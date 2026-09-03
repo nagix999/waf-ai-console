@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "waf-ai-console-backend"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "alembic==1.14.1",
+  "cryptography==44.0.1",
+  "fastapi==0.115.8",
+  "httpx==0.28.1",
+  "itsdangerous==2.2.0",
+  "moduagent==0.6.2",
+  "pydantic-settings==2.7.1",
+  "python-multipart==0.0.20",
+  "sqlalchemy==2.0.38",
+  "uvicorn[standard]==0.34.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==8.3.4",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+namespaces = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

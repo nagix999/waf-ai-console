@@ -1,0 +1,68 @@
+services:
+  api:
+    build: ./backend
+    command: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+    environment: &backend-env
+      WAF_DATABASE_URL: sqlite+pysqlite:////data/waf.db
+      WAF_ADMIN_USERNAME: ${WAF_ADMIN_USERNAME:-admin}
+      WAF_ADMIN_PASSWORD: ${WAF_ADMIN_PASSWORD:-change-me-now}
+      WAF_SESSION_SECRET: ${WAF_SESSION_SECRET:-local-session-secret-change-before-deploy}
+      WAF_SESSION_HTTPS_ONLY: ${WAF_SESSION_HTTPS_ONLY:-false}
+      WAF_BOOTSTRAP_API_KEY: ${WAF_BOOTSTRAP_API_KEY:-dev-service-key-change-me}
+      WAF_BOOTSTRAP_SOURCE_SYSTEM: ${WAF_BOOTSTRAP_SOURCE_SYSTEM:-internal-parser}
+      WAF_DATA_ENCRYPTION_KEY: ${WAF_DATA_ENCRYPTION_KEY:-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}
+      WAF_ENCRYPTION_KEY_VERSION: ${WAF_ENCRYPTION_KEY_VERSION:-dev-v1}
+      WAF_AGENT_MODE: ${WAF_AGENT_MODE:-stub}
+      WAF_WORKER_POLL_SECONDS: ${WAF_WORKER_POLL_SECONDS:-1}
+      WAF_JOB_LEASE_SECONDS: ${WAF_JOB_LEASE_SECONDS:-300}
+      WAF_VLLM_ALLOWED_TARGETS: ${WAF_VLLM_ALLOWED_TARGETS:-vllm.internal:8000}
+      WAF_VLLM_TEST_LEASE_SECONDS: ${WAF_VLLM_TEST_LEASE_SECONDS:-900}
+      WAF_VERIFIER_CONFIDENCE_THRESHOLD: ${WAF_VERIFIER_CONFIDENCE_THRESHOLD:-0.75}
+    volumes:
+      - waf-data:/data
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  worker:
+    build: ./backend
+    command: ["python", "-m", "app.worker"]
+    environment:
+      <<: *backend-env
+      WAF_WORKER_ROLE: analysis
+    volumes:
+      - waf-data:/data
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  model-tester:
+    build: ./backend
+    command: ["python", "-m", "app.worker"]
+    environment:
+      <<: *backend-env
+      WAF_WORKER_ROLE: model_test
+    volumes:
+      - waf-data:/data
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  waf-data:
