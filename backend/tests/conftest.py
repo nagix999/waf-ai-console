@@ -12,8 +12,6 @@ def settings() -> Settings:
         admin_username="admin",
         admin_password="test-password",
         session_secret="test-session-secret-that-is-long-enough",
-        bootstrap_api_key="test-service-api-key",
-        bootstrap_source_system="test-parser",
         data_encryption_key="AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
     )
 
@@ -23,6 +21,18 @@ def client(settings: Settings):
     app = create_app(settings, create_schema=True)
     with TestClient(app) as test_client:
         yield test_client
+
+
+@pytest.fixture
+def registered_vllm_target(client):
+    """Explicit synthetic authorization; the default client remains fail-closed."""
+    from app.models import InternalEgressTarget
+
+    with client.app.state.session_factory() as db:
+        target = InternalEgressTarget(ip_address="10.0.0.10", port=8000, description="Synthetic offline fixture")
+        db.add(target)
+        db.commit()
+        return target.id
 
 
 @pytest.fixture
@@ -44,5 +54,14 @@ def event_payload() -> dict:
 
 
 @pytest.fixture
-def service_headers() -> dict[str, str]:
-    return {"x-api-key": "test-service-api-key"}
+def service_headers(client) -> dict[str, str]:
+    """Opt-in synthetic DB credential, never an environment authentication path."""
+    from app.api_key_schemas import ServiceApiKeyCreate
+    from app.services.service_api_keys import issue_key
+
+    with client.app.state.session_factory() as db:
+        _key, raw = issue_key(db, ServiceApiKeyCreate(
+            name="Synthetic test parser", source_system="test-parser", scopes=["ingest", "review"],
+        ), "synthetic-fixture")
+        db.commit()
+    return {"x-api-key": raw}

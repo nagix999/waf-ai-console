@@ -1,7 +1,11 @@
 from datetime import UTC, datetime
 
+import pytest
+
 from app.models import ModelProfileStatus, ModelTestStatus, VLLMProfile, VLLMTestRun
 from app.services.vllm_profiles import profile_fingerprint
+
+pytestmark = pytest.mark.usefixtures("registered_vllm_target")
 
 
 def login_admin(client) -> None:
@@ -12,7 +16,7 @@ def login_admin(client) -> None:
 def profile_payload(name: str = "gemma4-test") -> dict:
     return {
         "name": name,
-        "base_url": "http://vllm.internal:8000/v1",
+        "base_url": "http://10.0.0.10:8000/v1",
         "model_name": "google/gemma-4-26B-A4B-it",
         "api_key": "profile-secret",
         "timeout_seconds": 120,

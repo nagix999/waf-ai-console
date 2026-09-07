@@ -8,7 +8,17 @@ from typing import Any, Awaitable, Callable
 import httpx
 
 from ..models import ModelTestMode, VLLMProfile
+from ..agent.contracts import WAFAnalysisOutput
 from .crypto import CryptoService
+from .internal_egress import InternalEgressError
+from .vllm_profiles import TargetNotAllowedError
+from .provider_options import (
+    CompletionRejected,
+    completion_content,
+    generation_options,
+    provider_name,
+    strict_json_schema,
+)
 
 
 @dataclass
@@ -35,36 +45,76 @@ def percentile(values: list[float], probability: float) -> float:
     return round(ordered[index], 2)
 
 
-def safe_http_error(exc: Exception) -> CheckFailed:
-    if isinstance(exc, httpx.TimeoutException):
-        return CheckFailed("vllm_timeout", "vLLM request timed out")
-    if isinstance(exc, httpx.ConnectError):
-        return CheckFailed("vllm_connection_failed", "Could not connect to the configured vLLM target")
-    if isinstance(exc, httpx.HTTPStatusError):
-        return CheckFailed(f"vllm_http_{exc.response.status_code}", "vLLM returned a non-success HTTP status")
-    if isinstance(exc, (json.JSONDecodeError, ValueError, KeyError, TypeError)):
-        return CheckFailed("vllm_invalid_response", "vLLM returned an invalid or unexpected response")
+def safe_http_error(exc: Exception, provider: str = "vllm") -> CheckFailed:
+    label = "OpenAI" if provider == "openai" else "vLLM"
     if isinstance(exc, CheckFailed):
         return exc
-    return CheckFailed("vllm_test_error", f"vLLM test failed with {type(exc).__name__}")
+    if isinstance(exc, (TargetNotAllowedError, InternalEgressError)):
+        code = str(exc)
+        if code not in {"vllm_target_not_allowed", "vllm_profile_unavailable", "internal_egress_configuration_invalid"}:
+            code = "vllm_target_not_allowed"
+        return CheckFailed(code, "vLLM request blocked by the current Internal Egress policy")
+    if isinstance(exc, CompletionRejected):
+        return CheckFailed(exc.code, f"{label} did not return a completed non-refused response")
+    if isinstance(exc, httpx.TimeoutException):
+        return CheckFailed(f"{provider}_timeout", f"{label} request timed out")
+    if isinstance(exc, httpx.ConnectError):
+        return CheckFailed(f"{provider}_connection_failed", f"Could not connect to the configured {label} target")
+    if isinstance(exc, httpx.HTTPStatusError):
+        return CheckFailed(f"{provider}_http_{exc.response.status_code}", f"{label} returned a non-success HTTP status")
+    if isinstance(exc, (json.JSONDecodeError, ValueError, KeyError, TypeError)):
+        return CheckFailed(f"{provider}_invalid_response", f"{label} returned an invalid or unexpected response")
+    return CheckFailed(f"{provider}_test_error", f"{label} test failed")
 
 
-def chat_payload(profile: VLLMProfile, messages: list[dict[str, str]], **overrides: Any) -> dict[str, Any]:
+def chat_payload(
+    profile: VLLMProfile,
+    messages: list[dict[str, str]],
+    *,
+    max_output_tokens: int | None = None,
+    **overrides: Any,
+) -> dict[str, Any]:
+    # Reasoning models may spend the completion allowance before visible text.
+    # OpenAI checks use the configured allowance rather than an artificial 8/64.
+    if max_output_tokens is None:
+        max_output_tokens = profile.max_output_tokens if provider_name(profile) == "openai" else min(64, profile.max_output_tokens)
     payload: dict[str, Any] = {
         "model": profile.model_name,
         "messages": messages,
-        "temperature": 0,
-        "max_tokens": min(64, profile.max_output_tokens),
-        "chat_template_kwargs": {"enable_thinking": False},
+        **generation_options(profile, max_output_tokens=max_output_tokens),
     }
     payload.update(overrides)
     return payload
 
 
-async def run_vllm_test(profile: VLLMProfile, crypto: CryptoService, mode: str) -> VLLMTestResult:
+async def run_vllm_test(
+    profile: VLLMProfile, crypto: CryptoService, mode: str,
+    *, egress_check: Callable[[], None] | None = None,
+) -> VLLMTestResult:
     checks: list[dict[str, Any]] = []
-    metrics: dict[str, Any] = {"mode": mode, "thinking_enabled": False}
+    provider = provider_name(profile)
+    metrics: dict[str, Any] = {"mode": mode, "provider": provider, "thinking_enabled": None if provider == "openai" else False}
     api_key = crypto.decrypt_text(profile.api_key_ciphertext) if profile.api_key_ciphertext else None
+    base_url = profile.base_url
+    if provider == "vllm":
+        if egress_check is None:
+            raise ValueError("vllm_egress_check_required")
+    if egress_check is not None:
+        egress_check()
+    if provider == "openai":
+        from .vllm_profiles import (
+            TargetNotAllowedError,
+            normalize_and_validate_profile_url,
+            validate_profile_provider_settings,
+        )
+
+        try:
+            validate_profile_provider_settings(profile, has_api_key=bool(api_key))
+            base_url = normalize_and_validate_profile_url(profile, "")
+            if not isinstance(api_key, str) or not api_key or any(character.isspace() for character in api_key):
+                raise TargetNotAllowedError("openai_api_key_required")
+        except TargetNotAllowedError as exc:
+            return VLLMTestResult(False, checks, metrics, str(exc), "OpenAI provider settings are not approved or valid")
     headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
     timeout = httpx.Timeout(profile.timeout_seconds)
 
@@ -76,8 +126,10 @@ async def run_vllm_test(profile: VLLMProfile, crypto: CryptoService, mode: str) 
         trust_env=False,
     ) as client:
         async def request_json(method: str, path: str, body: dict[str, Any] | None = None) -> tuple[dict[str, Any], float]:
+            if egress_check is not None:
+                egress_check()
             started = time.perf_counter()
-            response = await client.request(method, f"{profile.base_url}{path}", json=body)
+            response = await client.request(method, f"{base_url}{path}", json=body)
             elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
             response.raise_for_status()
             return response.json(), elapsed_ms
@@ -94,7 +146,7 @@ async def run_vllm_test(profile: VLLMProfile, crypto: CryptoService, mode: str) 
                 metrics.update(extra_metrics)
                 return True
             except Exception as exc:
-                safe = safe_http_error(exc)
+                safe = safe_http_error(exc, provider)
                 latency_ms = round((time.perf_counter() - started) * 1000, 2)
                 checks.append(
                     {
@@ -122,10 +174,8 @@ async def run_vllm_test(profile: VLLMProfile, crypto: CryptoService, mode: str) 
                 "/chat/completions",
                 chat_payload(profile, [{"role": "user", "content": "Reply with WAF_TEST_OK."}]),
             )
-            content = body["choices"][0]["message"]["content"]
-            if not isinstance(content, str) or not content.strip():
-                raise CheckFailed("empty_chat_response", "Chat completion returned empty content")
-            return {"non_empty_content": True, "sample": content[:200]}, {"chat_latency_ms": latency}
+            completion_content(body, provider)
+            return {"non_empty_content": True}, {"chat_latency_ms": latency}
 
         schema = {
             "type": "object",
@@ -152,17 +202,20 @@ async def run_vllm_test(profile: VLLMProfile, crypto: CryptoService, mode: str) 
                     response_format={"type": "json_schema", "json_schema": {"name": "waf_test", "strict": True, "schema": schema}},
                 ),
             )
-            content = body["choices"][0]["message"]["content"]
+            content = completion_content(body, provider)
             parsed = json.loads(content)
             valid = (
-                parsed.get("status") == "ok"
+                isinstance(parsed, dict)
+                and set(parsed) == {"status", "result"}
+                and parsed.get("status") == "ok"
                 and isinstance(parsed.get("result"), dict)
-                and isinstance(parsed["result"].get("code"), int)
+                and set(parsed["result"]) == {"code", "message"}
+                and type(parsed["result"].get("code")) is int
                 and isinstance(parsed["result"].get("message"), str)
             )
             if not valid:
                 raise CheckFailed("json_schema_validation_failed", "Response did not match the required nested JSON schema")
-            return {"nested_schema_valid": True, "parsed": parsed}, {"json_schema_latency_ms": latency}
+            return {"nested_schema_valid": True}, {"json_schema_latency_ms": latency}
 
         try:
             await check("models", models_check)
@@ -170,6 +223,38 @@ async def run_vllm_test(profile: VLLMProfile, crypto: CryptoService, mode: str) 
             await check("nested_json_schema", json_schema_check)
 
             if mode == ModelTestMode.full.value:
+                if provider == "openai":
+                    async def waf_schema_check() -> tuple[dict[str, Any], dict[str, Any]]:
+                        body, latency = await request_json(
+                            "POST",
+                            "/chat/completions",
+                            chat_payload(
+                                profile,
+                                [{"role": "user", "content": (
+                                    "This is a synthetic WAF contract test, not a real security event. "
+                                    "No payload or signature is provided. Return verdict inconclusive, "
+                                    "severity UNKNOWN, empty evidence and conflicting_evidence, "
+                                    "input_truncated false, tuning recommended false with nullable details null. "
+                                    "Explain missing information briefly in Korean and fill every schema field."
+                                )}],
+                                response_format={"type": "json_schema", "json_schema": {
+                                    "name": "WAFAnalysisOutput", "strict": True,
+                                    "schema": strict_json_schema(WAFAnalysisOutput.model_json_schema()),
+                                }},
+                            ),
+                        )
+                        try:
+                            output = WAFAnalysisOutput.model_validate_json(completion_content(body, provider))
+                        except CompletionRejected:
+                            raise
+                        except ValueError:
+                            raise CheckFailed("waf_schema_validation_failed", "Response did not match the WAF analysis contract") from None
+                        if output.verdict.value != "inconclusive":
+                            raise CheckFailed("waf_schema_validation_failed", "Synthetic missing-input test did not return inconclusive")
+                        return {"waf_contract_valid": True}, {"waf_schema_latency_ms": latency}
+
+                    await check("waf_analysis_schema", waf_schema_check)
+
                 async def system_role_check() -> tuple[dict[str, Any], dict[str, Any]]:
                     body, latency = await request_json(
                         "POST",
@@ -182,13 +267,16 @@ async def run_vllm_test(profile: VLLMProfile, crypto: CryptoService, mode: str) 
                             ],
                         ),
                     )
-                    content = body["choices"][0]["message"]["content"]
+                    content = completion_content(body, provider)
                     if "SYSTEM_ROLE_OK" not in content:
                         raise CheckFailed("system_role_not_applied", "System role marker was missing from the response")
                     return {"system_role_applied": True}, {"system_role_latency_ms": latency}
 
                 async def near_context_check() -> tuple[dict[str, Any], dict[str, Any]]:
-                    target_tokens = max(1024, profile.context_window - 2048)
+                    target_tokens = (
+                        max(1, profile.context_window - profile.max_output_tokens - 512)
+                        if provider == "openai" else max(1024, profile.context_window - 2048)
+                    )
                     synthetic = "x " * target_tokens
                     body, latency = await request_json(
                         "POST",
@@ -196,14 +284,12 @@ async def run_vllm_test(profile: VLLMProfile, crypto: CryptoService, mode: str) 
                         chat_payload(
                             profile,
                             [{"role": "user", "content": f"Synthetic context follows.\n{synthetic}\nReply OK."}],
-                            max_tokens=8,
+                            max_output_tokens=profile.max_output_tokens if provider == "openai" else 8,
                         ),
                     )
-                    content = body["choices"][0]["message"]["content"]
-                    if not isinstance(content, str) or not content.strip():
-                        raise CheckFailed("near_context_empty_response", "Near-context request returned empty content")
+                    completion_content(body, provider)
                     prompt_tokens = body.get("usage", {}).get("prompt_tokens")
-                    if not isinstance(prompt_tokens, int):
+                    if type(prompt_tokens) is not int or prompt_tokens < 0:
                         raise CheckFailed("usage_missing", "Near-context response did not include prompt token usage")
                     utilization = round(prompt_tokens / profile.context_window, 4)
                     if utilization < 0.8:
@@ -216,11 +302,12 @@ async def run_vllm_test(profile: VLLMProfile, crypto: CryptoService, mode: str) 
 
                 async def concurrency_check() -> tuple[dict[str, Any], dict[str, Any]]:
                     async def one(index: int) -> float:
-                        _body, latency = await request_json(
+                        body, latency = await request_json(
                             "POST",
                             "/chat/completions",
-                            chat_payload(profile, [{"role": "user", "content": f"Concurrency test {index}. Reply OK."}], max_tokens=8),
+                            chat_payload(profile, [{"role": "user", "content": f"Concurrency test {index}. Reply OK."}], max_output_tokens=profile.max_output_tokens if provider == "openai" else 8),
                         )
+                        completion_content(body, provider)
                         return latency
 
                     durations = await asyncio.gather(*(one(index) for index in range(profile.test_concurrency)))
@@ -235,7 +322,7 @@ async def run_vllm_test(profile: VLLMProfile, crypto: CryptoService, mode: str) 
                     }
 
                 await check("system_role", system_role_check)
-                await check("near_32k_context", near_context_check)
+                await check("near_configured_context" if provider == "openai" else "near_32k_context", near_context_check)
                 await check("concurrency", concurrency_check)
         except CheckFailed as exc:
             return VLLMTestResult(False, checks, metrics, exc.code, exc.safe_message)

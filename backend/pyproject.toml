@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "waf-ai-console-backend"
-version = "0.1.0"
+version = "0.2.0"
 requires-python = ">=3.12"
 dependencies = [
   "alembic==1.14.1",
@@ -27,6 +27,9 @@ dev = [
 [tool.setuptools.packages.find]
 include = ["app*"]
 namespaces = true
+
+[tool.setuptools.package-data]
+app = ["data/*.json", "data/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

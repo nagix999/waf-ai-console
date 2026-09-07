@@ -1,0 +1,34 @@
+# The frontend uses the repository root only to import the canonical API guide.
+# Deny everything except its build inputs and that one document.
+**
+!.dockerignore
+!frontend/
+frontend/*
+!frontend/Dockerfile
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/index.html
+!frontend/vite.config.js
+!frontend/nginx.conf
+!frontend/src/
+!frontend/src/**
+!docs/
+docs/*
+!docs/Production_API_v0.1.md
+
+# Keep secrets and generated/dependency directories excluded even under src/.
+**/.env*
+**/*.env
+**/*.key
+**/*.pem
+**/*.p12
+**/*.pfx
+**/id_rsa*
+**/id_ed25519*
+**/keys
+**/secrets
+**/.git
+**/node_modules
+**/dist
+**/dist-*
+backend

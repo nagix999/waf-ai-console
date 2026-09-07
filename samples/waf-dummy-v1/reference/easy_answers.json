@@ -1,0 +1,802 @@
+[
+  {
+    "event_id": "waf-syn-f149a8e0db17",
+    "difficulty": "easy",
+    "case_name": "User-Agent 제품명 curl",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_keyword_match",
+    "rationale_ko": "curl은 User-Agent 제품명이며 셸 구분자나 실행 인자가 없다. 도구 이름만으로 명령 주입을 판단한 오탐을 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "User-Agent: curl/SYNTHETIC_ONLY"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 자동화 클라이언트 허용 정책과는 별개로 명령 주입 여부만 평가한다."
+  },
+  {
+    "event_id": "waf-syn-01a318275d98",
+    "difficulty": "easy",
+    "case_name": "압축 본문 형식 헤더만 남은 요청",
+    "expected_verdict": "inconclusive",
+    "expected_severity": "UNKNOWN",
+    "category": "insufficient_data",
+    "rationale_ko": "압축 형식 헤더만 있고 본문 바이트와 헤더 종료가 없다. 해제 후의 값이 없어 XSS나 오탐을 추정하지 않는다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "Content-Encoding: gzip"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 압축 전후 원문과 캡처 완전성을 확보한다. gzip 자체는 공격 근거가 아니다."
+  },
+  {
+    "event_id": "waf-syn-cf2d0a10ee4d",
+    "difficulty": "easy",
+    "case_name": "Windows 역슬래시 경로 순회",
+    "expected_verdict": "true_positive",
+    "expected_severity": "MEDIUM",
+    "category": "path_traversal",
+    "rationale_ko": "인코딩된 역슬래시와 상위 경로 구간으로 Windows 설정 파일을 지정한다. 파일 지정 범위를 벗어나려는 경로 순회 탐침이다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "name=..%5C..%5CWindows%5Cwin.ini"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 운영체제와 경로 처리 방식은 미확인이며 파일 존재나 읽기 성공을 가정하지 않는다."
+  },
+  {
+    "event_id": "waf-syn-03ea2ae67f20",
+    "difficulty": "easy",
+    "case_name": "Unix 파일 파라미터의 상위 경로 이동",
+    "expected_verdict": "true_positive",
+    "expected_severity": "HIGH",
+    "category": "path_traversal",
+    "rationale_ko": "파일 값에 연속 상위 경로 이동과 시스템 계정 정보 파일 경로가 함께 있다. 허용 디렉터리 밖의 파일을 읽으려는 경로 순회 시도로 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "file=../../../../etc/passwd"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 실제 파일 접근과 노출은 경로 처리 및 응답 로그로 확인해야 한다."
+  },
+  {
+    "event_id": "waf-syn-05ac1f6eeb6b",
+    "difficulty": "easy",
+    "case_name": "주문 식별자 뒤의 OR 조건",
+    "expected_verdict": "true_positive",
+    "expected_severity": "HIGH",
+    "category": "sql_injection",
+    "rationale_ko": "주문 식별자 뒤에 항상 참인 OR 조건과 주석이 붙는다. 지정 행을 넘어 조회 조건을 바꾸려는 SQL Injection 구문으로 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "order_id=42%20OR%201=1--"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 매개변수 처리와 응답을 확인하기 전에는 다른 주문 조회 성공을 주장하지 않는다."
+  },
+  {
+    "event_id": "waf-syn-1cb9f1761987",
+    "difficulty": "easy",
+    "case_name": "암호 도움말 항목의 passwd 단어",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_keyword_match",
+    "rationale_ko": "passwd는 도움말 이름이며 /etc/passwd 경로나 상위 이동이 아니다. 민감 파일명의 부분 일치 오탐을 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "/help/passwd-requirements"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 응답이 없으므로 도움말의 접근 정책은 추정하지 않는다."
+  },
+  {
+    "event_id": "waf-syn-2c475ec6b3a9",
+    "difficulty": "easy",
+    "case_name": "로그인 헤더에서 끝난 캡처",
+    "expected_verdict": "inconclusive",
+    "expected_severity": "UNKNOWN",
+    "category": "insufficient_data",
+    "rationale_ko": "헤더 종료와 본문이 없어 실제 검사 대상 값을 볼 수 없다. SQL Injection 시그니처만으로 공격이나 오탐을 확정하지 않는다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "Content-Type: application/x-www-form-urlencoded\r\n"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 전체 헤더와 로그인 본문 캡처를 확보한다. 누락을 공격 흔적 없음으로 해석하지 않는다."
+  },
+  {
+    "event_id": "waf-syn-f7c85960476a",
+    "difficulty": "easy",
+    "case_name": "이메일의 플러스 기호",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_keyword_match",
+    "rationale_ko": "플러스는 이메일 로컬 파트에 들어 있고 명령 구분자나 실행 문장이 없다. 특수문자만으로 명령 주입을 판단한 오탐을 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "email=reader%2Bnews%40example.test"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 주소는 합성 값이다. 조회 권한은 이 판정의 근거가 아니다."
+  },
+  {
+    "event_id": "waf-syn-dc0227afd2ad",
+    "difficulty": "easy",
+    "case_name": "검색 문장부호인 파이프",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_keyword_match",
+    "rationale_ko": "브랜드와 상품명을 나누는 파이프 뒤에 셸 명령이나 실행 구문이 없다. 단일 기호의 부분 일치로 오탐을 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "q=ACME%20%7C%20Notebook"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 서버가 임의 명령을 구성하는 경우는 별도 확인하며 업무 권한은 단정하지 않는다."
+  },
+  {
+    "event_id": "waf-syn-ea46451d8779",
+    "difficulty": "easy",
+    "case_name": "SVG load 이벤트 실행",
+    "expected_verdict": "true_positive",
+    "expected_severity": "MEDIUM",
+    "category": "cross_site_scripting",
+    "rationale_ko": "SVG 요소에 onload 실행 속성이 포함된다. 확장자 단어만 있는 요청과 달리 이벤트 핸들러를 주입하는 형태다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "caption=%3Csvg%20onload=alert('SYNTHETIC_XSS')%3E"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. HTML 출력 위치와 브라우저 보안 설정에 따라 실행 가능성은 달라진다."
+  },
+  {
+    "event_id": "waf-syn-6349f10da1cd",
+    "difficulty": "easy",
+    "case_name": "역 이름의 UNION 단어",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_keyword_match",
+    "rationale_ko": "Union은 역 이름을 구성하고 운행 시간표 단어가 이어진다. SQL 결합 구문이 없으므로 단어 기반 오탐을 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "q=Union%20Station%20timetable"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 문장 맥락에 한정된 기대이며 업무 권한을 추정하지 않는다."
+  },
+  {
+    "event_id": "waf-syn-44043d420b0f",
+    "difficulty": "easy",
+    "case_name": "쿼리 값의 script 요소",
+    "expected_verdict": "true_positive",
+    "expected_severity": "MEDIUM",
+    "category": "cross_site_scripting",
+    "rationale_ko": "쿼리 값이 script 요소와 alert 호출을 구성한다. 일반 검색어와 달리 브라우저 실행 문법이므로 XSS 시도를 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "q=%3Cscript%3Ealert('SYNTHETIC_XSS')%3C/script%3E"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 합성 표식만 사용하는 탐침이다. 반사 위치와 출력 인코딩이 없어 실행 성공은 미확인이다."
+  },
+  {
+    "event_id": "waf-syn-5ea9c8b294b0",
+    "difficulty": "easy",
+    "case_name": "진단 입력의 파이프 명령 연결",
+    "expected_verdict": "true_positive",
+    "expected_severity": "HIGH",
+    "category": "command_injection",
+    "rationale_ko": "진단 대상 주소에 파이프 연산자와 whoami 명령이 이어진다. 호스트 값 뒤에 셸 명령을 연결하는 공격 구조로 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "target=192.0.2.60|whoami"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 문자열은 평가하지 않는다. 진단 기능 구현과 서버 감사 기록을 확인해야 한다."
+  },
+  {
+    "event_id": "waf-syn-1e4075113996",
+    "difficulty": "easy",
+    "case_name": "onerror가 포함된 이미지 파일명",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_keyword_match",
+    "rationale_ko": "onerror는 파일 이름의 일부이고 HTML 속성이나 할당된 코드가 없다. 이벤트 실행 구문으로 볼 근거가 없어 오탐을 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "/assets/onerror-diagram.png"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 파일의 존재나 내용 안전성은 이 요청만으로 판단하지 않는다."
+  },
+  {
+    "event_id": "waf-syn-cf04be3a8c61",
+    "difficulty": "easy",
+    "case_name": "MSSQL WAITFOR 지연 구문",
+    "expected_verdict": "true_positive",
+    "expected_severity": "MEDIUM",
+    "category": "sql_injection",
+    "rationale_ko": "조회 값에서 문자열과 문장을 종료하고 WAITFOR DELAY를 실행하려는 구조가 관찰된다. 키워드 단독 사용과 달리 SQL 문맥을 이탈하는 탐침이다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "code=9'; WAITFOR DELAY '0:0:5'--"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 대상 DB의 호환성과 전달 여부는 미확인이고 실제 서비스 지연이 측정된 것은 아니다."
+  },
+  {
+    "event_id": "waf-syn-c6f012549886",
+    "difficulty": "easy",
+    "case_name": "XML 외부 엔터티의 로컬 파일 참조",
+    "expected_verdict": "true_positive",
+    "expected_severity": "HIGH",
+    "category": "xml_external_entity",
+    "rationale_ko": "XML이 외부 엔터티를 로컬 파일로 정의하고 본문에서 참조한다. 일반 요소 데이터와 달리 파서의 파일 읽기를 유도하는 구조다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "<!ENTITY probe SYSTEM \"file:///etc/passwd\">"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 외부 엔터티 해석 허용 여부와 응답이 없어 실제 파일 노출은 미확인이다."
+  },
+  {
+    "event_id": "waf-syn-0864c5a4ce59",
+    "difficulty": "easy",
+    "case_name": "URL 경로 자체의 디렉터리 순회",
+    "expected_verdict": "true_positive",
+    "expected_severity": "MEDIUM",
+    "category": "path_traversal",
+    "rationale_ko": "정적 파일 경로에서 여러 번 상위로 이동하여 시스템 hosts 파일을 겨냥한다. 쿼리가 아닌 요청 경로를 이용한 순회 시도다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "/static/../../../../etc/hosts"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 프록시와 서버의 경로 정규화 및 실제 응답을 확인해야 한다."
+  },
+  {
+    "event_id": "waf-syn-bfe82a189e03",
+    "difficulty": "easy",
+    "case_name": "링크 속성의 javascript 스킴",
+    "expected_verdict": "true_positive",
+    "expected_severity": "MEDIUM",
+    "category": "cross_site_scripting",
+    "rationale_ko": "HTML 링크의 href에 일반 주소 대신 javascript 실행 스킴이 들어 있다. 사용자 소개 값에 실행 링크를 삽입하는 XSS 시도로 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "javascript:alert('SYNTHETIC_XSS')"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. JSON은 운반 형식이다. HTML 정화, 렌더링 및 클릭 여부는 확인되지 않았다."
+  },
+  {
+    "event_id": "waf-syn-34fd8e8d8448",
+    "difficulty": "easy",
+    "case_name": "자연어 AND OR 접속사",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_keyword_match",
+    "rationale_ko": "and와 or는 음료를 연결하는 자연어다. 비교식이나 쿼리 문맥 이탈이 없어 검색 문구로 추정한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "q=tea%20and%20coffee%20or%20juice"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 입력 문법에 한정된 오탐 기대이며 실제 사용자 권한의 증명은 아니다."
+  },
+  {
+    "event_id": "waf-syn-172e58565457",
+    "difficulty": "easy",
+    "case_name": "가구 검색의 SELECT 단어",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_keyword_match",
+    "rationale_ko": "select는 가구 선택 문구에 쓰였고 테이블, 열 또는 조건 변경 구문이 없다. 예약어만 겹친 사례로 오탐을 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "q=select%20oak%20chairs"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 탐지 위치를 확인하고 select 단어 자체를 이유로 룰 전체를 완화하지 않는다."
+  },
+  {
+    "event_id": "waf-syn-eca635a81cc8",
+    "difficulty": "easy",
+    "case_name": "파일 값 직전에서 끊긴 요청줄",
+    "expected_verdict": "inconclusive",
+    "expected_severity": "UNKNOWN",
+    "category": "insufficient_data",
+    "rationale_ko": "파일 파라미터 뒤에서 캡처가 끝나 값과 HTTP 버전, 헤더가 없다. 상위 경로 이동 여부를 알 수 없어 보류를 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "GET /download?file="
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 빈 값이 실제 요청인지 캡처 누락인지 원본 로그를 확인한다."
+  },
+  {
+    "event_id": "waf-syn-1734badef423",
+    "difficulty": "easy",
+    "case_name": "멀티파트 파일 내용 전의 캡처",
+    "expected_verdict": "inconclusive",
+    "expected_severity": "UNKNOWN",
+    "category": "insufficient_data",
+    "rationale_ko": "업로드 헤더까지만 있고 파일 바이트와 종료 경계가 없다. 이름과 형식만으로 실행 코드 여부를 알 수 없어 보류를 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "filename=\"attachment.bin\""
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 파일 전체 바이트, 실제 형식과 업로드 정책을 확인한다. .bin 자체를 악성으로 보지 않는다."
+  },
+  {
+    "event_id": "waf-syn-928784983d4c",
+    "difficulty": "easy",
+    "case_name": "HTML 엔터티 표기법 검색",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_keyword_match",
+    "rationale_ko": "검색어는 &lt;tag&gt; 표기법이며 스크립트나 이벤트 핸들러가 없다. 꺾쇠 표기 관련 문자열만 감지한 오탐을 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "q=%26lt%3Btag%26gt%3B%20notation"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 중복 디코딩과 출력 문맥은 미확인이지만 원문에 실행 코드는 없다."
+  },
+  {
+    "event_id": "waf-syn-a3e3dffd71ab",
+    "difficulty": "easy",
+    "case_name": "SQL SLEEP 시간 지연 탐침",
+    "expected_verdict": "true_positive",
+    "expected_severity": "MEDIUM",
+    "category": "sql_injection",
+    "rationale_ko": "인코딩된 따옴표와 SQL AND, SLEEP 함수 및 주석이 조합되어 있다. 일반 검색어가 아니라 응답 지연을 유도하는 SQL 탐침으로 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "q=test%27%20AND%20SLEEP(5)--"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 응답 시간이나 DB 종류가 없으므로 지연 발생을 단정하지 않는다."
+  },
+  {
+    "event_id": "waf-syn-c59f200daaeb",
+    "difficulty": "easy",
+    "case_name": "CRLF를 이용한 응답 헤더 삽입 탐침",
+    "expected_verdict": "true_positive",
+    "expected_severity": "MEDIUM",
+    "category": "http_header_injection",
+    "rationale_ko": "리다이렉트 값의 인코딩된 CRLF 뒤에 Set-Cookie 헤더 모양이 있다. 값 경계를 벗어나 응답 헤더를 삽입하려는 구문이다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "%0D%0ASet-Cookie%3A%20probe%3DSYNTHETIC_ONLY"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 실제 응답 반영과 CRLF 거부 여부는 별도 확인해야 한다."
+  },
+  {
+    "event_id": "waf-syn-4e76e2d74f71",
+    "difficulty": "easy",
+    "case_name": "CORS 사전 확인 요청의 OPTIONS",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_protocol_match",
+    "rationale_ko": "OPTIONS와 CORS 사전 확인 헤더가 일관되고 길이 모순이나 요청 경계 변조가 없다. 이 원문에서는 프로토콜 공격 근거가 없어 오탐을 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "OPTIONS /api/catalog HTTP/1.1"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 서버 CORS 정책은 미확인이며 허용되어야 하는 요청이라고 단정하지 않는다."
+  },
+  {
+    "event_id": "waf-syn-ade8d797877a",
+    "difficulty": "easy",
+    "case_name": "SVG 아이콘 경로",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_keyword_match",
+    "rationale_ko": "SVG 확장자 조회만 보이며 요소나 실행 이벤트가 삽입되지 않았다. 확장자만으로 XSS를 판정한 오탐을 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "/icons/search.svg"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 반환 파일 자체는 별도 검사 대상이며 응답은 제공되지 않았다."
+  },
+  {
+    "event_id": "waf-syn-8be5e4caf61d",
+    "difficulty": "easy",
+    "case_name": "textarea 문맥 종료 후 script 삽입",
+    "expected_verdict": "true_positive",
+    "expected_severity": "MEDIUM",
+    "category": "cross_site_scripting",
+    "rationale_ko": "입력 영역을 닫는 태그 다음에 script 요소를 넣어 기존 HTML 문맥에서 벗어나려 한다. 단순 특수문자보다 공격 의미가 명확하다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "</textarea><script>alert('SYNTHETIC_XSS')</script>"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 실제로 textarea 내부에 출력되는지와 escaping 여부는 별도 확인한다."
+  },
+  {
+    "event_id": "waf-syn-2d8c8ebf94b7",
+    "difficulty": "easy",
+    "case_name": "Shellshock 함수 선언 헤더",
+    "expected_verdict": "true_positive",
+    "expected_severity": "HIGH",
+    "category": "command_injection",
+    "rationale_ko": "헤더 값에 Bash 함수 선언 모양과 뒤따르는 명령이 연결되어 있다. CGI 환경변수 처리 취약점을 겨냥하는 고전적 Shellshock 탐침이다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "() { :;}; /usr/bin/id"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. CGI/Bash 사용과 취약 버전 여부는 입력만으로 알 수 없고 실행 성공은 주장하지 않는다."
+  },
+  {
+    "event_id": "waf-syn-b0da569dd267",
+    "difficulty": "easy",
+    "case_name": "호스트 값 뒤의 셸 명령 구분자",
+    "expected_verdict": "true_positive",
+    "expected_severity": "HIGH",
+    "category": "command_injection",
+    "rationale_ko": "호스트 입력 뒤에 세미콜론과 id 명령을 붙인다. 주소 값이 필요한 위치에서 별도 셸 명령 실행을 유도하는 구조다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "host=192.0.2.55;id"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 문자열을 실행하지 않는다. 서버의 셸 호출 여부와 명령 실행 성공은 미확인이다."
+  },
+  {
+    "event_id": "waf-syn-2fc5e7c1ab60",
+    "difficulty": "easy",
+    "case_name": "JSON 값 시작에서 잘린 본문",
+    "expected_verdict": "inconclusive",
+    "expected_severity": "UNKNOWN",
+    "category": "insufficient_data",
+    "rationale_ko": "JSON 키와 여는 따옴표만 있고 값은 없다. SQL Injection 시그니처의 실제 검사 대상을 확인할 수 없어 보류한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "{\"query\":\""
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 완전한 JSON이 필요하며 파싱 실패만으로 공격을 확정하지 않는다."
+  },
+  {
+    "event_id": "waf-syn-0942834c8e0c",
+    "difficulty": "easy",
+    "case_name": "문서 경로의 javascript 분류",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_keyword_match",
+    "rationale_ko": "javascript는 문서 경로의 분류명으로 실행 URL 스킴이나 코드 속성이 아니다. 단어만 겹치는 오탐을 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "/docs/javascript/arrays"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 경로 단어를 스킴으로 오인하는지 확인한다."
+  },
+  {
+    "event_id": "waf-syn-a58259e0d602",
+    "difficulty": "easy",
+    "case_name": "아바타 업로드의 PHP 명령 실행 코드",
+    "expected_verdict": "true_positive",
+    "expected_severity": "HIGH",
+    "category": "malicious_file_upload",
+    "rationale_ko": "아바타 파일에 PHP 확장자와 OS 명령을 호출하는 PHP 코드가 함께 있다. 일반 이미지와 구별되는 실행 코드 업로드 시도로 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "<?php system('id'); ?>"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 파일은 실행하지 않는다. 저장 위치와 확장자 검증, 서버 실행 매핑이 없어 설치 성공은 알 수 없다."
+  },
+  {
+    "event_id": "waf-syn-6e2fef0410cd",
+    "difficulty": "easy",
+    "case_name": "버전 범위를 나타내는 점 표기",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_keyword_match",
+    "rationale_ko": "값은 버전 범위이고 슬래시로 구분된 상위 이동이 없다. 점 두 개에만 반응한 경로 순회 오탐을 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "range=v1..v2"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 승인된 업무라고 단정하지 않고 입력 문법만 평가한다."
+  },
+  {
+    "event_id": "waf-syn-abd3246ddb2b",
+    "difficulty": "easy",
+    "case_name": "JSON 불리언 자료형",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_keyword_match",
+    "rationale_ko": "true와 false는 JSON 불리언이며 SQL 항진식이나 문자열 이탈 구문이 없다. 자료형 예약어를 공격으로 해석한 오탐을 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "\"in_stock\":true,\"include_archived\":false"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 서버 권한 검증과 별개로 요청 구문의 공격성만 평가한다."
+  },
+  {
+    "event_id": "waf-syn-a30caf2589b9",
+    "difficulty": "easy",
+    "case_name": "반송 경로 시작 부분의 요청줄 단절",
+    "expected_verdict": "inconclusive",
+    "expected_severity": "UNKNOWN",
+    "category": "insufficient_data",
+    "rationale_ko": "반송 경로 시작만 있어 뒤에 CRLF나 다른 값이 있었는지 알 수 없다. 요청줄과 헤더가 불완전하여 헤더 주입 판정을 보류한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "GET /redirect?next=%2F"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 리다이렉트 값 전체와 응답 헤더를 확인하며 인코딩된 슬래시만으로 공격이라 하지 않는다."
+  },
+  {
+    "event_id": "waf-syn-32c093e9ae97",
+    "difficulty": "easy",
+    "case_name": "UI 도움말의 DROP DOWN 문구",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_keyword_match",
+    "rationale_ko": "drop down menu는 UI 용어이고 SQL DROP 문장이 아니다. 테이블 대상이나 문장 구분자가 없어 단어 기반 오탐을 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "q=drop%20down%20menu%20settings"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 탐지 토큰과 문장 경계를 확인하며 서버의 업무 처리 성공은 가정하지 않는다."
+  },
+  {
+    "event_id": "waf-syn-41fecb39f9a1",
+    "difficulty": "easy",
+    "case_name": "이미지 오류 이벤트 삽입",
+    "expected_verdict": "true_positive",
+    "expected_severity": "MEDIUM",
+    "category": "cross_site_scripting",
+    "rationale_ko": "댓글 값에 이미지 요소와 onerror 실행 구문이 결합되어 있다. 이미지 파일명의 단어와 구별되는 XSS 페이로드다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "<img src=x onerror=alert('SYNTHETIC_XSS')>"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 댓글 저장, HTML 정화와 브라우저 렌더링을 확인해야 하며 저장형 XSS 성공은 미확인이다."
+  },
+  {
+    "event_id": "waf-syn-745ecbc6a5c8",
+    "difficulty": "easy",
+    "case_name": "파일명 안의 연속 마침표",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_keyword_match",
+    "rationale_ko": "마침표 두 개는 단일 파일명 안에 있고 독립된 .. 경로 구간이 아니다. 상위 이동이 없는 부분 일치 오탐을 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "/documents/annual..report.pdf"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 문서 접근 권한을 입증하지 않으며 경로 순회 여부만 평가한다."
+  },
+  {
+    "event_id": "waf-syn-51299aa24938",
+    "difficulty": "easy",
+    "case_name": "진단 파라미터 이름만 남은 조각",
+    "expected_verdict": "inconclusive",
+    "expected_severity": "UNKNOWN",
+    "category": "insufficient_data",
+    "rationale_ko": "파라미터 이름과 등호만 있고 값이나 HTTP 문맥이 없다. 명령 구분자 또는 정상 주소가 있었는지 알 수 없어 보류한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "target="
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 요청줄, 헤더와 target 전체 값을 복구한다."
+  },
+  {
+    "event_id": "waf-syn-aa7732d64ef3",
+    "difficulty": "easy",
+    "case_name": "정적 script.js 파일 조회",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_keyword_match",
+    "rationale_ko": "대상은 .js 자원 경로이며 script 태그나 이벤트 핸들러가 삽입되지 않았다. 파일명과 XSS를 혼동한 오탐을 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "/assets/script.js"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 파일 내용과 접근 권한을 가정하지 않고 요청에 주입 구문이 없는지만 평가한다."
+  },
+  {
+    "event_id": "waf-syn-da5fbbb26c4e",
+    "difficulty": "easy",
+    "case_name": "퍼센트 인코딩 중간의 요청줄 단절",
+    "expected_verdict": "inconclusive",
+    "expected_severity": "UNKNOWN",
+    "category": "insufficient_data",
+    "rationale_ko": "요청줄이 인코딩 중간에서 끊겨 값과 HTTP 버전, 헤더가 없다. 전달 문자열을 복원하지 않고 보류를 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "GET /search?q=%3"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 절단 전 요청줄을 확보한다. 미완성 %3을 특정 태그로 추측하지 않는다."
+  },
+  {
+    "event_id": "waf-syn-65c59b01f894",
+    "difficulty": "easy",
+    "case_name": "파일 이름의 셸 명령 치환",
+    "expected_verdict": "true_positive",
+    "expected_severity": "HIGH",
+    "category": "command_injection",
+    "rationale_ko": "파일 이름에 셸 명령 치환 문법 $(id)가 삽입되어 있다. 파일 처리 명령에 결합될 경우 별도 실행을 유도하는 탐침이다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "filename=report$(id).pdf"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 대상 처리기가 셸을 사용하지 않으면 실행되지 않을 수 있으며 성공 증거는 없다."
+  },
+  {
+    "event_id": "waf-syn-fe3494413bb6",
+    "difficulty": "easy",
+    "case_name": "탁구 검색의 ping 단어",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_keyword_match",
+    "rationale_ko": "ping은 스포츠 용어의 일부이고 호스트 대상이나 셸 구문이 없다. 명령 이름과 같은 자연어 토큰의 오탐을 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "q=ping%20pong%20racket"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 자연어 맥락을 확인하며 실제 업무 적합성은 확정하지 않는다."
+  },
+  {
+    "event_id": "waf-syn-3235590ee5a2",
+    "difficulty": "easy",
+    "case_name": "로그인 조건의 SQL 항진식",
+    "expected_verdict": "true_positive",
+    "expected_severity": "HIGH",
+    "category": "sql_injection",
+    "rationale_ko": "사용자명 위치에 따옴표 종료, 항상 참인 비교와 SQL 주석이 연결된다. 단순 단어 일치가 아니라 로그인 조건을 변경하려는 구문으로 SQL Injection 시도를 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "username=guest' OR '1'='1' --"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 실제 SQL 결합 방식과 인증 우회 성공 여부는 별도 확인해야 한다."
+  },
+  {
+    "event_id": "waf-syn-1eb3a9cf5a03",
+    "difficulty": "easy",
+    "case_name": "상품 식별자 뒤의 UNION SELECT",
+    "expected_verdict": "true_positive",
+    "expected_severity": "HIGH",
+    "category": "sql_injection",
+    "rationale_ko": "숫자 식별자 뒤에 UNION SELECT와 사용자 테이블의 열 이름이 연결된다. URL 인코딩을 해석하면 다른 데이터 집합을 읽으려는 공격 구문이 드러난다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "id=7%20UNION%20SELECT%20username,password%20FROM%20users--"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 발췌는 인코딩된 원문 그대로다. 테이블 존재나 데이터 유출 성공은 가정하지 않는다."
+  },
+  {
+    "event_id": "waf-syn-7a9166731283",
+    "difficulty": "easy",
+    "case_name": "요청줄 없는 Cookie 헤더 조각",
+    "expected_verdict": "inconclusive",
+    "expected_severity": "UNKNOWN",
+    "category": "insufficient_data",
+    "rationale_ko": "Host와 합성 쿠키만 있어 요청 대상과 쿼리, 본문을 알 수 없다. 이 조각에 공격 구문이 없다고 전체가 정상인 것은 아니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "Cookie: session=SYNTHETIC_ONLY"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 누락된 요청줄과 본문 및 실제 탐지 필드를 확인한다."
+  },
+  {
+    "event_id": "waf-syn-3a1eb43b93fd",
+    "difficulty": "easy",
+    "case_name": "XML 선언 속성에서 중단된 문서",
+    "expected_verdict": "inconclusive",
+    "expected_severity": "UNKNOWN",
+    "category": "insufficient_data",
+    "rationale_ko": "XML 버전 값 시작에서 문서가 끊겨 엔터티 선언이나 본문을 볼 수 없다. 형식 조각만으로 XXE 진위를 판단하지 않는다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "<?xml version=\""
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 전체 XML과 수집 잘림 여부를 확인하고 없는 엔터티 선언을 만들어 해석하지 않는다."
+  },
+  {
+    "event_id": "waf-syn-4014724b1858",
+    "difficulty": "easy",
+    "case_name": "외부 엔터티 없는 XML 검색 데이터",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_keyword_match",
+    "rationale_ko": "검색어와 페이지 요소만 있고 DOCTYPE, SYSTEM 선언이나 외부 엔터티가 없다. XML 형식 자체에 반응한 XXE 오탐을 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "<search><term>blue notebook</term><page>1</page></search>"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 파서의 모든 취약성까지 안전하다고 보장하지 않으며 외부 엔터티 여부만 평가한다."
+  },
+  {
+    "event_id": "waf-syn-4235277c1041",
+    "difficulty": "easy",
+    "case_name": "성씨의 아포스트로피",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_keyword_match",
+    "rationale_ko": "입력은 성씨 O'Reilly의 아포스트로피이며 SQL 연산자, 항진식 또는 주석 조합이 없다. 관찰 범위에서 이름 검색의 문자 사용으로 보아 오탐을 기대한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "name=O%27Reilly"
+      }
+    ],
+    "verification_notes_ko": "설계상 기대 판정이며 실측 정답이 아닌 사람 검토용이다. 난이도는 판정·심각도와 별개이며 WAF D/A는 정답 근거가 아니다. 조회 권한을 입증한 것은 아니다. 따옴표 하나만 탐지하는 룰인지 확인한다."
+  }
+]

@@ -1,0 +1,26 @@
+.compact-reference-comparison { min-width: 0; max-width: 100%; }
+.compact-reference-line { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; font-size: 12px; line-height: 1.7; }
+.compact-reference-value { color: var(--muted); white-space: nowrap; }
+.compact-reference-line strong { color: var(--text); font-weight: 600; }
+.compact-reference-source { display: block; margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.6; overflow-wrap: anywhere; }
+.compact-reference-empty { color: var(--muted); }
+.compact-reference-reason { margin-top: 4px; font-size: 10px; }
+.compact-reference-reason > summary { width: fit-content; color: var(--muted); cursor: pointer; }
+.compact-reference-reason > p { margin: 6px 0 0; color: var(--muted); font-size: 11px; line-height: 1.7; overflow-wrap: anywhere; }
+.compact-evaluation-detail { padding: 13px 18px; }
+.compact-evaluation-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; }
+.compact-evaluation-title { color: var(--muted); font-size: 11px; font-weight: 600; }
+.compact-evaluation-heading > small { color: var(--muted); font-size: 10px; line-height: 1.7; }
+.compact-evaluation-provenance { margin-top: 9px; }
+.compact-evaluation-provenance > summary { color: var(--muted); width: fit-content; font-size: 11px; cursor: pointer; }
+.compact-evaluation-provenance > .table-wrap { margin-top: 14px; max-height: 340px; border: 1px solid var(--line); border-radius: 8px; }
+.compact-evaluation-provenance .label-metadata { margin-block: 12px; }
+.compact-evaluation-history-error { margin: 8px 0 0; color: var(--danger); font-size: 11px; line-height: 1.7; }
+.label-attachment[hidden] { display: none; }
+@media (max-width: 680px) {
+  .compact-evaluation-detail { padding: 12px 14px; }
+  .compact-evaluation-heading { gap: 7px 10px; }
+  .compact-evaluation-heading > small { flex-basis: 100%; }
+  .compact-evaluation-provenance .label-metadata { grid-template-columns: 1fr; gap: 5px; }
+  .compact-evaluation-provenance .label-metadata dd { margin-bottom: 6px; }
+}

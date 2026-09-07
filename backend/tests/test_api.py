@@ -81,7 +81,10 @@ def test_stub_worker_creates_visible_agent_history(client, event_payload, servic
     result = client.get(f"/api/v1/analyses/{created['id']}").json()
     runs = client.get(f"/api/v1/analyses/{created['id']}/agent-runs").json()
     assert result["verdict"] == "inconclusive"
+    assert result["result"]["schema_version"] == "waf-analysis-v2"
+    assert result["result"]["threat_analysis"]["severity"] == "UNKNOWN"
+    assert "uncertainties" not in result["result"]
     assert len(runs) == 1
-    assert [step["step_type"] for step in runs[0]["steps"]] == ["input", "parser", "agent_stub"]
+    assert [step["step_type"] for step in runs[0]["steps"]] == ["input", "parser", "decoder", "agent_stub"]
     step_input = json.loads(runs[0]["steps"][0]["input"])
     assert step_input["payload"] == event_payload["payload"]

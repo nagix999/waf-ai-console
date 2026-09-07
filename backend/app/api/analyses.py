@@ -23,8 +23,13 @@ from ..schemas import (
     UploadResponse,
 )
 from ..security import CurrentPrincipal, Principal, require_scope
-from ..services.analysis import count_analyses, enqueue_analysis, fetch_analysis, to_detail, to_summary
-from ..services.uploads import UploadFormatError, normalize_upload_row, parse_upload
+from ..services.analysis import AnalysisIngestError, enqueue_analysis, fetch_analysis, to_detail, to_summary
+from ..services.analysis_query import AnalysisFilters, filtered_evaluation_summary, find_analyses
+from ..services.timing import run_duration_ms, step_duration_ms
+from ..services.payload_decoding import decode_payload
+from ..services.uploads import UploadFormatError, extract_test_upload_row, normalize_upload_row, parse_upload
+from ..services.upload_expected_labels import enqueue_test_upload_row
+from ..services.input_schemas import InputSchemaError, pin_schema
 
 router = APIRouter(tags=["analyses"])
 DbSession = Annotated[Session, Depends(get_db)]
@@ -34,6 +39,19 @@ def require_source(principal: Principal) -> str:
     if principal.source_system:
         return principal.source_system
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="source_system_required")
+
+
+def visible_source(principal: Principal) -> str | None:
+    return None if "admin" in principal.scopes else require_source(principal)
+
+
+def begin_analysis_read_snapshot(db: Session) -> None:
+    # SQLite legacy transaction mode does not begin a DBAPI transaction for
+    # SELECT. Keep count, page, labels and aggregate on one read snapshot in
+    # these read-only routes; leave ingest, worker and global DB behavior alone.
+    connection = db.connection()
+    if connection.dialect.name == "sqlite" and not connection.connection.driver_connection.in_transaction:
+        connection.exec_driver_sql("BEGIN")
 
 
 def safe_validation_errors(exc: ValidationError) -> list[dict]:
@@ -63,7 +81,7 @@ def record_access(db: Session, principal: Principal, action: str, resource_type:
 @router.post(
     "/analyses",
     response_model=AnalysisDetail,
-    responses={202: {"description": "Queued or still processing"}},
+    responses={202: {"model": AnalysisDetail, "description": "Queued or still processing"}},
 )
 async def create_analysis(
     payload: AnalysisInput,
@@ -73,7 +91,60 @@ async def create_analysis(
     principal: Annotated[Principal, Depends(require_scope("ingest"))],
     wait_seconds: int = Query(default=0, ge=0, le=60),
 ) -> AnalysisDetail:
-    row, _duplicate = enqueue_analysis(db, request.app.state.crypto, require_source(principal), payload)
+    return await submit_analysis(payload, request, response, db, principal, wait_seconds, "production", "service_api")
+
+
+@router.post(
+    "/test-analyses", response_model=AnalysisDetail,
+    responses={202: {"model": AnalysisDetail, "description": "Queued or still processing"}},
+)
+async def create_test_analysis(
+    payload: AnalysisInput,
+    request: Request,
+    response: Response,
+    db: DbSession,
+    principal: Annotated[Principal, Depends(require_scope("admin"))],
+    name: str = Query(..., min_length=1, max_length=120),
+    idempotency_key: str = Query(..., min_length=8, max_length=120),
+    wait_seconds: int = Query(default=0, ge=0, le=60),
+) -> AnalysisDetail:
+    if set(request.query_params) - {"wait_seconds", "name", "idempotency_key"}:
+        raise HTTPException(422, "unsupported_query_parameter")
+    from .test_runs import submit
+    from ..models import TestRunItem
+    run, _ = submit(db, request, principal, name=name, idempotency_key=idempotency_key,
+        rows=[payload.model_dump(mode="json", exclude_unset=True)], kind="direct")
+    item = db.scalar(select(TestRunItem).where(TestRunItem.test_run_id == run.id))
+    if item.analysis_id is None:
+        raise HTTPException(413 if item.error_code == "payload_too_large" else 422,
+                            item.error_code or "invalid_test_event")
+    row = fetch_analysis(db, item.analysis_id)
+    if wait_seconds:
+        deadline = asyncio.get_running_loop().time() + wait_seconds
+        while row.status in {"pending", "processing"} and asyncio.get_running_loop().time() < deadline:
+            await asyncio.sleep(0.25)
+            db.expire_all()
+            row = fetch_analysis(db, item.analysis_id)
+    row._test_run_id = run.id
+    if row.status in {"pending", "processing"}:
+        response.status_code = 202
+    return to_detail(row, request.app.state.crypto)
+
+
+async def submit_analysis(
+    payload: AnalysisInput, request: Request, response: Response, db: Session,
+    principal: Principal, wait_seconds: int, purpose: str, channel: str,
+) -> AnalysisDetail:
+    if set(request.query_params) - {"wait_seconds"}:
+        raise HTTPException(status_code=422, detail="unsupported_query_parameter")
+    try:
+        row, _duplicate = enqueue_analysis(
+            db, request.app.state.crypto, require_source(principal), payload,
+            analysis_purpose=purpose, ingest_channel=channel,
+            payload_max_bytes=request.app.state.settings.payload_max_bytes,
+        )
+    except AnalysisIngestError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=exc.issues or exc.code) from None
     if wait_seconds:
         deadline = asyncio.get_running_loop().time() + wait_seconds
         while row.status in {"pending", "processing"} and asyncio.get_running_loop().time() < deadline:
@@ -85,33 +156,34 @@ async def create_analysis(
             row = refreshed
     if row.status in {"pending", "processing"}:
         response.status_code = status.HTTP_202_ACCEPTED
-    return to_detail(row)
+    return to_detail(row, request.app.state.crypto)
 
 
 @router.get("/analyses", response_model=AnalysisListResponse)
 def list_analyses(
     db: DbSession,
-    _principal: CurrentPrincipal,
-    limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
-    analysis_status: str | None = Query(default=None, alias="status"),
-    verdict: str | None = Query(default=None),
+    principal: Annotated[Principal, Depends(require_scope("ingest"))],
+    filters: Annotated[AnalysisFilters, Query()],
 ) -> AnalysisListResponse:
-    query = select(Analysis).options(selectinload(Analysis.reviews)).order_by(desc(Analysis.created_at))
-    if analysis_status:
-        query = query.where(Analysis.status == analysis_status)
-    if verdict:
-        query = query.where(Analysis.verdict == verdict)
-    rows = list(db.scalars(query.offset(offset).limit(limit)).all())
-    return AnalysisListResponse(items=[to_summary(row) for row in rows], total=count_analyses(db), limit=limit, offset=offset)
+    begin_analysis_read_snapshot(db)
+    rows, total = find_analyses(db, filters, visible_source(principal))
+    return AnalysisListResponse(
+        items=[to_summary(row) for row in rows], total=total, limit=filters.limit, offset=filters.offset,
+        evaluation_summary=filtered_evaluation_summary(db, filters, visible_source(principal)),
+    )
 
 
 @router.get("/analyses/{analysis_id}", response_model=AnalysisDetail)
-def get_analysis(analysis_id: str, db: DbSession, _principal: CurrentPrincipal) -> AnalysisDetail:
-    row = fetch_analysis(db, analysis_id)
+def get_analysis(
+    analysis_id: str, db: DbSession,
+    principal: Annotated[Principal, Depends(require_scope("ingest"))],
+    request: Request = None,
+) -> AnalysisDetail:
+    begin_analysis_read_snapshot(db)
+    row = fetch_analysis(db, analysis_id, visible_source(principal))
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="analysis_not_found")
-    return to_detail(row)
+    return to_detail(row, request.app.state.crypto if request is not None else None)
 
 
 @router.get("/analyses/{analysis_id}/event", response_model=RawEventResponse)
@@ -135,6 +207,7 @@ def get_raw_event(
         payload=payload,
         extra_fields=row.extra_fields,
         encryption_key_version=row.encryption_key_version,
+        decoding=decode_payload(payload),
     )
 
 
@@ -146,7 +219,7 @@ def create_review(
     db: DbSession,
     principal: Annotated[Principal, Depends(require_scope("review"))],
 ) -> ReviewResponse:
-    analysis = db.get(Analysis, analysis_id)
+    analysis = fetch_analysis(db, analysis_id, visible_source(principal))
     if analysis is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="analysis_not_found")
     if analysis.event_id != payload.event_id:
@@ -159,6 +232,7 @@ def create_review(
         )
     )
     if existing:
+        validate_review_duplicate(existing, analysis_id, payload)
         response.status_code = status.HTTP_200_OK
         return ReviewResponse.model_validate(existing, from_attributes=True)
     row = Review(analysis_id=analysis_id, source_system=source_system, **payload.model_dump())
@@ -175,9 +249,17 @@ def create_review(
         )
         if row is None:
             raise
+        validate_review_duplicate(row, analysis_id, payload)
         response.status_code = status.HTTP_200_OK
     db.refresh(row)
     return ReviewResponse.model_validate(row, from_attributes=True)
+
+
+def validate_review_duplicate(existing: Review, analysis_id: str, payload: ReviewCreate) -> None:
+    if existing.analysis_id != analysis_id or any(
+        getattr(existing, field) != value for field, value in payload.model_dump().items()
+    ):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="external_review_id_conflict")
 
 
 @router.get("/analyses/{analysis_id}/agent-runs", response_model=list[AgentRunResponse])
@@ -218,6 +300,7 @@ def get_agent_runs(
                     tool_calls=step.tool_calls_json,
                     started_at=step.started_at,
                     completed_at=step.completed_at,
+                    duration_ms=step_duration_ms(step),
                 )
             )
         result.append(
@@ -230,6 +313,7 @@ def get_agent_runs(
                 failure_id=run.failure_id,
                 started_at=run.started_at,
                 completed_at=run.completed_at,
+                duration_ms=run_duration_ms(run),
                 steps=steps,
             )
         )
@@ -253,6 +337,37 @@ async def upload_events(
     principal: Annotated[Principal, Depends(require_scope("ingest"))],
     file: UploadFile = File(...),
 ) -> UploadResponse:
+    return await submit_upload(request, db, principal, file, "production", "file_upload")
+
+
+@router.post("/test-uploads", response_model=UploadResponse, status_code=status.HTTP_202_ACCEPTED)
+async def upload_test_events(
+    request: Request,
+    db: DbSession,
+    principal: Annotated[Principal, Depends(require_scope("admin"))],
+    file: UploadFile = File(...),
+    name: str = Query(..., min_length=1, max_length=120),
+    idempotency_key: str = Query(..., min_length=8, max_length=120),
+) -> UploadResponse:
+    if set(request.query_params) - {"name", "idempotency_key"}:
+        raise HTTPException(422, "unsupported_query_parameter")
+    from .test_runs import upload_test_run
+    from ..models import TestRunItem
+    detail = await upload_test_run(request, db, principal, name, idempotency_key, file)
+    rows = list(db.scalars(select(TestRunItem).where(TestRunItem.test_run_id == detail.id).order_by(TestRunItem.row_number)))
+    return UploadResponse(accepted=detail.accepted, duplicates=detail.duplicates, rejected=detail.rejected,
+        analysis_ids=[row.analysis_id for row in rows if row.analysis_id],
+        errors=[{"row": row.row_number, "message": row.error_code} for row in rows if row.error_code][:100],
+        label_attached=sum(row.label_id is not None and row.ingest_status == "accepted" for row in rows),
+        label_unchanged=sum(row.label_id is not None and row.ingest_status == "duplicate" for row in rows),
+        test_run_id=detail.id)
+
+
+async def submit_upload(
+    request: Request, db: Session, principal: Principal, file: UploadFile, purpose: str, channel: str,
+) -> UploadResponse:
+    if request.query_params:
+        raise HTTPException(status_code=422, detail="unsupported_query_parameter")
     content = await file.read(request.app.state.settings.upload_max_bytes + 1)
     if len(content) > request.app.state.settings.upload_max_bytes:
         raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="upload_too_large")
@@ -262,13 +377,40 @@ async def upload_events(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
 
     accepted = duplicates = rejected = 0
+    label_attached = label_unchanged = 0
     analysis_ids: list[str] = []
     errors: list[dict] = []
     source_system = require_source(principal)
+    try:
+        schema_snapshot = pin_schema(db, request.app.state.crypto, Analysis())
+        db.commit()  # Persist first-use default before row-level transactions.
+    except InputSchemaError as exc:
+        db.rollback()
+        raise HTTPException(exc.status_code, exc.code) from None
     for index, raw_row in enumerate(rows, start=1):
         try:
+            expected_verdict = None
+            if purpose == "test":
+                raw_row, expected_verdict = extract_test_upload_row(raw_row)
             payload = AnalysisInput.model_validate(normalize_upload_row(raw_row))
-            analysis, duplicate = enqueue_analysis(db, request.app.state.crypto, source_system, payload)
+            if purpose == "test":
+                analysis, duplicate, label_state = enqueue_test_upload_row(
+                    db, request.app.state.crypto, source_system, payload,
+                    expected_verdict=expected_verdict,
+                    actor=principal.username or source_system,
+                    payload_max_bytes=request.app.state.settings.payload_max_bytes,
+                    ingest_channel=channel,
+                    schema_snapshot=schema_snapshot,
+                )
+                label_attached += label_state == "attached"
+                label_unchanged += label_state == "unchanged"
+            else:
+                analysis, duplicate = enqueue_analysis(
+                    db, request.app.state.crypto, source_system, payload,
+                    analysis_purpose=purpose, ingest_channel=channel,
+                    payload_max_bytes=request.app.state.settings.payload_max_bytes,
+                    schema_snapshot=schema_snapshot,
+                )
             analysis_ids.append(analysis.id)
             if duplicate:
                 duplicates += 1
@@ -278,6 +420,14 @@ async def upload_events(
             rejected += 1
             if len(errors) < 100:
                 errors.append({"row": index, "validation": safe_validation_errors(exc)})
+        except AnalysisIngestError as exc:
+            rejected += 1
+            if len(errors) < 100:
+                errors.append({"row": index, "message": exc.code, **({"validation": exc.issues} if exc.issues else {})})
+        except UploadFormatError as exc:
+            rejected += 1
+            if len(errors) < 100:
+                errors.append({"row": index, "message": str(exc)})
         except ValueError as exc:
             rejected += 1
             if len(errors) < 100:
@@ -288,4 +438,6 @@ async def upload_events(
         rejected=rejected,
         analysis_ids=analysis_ids,
         errors=errors,
+        label_attached=label_attached,
+        label_unchanged=label_unchanged,
     )

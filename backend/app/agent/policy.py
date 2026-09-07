@@ -1,12 +1,16 @@
 from dataclasses import dataclass
 
+from .analyst_guidance import FOLLOW_UP_SUMMARY, merge_analyst_checks
 from .contracts import (
     AgentVerdict,
     EvidenceItem,
     SignatureRelation,
+    ThreatAnalysis,
+    ThreatSeverity,
     TuningRecommendation,
     WAFAnalysisOutput,
 )
+from .evidence_deduplication import deduplicate_evidence
 
 
 @dataclass(frozen=True)
@@ -15,6 +19,7 @@ class VerifierPolicyContext:
     parser_status: str
     input_truncated: bool
     confidence_threshold: float = 0.75
+    evidence_grounding_failed: bool = False
 
 
 @dataclass(frozen=True)
@@ -46,6 +51,8 @@ def verifier_reasons(primary: WAFAnalysisOutput, context: VerifierPolicyContext)
         reasons.append("tuning_recommended")
     if primary.conflicting_evidence:
         reasons.append("conflicting_evidence")
+    if context.evidence_grounding_failed:
+        reasons.append("evidence_grounding_failed")
     return reasons
 
 
@@ -60,17 +67,7 @@ def _dedupe_text(values: list[str], limit: int = 10) -> list[str]:
 
 
 def _merge_evidence(primary: WAFAnalysisOutput, verifier: WAFAnalysisOutput | None) -> list[EvidenceItem]:
-    result: list[EvidenceItem] = []
-    seen: set[tuple[str, str]] = set()
-    for item in [*primary.evidence, *(verifier.evidence if verifier else [])]:
-        key = (item.field, item.excerpt)
-        if key in seen:
-            continue
-        seen.add(key)
-        result.append(item)
-        if len(result) == 5:
-            break
-    return result
+    return deduplicate_evidence([*primary.evidence, *(verifier.evidence if verifier else [])])
 
 
 def _disabled_tuning(reason: str) -> TuningRecommendation:
@@ -82,9 +79,36 @@ def _disabled_tuning(reason: str) -> TuningRecommendation:
     )
 
 
+def _severity_for_inconclusive(primary: WAFAnalysisOutput) -> ThreatAnalysis:
+    return primary.threat_analysis.model_copy(update={"severity": ThreatSeverity.UNKNOWN})
+
+
+def _conservative_agreed_severity(
+    primary: WAFAnalysisOutput,
+    verifier: WAFAnalysisOutput,
+) -> ThreatAnalysis:
+    if primary.verdict == AgentVerdict.false_positive:
+        severity = ThreatSeverity.NONE
+    elif primary.verdict == AgentVerdict.inconclusive:
+        severity = ThreatSeverity.UNKNOWN
+    else:
+        threat_rank = {
+            ThreatSeverity.LOW: 0,
+            ThreatSeverity.MEDIUM: 1,
+            ThreatSeverity.HIGH: 2,
+            ThreatSeverity.CRITICAL: 3,
+        }
+        severity = min(
+            primary.threat_analysis.severity,
+            verifier.threat_analysis.severity,
+            key=threat_rank.__getitem__,
+        )
+    return primary.threat_analysis.model_copy(update={"severity": severity})
+
+
 def finalize_without_verifier(primary: WAFAnalysisOutput) -> Finalization:
     return Finalization(
-        output=primary,
+        output=primary.model_copy(update={"evidence": _merge_evidence(primary, None)}),
         verifier_executed=False,
         agreement=None,
         verifier_reasons=(),
@@ -102,17 +126,14 @@ def finalize_with_verifier(
             update={
                 "verdict": AgentVerdict.inconclusive,
                 "confidence_score": min(primary.confidence_score, 0.49),
-                "summary_ko": "독립 검증을 완료하지 못해 최종 판정을 보류합니다.",
-                "uncertainties": _dedupe_text(
-                    ["독립 검증 Agent가 정상 결과를 반환하지 못했습니다.", *primary.uncertainties]
-                ),
+                "summary_ko": FOLLOW_UP_SUMMARY,
+                "threat_analysis": _severity_for_inconclusive(primary),
+                "evidence": _merge_evidence(primary, None),
                 "recommended_checks": _dedupe_text(
-                    ["검증 모델 연결과 실패 ID를 확인한 뒤 다시 분석하세요.", *primary.recommended_checks]
+                    primary.recommended_checks
                 ),
-                "tuning_recommendation": _disabled_tuning("검증 실패 상태에서는 튜닝을 제안하지 않습니다."),
-                "conflicting_evidence": _dedupe_text(
-                    ["독립 검증 결과 부재", *primary.conflicting_evidence]
-                ),
+                "analyst_checks": merge_analyst_checks(primary),
+                "tuning_recommendation": _disabled_tuning("추가 확인 전에는 WAF 설정 변경을 제안하지 않습니다."),
             }
         )
         return Finalization(output, True, False, tuple(reasons), verifier_failure)
@@ -123,21 +144,16 @@ def finalize_with_verifier(
             update={
                 "verdict": AgentVerdict.inconclusive,
                 "confidence_score": min(primary.confidence_score, verifier.confidence_score, 0.49),
-                "summary_ko": "1차 판정과 독립 검증 판정이 일치하지 않아 최종 판정을 보류합니다.",
+                "summary_ko": FOLLOW_UP_SUMMARY,
+                "threat_analysis": _severity_for_inconclusive(primary),
                 "evidence": _merge_evidence(primary, verifier),
-                "uncertainties": _dedupe_text(
-                    [
-                        f"판정 불일치: primary={primary.verdict.value}, verifier={verifier.verdict.value}",
-                        *primary.uncertainties,
-                        *verifier.uncertainties,
-                    ]
-                ),
                 "recommended_checks": _dedupe_text(
-                    ["분석가가 원문과 양쪽 근거를 직접 확인하세요.", *primary.recommended_checks, *verifier.recommended_checks]
+                    [*primary.recommended_checks, *verifier.recommended_checks]
                 ),
-                "tuning_recommendation": _disabled_tuning("판정 불일치 상태에서는 튜닝을 제안하지 않습니다."),
+                "analyst_checks": merge_analyst_checks(primary, verifier),
+                "tuning_recommendation": _disabled_tuning("추가 확인 전에는 WAF 설정 변경을 제안하지 않습니다."),
                 "conflicting_evidence": _dedupe_text(
-                    ["Primary/Verifier verdict 불일치", *primary.conflicting_evidence, *verifier.conflicting_evidence]
+                    [*primary.conflicting_evidence, *verifier.conflicting_evidence]
                 ),
             }
         )
@@ -145,13 +161,14 @@ def finalize_with_verifier(
 
     tuning = primary.tuning_recommendation
     if tuning.recommended and not verifier.tuning_recommendation.recommended:
-        tuning = _disabled_tuning("독립 검증이 튜닝 제안에 동의하지 않았습니다.")
+        tuning = _disabled_tuning("현재 자료만으로 안전한 변경 범위를 확정하지 않아 튜닝을 제안하지 않습니다.")
     output = primary.model_copy(
         update={
             "confidence_score": min(primary.confidence_score, verifier.confidence_score),
+            "threat_analysis": _conservative_agreed_severity(primary, verifier),
             "evidence": _merge_evidence(primary, verifier),
-            "uncertainties": _dedupe_text([*primary.uncertainties, *verifier.uncertainties]),
             "recommended_checks": _dedupe_text([*primary.recommended_checks, *verifier.recommended_checks]),
+            "analyst_checks": merge_analyst_checks(primary, verifier),
             "tuning_recommendation": tuning,
             "conflicting_evidence": _dedupe_text(
                 [*primary.conflicting_evidence, *verifier.conflicting_evidence]

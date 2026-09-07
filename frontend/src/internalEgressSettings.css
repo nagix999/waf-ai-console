@@ -1,0 +1,45 @@
+.internal-egress-settings { display: grid; gap: 18px; min-width: 0; }
+.internal-egress-settings .egress-overview, .internal-egress-settings .egress-editor { padding: 22px; }
+.internal-egress-settings .egress-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; margin-bottom: 15px; }
+.internal-egress-settings .egress-heading > div { min-width: 0; }
+.internal-egress-settings .egress-heading > button { flex-shrink: 0; }
+.internal-egress-settings .egress-heading p, .internal-egress-settings .egress-help { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.75; }
+.internal-egress-settings .egress-policy { padding: 12px 14px; margin: 0; border: 1px solid var(--line); border-radius: 9px; background: var(--raised); font-size: 12px; line-height: 1.8; }
+.internal-egress-settings .egress-migration { margin-top: 15px; font-size: 12px; }
+.internal-egress-settings summary { cursor: pointer; font-weight: 600; }
+.internal-egress-settings .egress-migration p { margin: 10px 0 0; color: var(--muted); line-height: 1.8; }
+.internal-egress-settings .egress-layout { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(300px, 1fr); gap: 18px; align-items: start; }
+.internal-egress-settings .egress-targets { display: grid; }
+.internal-egress-settings .egress-targets article { padding: 18px 20px; border-bottom: 1px solid var(--line); border-left: 3px solid transparent; }
+.internal-egress-settings .egress-targets article:last-child { border-bottom: 0; }
+.internal-egress-settings .egress-targets .egress-selected { border-left-color: var(--accent); background: var(--accent-soft); }
+.internal-egress-settings .egress-target-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.internal-egress-settings .egress-target-heading strong { min-width: 0; font-size: 14px; font-family: ui-monospace, monospace; overflow-wrap: anywhere; }
+.internal-egress-settings .egress-use { padding: 3px 7px; background: var(--raised); border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-size: 10px; }
+.internal-egress-settings .egress-description { margin: 8px 0 12px; font-size: 12px; overflow-wrap: anywhere; }
+.internal-egress-settings .egress-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
+.internal-egress-settings .egress-actions small { color: var(--muted); font-size: 10px; margin-left: auto; }
+.internal-egress-settings .egress-profiles { padding: 0; margin: 10px 0; list-style: none; display: grid; gap: 5px; }
+.internal-egress-settings .egress-profiles li { display: flex; align-items: baseline; gap: 9px; font-size: 12px; }
+.internal-egress-settings .egress-profiles li span { min-width: 0; overflow-wrap: anywhere; }
+.internal-egress-settings .egress-profiles small { color: var(--muted); flex-shrink: 0; }
+.internal-egress-settings .egress-empty { padding: 20px; margin: 0; font-size: 12px; color: var(--muted); }
+.internal-egress-settings .egress-editor fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 13px; min-width: 0; }
+.internal-egress-settings input[readonly] { background: var(--raised); color: var(--muted); }
+.internal-egress-settings .egress-warning { margin: 14px 0; padding: 12px; color: var(--warn); background: var(--warn-soft); border-radius: 8px; font-size: 12px; }
+.internal-egress-settings .egress-conflict { margin-top: 16px; padding: 14px; border: 1px solid var(--warn); border-radius: 8px; background: var(--warn-soft); overflow-wrap: anywhere; }
+.internal-egress-settings .egress-conflict h3 { margin: 0 0 10px; }
+.internal-egress-settings .egress-conflict p { margin: 8px 0; font-size: 12px; }
+.internal-egress-settings > .error, .internal-egress-settings > .notice { margin: 0; }
+.profile-form .profile-egress { margin: 15px 0; padding: 14px; border: 1px solid var(--line); border-radius: 9px; background: var(--raised); display: grid; gap: 10px; min-width: 0; }
+.profile-form .profile-egress .egress-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.profile-form .profile-egress p { margin: 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.profile-form .profile-egress .egress-validation { color: var(--warn); }
+.profile-form .profile-egress select { overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1050px) { .internal-egress-settings .egress-layout { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 600px) {
+  .internal-egress-settings .egress-overview, .internal-egress-settings .egress-editor { padding: 16px; }
+  .internal-egress-settings .egress-heading { flex-direction: column; }
+  .internal-egress-settings .egress-targets article { padding: 16px; }
+  .internal-egress-settings .egress-conflict button { white-space: normal; }
+}

@@ -1,8 +1,17 @@
 .env
+.env.*
+!.env.example
+.local-deploy/
 .venv/
 __pycache__/
 *.py[cod]
 *.db
+*.db-wal
+*.db-shm
+*.sqlite*
+*.bak
+*.pem
+*.key
 .pytest_cache/
 node_modules/
 dist/

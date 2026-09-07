@@ -3,7 +3,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -18,6 +18,20 @@ class AnalysisStatus(str, enum.Enum):
     processing = "processing"
     completed = "completed"
     failed = "failed"
+
+
+class AnalysisPurpose(str, enum.Enum):
+    production = "production"
+    test = "test"
+    legacy_unknown = "legacy_unknown"
+
+
+class IngestChannel(str, enum.Enum):
+    service_api = "service_api"
+    file_upload = "file_upload"
+    test_lab = "test_lab"
+    model_validation = "model_validation"
+    legacy_unknown = "legacy_unknown"
 
 
 class Verdict(str, enum.Enum):
@@ -45,6 +59,11 @@ class ModelProfileStatus(str, enum.Enum):
     disabled = "disabled"
 
 
+class ModelProvider(str, enum.Enum):
+    vllm = "vllm"
+    openai = "openai"
+
+
 class ModelTestMode(str, enum.Enum):
     quick = "quick"
     full = "full"
@@ -62,10 +81,16 @@ class Analysis(Base):
     __table_args__ = (
         UniqueConstraint("source_system", "event_id", name="uq_analysis_source_event"),
         Index("ix_analyses_status_created", "status", "created_at"),
+        Index("ix_analyses_purpose_created", "analysis_purpose", "created_at"),
+        Index("ix_analyses_severity_created", "severity", "created_at"),
+        Index("ix_analyses_category_created", "threat_category", "created_at"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     source_system: Mapped[str] = mapped_column(String(120), nullable=False)
+    analysis_purpose: Mapped[str] = mapped_column(String(32), default="legacy_unknown", server_default="legacy_unknown", nullable=False)
+    ingest_channel: Mapped[str] = mapped_column(String(32), default="legacy_unknown", server_default="legacy_unknown", nullable=False)
+    event_fingerprint: Mapped[str | None] = mapped_column(String(64))
     event_id: Mapped[str] = mapped_column(String(255), nullable=False)
     company_name: Mapped[str] = mapped_column(String(255), nullable=False)
     src_ip: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -90,12 +115,19 @@ class Analysis(Base):
     error_message: Mapped[str | None] = mapped_column(Text)
 
     verdict: Mapped[str | None] = mapped_column(String(32))
+    severity: Mapped[str | None] = mapped_column(String(16))
+    threat_category: Mapped[str | None] = mapped_column(String(120))
     confidence_score: Mapped[float | None] = mapped_column(Float)
     summary_ko: Mapped[str | None] = mapped_column(Text)
     result_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     input_truncated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     prompt_version: Mapped[str | None] = mapped_column(String(120))
+    prompt_policy_version_id: Mapped[str | None] = mapped_column(ForeignKey("prompt_policy_versions.id", ondelete="RESTRICT"))
+    prompt_snapshot_ciphertext: Mapped[str | None] = mapped_column(Text)
+    input_schema_version_id: Mapped[str | None] = mapped_column(ForeignKey("input_schema_versions.id", ondelete="RESTRICT"))
+    input_schema_snapshot_ciphertext: Mapped[str | None] = mapped_column(Text)
     model_profile: Mapped[str | None] = mapped_column(String(120))
+    model_test_run_id: Mapped[str | None] = mapped_column(ForeignKey("vllm_test_runs.id", ondelete="RESTRICT"), index=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
@@ -164,6 +196,30 @@ class Review(Base):
     analysis: Mapped[Analysis] = relationship(back_populates="reviews")
 
 
+class AnalysisLabel(Base):
+    """Append-only references, never part of event/model input."""
+    __tablename__ = "analysis_labels"
+    __table_args__ = (
+        UniqueConstraint("analysis_id", "revision", name="uq_analysis_label_revision"),
+        Index("ix_analysis_labels_attachment", "attachment_id"),
+        CheckConstraint("revision > 0", name="ck_analysis_label_revision"),
+        CheckConstraint("verdict IN ('true_positive', 'false_positive', 'inconclusive')", name="ck_analysis_label_verdict"),
+        CheckConstraint("source_kind IN ('synthetic_expected', 'reference')", name="ck_analysis_label_source"),
+        CheckConstraint("verdict != 'inconclusive' OR source_kind = 'synthetic_expected'", name="ck_analysis_label_abstention"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    analysis_id: Mapped[str] = mapped_column(ForeignKey("analyses.id", ondelete="CASCADE"), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    verdict: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_ref: Mapped[str] = mapped_column(String(120), nullable=False)
+    ai_visible: Mapped[bool | None] = mapped_column(Boolean)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    attachment_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    token_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
 class AccessAudit(Base):
     __tablename__ = "access_audits"
     __table_args__ = (Index("ix_access_audits_created", "created_at"),)
@@ -177,6 +233,95 @@ class AccessAudit(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
+class PromptPolicyVersion(Base):
+    """Immutable saved policy content; activation lives in the singleton state."""
+    __tablename__ = "prompt_policy_versions"
+    __table_args__ = (
+        UniqueConstraint("version_number", name="uq_prompt_policy_version_number"),
+        CheckConstraint("version_number > 0", name="ck_prompt_policy_version_number"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    change_note: Mapped[str] = mapped_column(String(1000), nullable=False)
+    parent_version_id: Mapped[str | None] = mapped_column(ForeignKey("prompt_policy_versions.id", ondelete="RESTRICT"))
+    policy_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    encryption_key_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class PromptPolicyState(Base):
+    __tablename__ = "prompt_policy_state"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_prompt_policy_state_singleton"),
+        CheckConstraint("revision >= 1", name="ck_prompt_policy_state_revision"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    active_version_id: Mapped[str] = mapped_column(ForeignKey("prompt_policy_versions.id", ondelete="RESTRICT"), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+
+
+class InputSchemaVersion(Base):
+    __tablename__ = "input_schema_versions"
+    __table_args__ = (
+        UniqueConstraint("version_number", name="uq_input_schema_version_number"),
+        CheckConstraint("version_number > 0", name="ck_input_schema_version_number"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    change_note: Mapped[str] = mapped_column(String(1000), nullable=False)
+    parent_id: Mapped[str | None] = mapped_column(ForeignKey("input_schema_versions.id", ondelete="RESTRICT"))
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    definition_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    encryption_key_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class InputSchemaState(Base):
+    __tablename__ = "input_schema_state"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="ck_input_schema_state_singleton"),
+        CheckConstraint("revision >= 1", name="ck_input_schema_state_revision"),
+    )
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    active_version_id: Mapped[str] = mapped_column(ForeignKey("input_schema_versions.id", ondelete="RESTRICT"), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+
+
+class InputSchemaActivation(Base):
+    __tablename__ = "input_schema_activations"
+    __table_args__ = (UniqueConstraint("revision", name="uq_input_schema_activation_revision"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    previous_version_id: Mapped[str | None] = mapped_column(ForeignKey("input_schema_versions.id", ondelete="RESTRICT"))
+    active_version_id: Mapped[str] = mapped_column(ForeignKey("input_schema_versions.id", ondelete="RESTRICT"), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    actor_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class InternalEgressTarget(Base):
+    __tablename__ = "internal_egress_targets"
+    __table_args__ = (
+        UniqueConstraint("ip_address", "port", name="uq_internal_egress_ip_port"),
+        CheckConstraint("port >= 1 AND port <= 65535", name="ck_internal_egress_port"),
+        CheckConstraint("revision >= 1", name="ck_internal_egress_revision"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    ip_address: Mapped[str] = mapped_column(String(39), nullable=False)
+    port: Mapped[int] = mapped_column(Integer, nullable=False)
+    description: Mapped[str] = mapped_column(String(500), default="", nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+
 class VLLMProfile(Base):
     __tablename__ = "vllm_profiles"
     __table_args__ = (
@@ -188,10 +333,14 @@ class VLLMProfile(Base):
             sqlite_where=text("status = 'production'"),
             postgresql_where=text("status = 'production'"),
         ),
+        Index("uq_vllm_single_test", "is_test", unique=True,
+              sqlite_where=text("is_test = 1"), postgresql_where=text("is_test = true")),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name: Mapped[str] = mapped_column(String(120), nullable=False)
+    provider: Mapped[str] = mapped_column(String(20), default="vllm", server_default="vllm", nullable=False)
+    external_data_approved: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
     base_url: Mapped[str] = mapped_column(String(500), nullable=False)
     model_name: Mapped[str] = mapped_column(String(255), nullable=False)
     api_key_ciphertext: Mapped[str | None] = mapped_column(Text)
@@ -202,6 +351,7 @@ class VLLMProfile(Base):
     test_concurrency: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
     tls_verify: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     status: Mapped[str] = mapped_column(String(32), default=ModelProfileStatus.draft.value, nullable=False)
+    is_test: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
     last_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
@@ -215,13 +365,22 @@ class VLLMProfile(Base):
 
 class VLLMTestRun(Base):
     __tablename__ = "vllm_test_runs"
-    __table_args__ = (Index("ix_vllm_test_status_created", "status", "created_at"),)
+    __table_args__ = (Index("ix_vllm_test_status_created", "status", "created_at"),
+                     Index("uq_vllm_tests_idempotency", "idempotency_key", unique=True))
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     profile_id: Mapped[str] = mapped_column(ForeignKey("vllm_profiles.id", ondelete="CASCADE"), nullable=False)
     mode: Mapped[str] = mapped_column(String(20), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default=ModelTestStatus.pending.value, nullable=False)
     profile_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    include_dataset: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
+    dataset_version: Mapped[str | None] = mapped_column(String(80))
+    dataset_hash: Mapped[str | None] = mapped_column(String(64))
+    name: Mapped[str | None] = mapped_column(String(120))
+    idempotency_key: Mapped[str | None] = mapped_column(String(120))
+    request_hash: Mapped[str | None] = mapped_column(String(64))
+    input_schema_version_id: Mapped[str | None] = mapped_column(ForeignKey("input_schema_versions.id", ondelete="RESTRICT"))
+    input_schema_snapshot_ciphertext: Mapped[str | None] = mapped_column(Text)
     checks_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
     metrics_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     error_code: Mapped[str | None] = mapped_column(String(120))
@@ -233,3 +392,70 @@ class VLLMTestRun(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
     profile: Mapped[VLLMProfile] = relationship(back_populates="test_runs")
+
+
+class TestRun(Base):
+    """Named, immutable submission boundary; analyses remain the work queue."""
+    __tablename__ = "test_runs"
+    __table_args__ = (Index("ix_test_runs_created", "created_at"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_system: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    filename: Mapped[str | None] = mapped_column(String(255))
+    dataset_hash: Mapped[str | None] = mapped_column(String(64))
+    model_test_run_id: Mapped[str | None] = mapped_column(ForeignKey("vllm_test_runs.id", ondelete="RESTRICT"), unique=True)
+    profile_id: Mapped[str | None] = mapped_column(ForeignKey("vllm_profiles.id", ondelete="RESTRICT"))
+    profile_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    profile_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    execution_mode: Mapped[str] = mapped_column(String(32), nullable=False)
+    prompt_snapshot_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    prompt_policy_version_id: Mapped[str] = mapped_column(ForeignKey("prompt_policy_versions.id", ondelete="RESTRICT"), nullable=False)
+    prompt_version: Mapped[str] = mapped_column(String(120), nullable=False)
+    input_schema_version_id: Mapped[str | None] = mapped_column(ForeignKey("input_schema_versions.id", ondelete="RESTRICT"))
+    input_schema_snapshot_ciphertext: Mapped[str | None] = mapped_column(Text)
+    encryption_key_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class TestRunItem(Base):
+    __tablename__ = "test_run_items"
+    __table_args__ = (
+        UniqueConstraint("test_run_id", "row_number", name="uq_test_run_row"),
+        Index("ix_test_run_items_analysis", "analysis_id"),
+        Index("ix_test_run_items_run", "test_run_id"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    test_run_id: Mapped[str] = mapped_column(ForeignKey("test_runs.id", ondelete="RESTRICT"), nullable=False)
+    row_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    analysis_id: Mapped[str | None] = mapped_column(ForeignKey("analyses.id", ondelete="RESTRICT"))
+    label_id: Mapped[str | None] = mapped_column(ForeignKey("analysis_labels.id", ondelete="RESTRICT"))
+    event_id: Mapped[str | None] = mapped_column(String(255))
+    difficulty: Mapped[str | None] = mapped_column(String(80))
+    test_category: Mapped[str | None] = mapped_column(String(120))
+    case_name: Mapped[str | None] = mapped_column(String(240))
+    ingest_status: Mapped[str] = mapped_column(String(24), nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(120))
+
+
+class ServiceApiKey(Base):
+    __tablename__ = "service_api_keys"
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_service_api_key_name"),
+        UniqueConstraint("key_hash", name="uq_service_api_key_hash"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    key_prefix: Mapped[str] = mapped_column(String(48), nullable=False)
+    key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_system: Mapped[str] = mapped_column(String(120), nullable=False)
+    scopes_json: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_by: Mapped[str | None] = mapped_column(String(255))

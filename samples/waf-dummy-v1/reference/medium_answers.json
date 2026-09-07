@@ -1,0 +1,1002 @@
+[
+  {
+    "event_id": "waf-syn-782a7a9e51bb",
+    "difficulty": "medium",
+    "case_name": "인코딩된 상위 경로를 통한 파일 접근 탐색",
+    "expected_verdict": "true_positive",
+    "expected_severity": "MEDIUM",
+    "category": "path_traversal",
+    "rationale_ko": "파일 선택값이 반복된 인코딩 상위 경로로 시작하고 별도의 private 경로를 가리킵니다. 일반 파일명과 구별되는 디렉터리 탈출 탐색 구문이므로 경로 탐색 시도를 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "file=%2e%2e%2f%2e%2e%2fprivate%2fSYNTHETIC_MARKER.txt"
+      },
+      {
+        "field": "signature",
+        "excerpt": "Directory Traversal: Encoded Parent Segment"
+      }
+    ],
+    "verification_notes_ko": "대상은 존재하지 않는 합성 표식 파일입니다. 경로 정규화 결과나 실제 파일 접근 성공은 제공되지 않았습니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-541dafcbf92b",
+    "difficulty": "medium",
+    "case_name": "SVG 외래 콘텐츠의 업로드 정책 미상",
+    "expected_verdict": "inconclusive",
+    "expected_severity": "UNKNOWN",
+    "category": "active_content_policy",
+    "rationale_ko": "SVG 안에 HTML을 담을 수 있는 foreignObject가 있지만 스크립트나 이벤트 실행 구문은 없습니다. 허용되는 문서 기능인지 업로드 보안정책 위반인지 정책·출력 문맥이 없어 보류를 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "<foreignObject width=\"20\" height=\"20\">"
+      },
+      {
+        "field": "signature",
+        "excerpt": "SVG Active Content: Foreign Object"
+      }
+    ],
+    "verification_notes_ko": "SVG 렌더링 방식과 허용 요소 목록을 확인해야 합니다. foreignObject의 존재만으로 스크립트 실행을 관측했다고 주장하지 않습니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-49288ba633d6",
+    "difficulty": "medium",
+    "case_name": "통화 가격 문자열의 달러 기호",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_structured_data",
+    "rationale_ko": "달러 기호는 문자열 형태의 금액에 사용되었고 JSON 객체의 비교 연산자 키가 아닙니다. 연산자 객체와 통화 표시 문자열을 혼동한 탐지는 오탐을 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "\"display_price\":\"$20.00\""
+      },
+      {
+        "field": "signature",
+        "excerpt": "NoSQL Injection: Dollar Prefix"
+      }
+    ],
+    "verification_notes_ko": "백엔드 가격 검증이나 수정 권한은 이 데이터에 주어지지 않았으며 이를 정상 권한의 증명으로 사용하지 않습니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-73bc8cf1365c",
+    "difficulty": "medium",
+    "case_name": "인코딩된 이름의 정상 아포스트로피",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_text",
+    "rationale_ko": "이름 안의 인코딩된 아포스트로피 외에는 SQL 조건식, 연산자 연결, 주석 구문이 없습니다. 입력 전체가 일반 이름 검색 형태이므로 따옴표 단독 탐지는 오탐이라는 설계 기대값입니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "name=O%27Connor"
+      },
+      {
+        "field": "signature",
+        "excerpt": "SQL Injection: Quote Character"
+      }
+    ],
+    "verification_notes_ko": "이는 SQL 실행 안전성 보증이 아니라 해당 문자열의 공격 의미에 대한 기대 판정입니다. 이름에 특수문자가 있다는 이유만으로 룰을 전면 제외해서는 안 됩니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-f57a203af268",
+    "difficulty": "medium",
+    "case_name": "표시값에 삽입된 서버 표현식 접근",
+    "expected_verdict": "true_positive",
+    "expected_severity": "MEDIUM",
+    "category": "expression_injection",
+    "rationale_ko": "일반 표시 문자열 위치에 서버 표현식의 타입 접근과 속성 조회 호출이 들어 있습니다. 운영 명령이나 실제 비밀 값 없이도 단순 특수문자와 구별되는 서버 표현식 탐색 시도를 표현합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "${T(java.lang.System).getProperty('SYNTHETIC_PROPERTY')}"
+      },
+      {
+        "field": "signature",
+        "excerpt": "Server Expression Injection: Type Access"
+      }
+    ],
+    "verification_notes_ko": "대상 표현식 엔진이나 평가 여부는 확인되지 않았습니다. 이 사례는 명령 실행 성공이 아닌 합성 속성 접근 시도의 기대 판정입니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-fa5300d0bfe2",
+    "difficulty": "medium",
+    "case_name": "HTTP Accept 협상 문자열 속 XML 명칭",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_http_header",
+    "rationale_ko": "XML이라는 단어는 응답 형식 협상용 Accept 헤더에만 있습니다. 외부 엔티티를 선언하는 XML 본문이나 자원 참조가 없어 XXE라는 탐지에는 직접 근거가 없습니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "Accept: application/json, application/xml;q=0.8"
+      },
+      {
+        "field": "signature",
+        "excerpt": "XML External Entity: XML Content Marker"
+      }
+    ],
+    "verification_notes_ko": "XML 응답을 선호하는 것과 XML 입력을 악용하는 것은 다릅니다. 서비스가 실제 어떤 응답 형식을 선택했는지는 평가 대상이 아닙니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-9f6a5343d33f",
+    "difficulty": "medium",
+    "case_name": "JSON 표시 이름의 이미지 오류 이벤트",
+    "expected_verdict": "true_positive",
+    "expected_severity": "MEDIUM",
+    "category": "cross_site_scripting",
+    "rationale_ko": "표시 이름 문자열 안에 이미지 요소와 오류 시 실행할 이벤트 속성이 완성되어 있습니다. 데이터 필드를 통해 실행 가능한 HTML 구문을 주입하려는 시도로 분류하는 기대값입니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "<img src=x onerror=alert('SYNTHETIC_MARKER')>"
+      },
+      {
+        "field": "signature",
+        "excerpt": "Cross-Site Scripting: Event Attribute"
+      }
+    ],
+    "verification_notes_ko": "저장형 XSS가 성립하려면 이후 HTML 출력 문맥이 필요합니다. 요청에 공격 구문이 있다는 사실과 저장·실행 성공을 구분합니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-4198661f108f",
+    "difficulty": "medium",
+    "case_name": "폼 링크값의 스크립트 URI",
+    "expected_verdict": "true_positive",
+    "expected_severity": "MEDIUM",
+    "category": "cross_site_scripting",
+    "rationale_ko": "링크 주소 필드가 일반 HTTP 주소가 아니라 스크립트 실행 URI를 구성합니다. 저장된 링크의 클릭 문맥을 노리는 입력이므로 XSS 시도를 기대 판정으로 둡니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "url=javascript%3Aalert%28%27SYNTHETIC_MARKER%27%29"
+      },
+      {
+        "field": "signature",
+        "excerpt": "Cross-Site Scripting: JavaScript URI"
+      }
+    ],
+    "verification_notes_ko": "URI 스킴 검증이나 HTML 렌더링 차단이 적용되었을 수 있습니다. 클릭 및 실행 결과는 입력에 없습니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-927c9299baa6",
+    "difficulty": "medium",
+    "case_name": "multipart 업로드 파일명의 디렉터리 탈출",
+    "expected_verdict": "true_positive",
+    "expected_severity": "HIGH",
+    "category": "path_traversal",
+    "rationale_ko": "업로드 파일명에 두 개의 상위 디렉터리 요소와 private 대상 경로가 포함됩니다. 단순 본문 인용이 아니라 서버 저장 경로에 영향을 줄 수 있는 파일명 위치의 탈출 시도입니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "filename=\"../../private/SYNTHETIC_MARKER.txt\""
+      },
+      {
+        "field": "signature",
+        "excerpt": "Directory Traversal: Upload Filename"
+      }
+    ],
+    "verification_notes_ko": "서버가 basename만 사용하는지 확인해야 합니다. 파일 쓰기나 덮어쓰기가 실제 발생했다고 단정하지 않습니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-c4ee88ea5e5c",
+    "difficulty": "medium",
+    "case_name": "문서 변경 요청의 소유권 관계 미상",
+    "expected_verdict": "inconclusive",
+    "expected_severity": "UNKNOWN",
+    "category": "broken_access_control",
+    "rationale_ko": "요청에 소유자 식별자가 있지만 인증 주체와 문서의 실제 소유 관계, 위임 권한을 확인할 자료가 없습니다. 필드 값의 차이만으로 권한 우회 또는 정상 변경을 확정하지 않고 보류를 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "\"owner_id\":\"SYNTHETIC_USER_B\""
+      },
+      {
+        "field": "signature",
+        "excerpt": "Access Control: Object Owner Parameter"
+      }
+    ],
+    "verification_notes_ko": "인증 표식은 합성이며 신뢰 가능한 사용자 신원 증거가 아닙니다. 서버의 객체별 권한 검사와 변경 결과를 확인해야 합니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-d7aa9053de08",
+    "difficulty": "medium",
+    "case_name": "프록시 경로 재작성 헤더의 신뢰 경계 미상",
+    "expected_verdict": "inconclusive",
+    "expected_severity": "UNKNOWN",
+    "category": "proxy_routing_bypass",
+    "rationale_ko": "요청 라인은 상태 확인 경로이고 헤더에는 관리 경로가 있으나 프록시가 이 헤더를 신뢰하는지 알 수 없습니다. 경로 우회 시도 또는 무시되는 임의 헤더인지 확정할 처리 맥락이 없어 보류를 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "X-Original-URL: /admin/status"
+      },
+      {
+        "field": "signature",
+        "excerpt": "Access Control: Original URL Override"
+      }
+    ],
+    "verification_notes_ko": "프록시·백엔드의 헤더 신뢰 규칙과 실제 라우팅 결과를 확인해야 합니다. 관리 기능 접근 권한이나 접근 성공을 추정하지 않습니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-5c3dc863b4e0",
+    "difficulty": "medium",
+    "case_name": "XML 로그인 값의 XPath 조건식",
+    "expected_verdict": "true_positive",
+    "expected_severity": "HIGH",
+    "category": "xpath_injection",
+    "rationale_ko": "이름 요소에 문자열 경계를 닫는 따옴표와 XPath 노드 집계 함수, OR 조건이 연결되어 있습니다. XML 엔티티로 표현된 비교 부호까지 고려하면 인증 질의 조건을 바꾸는 구문입니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "' or count(//user)&gt;0 or 'x'='y"
+      },
+      {
+        "field": "signature",
+        "excerpt": "XPath Injection: Boolean Predicate"
+      }
+    ],
+    "verification_notes_ko": "근거에는 디코딩 전 &gt; 원문을 유지합니다. 실제 XPath 사용 여부와 인증 결과는 입력만으로 확인할 수 없습니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-1a524d044431",
+    "difficulty": "medium",
+    "case_name": "URL 인코딩된 숫자 조건 우회",
+    "expected_verdict": "true_positive",
+    "expected_severity": "HIGH",
+    "category": "sql_injection",
+    "rationale_ko": "숫자 식별자 뒤에 단일 URL 인코딩된 OR 1=1과 SQL 주석이 이어집니다. 단순 검색 문장이 아니라 기존 조회 조건을 바꾸려는 조합이므로 SQL 삽입 시도를 기대 판정으로 지정합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "id=17%20OR%201%3D1--"
+      },
+      {
+        "field": "signature",
+        "excerpt": "SQL Injection: Boolean Expression"
+      }
+    ],
+    "verification_notes_ko": "디코딩한 설명과 원문 발췌를 구분하고, 실제 SQL 실행이나 조회 성공은 서버 로그 없이는 단정하지 않습니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-7e1deb0a8b61",
+    "difficulty": "medium",
+    "case_name": "합성 표식을 표현한 Base64 데이터",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_encoded_data",
+    "rationale_ko": "Base64 문자열은 SYNTHETIC_DATA라는 중립적인 표식을 표현하며 명령이나 코드가 아닙니다. 인코딩된 값이라는 사실만으로 명령 삽입을 판단하는 탐지는 오탐을 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "U1lOVEhFVElDX0RBVEE="
+      },
+      {
+        "field": "signature",
+        "excerpt": "Command Injection: Encoded Content"
+      }
+    ],
+    "verification_notes_ko": "실제 원문 근거에는 Base64 문자열을 그대로 사용합니다. 디코딩 내용이 있다는 이유로 동적 실행을 가정하지 않습니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-b106f2ae1331",
+    "difficulty": "medium",
+    "case_name": "XML 식별자 속 SQL 논리식",
+    "expected_verdict": "true_positive",
+    "expected_severity": "HIGH",
+    "category": "sql_injection",
+    "rationale_ko": "XML 요소의 식별자 자리에 숫자만이 아니라 항상 참인 OR 조건과 SQL 주석이 들어 있습니다. 전송 형식이 XML이라는 이유로 SQL 구문의 공격 의미가 사라지지는 않습니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "<orderId>7 OR 2=2--</orderId>"
+      },
+      {
+        "field": "signature",
+        "excerpt": "SQL Injection: Numeric Predicate"
+      }
+    ],
+    "verification_notes_ko": "XML 파싱 성공과 SQL 삽입 성공은 별개입니다. 실제 데이터 계층으로 해당 값이 어떻게 전달되는지 확인해야 합니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-c6bd93008b2b",
+    "difficulty": "medium",
+    "case_name": "쿠키 설정값의 SQL 결합 구문",
+    "expected_verdict": "true_positive",
+    "expected_severity": "MEDIUM",
+    "category": "sql_injection",
+    "rationale_ko": "쿠키 테마 값이 합성 문자열 뒤의 따옴표 종료, UNION SELECT, 주석으로 구성됩니다. 쿼리나 본문뿐 아니라 쿠키에서도 SQL 문맥 삽입을 시도할 수 있다는 점을 확인하는 사례입니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "theme=SYNTHETIC%27%20UNION%20SELECT%20%27SYNTHETIC_MARKER%27--"
+      },
+      {
+        "field": "signature",
+        "excerpt": "SQL Injection: UNION Clause"
+      }
+    ],
+    "verification_notes_ko": "Cookie는 전부 합성 값입니다. 쿠키의 URL 디코딩 여부와 DB 사용 경로를 확인해야 하며 응답 결과는 포함하지 않았습니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-c910891aa98c",
+    "difficulty": "medium",
+    "case_name": "JSON 설명 문자열의 줄바꿈 이스케이프",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_multiline_text",
+    "rationale_ko": "줄바꿈 표기는 JSON 본문 안의 여러 줄 설명 문자열에 사용되며 새 HTTP 헤더 이름이 뒤따르지 않습니다. 헤더 경계와 본문 텍스트를 구분하지 못한 탐지는 오탐을 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "Paper notebook\\nBlue cover"
+      },
+      {
+        "field": "signature",
+        "excerpt": "HTTP Header Injection: Escaped Newline"
+      }
+    ],
+    "verification_notes_ko": "JSON 디코딩 후 줄바꿈이 생긴다는 사실만으로 응답 분리가 성립하지 않습니다. 헤더로 복사하는 처리 경로는 제시되지 않았습니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-7d681c465b91",
+    "difficulty": "medium",
+    "case_name": "인코딩 CRLF를 통한 합성 헤더 삽입",
+    "expected_verdict": "true_positive",
+    "expected_severity": "LOW",
+    "category": "header_injection",
+    "rationale_ko": "이름 값에 CRLF 두 문자와 새 헤더 형식의 X-Synthetic-Marker: inserted가 함께 들어 있습니다. 단순 줄바꿈 텍스트와 달리 응답 헤더 경계를 만들려는 구체적 구조입니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "label=quarterly%0D%0AX-Synthetic-Marker%3A%20inserted"
+      },
+      {
+        "field": "signature",
+        "excerpt": "HTTP Response Splitting: Encoded CRLF"
+      }
+    ],
+    "verification_notes_ko": "합성 헤더 표식만 사용하여 심각도 기대값을 LOW로 둡니다. 응답 헤더에 반영되었는지와 프레임워크의 줄바꿈 거부 여부는 미확인입니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-7e19c79995e9",
+    "difficulty": "medium",
+    "case_name": "인벤토리 문자열의 Windows 경로",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_structured_data",
+    "rationale_ko": "역슬래시는 JSON으로 이스케이프된 정상 경로 구분자이며 상위 디렉터리를 뜻하는 .. 요소가 없습니다. 경로 보고 문자열에 구분자가 있다는 이유만으로 탈출 시도로 분류하는 것은 오탐을 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "C:\\\\Reports\\\\Q3\\\\report.csv"
+      },
+      {
+        "field": "signature",
+        "excerpt": "Directory Traversal: Backslash Token"
+      }
+    ],
+    "verification_notes_ko": "실제 파일 읽기 요청이나 해당 경로에 대한 권한은 제시되지 않았습니다. 경로 문자열의 형식과 파일 접근 행위를 구분해야 합니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-027b7d28beee",
+    "difficulty": "medium",
+    "case_name": "폼 할인율의 단일 인코딩 퍼센트",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_form_data",
+    "rationale_ko": "%25는 퍼센트 문자를 한 번 URL 인코딩한 값이며 할인 안내 문구의 일부입니다. 중첩 인코딩이나 공격 구문이 없으므로 퍼센트 기호만으로 우회 시도라고 보는 탐지는 오탐을 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "discount_label=25%25%20off"
+      },
+      {
+        "field": "signature",
+        "excerpt": "Encoding Evasion: Percent Token"
+      }
+    ],
+    "verification_notes_ko": "인코딩 횟수와 실제 디코딩 결과를 확인해야 합니다. URL 인코딩 자체는 공격의 증거가 아닙니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-c220144d5a11",
+    "difficulty": "medium",
+    "case_name": "인코딩 LDAP 필터 경계 조작",
+    "expected_verdict": "true_positive",
+    "expected_severity": "HIGH",
+    "category": "ldap_injection",
+    "rationale_ko": "uid 값에 와일드카드와 닫는 괄호, LDAP OR 필터 구조가 함께 인코딩되어 있습니다. 일반 이름 데이터가 아니라 검색 필터 범위를 확장하는 삽입 시도로 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "uid=%2A%29%28%7C%28uid%3D%2A%29"
+      },
+      {
+        "field": "signature",
+        "excerpt": "LDAP Injection: Filter Boolean Operator"
+      }
+    ],
+    "verification_notes_ko": "이 사례는 서버 필터가 (&(uid=<value>)(objectClass=person)) 형태로 값을 직접 결합한다는 가정 아래 설계했습니다. 디코딩된 값 *)(|(uid=*)를 대입하면 (&(uid=*)(|(uid=*)(objectClass=person)))가 됩니다. 실제 서버 필터 구조와 이스케이프 적용 여부는 확인되지 않았으며 디렉터리 조회나 인증 우회의 성공도 관측되지 않았습니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-f55ef96d61e4",
+    "difficulty": "medium",
+    "case_name": "SQL 시그니처와 불일치하는 인코딩 SVG 구문",
+    "expected_verdict": "true_positive",
+    "expected_severity": "MEDIUM",
+    "category": "cross_site_scripting",
+    "rationale_ko": "검색값을 한 번 URL 디코딩하면 SVG 태그와 onload 이벤트의 스크립트 호출이 구성됩니다. SQL 시그니처와는 불일치하지만 payload에는 XSS 실행 구문이 명확하므로 탐지명만 보고 오탐으로 바꾸지 않는 기대값입니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "q=%3Csvg%20onload%3Dalert%28%27SYNTHETIC_MARKER%27%29%3E"
+      },
+      {
+        "field": "signature",
+        "excerpt": "SQL Injection: UNION Clause"
+      }
+    ],
+    "verification_notes_ko": "합성 표식을 알리는 동작만 포함합니다. 응답 반영 위치, 출력 인코딩, 브라우저 실행 여부는 추가 검증 대상입니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-c00af87fa643",
+    "difficulty": "medium",
+    "case_name": "SVG 파일명 속 이벤트 단어",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_file_upload",
+    "rationale_ko": "onload는 파일명의 일부일 뿐 SVG 속성으로 선언되지 않았습니다. 실제 SVG 본문은 정적인 사각형이며 이벤트 핸들러나 스크립트가 없어 키워드 탐지를 오탐으로 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "filename=\"onload-chart.svg\""
+      },
+      {
+        "field": "signature",
+        "excerpt": "Cross-Site Scripting: onload Keyword"
+      }
+    ],
+    "verification_notes_ko": "SVG 전체 허용 정책이나 업로드 권한은 별도의 문제입니다. 이 사례의 정답 범위는 onload 실행 구문의 존재 여부입니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-e6a4718b4f4c",
+    "difficulty": "medium",
+    "case_name": "동일 호스트 외부 DTD의 허용 여부 미상",
+    "expected_verdict": "inconclusive",
+    "expected_severity": "UNKNOWN",
+    "category": "xml_external_entity",
+    "rationale_ko": "문서에 외부 DTD 참조는 있지만 파일 탈취나 임의 엔티티 치환 구문은 없습니다. 합의된 스키마 검증 기능인지 금지된 외부 자원 해석인지 정책과 파서 설정이 없어 보류를 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "SYSTEM \"https://app.example.test/schema/order.dtd\""
+      },
+      {
+        "field": "signature",
+        "excerpt": "XML External Entity: External DTD"
+      }
+    ],
+    "verification_notes_ko": "동일 호스트라는 이유만으로 안전을 보증하지 않습니다. 외부 DTD 허용 정책과 네트워크·파서 설정을 확인해야 합니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-89bc7fb812cb",
+    "difficulty": "medium",
+    "case_name": "인코딩된 속성 종료와 마우스 이벤트",
+    "expected_verdict": "true_positive",
+    "expected_severity": "MEDIUM",
+    "category": "cross_site_scripting",
+    "rationale_ko": "캡션 값에 따옴표로 속성을 닫고 새 이벤트 속성을 추가한 다음 따옴표를 다시 여는 구조가 있습니다. 전체 태그가 없어도 HTML 속성 문맥을 탈출하려는 실행 구문을 구별할 수 있습니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "caption=%22%20onmouseover%3Dalert%28%27SYNTHETIC_MARKER%27%29%20x%3D%22"
+      },
+      {
+        "field": "signature",
+        "excerpt": "Cross-Site Scripting: Attribute Injection"
+      }
+    ],
+    "verification_notes_ko": "실제 출력 위치가 속성인지, 출력 인코딩이 적용되는지 확인해야 합니다. 브라우저 상호작용이나 실행 성공은 제공되지 않았습니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-e2e0dceddd00",
+    "difficulty": "medium",
+    "case_name": "JSON 필터의 서버 측 조건 기능 여부 미상",
+    "expected_verdict": "inconclusive",
+    "expected_severity": "UNKNOWN",
+    "category": "nosql_injection",
+    "rationale_ko": "서버 측 조건식과 닮은 키가 있으나 이 API가 허용하는 필터 문법인지 금지된 연산자 주입인지 알 수 없습니다. 인증 우회처럼 목적이 명확한 조합도 없어 현재 입력에서는 보류를 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "\"$where\":\"this.amount > 10\""
+      },
+      {
+        "field": "signature",
+        "excerpt": "NoSQL Injection: Server-Side Predicate"
+      }
+    ],
+    "verification_notes_ko": "필터 연산자 허용 목록, 서버 평가 여부, 호출자 권한을 확인해야 합니다. 키 이름만으로 공격 또는 정상 업무를 확정하지 않습니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-a82fb3c37780",
+    "difficulty": "medium",
+    "case_name": "템플릿 문법을 이용한 합성 설정 접근",
+    "expected_verdict": "true_positive",
+    "expected_severity": "MEDIUM",
+    "category": "server_side_template_injection",
+    "rationale_ko": "인사말의 이름 위치에 템플릿 구분자와 설정 객체 인덱스 접근이 함께 나타납니다. 단순 산술식만 있는 사례보다 서버 객체 접근 의도가 구체적이므로 템플릿 삽입 탐색 시도를 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "{{config['SYNTHETIC_SETTING']}}"
+      },
+      {
+        "field": "signature",
+        "excerpt": "Template Injection: Configuration Access"
+      }
+    ],
+    "verification_notes_ko": "합성 설정 이름만 포함하며 실제 값이나 실행 응답은 없습니다. 해당 엔진의 존재와 이름 값이 템플릿으로 평가되는지 확인해야 합니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-689f8479c4ac",
+    "difficulty": "medium",
+    "case_name": "단일 상대 상위 경로의 기준 디렉터리 미상",
+    "expected_verdict": "inconclusive",
+    "expected_severity": "UNKNOWN",
+    "category": "path_traversal",
+    "rationale_ko": "상위 경로 요소는 있으나 테마 하위 디렉터리에서 정상 공유 이미지로 이동하는 값일 수도 있습니다. 기준 디렉터리와 허용 루트가 없어 실제 보안 경계를 벗어나는지 판단하기 어려워 보류를 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "path=..%2Fimages%2Flogo.png"
+      },
+      {
+        "field": "signature",
+        "excerpt": "Directory Traversal: Relative Parent Segment"
+      }
+    ],
+    "verification_notes_ko": "다중 탈출과 private 표적이 결합된 사례와 구분합니다. 정규화된 최종 경로가 허용 루트 안에 있는지 확인해야 합니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-d881eaebe2f0",
+    "difficulty": "medium",
+    "case_name": "외부 엔티티로 합성 파일 읽기 요청",
+    "expected_verdict": "true_positive",
+    "expected_severity": "MEDIUM",
+    "category": "xml_external_entity",
+    "rationale_ko": "본문이 외부 엔티티를 로컬 파일 URI로 정의한 뒤 실제 요소 안에서 참조합니다. 단순 DTD 선언이나 엔티티 이름 언급과 달리 파일 내용을 문서에 치환하도록 요청하는 구조입니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "<!ENTITY probe SYSTEM \"file:///SYNTHETIC_MARKER.txt\">"
+      },
+      {
+        "field": "signature",
+        "excerpt": "XML External Entity: Local File Reference"
+      }
+    ],
+    "verification_notes_ko": "파일명은 합성 표식이며 실제 민감 파일을 지정하지 않습니다. 외부 엔티티가 비활성화되어 있을 수 있어 파일 읽기 성공은 추정하지 않습니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-c975197499a3",
+    "difficulty": "medium",
+    "case_name": "CSS 색상값의 해시 문자",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_stylesheet_data",
+    "rationale_ko": "해시 문자는 색상 필드의 16진수 CSS 색상 표기에 사용됩니다. SQL 식이나 주석을 시작하는 문맥이 없으므로 일반 색상 값을 공격으로 해석한 오탐을 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "\"background\":\"#ffffff\""
+      },
+      {
+        "field": "signature",
+        "excerpt": "SQL Injection: Comment Prefix"
+      }
+    ],
+    "verification_notes_ko": "색상 입력의 자료형과 패턴을 확인하는 것이 적절합니다. 특정 문자 전체를 무조건 허용하는 튜닝 근거로 확대하지 않습니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-251608577967",
+    "difficulty": "medium",
+    "case_name": "JSON 구조 안의 정적인 GraphQL 조회",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_structured_query",
+    "rationale_ko": "중괄호는 GraphQL 조회 문법의 필드 선택 구조이며 템플릿 엔진의 평가 구분자가 아닙니다. 정적 조회 요청을 템플릿 삽입으로 탐지한 경우 오탐을 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "query Catalog { products { id title } }"
+      },
+      {
+        "field": "signature",
+        "excerpt": "Template Injection: Curly Braces"
+      }
+    ],
+    "verification_notes_ko": "GraphQL 접근 제어가 올바른지는 별도 확인 사항입니다. 이 기대값은 정상 권한을 가정하지 않고 템플릿 삽입 시그니처의 문맥 오류를 다룹니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-65fda5b18389",
+    "difficulty": "medium",
+    "case_name": "산술 템플릿 문자열의 평가 문맥 미상",
+    "expected_verdict": "inconclusive",
+    "expected_severity": "UNKNOWN",
+    "category": "server_side_template_injection",
+    "rationale_ko": "템플릿 산술식과 닮은 구분자가 있지만 공격 탐색인지 편집기의 정상 표현식 데이터인지 판단할 실행 문맥이 없습니다. 표식 자체만으로 서버 측 평가나 보안 위반을 확정하지 않고 보류를 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "text=%7B%7B7%2A7%7D%7D"
+      },
+      {
+        "field": "signature",
+        "excerpt": "Template Injection: Expression Delimiter"
+      }
+    ],
+    "verification_notes_ko": "요청 대상 기능의 입력 계약과 서버 응답, 실제 렌더링 엔진을 확인해야 합니다. 산술식 결과를 입력에서 관측한 것처럼 쓰지 않습니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-f2d2a5920f2a",
+    "difficulty": "medium",
+    "case_name": "URL 수집 기능의 대상 승인 범위 미상",
+    "expected_verdict": "inconclusive",
+    "expected_severity": "UNKNOWN",
+    "category": "server_side_request_forgery",
+    "rationale_ko": "본문에 IP 주소 기반 URL이 있으나 서버가 이를 실제로 가져오는지와 허용 대상 범위가 제공되지 않았습니다. 문서화용 주소를 썼다는 합성 데이터의 특성을 공격성 판단에 사용하지 않고 보류를 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "url=http%3A%2F%2F192.0.2.85%2Fstatus"
+      },
+      {
+        "field": "signature",
+        "excerpt": "SSRF: IP Address URL"
+      }
+    ],
+    "verification_notes_ko": "네트워크 요청 실행 여부, URL allowlist, 리다이렉트 정책을 확인해야 합니다. 주소는 문서화 대역이며 실제 내부 서비스나 외부 유출 대상을 지정하지 않습니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-cf0fcaf72067",
+    "difficulty": "medium",
+    "case_name": "JSON 상품 제목의 아포스트로피",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_structured_data",
+    "rationale_ko": "아포스트로피가 JSON 상품명 문자열의 단어 일부로 사용되었습니다. 질의 경계를 바꾸는 논리식이나 SQL 주석이 없고 주변 필드도 상품 데이터 형식과 일관됩니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "D'Art stationery"
+      },
+      {
+        "field": "signature",
+        "excerpt": "SQL Injection: Quote Character"
+      }
+    ],
+    "verification_notes_ko": "작성 권한의 승인 여부를 오탐 근거로 삼지 않습니다. 이 기대값은 SQL 삽입 탐지의 적절성만을 다룹니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-8cdea1e3db36",
+    "difficulty": "medium",
+    "case_name": "XML 수학 설명의 이스케이프 꺾쇠",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_xml",
+    "rationale_ko": "꺾쇠 엔티티는 숫자의 대소 비교를 설명하는 XML 텍스트입니다. 태그명, 이벤트 속성, 스크립트 실행 구문이 없어 XSS 탐지로는 오탐을 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "<text>1 &lt; 2 and 3 &gt; 2</text>"
+      },
+      {
+        "field": "signature",
+        "excerpt": "Cross-Site Scripting: Angle Bracket"
+      }
+    ],
+    "verification_notes_ko": "XML 엔티티 디코딩 사실과 HTML 실행 문맥은 다릅니다. 수학 표현만으로 실행 위험을 확정하지 않습니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-5a940e68e13d",
+    "difficulty": "medium",
+    "case_name": "JSON 인증값을 비교 연산자로 교체",
+    "expected_verdict": "true_positive",
+    "expected_severity": "HIGH",
+    "category": "nosql_injection",
+    "rationale_ko": "인증에 필요한 두 문자열 값 대신 null이 아닌 모든 값을 선택하는 비교 연산자 객체가 들어 있습니다. 단순 달러 기호나 가격 문자열과 구별되는 인증 조건 변조 시도입니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "\"username\":{\"$ne\":null},\"password\":{\"$ne\":null}"
+      },
+      {
+        "field": "signature",
+        "excerpt": "NoSQL Injection: Authentication Operator"
+      }
+    ],
+    "verification_notes_ko": "사용 중인 DB나 자료형 검증이 실제로 이 객체를 해석했는지는 별도 확인해야 합니다. 로그인이 성공했다는 뜻은 아닙니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-c41711f73003",
+    "difficulty": "medium",
+    "case_name": "검색 문장의 인코딩 앰퍼샌드",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_search",
+    "rationale_ko": "앰퍼샌드는 음악 관련 검색 구문의 두 단어를 연결하는 문자입니다. 실행할 명령이나 셸 치환 구조가 없으므로 문자 하나를 명령 구분자로 해석하는 탐지는 오탐을 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "q=rock%20%26%20roll"
+      },
+      {
+        "field": "signature",
+        "excerpt": "Command Injection: Shell Separator"
+      }
+    ],
+    "verification_notes_ko": "검색 문자열에 대한 일반 데이터 해석이며 셸 호출 존재를 가정하지 않습니다. 실제 명령 실행 경로가 확인되면 별도 검토가 필요합니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-e1583420ca1e",
+    "difficulty": "medium",
+    "case_name": "지명 검색의 UNION 단어",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_search",
+    "rationale_ko": "UNION은 지명인 Union Square의 일부이며 SELECT 절, 따옴표 종료, SQL 주석이 없습니다. SQL 키워드와 철자가 같다는 이유만으로 공격으로 분류하면 문맥을 놓치게 됩니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "q=Union%20Square"
+      },
+      {
+        "field": "signature",
+        "excerpt": "SQL Injection: UNION Keyword"
+      }
+    ],
+    "verification_notes_ko": "응답이나 사용자의 신원은 필요 근거가 아닙니다. 완성된 SQL 문법과 자연어 명칭을 구별하는 합성 기대 사례입니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-387b7189f2a6",
+    "difficulty": "medium",
+    "case_name": "XML CDATA 속 속성 탈출 구문",
+    "expected_verdict": "true_positive",
+    "expected_severity": "MEDIUM",
+    "category": "cross_site_scripting",
+    "rationale_ko": "CDATA는 XML 파서에서 문자를 보존할 뿐 HTML 실행 위험을 제거하지 않습니다. 값의 시작 부분에 속성 경계를 닫는 구문과 스크립트 이벤트 태그가 연결되어 있어 주입 시도라는 기대값을 설정합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "\"><svg onload=alert('SYNTHETIC_MARKER')>"
+      },
+      {
+        "field": "signature",
+        "excerpt": "Cross-Site Scripting: HTML Attribute Breakout"
+      }
+    ],
+    "verification_notes_ko": "서버가 CDATA 내용을 어디에 출력하는지 확인해야 합니다. XML 내 문자열이라는 이유만으로 안전 또는 실행 성공을 확정하지 않습니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-21770c9044ba",
+    "difficulty": "medium",
+    "case_name": "파일명 중간의 점 두 개",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_filename",
+    "rationale_ko": "한 번 디코딩한 파일명 중간의 점 두 개는 슬래시로 구분된 상위 디렉터리 요소가 아닙니다. 경로 탈출 구문과 단순 파일명 구두점을 혼동한 오탐을 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "file=meeting%2E%2Enotes.txt"
+      },
+      {
+        "field": "signature",
+        "excerpt": "Directory Traversal: Dot Dot Token"
+      }
+    ],
+    "verification_notes_ko": "파일의 존재나 다운로드 권한은 추정하지 않습니다. 이 판정은 .. 경로 요소를 통한 탈출 시도의 유무에 관한 것입니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-7a8734b2d0cc",
+    "difficulty": "medium",
+    "case_name": "JSON 인증 문자열의 SQL 조건 삽입",
+    "expected_verdict": "true_positive",
+    "expected_severity": "HIGH",
+    "category": "sql_injection",
+    "rationale_ko": "사용자명 값에 문자열 종료 기호, 항상 참인 비교식, 후속 SQL 주석이 함께 있습니다. 인증 데이터로 보기 어려운 조건 우회 구문이어서 공격 시도에 해당하는 설계 기대값입니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "\"username\":\"' OR '1'='1'--\""
+      },
+      {
+        "field": "signature",
+        "excerpt": "SQL Injection: Authentication Condition"
+      }
+    ],
+    "verification_notes_ko": "비밀번호와 세션은 합성 값입니다. 애플리케이션의 파라미터 바인딩 여부와 인증 결과를 별도로 확인해야 합니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-152e0a3ee163",
+    "difficulty": "medium",
+    "case_name": "multipart 파일명의 세미콜론",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_file_upload",
+    "rationale_ko": "세미콜론이 따옴표로 감싼 파일명 내부에 있고 뒤에는 실행 명령이 아니라 연도와 확장자가 이어집니다. 파일명 문맥을 무시한 셸 구분자 탐지로 인한 오탐을 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "filename=\"report;2026.txt\""
+      },
+      {
+        "field": "signature",
+        "excerpt": "Command Injection: Semicolon Separator"
+      }
+    ],
+    "verification_notes_ko": "서버가 파일명을 셸 문자열로 직접 결합하는지 여부는 별도 취약점 검토 대상이며 이 요청에서 확인된 사실이 아닙니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-f9b1fec87fd3",
+    "difficulty": "medium",
+    "case_name": "CDATA 안내문 속 SELECT와 OPTIONS",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_xml",
+    "rationale_ko": "SELECT는 메뉴 사용을 설명하는 문장의 동사이고 FROM 절이나 삽입 경계가 없습니다. CDATA 안의 자연어 문장을 SQL 키워드와 동일시한 탐지는 오탐을 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "SELECT OPTIONS in the menu, then choose a paper size."
+      },
+      {
+        "field": "signature",
+        "excerpt": "SQL Injection: SELECT Keyword"
+      }
+    ],
+    "verification_notes_ko": "이 사례는 실행 가능한 SQL 예제를 정상으로 가정하는 것이 아니라 자연어 명령문의 문맥을 구별하는 사례입니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-249eef048427",
+    "difficulty": "medium",
+    "case_name": "명령 이름 필드의 작업 실행 정책 미상",
+    "expected_verdict": "inconclusive",
+    "expected_severity": "UNKNOWN",
+    "category": "command_injection",
+    "rationale_ko": "command라는 필드는 있으나 값은 중립적인 합성 작업명이고 셸 구분자나 운영 명령이 없습니다. 허용된 작업 실행 API인지 외부 입력을 직접 실행하는 경로인지 알 수 없어 보류를 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "\"command\":\"SYNTHETIC_JOB\""
+      },
+      {
+        "field": "signature",
+        "excerpt": "Command Execution: Command Field"
+      }
+    ],
+    "verification_notes_ko": "dry_run은 요청자가 제시한 값일 뿐 실제 무실행 보증이 아닙니다. 작업 허용 목록, 인자 처리 방식, 실행 권한을 확인해야 합니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-0e883085f066",
+    "difficulty": "medium",
+    "case_name": "JSON 안내문에 포함된 집합 표기",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_structured_data",
+    "rationale_ko": "중괄호 한 쌍은 선택 항목의 집합을 나타내며 템플릿 평가 구분자나 객체 접근식이 아닙니다. 일반 안내문 안의 구두점을 템플릿 삽입으로 오인한 사례입니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "Choose one item from {A, B, C}."
+      },
+      {
+        "field": "signature",
+        "excerpt": "Template Injection: Brace Token"
+      }
+    ],
+    "verification_notes_ko": "본문의 format 값만 믿고 안전을 확정하는 것이 아니라 실제 구문에 평가 구조가 없는 점을 근거로 삼습니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-b61e21ff1eaa",
+    "difficulty": "medium",
+    "case_name": "XSS 시그니처와 불일치하는 JSON 경로 탈출",
+    "expected_verdict": "true_positive",
+    "expected_severity": "MEDIUM",
+    "category": "path_traversal",
+    "rationale_ko": "템플릿 파일 선택값에 반복된 상위 경로와 private 파일 대상이 포함됩니다. XSS 시그니처는 payload와 맞지 않지만 경로 요소로 구분된 탈출 시도 자체는 확인되므로 공격 유형을 경로 탐색으로 바로잡는 기대값입니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "\"template_file\":\"../../private/SYNTHETIC_MARKER.txt\""
+      },
+      {
+        "field": "signature",
+        "excerpt": "Cross-Site Scripting: Encoded Tag"
+      }
+    ],
+    "verification_notes_ko": "허용된 템플릿 루트와 정규화·경로 제한을 확인해야 합니다. 실제 파일이 존재하거나 읽혔다고 가정하지 않습니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-837f5317e24d",
+    "difficulty": "medium",
+    "case_name": "XML 이름의 기본 문자 엔티티",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_xml",
+    "rationale_ko": "apos와 amp는 XML의 기본 문자 엔티티이며 외부 SYSTEM 선언이나 외부 자원 참조가 없습니다. 엔티티 참조 표시만으로 XXE라고 탐지한 경우 오탐을 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "O&apos;Brien"
+      },
+      {
+        "field": "signature",
+        "excerpt": "XML External Entity: Entity Reference"
+      }
+    ],
+    "verification_notes_ko": "기본 문자 엔티티와 외부 엔티티 선언을 구분해야 합니다. 네트워크 요청이나 파일 읽기가 발생했다고 추정하지 않습니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-424d089ecd8f",
+    "difficulty": "medium",
+    "case_name": "잘린 JSON 본문의 불완전 SQL 의심 조각",
+    "expected_verdict": "inconclusive",
+    "expected_severity": "UNKNOWN",
+    "category": "sql_injection",
+    "rationale_ko": "JSON 문자열과 객체가 닫히지 않았고 따옴표·OR 키워드 이후의 조건식이 없습니다. 수집 손실인지 원래 잘못된 요청인지 알 수 없으며 완성된 공격 구문이나 정상 문맥을 확정하기 어려워 보류를 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "{\"query\":\"%27 OR"
+      },
+      {
+        "field": "signature",
+        "excerpt": "SQL Injection: Quote and Boolean Keyword"
+      }
+    ],
+    "verification_notes_ko": "원본 수집 길이와 전송 본문을 대조해야 합니다. 존재하지 않는 후속 조건이나 누락된 문자열을 모델이 보완하지 않는지 확인합니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-e1f134349504",
+    "difficulty": "medium",
+    "case_name": "폼 본문의 상수 UNION 탐색",
+    "expected_verdict": "true_positive",
+    "expected_severity": "MEDIUM",
+    "category": "sql_injection",
+    "rationale_ko": "폼 검색값에 따옴표로 기존 문맥을 닫고 UNION SELECT로 합성 상수를 결합하려는 구조가 있습니다. 데이터 탈취 명령은 없지만 SQL 구문 삽입을 시험하는 시도라는 점은 구별할 수 있습니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "q=%27%20UNION%20SELECT%20%27SYNTHETIC_MARKER%27--"
+      },
+      {
+        "field": "signature",
+        "excerpt": "SQL Injection: UNION Clause"
+      }
+    ],
+    "verification_notes_ko": "응답에 합성 표식이 나타났다는 증거는 없습니다. 상수 조회 탐색의 기대 심각도이며 실제 데이터 유출을 의미하지 않습니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  },
+  {
+    "event_id": "waf-syn-97f2e30f4cb3",
+    "difficulty": "medium",
+    "case_name": "문서화 주소 두 개의 프록시 체인 표기",
+    "expected_verdict": "false_positive",
+    "expected_severity": "NONE",
+    "category": "benign_http_header",
+    "rationale_ko": "쉼표는 한 HTTP 헤더 안에서 프록시 주소 목록을 구분하며 새로운 헤더 줄을 만들지 않습니다. CRLF나 별도 헤더 주입 구조가 없어 구분자 기반 헤더 삽입 탐지는 오탐을 기대합니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "X-Forwarded-For: 192.0.2.44, 198.51.100.75"
+      },
+      {
+        "field": "signature",
+        "excerpt": "HTTP Header Injection: Separator Token"
+      }
+    ],
+    "verification_notes_ko": "주소의 신뢰성이나 프록시 우회 권한을 보증하지 않습니다. 기대 판정은 헤더 분리 구문의 부재에 한정됩니다. 이 답안은 합성 사례의 설계 기대값이며 실측 정답이 아닙니다."
+  }
+]

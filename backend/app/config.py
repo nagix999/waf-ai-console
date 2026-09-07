@@ -17,9 +17,6 @@ class Settings(BaseSettings):
     session_https_only: bool = False
     session_max_age_seconds: int = 8 * 60 * 60
 
-    bootstrap_api_key: str = "dev-service-key-change-me"
-    bootstrap_source_system: str = "internal-parser"
-
     data_encryption_key: str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
     encryption_key_version: str = "dev-v1"
 
@@ -28,7 +25,9 @@ class Settings(BaseSettings):
     worker_poll_seconds: float = Field(default=1.0, ge=0.1, le=60)
     job_lease_seconds: int = Field(default=300, ge=30, le=3600)
     upload_max_bytes: int = Field(default=10 * 1024 * 1024, ge=1024)
-    vllm_allowed_targets: str = "vllm.internal:8000"
+    payload_max_bytes: int = Field(default=2 * 1024 * 1024, ge=1)
+    # Deprecated compatibility setting. Egress authorization is DB-only.
+    vllm_allowed_targets: str = ""
     vllm_test_lease_seconds: int = Field(default=900, ge=60, le=3600)
     verifier_confidence_threshold: float = Field(default=0.75, ge=0, le=1)
 
