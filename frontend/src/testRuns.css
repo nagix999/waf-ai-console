@@ -1,4 +1,6 @@
 .test-run-history,.test-run-header,.test-run-scope,.test-run-cases { padding: 22px; }
+.test-run-header > .panel-head { padding: 0 0 14px; }
+.test-run-header h2 { margin-top: 0; }
 .test-run-search { display: flex; align-items: end; gap: 12px; margin: 18px 0; }.test-run-search label { flex: 1; }
 .test-run-history > .panel-head > button,.test-run-search > button { flex-shrink: 0; white-space: nowrap; }.test-run-applied { font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }.test-run-empty { padding: 16px 0; font-size: 13px; line-height: 1.8; }.test-run-empty p { margin: 0 0 12px; }.test-run-empty > button { margin-bottom: 10px; }
 .test-run-table td,.test-run-items td { vertical-align: top; }.test-run-table td small,.test-run-items td small { display: block; color: var(--muted); margin-top: 6px; line-height: 1.6; overflow-wrap: anywhere; }
@@ -6,5 +8,8 @@
 .test-run-items td:nth-child(2) { width: 37%; }.test-run-items td:nth-child(2) small { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .test-run-header h2 { margin-top: 8px; }.test-run-header dl { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px; margin: 22px 0; }.test-run-header dt { color: var(--muted); font-size: 11px; }.test-run-header dd { margin: 7px 0 0; font-size: 13px; overflow-wrap: anywhere; }
 .test-run-scope h3 { margin-top: 0; font-size: 14px; }.test-run-cases .filter-grid { margin: 16px 0; }.test-name-field { margin: 16px 0; }
+.test-run-detail .panel-head-inline { flex-wrap: wrap; gap: 12px; }
+.test-run-header h2 { overflow-wrap: anywhere; }
+.test-run-detail .panel-head-inline .back { flex-shrink: 0; white-space: nowrap; }
 .test-submission-fields { border: 0; padding: 0; margin: 0; min-width: 0; }.test-submission-fields:disabled { opacity: .7; }
 @media(max-width:680px) { .test-run-history,.test-run-header,.test-run-scope,.test-run-cases { padding: 16px; }.test-run-history > .panel-head { flex-wrap: wrap; }.test-run-search label { min-width: 0; }.test-run-header dl { grid-template-columns: 1fr 1fr; }.test-run-table,.test-run-items { min-width: 650px; } }

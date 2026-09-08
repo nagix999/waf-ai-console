@@ -49,6 +49,8 @@ class PromptSnapshot(BaseModel):
 
 def load_analysis_prompt(analysis: Analysis, crypto: CryptoService) -> PromptSnapshot:
     try:
+        if not isinstance(analysis.prompt_snapshot_ciphertext, str) or not analysis.prompt_snapshot_ciphertext:
+            raise PromptSnapshotError()
         snapshot = PromptSnapshot.model_validate_json(crypto.decrypt_text(analysis.prompt_snapshot_ciphertext))
         if (
             snapshot.policy_version_id != analysis.prompt_policy_version_id
@@ -71,8 +73,12 @@ def pin_analysis_prompt(
         isinstance(analysis.prompt_version, str) and "/policy-" in analysis.prompt_version
     ):
         raise PromptSnapshotError()
+    # Production and named tests use the same active policy and system rules.
     version = get_active_policy(db, crypto)
-    policy_text = read_policy_text(version, crypto)
+    try:
+        policy_text = read_policy_text(version, crypto)
+    except (AttributeError, TypeError):
+        raise PromptSnapshotError() from None
     primary, verifier = build_role_instructions(policy_text)
     snapshot = PromptSnapshot(
         policy_version_id=version.id,

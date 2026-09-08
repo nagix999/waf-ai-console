@@ -1,6 +1,6 @@
 # Production WAF Analysis API v0.2.0
 
-기준일: 2026-09-07. 내부 WAF 수집기와 분석가 시스템을 위한 REST 계약이다.
+기준일: 2026-09-08. 내부 WAF 수집기와 분석가 시스템을 위한 REST 계약이다.
 이 문서는 실제 구현을 기준으로 한다. 상위 설계서의 미구현 재분석·범용 배치·모델 비교 API와 구분한다. 별도 참고 Label 연결과 테스트 파일 답안 비교는 아래 계약을 사용한다. 설정의 선택형 150건 후보 검증은 [별도 정의서](Model_Validation_Dataset_v0.1.md)를 따른다.
 
 ## 연결과 인증
@@ -9,9 +9,11 @@
 - API prefix: `/api/v1`
 - 현재 로컬 연결: `http://localhost:18000/api/v1`
 - Swagger: `/docs`, OpenAPI JSON: `/openapi.json` (API 호스트 기준)
+- 최신 정의서: `GET /api/v1/production-api` (Markdown 및 입력 스키마 정보), PDF: `GET /api/v1/production-api.pdf`. 두 경로 모두 ingest 권한 또는 관리자 세션이 필요하며 현재 활성 입력 스키마를 반영한다.
+- PDF는 전체 12개 항목과 입력 필드·제한·예시를 포함한다. 웹의 검색·선택 항목과 무관하다. 화면과 같은 정의를 받으려면 `expected_schema_version_id`와 `expected_schema_hash`를 query로 보낼 수 있다. 현재 활성 정의와 다르면 409 `input_schema_document_changed`이며 정의서를 새로 조회해야 한다. 출력 한도 초과는 413, 생성 불가는 503이고 부분 PDF는 제공하지 않는다.
 - 요청 및 응답: UTF-8 JSON. 파일 업로드만 `multipart/form-data`.
 - 서비스 인증: `X-API-Key: <SERVICE_API_KEY>`
-- 설정 → 서비스 API Key에서 복수 키를 발급·이름 수정·폐기한다. 만료 기간은 없으며 키마다 source system과 `ingest` / `review` 권한을 지정한다. 원문은 발급 직후 한 번만 표시한다. 관리자 API는 [서비스 키 정의서](Service_API_Keys_v0.1.md)를 따른다.
+- 설정 → 서비스 API Key에서 복수 키를 발급·이름 수정·삭제한다. 삭제하면 인증을 차단하고 키 목록·키별 대시보드에서 제거하지만 기존 분석·감사 이력은 보존한다. 만료 기간은 없으며 키마다 source system과 `ingest` / `review` 권한을 지정한다. 원문은 발급 직후 한 번만 표시한다. 관리자 API는 [서비스 키 정의서](Service_API_Keys_v0.1.md)를 따른다.
 - 환경변수 기반 배포 키는 제거했다. `WAF_BOOTSTRAP_API_KEY`, `WAF_BOOTSTRAP_SOURCE_SYSTEM`, `WAF_BOOTSTRAP_API_KEY_ENABLED`는 새 버전에서 무시한다. 기본 서비스 키는 없으며 새 버전 배포 후 관리자 설정에서 발급한 키로 연동 시스템을 전환해야 한다.
 - 서비스 조회와 리뷰 등록은 자신의 `source_system`에 속한 분석에만 허용한다. 다른 소스의 ID는 `404`로 응답한다.
 - 관리자 세션은 전체 목록·상세와 원문·Agent 이력을 조회할 수 있다. 원문·Agent 이력 열람에는 접근 감사를 남긴다.
@@ -25,7 +27,7 @@ GET /api/v1/auth/me
 X-API-Key: <SERVICE_API_KEY>
 ```
 
-실제 키를 소스, URL, 로그에 넣지 않는다. 예시 이벤트는 모두 합성 데이터다.
+실제 키를 소스, URL, 로그에 넣지 않는다. 예시 이벤트는 모두 테스트 데이터다.
 
 ## 목적과 유입 경로
 
@@ -39,10 +41,10 @@ X-API-Key: <SERVICE_API_KEY>
 | `POST /test-uploads` | admin | `test` | `file_upload` |
 | `POST /test-runs` | admin | `test` | `test_lab` |
 | `POST /test-runs/uploads` | admin | `test` | `file_upload` |
-| 선택형 모델 전체 검증의 합성 150건 | admin | `test` | `model_validation` |
+| 선택형 모델 전체 검증의 테스트 데이터 150건 | admin | `test` | `model_validation` |
 | 분류 도입 전 데이터 | 기존 권한 유지 | `legacy_unknown` | `legacy_unknown` |
 
-웹의 **테스트 분석**은 사용자 테스트명을 받는 `/test-runs`와 `/test-runs/uploads`를 사용한다. 접수 당시 **Test 용도로 지정한 프로필**·프롬프트를 고정하고 일반 분석 worker를 사용한다. 실제 모델 모드에서 Test가 미지정이면 409이며 Production으로 대체하지 않는다. Production과 Test는 각각 전체 검증을 통과한 프로필만 지정할 수 있다. 기존 `/test-analyses`·`/test-uploads`도 이제 필수 query `name`, `idempotency_key`를 받아 이름 있는 실행에 연결하며 기존 응답에 `test_run_id`를 추가한다. 이름·키 없는 관리자 테스트 접수는 422다. Production 접수 계약은 그대로다. 설정의 합성 150건 검증은 후보 프로필·model-test worker를 유지한다. 상세 계약은 [테스트 실행 및 평가 정의서](Test_Runs_and_Evaluation_v0.1.md)를 따른다.
+웹의 **테스트 분석**은 사용자 테스트명을 받는 `/test-runs`와 `/test-runs/uploads`를 사용한다. 접수 당시 **Test 용도로 지정한 프로필**·프롬프트를 고정하고 일반 분석 worker를 사용한다. 실제 모델 모드에서 Test가 미지정이면 409이며 Production으로 대체하지 않는다. Production과 Test는 각각 전체 검증을 통과한 프로필만 지정할 수 있다. 기존 `/test-analyses`·`/test-uploads`도 이제 필수 query `name`, `idempotency_key`를 받아 이름 있는 실행에 연결하며 기존 응답에 `test_run_id`를 추가한다. 이름·키 없는 관리자 테스트 접수는 422다. Production 접수 계약은 그대로다. 설정의 테스트 데이터 150건 검증은 후보 프로필·model-test worker를 유지한다. 상세 계약은 [테스트 실행 및 평가 정의서](Test_Runs_and_Evaluation_v0.1.md)를 따른다.
 
 기존 데이터는 이벤트명이나 ID 접두사로 추정하지 않는다. `전체` 조회에 포함되지만 운영·테스트 필터에는 포함되지 않는다. 분류와 유입 경로는 LLM 판정 입력에 추가하지 않는다.
 
@@ -84,7 +86,7 @@ Content-Type: application/json
 
 정답 혼입을 막기 위해 최상위의 `label`, `expected_verdict`, `reference_label`, `ground_truth` 등 평가 필드와 `difficulty`, `expected_severity`, `rationale_ko`, `important_evidence` 등 참고 답안 필드도 422 `evaluation_labels_require_separate_attachment`로 거부한다. Label은 아래 별도 연결 API로 제공한다. 이는 임의의 중첩 필드나 payload 본문에서 정답 문장을 찾아 제거하는 기능이 아니며, 기존 입력 내용을 조용히 삭제하거나 재해석하지 않는다.
 
-아래 요청은 기본 스키마의 합성 예시다. 운영 스키마에서 추가한 필수 필드·허용값·제한에 맞게 수정한 뒤 전송해야 한다.
+아래 요청은 기본 스키마의 예시 입력다. 운영 스키마에서 추가한 필수 필드·허용값·제한에 맞게 수정한 뒤 전송해야 한다.
 
 ```json
 {
@@ -136,7 +138,7 @@ POST는 `AnalysisDetail` 객체를 반환한다. 내부 분석 ID의 필드명�
 3. `completed`이면 최종 결과를 사용한다.
 4. `failed`이면 `error_code`, `error_message`를 처리한다.
 
-`completed + inconclusive`는 정상 완료된 보류 판정이다. HTTP 200이나 `confidence_score`만으로 성공·공격 여부를 결정하지 않는다. webhook과 재분석 API는 아직 없다.
+`completed + inconclusive`는 정상 완료된 보류 판정이다. HTTP 200이나 `confidence_score`만으로 성공·공격 여부를 결정하지 않는다. webhook과 서비스 키를 통한 임의 재분석은 제공하지 않는다. 관리자는 `GET /analyses/{id}/retry-eligibility`로 실패 당시 설정의 보존 여부를 확인하고 별도 `POST /analyses/{id}/retry`로 실패 재실행을 요청할 수 있다. 기존 실패는 보존하며 당시 설정을 확인할 수 없으면 현재 모델로 대체하지 않고 차단한다.
 
 환경변수에 키가 이미 안전하게 주입되었다고 가정한 호출 예시:
 
@@ -206,7 +208,7 @@ curl --silent --show-error --fail-with-body \
 - `signature_assessment.relation`: exact / partial / mismatch / unknown.
 - Verifier 실패 또는 판정 불일치는 최종 inconclusive/UNKNOWN이다. Primary 출력 검증은 교정 1회 후에도 실패하면 분석 failed로 종료한다.
 - v2에는 `uncertainties`가 없다. 추가 확인 작업은 `recommended_checks`에 있다.
-- ModuAgent 모드의 현재 프롬프트 코드 기준은 `waf-judgment-v2.5`이며 새 접수의 `prompt_version`은 `waf-judgment-v2.5/policy-N` 형식이다. 결과 계약은 `waf-analysis-v2`를 유지한다. stub 모드는 별도 프롬프트 식별값을 사용한다.
+- ModuAgent 모드의 현재 프롬프트 코드 기준은 `waf-judgment-v2.6`이며 새 접수의 `prompt_version`은 `waf-judgment-v2.6/policy-N` 형식이다. Production과 Test는 같은 활성 공통 프롬프트를 사용한다. 결과 계약은 `waf-analysis-v2`를 유지한다. stub 모드는 별도 프롬프트 식별값을 사용한다.
 - 정책은 서버가 접수 시 선택·고정한다. 운영 버전 변경은 이후 새 접수에만 적용되며 대기 작업·재시도·재선점·중복 접수는 원래 버전을 유지한다. 요청에서 정책 ID·스냅샷·지침을 지정할 수 없다. 관리자 버전 관리 API와 `0006` 마이그레이션은 [프롬프트 버전 관리 정의서](Prompt_Policies_v0.1.md)를 참고한다.
 - `input_truncated=true`는 payload뿐 아니라 이벤트 메타데이터·파서 힌트가 축소된 경우도 포함한다. 정확한 모델 토큰 수는 운영 모델에서 별도 검증해야 한다.
 - v1 JSON은 그대로 보존한다. 과거 결과에 심각도가 없다면 응답 최상위 `severity`는 null이고 보존된 `result` 내부 키는 누락될 수 있다. 임의 추정하지 않는다.
@@ -274,6 +276,8 @@ GET /api/v1/analyses?analysis_purpose=production&status=completed&severity=HIGH&
 | `confidence_min`, `confidence_max` | 각각 0~1, 최소 ≤ 최대 |
 | `created_from`, `created_to` | timezone이 포함된 ISO 8601; 시작 포함, 종료 미포함 |
 | `limit`, `offset` | 기본 50/0; limit 1~200, offset ≥ 0 |
+| `service_api_key_id` | 최초 접수 키 UUID로 제한; 과거 미기록 키를 출처로 추정하지 않음 |
+| `include_retries` | 기본 false. true는 재실행 이력 조회용이며 원본과 자식을 섞은 품질 집계에 사용하지 않음 |
 
 부분 문자열의 `%`, `_`는 와일드카드가 아닌 문자로 취급한다. IP 검색은 정확 일치이며 CIDR 검색은 없다. 텍스트 대소문자 처리는 DB의 기본 문자 지원에 따른다. payload, Cookie, 암호화된 Agent 이력, 임의 확장 필드는 목록 검색 대상이 아니다.
 
@@ -286,6 +290,8 @@ GET /api/v1/dashboard/summary?days=7
 ```
 
 관리자 세션 전용이다. 미인증은 401, 일반 서비스 API Key는 403이다. `days`는 정수 1~90이며 기본 7이다. 서버 조회 시각을 기준으로 최근 N일에 접수된 Production 분석 전체를 집계하며 목록 페이지 크기의 영향을 받지 않는다. 테스트와 기존 미분류 분석은 제외한다.
+
+`service_api_key_id=<UUID>`를 추가하면 최초 접수 키별로 제한한다. 삭제·미존재 키의 전용 대시보드는 404이며 해당 분석은 전체 집계에 보존한다. 재실행 자식은 중복 집계하지 않는다. 응답은 아래 기본 필드와 함께 `service_api_key`, `attribution_unknown_count`, `evaluation_summary` 및 UTC 접수일별 `trend`를 제공한다. 지표는 참고 답안이 연결된 평가 가능 표본 기준이지 운영 트래픽 전체의 정확도가 아니다.
 
 ```json
 {
@@ -397,7 +403,7 @@ Content-Type: multipart/form-data
 | 폼 필드 | 규칙 |
 | --- | --- |
 | `file` | UTF-8 JSON 참고 답안 배열; 최대 2 MiB, 500행 |
-| `source_system` | 원래 분석의 정확한 source. 웹 파일 분석·Test Lab은 admin-ui |
+| `source_system` | 원래 분석의 정확한 source. 새 테스트는 실행 상세의 source_system을 사용하며 이전 웹 테스트만 admin-ui일 수 있음 |
 | `source_kind` | reference 또는 synthetic_expected |
 | `source_ref` | 1~120자 출처 식별자; 문자·숫자·공백·점·밑줄·하이픈 사용 |
 | `ai_visible` | 답안 작성 시 AI 결과 열람 여부 true / false / unknown; 미확인은 unknown |
@@ -446,8 +452,8 @@ GET /api/v1/analyses/{id}/evaluation-labels
 | `false_negative` | 참고 정탐, AI 오탐: 미탐 방향의 불일치 |
 | `false_positive` | 참고 오탐, AI 정탐: 과탐 방향의 불일치 |
 | `abstained` | 참고 정탐/오탐, AI 판단 보류 |
-| `expected_abstention_match` | 합성 기대 보류, AI도 보류 |
-| `expected_abstention_mismatch` | 합성 기대 보류, AI는 정탐/오탐 |
+| `expected_abstention_match` | 테스트 기대 보류, AI도 보류 |
+| `expected_abstention_mismatch` | 테스트 기대 보류, AI는 정탐/오탐 |
 | `unlabeled` | 연결된 Label 없음 |
 | `pending` | Label이 있으나 분석 진행 중 |
 | `failed` | Label이 있으나 분석 실패 |
@@ -455,11 +461,11 @@ GET /api/v1/analyses/{id}/evaluation-labels
 | `unknown_provenance` | 실제 최종 판정 실행 근거 미확인 또는 결과 불일치 |
 | `input_contaminated` | 이전 이벤트 확장 필드에서 알려진 정답/평가 정보 필드 발견 |
 
-비교는 Primary 단독 결과가 아니라 Verifier·근거·정책 결합 후의 최종 판정을 기준으로 한다. 미탐은 참고 정탐 → AI 오탐, 과탐은 참고 오탐 → AI 정탐이다. 확정 참고값에 대한 모델 inconclusive는 판단 보류로 구분하고 이진 오류에 섞지 않는다. 합성 inconclusive 기대값은 기대 보류의 일치 여부로 별도 표시한다. 미라벨·진행 중·실패·stub·출처 불명 또는 정답 혼입이 확인된 이전 입력은 정상 품질 표본으로 세지 않는다.
+비교는 Primary 단독 결과가 아니라 Verifier·근거·정책 결합 후의 최종 판정을 기준으로 한다. 미탐은 참고 정탐 → AI 오탐, 과탐은 참고 오탐 → AI 정탐이다. 확정 참고값에 대한 모델 inconclusive는 판단 보류로 구분하고 이진 오류에 섞지 않는다. 테스트의 inconclusive 기대값은 기대 보류의 일치 여부로 별도 표시한다. 미라벨·진행 중·실패·stub·출처 불명 또는 정답 혼입이 확인된 이전 입력은 정상 품질 표본으로 세지 않는다.
 
-`evaluation_summary`는 테스트와 Production 모두 적용된 모든 검색 조건과 권한 범위 전체를 집계한다. 전체 및 출처·AI 열람 여부별 `source_groups`에 `confusion_matrix`(tp/fn/fp/tn/abstained_positive/abstained_negative), `metrics`를 추가한다. Accuracy/Precision/Recall/F1·Specificity·FPR/FNR·Balanced Accuracy·Macro F1·MCC·커버리지·보류율·보류 포함 정답률을 제공한다. 비율은 0~1, MCC는 -1~1이며 산출 불가는 null이다. 전체 집계의 `label_coverage`는 답안 연결률이다. 수식과 분모는 [공통 평가 정의서](Test_Runs_and_Evaluation_v0.1.md)를 따른다. 합성·AI 지원 답안 일치율과 선택된 운영 표본을 독립적인 전체 운영 정확도로 표현하지 않는다. 심각도 채점·자동 모델 비교는 포함하지 않는다.
+`evaluation_summary`는 테스트와 Production 모두 적용된 모든 검색 조건과 권한 범위 전체를 집계한다. 전체 및 출처·AI 열람 여부별 `source_groups`에 `confusion_matrix`(tp/fn/fp/tn/abstained_positive/abstained_negative), `metrics`를 추가한다. Accuracy/Precision/Recall/F1·Specificity·FPR/FNR·Balanced Accuracy·Macro F1·MCC·커버리지·보류율·보류 포함 정답률을 제공한다. 비율은 0~1, MCC는 -1~1이며 산출 불가는 null이다. 전체 집계의 `label_coverage`는 답안 연결률이다. 수식과 분모는 [공통 평가 정의서](Test_Runs_and_Evaluation_v0.1.md)를 따른다. 테스트 기대 답안·AI 지원 답안 일치율과 선택된 운영 표본을 독립적인 전체 운영 정확도로 표현하지 않는다. 심각도 채점·자동 모델 비교는 포함하지 않는다.
 
-집계 필드는 total(전체), labeled(Label 존재), evaluable(비교 가능), matches(일치), outcomes(상태별 건수), source_groups(출처 종류 × AI 열람 여부)다. 그룹의 판정 일치율은 `matches / evaluable`로, 합성 기대 보류와 실제 보류가 같으면 일치에 포함하고 확정 참고값에 대한 AI 보류는 분모에 남는다. 이진 확정판정 coverage는 `binary_decided / binary_evaluable`이며 기대 보류 Label은 양쪽에서 제외한다. 분모가 0이면 비율을 산출하지 않는다. 그룹의 false_negatives, false_positives, abstained, expected_abstention_matches, expected_abstention_mismatches를 함께 확인한다.
+집계 필드는 total(전체), labeled(Label 존재), evaluable(비교 가능), matches(일치), outcomes(상태별 건수), source_groups(출처 종류 × AI 열람 여부)다. 그룹의 판정 일치율은 `matches / evaluable`로, 테스트 기대 보류와 실제 보류가 같으면 일치에 포함하고 확정 참고값에 대한 AI 보류는 분모에 남는다. 이진 확정판정 coverage는 `binary_decided / binary_evaluable`이며 기대 보류 Label은 양쪽에서 제외한다. 분모가 0이면 비율을 산출하지 않는다. 그룹의 false_negatives, false_positives, abstained, expected_abstention_matches, expected_abstention_mismatches를 함께 확인한다.
 
 정답 파일은 분석 접수 파일과 분리한다. 분석 요청에 정답을 섞으면 평가 정보가 모델 입력으로 유입될 수 있으므로 별도 연결 경로만 사용한다. 이미 실행된 분석에 정답이 포함되었던 경우에는 사후 연결로 과거 모델 입력이 정화되지 않는다. 저장된 과거 원문·fingerprint·Agent 이력은 변경하지 않는다.
 

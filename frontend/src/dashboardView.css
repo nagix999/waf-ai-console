@@ -1,0 +1,20 @@
+.dashboard-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; }
+.dashboard-filters label:first-child { min-width: 240px; }
+.dashboard-filters > span { margin-left: auto; padding-bottom: 10px; }
+.dashboard-priorities { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.dashboard-priorities button { border: 0; background: var(--raised); color: var(--text); padding: 8px 12px; border-radius: 6px; }
+.dashboard-priorities b { color: var(--danger); margin-left: 6px; }
+.dashboard-workspace .stats-grid article { min-height: 128px; }
+.trend-panel { min-width: 0; }
+.trend-panel .panel-head { gap: 6px; }
+.trend-panel h2 { flex: 1; }
+.trend-panel select { max-width: 140px; }
+.trend-body { padding: 20px; }
+.evaluation-trend { display: block; width: 100%; min-height: 150px; color: var(--accent); }
+.evaluation-trend polyline { stroke: currentColor; stroke-width: 2; }
+.evaluation-trend circle { fill: currentColor; }
+.evaluation-trend .trend-grid { stroke: var(--line); stroke-dasharray: 3 4; }
+.evaluation-trend text { fill: var(--muted); font-size: 10px; }
+.trend-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-top: 12px; color: var(--muted); font-size: 12px; }
+.trend-empty { min-height: 150px; display: grid; place-items: center; color: var(--muted); font-size: 13px; text-align: center; }
+@media (max-width: 700px) { .dashboard-filters label:first-child { min-width: 0; flex: 1; } .dashboard-filters > span { width: 100%; margin: 0; padding: 0; } }

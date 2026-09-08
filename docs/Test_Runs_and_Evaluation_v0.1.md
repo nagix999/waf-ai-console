@@ -2,6 +2,8 @@
 
 기준일: 2026-09-07. 테스트와 Production 모두 **최종 AI 판정과 별도 참고 답안**을 비교한다. 조회·채점은 모델을 다시 호출하지 않는다. WAF Deny/Allow, 분석가 리뷰의 처리 상태, AI가 출력한 신뢰도를 정답으로 사용하지 않는다.
 
+2026-09-08 추가: 두 실행의 같은 문항·고정 답안을 비교한다. Test와 Production은 같은 공통 활성 프롬프트를 사용하며 테스트별 지침 선택은 제공하지 않는다. [공통 프롬프트·실행 비교 계약](Prompt_Optimization_and_Comparison_v0.2.0.md)을 따른다. 새 DB 마이그레이션은 없다.
+
 ## 평가 범위
 
 - 분석 결과의 전체/프로덕션 및 테스트의 개별 문항 검색 조건에 맞는 **전체 결과**를 서버에서 집계한다. 테스트 실행 상세는 선택한 실행·난이도·유형 전체를 집계한다. 현재 화면의 한 페이지만 채점하지 않는다.
@@ -94,10 +96,11 @@ ROC-AUC·PR-AUC·Brier score·확률 보정 오차는 현재 결과의 `confiden
 
 | 경로 | 요청 및 응답 |
 | --- | --- |
-| `POST /api/v1/test-runs` | JSON의 `name`, `idempotency_key`, `event` 필수. 이벤트와 별도로 `expected_verdict`, `difficulty`, `test_category`, `case_name` 선택. 실행 상세 반환 |
-| `POST /api/v1/test-runs/uploads` | multipart의 `name`, `idempotency_key`, `file` 필수. JSON/CSV 최대 파일 제한과 최대 5,000행 검사. 실행 상세 반환 |
+| `POST /api/v1/test-runs` | JSON의 `name`, `idempotency_key`, `event` 필수. 이벤트와 별도로 `expected_verdict`, `difficulty`, `test_category`, `case_name` 선택. 공통 활성 프롬프트를 고정하고 실행 상세 반환 |
+| `POST /api/v1/test-runs/uploads` | multipart의 `name`, `idempotency_key`, `file` 필수. JSON/CSV 최대 파일 제한과 최대 5,000행 검사. 공통 활성 프롬프트를 고정하고 실행 상세 반환 |
 | `GET /api/v1/test-runs` | `q` 이름 검색, `limit`(1~100, 기본 20), `offset`. `items`, `total`, `limit`, `offset` 반환 |
 | `GET /api/v1/test-runs/{id}` | `limit`(1~200, 기본 50), `offset`, 난이도·유형 및 문항 필터. 실행 정보와 `items`, `total_items`, `facets`, `evaluation_summary` 반환 |
+| `GET /api/v1/test-runs/{candidate_id}/comparison` | `baseline_id` 필수, `limit`(1~200, 기본 25), `offset`, `changes_only`. 두 실행 전체의 공통 문항·고정 답안 비교; 페이지 필터는 요약 분모와 분리 |
 
 `name`은 공백만 아닌 표시 가능한 1~120자다. `idempotency_key`는 8~120자의 영문·숫자·`_.:-`만 허용한다. 난이도는 최대 80자, 유형 120자, 문항명 240자다. 이름은 비밀정보 저장란이 아니다. 이벤트 본문 오류는 원문을 응답에 포함하지 않으며 접수 거부 문항으로 기록한다.
 

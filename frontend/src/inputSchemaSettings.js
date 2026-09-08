@@ -56,7 +56,7 @@ export function schemaFieldDiff(before = [], after = []) {
   });
 }
 export function parseSchemaSample(text) {
-  if (text.length > 2_200_000) throw new Error("샘플이 너무 큽니다. 짧은 합성 이벤트 한 건으로 검증하세요.");
+  if (text.length > 2_200_000) throw new Error("샘플이 너무 큽니다. 짧은 예시 입력 한 건으로 검증하세요.");
   let event;
   try { event = JSON.parse(text); } catch { throw new Error("샘플의 JSON 형식을 확인하세요."); }
   if (!event || typeof event !== "object" || Array.isArray(event)) throw new Error("샘플은 이벤트 한 건의 JSON 객체여야 합니다.");

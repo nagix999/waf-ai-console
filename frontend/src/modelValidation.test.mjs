@@ -8,6 +8,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { api } from "./api.js";
 import { analysisQuery } from "./analysisView.js";
+import { autoTestName } from "./testRuns.js";
 import { createFullValidationController, datasetEvaluationStatus, datasetListState, expectedVerdictUploadError, modelTestPayload, uploadLabelNotice } from "./modelValidation.js";
 
 const profile = (extra = {}) => ({ id: "candidate-profile", name: "synthetic-candidate", provider: "vllm", model_name: "synthetic-model", profile_fingerprint: "a".repeat(64), ...extra });
@@ -50,6 +51,15 @@ test("ambiguous model-test responses never retry or silently close the confirmat
   openNamed(controller); const key = controller.getState().idempotencyKey; assert.equal(await controller.submit(true), false); assert.equal(calls, 1); assert.equal(controller.getState().idempotencyKey, key); assert.equal(controller.getState().profile.id, "candidate-profile"); assert.match(controller.getState().error, /자동으로 재요청하지/); assert.doesNotMatch(controller.getState().error, /SYNTHETIC_NETWORK_FAILURE/); controller.close(); controller.dispose();
 });
 
+test("blank validation names use one stable automatic name per idempotent request", async () => {
+  const calls = []; const controller = createFullValidationController({ api: { runModelProfileTest: async (...args) => { calls.push(args); throw new Error("SYNTHETIC_NETWORK_FAILURE"); } }, onChange() {} });
+  controller.open(profile()); const key = controller.getState().idempotencyKey;
+  assert.equal(await controller.submit(false), false); assert.equal(await controller.submit(false), false);
+  assert.equal(calls[0][4].name, autoTestName("", key)); assert.deepEqual(calls[0], calls[1]);
+  assert.equal(await controller.submit(true), false); assert.notEqual(calls[2][4].idempotency_key, key); assert.equal(calls[2][4].name, autoTestName("", calls[2][4].idempotency_key));
+  controller.setName(" 사용자 이름 "); assert.equal(await controller.submit(true), false); assert.equal(calls[3][4].name, "사용자 이름"); controller.dispose();
+});
+
 test("a model-test response after unmount cannot publish or navigate", async () => {
   const response = deferred(); let submitted = 0; const states = []; const controller = createFullValidationController({ api: { runModelProfileTest: async () => response.promise }, onChange: state => states.push(state), onSubmitted: () => submitted++ });
   openNamed(controller); const pending = controller.submit(true); controller.dispose(); const count = states.length; response.resolve({}); await pending; assert.equal(states.length, count); assert.equal(submitted, 0);
@@ -63,7 +73,7 @@ test("dataset navigation filters exact internal source and test purpose, preserv
 });
 
 test("upload automatic label counts and error messages never imply completed analysis or independent accuracy", () => {
-  assert.equal(uploadLabelNotice(null), ""); assert.equal(uploadLabelNotice({ accepted: 1 }), ""); assert.match(uploadLabelNotice({ label_attached: 2, label_unchanged: 1 }), /합성 기대값 연결 2건 · 기존 답안과 동일 1건/); assert.match(uploadLabelNotice({ label_attached: 0, label_unchanged: 0 }), /분석이 완료되면/);
+  assert.equal(uploadLabelNotice(null), ""); assert.equal(uploadLabelNotice({ accepted: 1 }), ""); assert.match(uploadLabelNotice({ label_attached: 2, label_unchanged: 1 }), /기대 답안 연결 2건 · 기존 답안과 동일 1건/); assert.match(uploadLabelNotice({ label_attached: 0, label_unchanged: 0 }), /분석이 완료되면/);
   assert.match(expectedVerdictUploadError({ message: "expected_verdict_conflict" }), /덮어쓰지 않고/); assert.match(expectedVerdictUploadError({ code: "invalid_expected_verdict" }), /true_positive/); assert.equal(expectedVerdictUploadError({ message: "toString" }), "");
   assert.equal(datasetEvaluationStatus("completed"), "판정 평가 처리 완료"); assert.equal(datasetEvaluationStatus("toString"), "판정 평가 상태 미확인");
 });
@@ -75,8 +85,10 @@ const render = (Component, props) => renderToStaticMarkup(createElement(Componen
 
 test("full-validation UI exposes exactly three choices with selected-profile and OpenAI cost notices", () => {
   const html = render(FullValidationContent, { profile: profile({ provider: "openai", name: '<script>SYNTHETIC</script>' }), busy: false, error: "", onCancel() {}, onSubmit() {} });
-  assert.equal((html.match(/<button/g) || []).length, 3); assert.match(html, />취소<\/button>/); assert.match(html, />연결·기능 검증만<\/button>/); assert.match(html, />150건 판정 평가도 실행<\/button>/);
-  assert.match(html, /이 화면에서 선택한 프로필/); assert.doesNotMatch(html, /현재 Production이 아니라/); assert.match(html, /자동 승격하지/); assert.match(html, /150회를 넘을 수/); assert.match(html, /OpenAI 외부 API로 전송/); assert.match(html, /API 비용/); assert.match(html, /독립적인 운영 정확도가 아닙니다/); assert.doesNotMatch(html, /<script>/); assert.match(html, /&lt;script&gt;SYNTHETIC/);
+  assert.equal((html.match(/<button(?![^>]*metric-help-trigger)/g) || []).length, 3); assert.match(html, />취소<\/button>/); assert.match(html, />연결·기능 검증만<\/button>/); assert.match(html, />150건 판정 평가도 실행<\/button>/);
+  assert.match(html, /선택한 프로필로 검증/); assert.doesNotMatch(html, /현재 Production이 아니라/); assert.match(html, /Production·Test 지정을 바꾸지/); assert.match(html, /150회를 넘을 수/); assert.match(html, /OpenAI 외부 API로 전송/); assert.match(html, /API 비용/); assert.match(html, /150건 판정 평가 설명/); assert.doesNotMatch(html, /<script>/); assert.match(html, /&lt;script&gt;SYNTHETIC/);
+  assert.doesNotMatch(html, /검증 대상 설명|연결·기능 검증 설명/); assert.match(html, /Test 지정 여부와 관계없이/); assert.match(html, /공통 활성 프롬프트를 사용합니다/);
+  assert.match(html, /연결·기본 응답·구조화 출력·시스템 지침·큰 입력·동시 요청/); assert.match(html, /판정 품질은 보증하지 않습니다/);
   assert.doesNotMatch(render(FullValidationContent, { profile: profile(), busy: false }), /OpenAI를 선택했습니다/);
   const reconfirm = render(FullValidationContent, { profile: profile(), busy: false, needsReconfirm: true }); assert.equal((reconfirm.match(/disabled=""/g) || []).length, 2); assert.match(reconfirm, /class="secondary">취소<\/button>/);
 });
@@ -84,7 +96,28 @@ test("full-validation UI exposes exactly three choices with selected-profile and
 test("dataset result UI separates completed, failed, held and expected-abstention outcomes and preserves missing metadata", () => {
   const summary = { total: 150, labeled: 150, evaluable: 147, matches: 140, outcomes: { false_negative: 2, false_positive: 1, abstained: 3, expected_abstention_match: 5, expected_abstention_mismatch: 1, failed: 3 }, source_groups: [{ source_kind: "synthetic_expected", ai_visible: false, matches: 140, evaluable: 147, binary_decided: 130, binary_evaluable: 140, false_negatives: 2, false_positives: 1, abstained: 3, expected_abstention_matches: 5, expected_abstention_mismatches: 1 }] };
   const testRun = { include_dataset: true, dataset_evaluation: { dataset_version: "waf-dummy-v1", source_system: "waf-internal-model-test-synthetic", status: "completed", total: 150, pending: 0, processing: 0, completed: 147, failed: 3, summary } };
-  const html = render(DatasetEvaluation, { test: testRun, onViewDataset() {} }); assert.match(html, /처리 종료 150 \/ 150건/); assert.match(html, /분석 완료 <strong>147건/); assert.match(html, /실행 실패 <strong>3건/); assert.match(html, /150건 분석 결과 보기/); assert.match(html, /미탐 방향 2 · 과탐 방향 1 · 모델 보류 3건/); assert.match(html, /기대 보류 일치 5 · 불일치 1건/); assert.match(html, /일치율로 자동 승격하지/);
+  const html = render(DatasetEvaluation, { test: testRun, onViewDataset() {} }); assert.match(html, /처리 종료 150 \/ 150건/); assert.match(html, /분석 완료 <strong>147건/); assert.match(html, /실행 실패 <strong>3건/); assert.match(html, /150건 분석 결과 보기/); assert.match(html, /참고 답안 비교 집계/); assert.match(html, /일치율로 자동 승격하지/); assert.doesNotMatch(html, /<details/);
+  let tree;
+  function CaptureDataset() { tree = DatasetEvaluation({ test: testRun, onViewDataset() {} }); return null; }
+  render(CaptureDataset);
+  const dialog = tree.props.children.find(child => child?.props?.title === "150건 참고 답안 비교 집계");
+  assert.equal(dialog.props.open, false); assert.equal(dialog.props.children.props.summary, summary);
+  const content = renderToStaticMarkup(dialog.props.children);
+  assert.match(content, /전체 150건/); assert.match(content, /출처별 지표/); assert.match(content, /제외·보류 내역/);
+  let summaryTree;
+  function CaptureSummary() { summaryTree = dialog.props.children.type(dialog.props.children.props); return null; }
+  render(CaptureSummary);
+  function descendants(node) {
+    if (Array.isArray(node)) return node.flatMap(descendants);
+    if (!node || typeof node !== "object") return [];
+    return [node, ...descendants(node.props?.children)];
+  }
+  const sources = descendants(summaryTree).find(node => node.props?.title === "답안 출처별 지표");
+  assert.equal(sources.props.open, false);
+  const provenance = renderToStaticMarkup(sources.props.children);
+  assert.match(provenance, /미탐 방향 2 · 과탐 방향 1 · 모델 보류 3건/); assert.match(provenance, /기대 보류 일치 5 · 불일치 1건/);
+  const exclusions = descendants(summaryTree).find(node => node.props?.title === "평가 제외·보류 내역");
+  assert.match(renderToStaticMarkup(exclusions.props.children), /실행 실패 3.*일치율 분모에서 제외/);
   assert.equal(render(DatasetEvaluation, { test: { include_dataset: false } }), ""); assert.match(render(DatasetEvaluation, { test: { include_dataset: true, dataset_evaluation: null } }), /아직 확인할 수 없습니다/);
   assert.match(render(DatasetEvaluation, { test: { ...testRun, dataset_evaluation: { ...testRun.dataset_evaluation, status: "skipped" } } }), /실행하지 않았습니다/);
 });

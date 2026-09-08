@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 
 from .api.analyses import router as analyses_router
+from .api.analysis_exports import router as analysis_exports_router
 from .api.auth import router as auth_router
 from .api.dashboard import router as dashboard_router
 from .api.model_profiles import router as model_profiles_router
@@ -17,6 +18,7 @@ from .api.prompt_policies import router as prompt_policies_router
 from .api.internal_egress import router as internal_egress_router
 from .api.service_api_keys import router as service_api_keys_router
 from .api.test_runs import router as test_runs_router
+from .api.test_comparisons import router as test_comparisons_router
 from .api.input_schemas import router as input_schemas_router
 from .api.production_api import router as production_api_router
 from .config import Settings, get_settings
@@ -83,6 +85,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
     )
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(analyses_router, prefix="/api/v1", responses=ANALYSIS_ERROR_RESPONSES)
+    app.include_router(analysis_exports_router, prefix="/api/v1")
     app.include_router(dashboard_router, prefix="/api/v1", responses=ANALYSIS_ERROR_RESPONSES)
     app.include_router(model_profiles_router, prefix="/api/v1")
     app.include_router(evaluation_labels_router, prefix="/api/v1", responses=ANALYSIS_ERROR_RESPONSES)
@@ -90,6 +93,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
     app.include_router(internal_egress_router, prefix="/api/v1")
     app.include_router(service_api_keys_router, prefix="/api/v1")
     app.include_router(test_runs_router, prefix="/api/v1", responses=ANALYSIS_ERROR_RESPONSES)
+    app.include_router(test_comparisons_router, prefix="/api/v1", responses=ANALYSIS_ERROR_RESPONSES)
     app.include_router(input_schemas_router, prefix="/api/v1")
     app.include_router(production_api_router, prefix="/api/v1")
 

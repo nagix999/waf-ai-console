@@ -1,37 +1,20 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { useState } from "react";
+import HelpTooltip from "./HelpTooltip.jsx";
+import Dialog from "./Dialog.jsx";
 import { extraMetrics, mainMetrics, matrixCells, metricHelp, metricText } from "./evaluationMetrics.js";
 import "./evaluationMetrics.css";
 
 export function MetricHelp({ metric, label }) {
-  const id = useId(); const [open, setOpen] = useState(false); const [position, setPosition] = useState(null);
-  const trigger = useRef(null); const tooltip = useRef(null); const closing = useRef(null);
-  const show = () => { clearTimeout(closing.current); setOpen(true); };
-  const hide = () => { clearTimeout(closing.current); setOpen(false); setPosition(null); };
-  const leave = () => { clearTimeout(closing.current); closing.current = setTimeout(() => { if (document.activeElement !== trigger.current) hide(); }, 140); };
-  useEffect(() => () => clearTimeout(closing.current), []);
-  useLayoutEffect(() => {
-    if (!open) return undefined;
-    const place = () => {
-      if (!trigger.current || !tooltip.current) return;
-      const anchor = trigger.current.getBoundingClientRect(); const box = tooltip.current.getBoundingClientRect();
-      const left = Math.max(8, Math.min(anchor.left + anchor.width / 2 - box.width / 2, window.innerWidth - box.width - 8));
-      const below = anchor.bottom + 8; const preferredTop = below + box.height <= window.innerHeight - 8 ? below : anchor.top - box.height - 8;
-      setPosition({ left, top: Math.max(8, Math.min(preferredTop, window.innerHeight - box.height - 8)) });
-    };
-    const dismiss = event => { if (event.key === "Escape" || (event.type === "pointerdown" && !trigger.current?.contains(event.target) && !tooltip.current?.contains(event.target))) hide(); };
-    place(); window.addEventListener("resize", place); window.addEventListener("scroll", place, true); document.addEventListener("keydown", dismiss); document.addEventListener("pointerdown", dismiss);
-    return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); document.removeEventListener("keydown", dismiss); document.removeEventListener("pointerdown", dismiss); };
-  }, [open]);
-  return <span className="metric-help" onMouseEnter={show} onMouseLeave={leave}><button ref={trigger} type="button" className="metric-help-trigger" aria-label={`${label} 설명`} aria-describedby={open ? id : undefined} onFocus={show} onBlur={hide} onClick={show} onKeyDown={event => { if (event.key === "Escape") { hide(); event.stopPropagation(); } }}>?</button>{open && createPortal(<span ref={tooltip} className="metric-help-tooltip" style={{ ...(position || {}), visibility: position ? "visible" : "hidden" }} id={id} role="tooltip" onMouseEnter={show} onMouseLeave={leave}>{metricHelp[metric]}</span>, document.body)}</span>;
+  return <HelpTooltip label={label}>{metricHelp[metric]}</HelpTooltip>;
 }
 
 export function MetricCards({ metrics, compact = false }) {
-  return <div className={`quality-metrics${compact ? " quality-metrics-compact" : ""}`}>{mainMetrics.map(([key, label, help]) => <div className={`quality-metric quality-metric-${key}`} key={key}><span>{label}<MetricHelp metric={key} label={label} /></span><strong>{metricText(metrics?.[key], key)}</strong><small>{help}</small></div>)}</div>;
+  return <div className={`quality-metrics${compact ? " quality-metrics-compact" : ""}`}>{mainMetrics.map(([key, label]) => <div className={`quality-metric quality-metric-${key}`} key={key}><span>{label}<MetricHelp metric={key} label={label} /></span><strong>{metricText(metrics?.[key], key)}</strong></div>)}</div>;
 }
 
 export function AdditionalMetrics({ metrics }) {
-  return <details className="quality-additional"><summary>추가 지표 · 클래스 불균형과 오류 방향 확인</summary><dl>{extraMetrics.map(([key, label, help]) => <div key={key}><dt>{label}<MetricHelp metric={key} label={label} /><small>{help}</small></dt><dd>{metricText(metrics?.[key], key)}</dd></div>)}</dl><p className="evaluation-footnote">Coverage·보류율·보류 포함 정답률을 제외한 지표는 보류를 제외한 확정 판정 기준입니다. 지표별 분모가 0이면 계산하지 않습니다. Balanced Accuracy·Macro F1은 확정한 참고 정탐·오탐이 모두 필요합니다.</p></details>;
+  const [open, setOpen] = useState(false);
+  return <><button type="button" className="secondary" onClick={() => setOpen(true)}>추가 지표</button><Dialog open={open} title="추가 평가 지표" onClose={() => setOpen(false)}><div className="quality-additional"><dl>{extraMetrics.map(([key, label]) => <div key={key}><dt>{label}<MetricHelp metric={key} label={label} /></dt><dd>{metricText(metrics?.[key], key)}</dd></div>)}</dl><p className="evaluation-footnote">계산에 필요한 표본이 없으면 —로 표시합니다.</p></div></Dialog></>;
 }
 
 export function ConfusionMatrix({ matrix, onCell, selectedCell }) {

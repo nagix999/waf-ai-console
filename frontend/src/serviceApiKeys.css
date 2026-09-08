@@ -1,4 +1,9 @@
 .service-api-keys { display: grid; gap: 18px; min-width: 0; }
+.service-api-keys .service-key-list-first { grid-template-columns: minmax(0, 1fr); }
+.service-api-keys .service-key-overview .service-key-actions { margin-top: 0; flex-shrink: 0; }
+.service-key-dialog { width: min(680px, calc(100vw - 32px)); }
+.service-key-dialog .service-key-form { padding: 0; }
+.service-key-dialog .service-key-issued { border: 0; box-shadow: none; padding: 0; background: transparent; }
 .service-api-keys .service-key-overview, .service-api-keys .service-key-form, .service-api-keys .service-key-issued { padding: 22px; }
 .service-api-keys .service-key-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
 .service-api-keys .service-key-heading > div { min-width: 0; }

@@ -32,19 +32,29 @@ test("the unified test view mounts both workflows with one visible input panel a
   assert.match(html, /aria-label="테스트 입력 방식"/);
   assert.match(html, /id="test-panel-direct"[^>]*role="tabpanel"[^>]*aria-labelledby="test-input-direct">/);
   assert.match(html, /id="test-panel-file"[^>]*hidden=""/);
-  assert.match(html, /HTTP 요청 직접 입력/);
-  assert.match(html, /파일 분석 시작/);
+  assert.match(html, /단건 분석/);
+  assert.match(html, /HTTP 요청 1건/);
+  assert.match(html, /배치 파일 분석/);
+  assert.match(html, /배치 분석 시작/);
   assert.match(html, /테스트 결과 보기/);
-  assert.match(html, /Test 모델·프롬프트/);
-  assert.match(html, /Production 지정과 별개/);
+  assert.match(html, /aria-label="답안 자동 비교 설명"/);
+  assert.match(html, /UTF-8 CSV \/ JSON · 입력 스키마 기준/);
+  assert.match(html, /답안·난이도·유형은 모델에 보내지 않습니다/);
+  assert.doesNotMatch(html, /aria-label="(?:테스트 실행|파일 형식|참고 답안) 설명"/);
+  assert.doesNotMatch(html, /테스트 프롬프트 선택|저장된 프롬프트 버전|간결 지침|시스템 지침<select/);
   assert.match(html, /10 MiB/);
-  assert.match(html, /expected_verdict/);
-  assert.match(html, /분석 입력에서 분리해 합성 기대값으로 자동 연결/);
-  assert.match(html, /JSON null·CSV 빈칸/);
-  assert.match(html, /Production 이벤트 본문에는 답안·평가 정보를 넣지/);
-  assert.match(html, /테스트 목록/);
-  assert.match(html, /합성 기대 답안/);
-  assert.equal((html.match(/placeholder="예: (?:9월 SQLi 회귀 검증 · 1차|URL 이중 인코딩 점검 · 1차)"/g) || []).length, 2);
+  assert.match(html, /기대 답안 \(선택\)/);
+  assert.doesNotMatch(html, /test-run-history|test-run-detail|role="tooltip"|합성/);
+  // The two name fields start empty; a request ID supplies a name only when submitted.
+  const nameFields = [...html.matchAll(/<label class="test-name-field">테스트명 <input([^>]*)>/g)];
+  assert.equal(nameFields.length, 2);
+  for (const [, attributes] of nameFields) {
+    assert.match(attributes, /placeholder="비워두면 ID 자동 생성"/);
+    assert.match(attributes, /value=""/);
+  }
+  assert.match(html, /<textarea[^>]*placeholder="GET \/search\?q=example HTTP\/1.1[^>]*><\/textarea>/);
+  assert.match(html, /placeholder="예: 192.0.2.10"[^>]*value=""/);
+  assert.match(html, /id="single-test-extra" hidden=""/);
 });
 
 test("actual result component uses analyst wording, ordered sections and precise source paths", () => {

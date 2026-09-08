@@ -23,6 +23,15 @@
 .api-doc-toc button:hover, .api-doc-toc button:focus-visible { background: var(--accent-soft); color: var(--accent); }
 .api-doc-index > small { display: block; margin: 16px 3px 0; padding-top: 13px; border-top: 1px solid var(--line); color: var(--muted); font-size: 10px; line-height: 1.6; }
 .api-doc-content { display: grid; min-width: 0; gap: 22px; }
+.api-section-navigation { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.api-section-navigation button { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 16px; text-align: left; line-height: 1.6; }
+.api-section-navigation button span { overflow-wrap: anywhere; }
+.api-section-navigation button span[aria-hidden] { flex-shrink: 0; }
+.api-section-navigation .api-section-next { grid-column: 2; justify-content: flex-end; text-align: right; }
+.api-doc-toc button[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 650; }
+.api-document-page > .api-source-note { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0; }
+.api-document-page > .api-source-note > button { margin-left: auto; }
+.api-technical-dialog dd { margin: 5px 0 18px; overflow-wrap: anywhere; }
 .api-doc-section { padding: 26px; min-width: 0; }
 .api-section-title { display: flex; align-items: center; gap: 11px; margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid var(--line); }
 .api-section-title > span { display: grid; place-items: center; width: 29px; height: 29px; flex-shrink: 0; border: 1px solid var(--line); border-radius: 7px; background: var(--raised); color: var(--muted); font: 11px ui-monospace, monospace; }
@@ -68,7 +77,7 @@
   .api-doc-heading .eyebrow { font-size: 8px; }
   .api-doc-heading p { font-size: 11px; }
   .api-doc-actions { gap: 7px; }
-  .api-doc-actions a { font-size: 10px; padding: 8px 10px; }
+  .api-doc-actions a, .api-doc-actions button { font-size: 11px; padding: 8px 10px; }
   .api-doc-notice { padding: 13px; gap: 8px; }
   .api-doc-notice p { font-size: 11px; }
   .api-doc-meta { gap: 12px; }

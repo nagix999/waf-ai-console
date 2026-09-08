@@ -180,3 +180,10 @@ export function filterApiSections(sections, query) {
     [section.title, ...section.blocks.map(blockText)].join("\n").toLowerCase().includes(needle)
   ));
 }
+
+export function apiSectionNeighbors(sections, selectedId, query = "") {
+  const entries = query.trim() ? sections : [{ id: "intro", title: "정의서 안내" }, ...sections];
+  const index = entries.findIndex(section => section.id === selectedId);
+  if (index < 0) return { previous: null, next: null };
+  return { previous: entries[index - 1] || null, next: entries[index + 1] || null };
+}

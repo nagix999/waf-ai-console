@@ -23,6 +23,8 @@ class AnalysisFilters(BaseModel):
 
     limit: int = Field(default=50, ge=1, le=200)
     offset: int = Field(default=0, ge=0)
+    service_api_key_id: str | None = Field(default=None, min_length=1, max_length=36)
+    include_retries: bool = False
     analysis_purpose: AnalysisPurpose | None = None
     ingest_channel: IngestChannel | None = None
     test_run_id: str | None = Field(default=None, min_length=1, max_length=36)
@@ -84,6 +86,10 @@ def contains_text(column, value: str):
 
 def analysis_conditions(filters: AnalysisFilters, source_system: str | None, evaluation):
     conditions = []
+    if not filters.include_retries:
+        conditions.append(Analysis.retry_of_analysis_id.is_(None))
+    if filters.service_api_key_id is not None:
+        conditions.append(Analysis.service_api_key_id == filters.service_api_key_id)
     if filters.test_run_id is not None or filters.test_difficulty is not None or filters.test_category is not None:
         members = select(TestRunItem.analysis_id).where(TestRunItem.ingest_status == "accepted")
         for name, value in (("test_run_id", filters.test_run_id), ("difficulty", filters.test_difficulty), ("test_category", filters.test_category)):
@@ -152,6 +158,8 @@ def find_analyses(db: Session, filters: AnalysisFilters, source_system: str | No
     attach_evaluations(db, rows)
     from .test_runs import attach_test_run_ids
     attach_test_run_ids(db, rows)
+    from .analysis import attach_retry_ids
+    attach_retry_ids(db, rows)
     return rows, total
 
 

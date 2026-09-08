@@ -29,9 +29,11 @@ export const api = {
   }),
   logout: () => request("/api/v1/auth/logout", { method: "POST" }),
   me: () => request("/api/v1/auth/me"),
-  dashboard: (days = 7, options = {}) => request(`/api/v1/dashboard/summary?days=${days}`, options),
+  dashboard: (days = 7, options = {}, serviceApiKeyId = "") => request(`/api/v1/dashboard/summary?${new URLSearchParams({ days, ...(serviceApiKeyId ? { service_api_key_id: serviceApiKeyId } : {}) })}`, { ...options, cache: "no-store" }),
   analyses: (query = {}, options = {}) => request(`/api/v1/analyses?${new URLSearchParams(query)}`, options),
   analysis: (id, options = {}) => request(`/api/v1/analyses/${id}`, options),
+  retryEligibility: (id, options = {}) => request(`/api/v1/analyses/${encodeURIComponent(id)}/retry-eligibility`, { ...options, cache: "no-store" }),
+  retryAnalysis: (id, payload) => request(`/api/v1/analyses/${encodeURIComponent(id)}/retry`, { method: "POST", body: JSON.stringify(payload), cache: "no-store" }),
   rawEvent: (id, options = {}) => request(`/api/v1/analyses/${id}/event`, options),
   agentRuns: (id, options = {}) => request(`/api/v1/analyses/${id}/agent-runs`, options),
   evaluationLabels: (id, options = {}) => request(`/api/v1/analyses/${id}/evaluation-labels`, options),
@@ -50,6 +52,7 @@ export const api = {
   },
   testRuns: (query = {}, options = {}) => request(`/api/v1/test-runs?${new URLSearchParams(query)}`, options),
   testRun: (id, query = {}, options = {}) => request(`/api/v1/test-runs/${encodeURIComponent(id)}?${new URLSearchParams(query)}`, options),
+  compareTestRuns: (id, query, options = {}) => request(`/api/v1/test-runs/${encodeURIComponent(id)}/comparison?${new URLSearchParams(query)}`, { ...options, cache: "no-store" }),
   createTestRun: (payload) => request("/api/v1/test-runs", { method: "POST", body: JSON.stringify(payload) }),
   uploadTestRun: (file, name, idempotencyKey) => {
     const body = new FormData(); body.append("name", name); body.append("idempotency_key", idempotencyKey); body.append("file", file);
@@ -60,6 +63,7 @@ export const api = {
   createServiceApiKey: (payload) => request("/api/v1/admin/service-api-keys", { method: "POST", body: JSON.stringify(payload), cache: "no-store" }),
   renameServiceApiKey: (id, payload) => request(`/api/v1/admin/service-api-keys/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(payload), cache: "no-store" }),
   revokeServiceApiKey: (id) => request(`/api/v1/admin/service-api-keys/${encodeURIComponent(id)}/revoke`, { method: "POST", cache: "no-store" }),
+  deleteServiceApiKey: (id) => request(`/api/v1/admin/service-api-keys/${encodeURIComponent(id)}`, { method: "DELETE", cache: "no-store" }),
   internalEgress: (options = {}) => request("/api/v1/admin/internal-egress", options),
   createInternalEgress: (payload) => request("/api/v1/admin/internal-egress", { method: "POST", body: JSON.stringify(payload) }),
   updateInternalEgress: (id, payload) => request(`/api/v1/admin/internal-egress/${encodeURIComponent(id)}`, { method: "PUT", body: JSON.stringify(payload) }),

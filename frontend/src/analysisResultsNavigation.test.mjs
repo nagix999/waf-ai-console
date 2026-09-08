@@ -47,12 +47,17 @@ test("all and Production scopes retain the individual list, reference metrics an
     const before = JSON.stringify(options.state);
     const html = render(options);
     assert.match(html, /<table class="[^"]*\bunified-analysis-table\b/);
-    assert.match(html, /판정 평가 지표/);
-    assert.match(html, /name="label_presence"/);
+    assert.match(html, /aria-label="평가 지표"/);
+    assert.match(html, /답안 표본 기준 · 운영 전체 정확도는 아닙니다/);
+    assert.doesNotMatch(html, /aria-label="평가 범위 설명"/);
+    assert.doesNotMatch(html, /name="label_presence"/);
     assert.match(html, /name="evaluation_outcome"/);
     assert.match(html, /value="synthetic-production"/);
     assert.doesNotMatch(html, /\btest-run-history\b|class="page-stack test-run-detail"|테스트명 검색/);
     assert.equal(JSON.stringify(options.state), before);
+    const expanded = render({ ...options, state: { ...options.state, advanced: true } });
+    assert.match(expanded, /name="label_presence"/);
+    assert.match(expanded, /name="source_system"/);
   }
 });
 
@@ -64,7 +69,7 @@ test("individual Test fallback includes named and previous items with latest-ref
   assert.match(html, /이름 있는 실행과 실행 묶음이 없는 이전 결과를 함께 조회/);
   assert.match(html, /최신 참고 답안 기준/);
   assert.match(html, /<table class="[^"]*\bunified-analysis-table\b/);
-  assert.match(html, /판정 평가 지표/);
+  assert.match(html, /aria-label="평가 지표"/);
   assert.doesNotMatch(html, /테스트명 검색/);
 });
 

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { buildSync } from "esbuild";
 import { createElement } from "react";
@@ -25,7 +26,7 @@ test("service key validation enforces names, case-insensitive reserved sources a
   const draft = { name: " 합성 이름 ! ", source_system: "sample-collector_1.v2", scopes: ["ingest"] };
   assert.equal(validateServiceKeyDraft(draft), "");
   for (const name of ["", " ", "a".repeat(121), "x\n", "x\t", "x\u202e", "x\u200b", "x\ud800"]) assert.ok(serviceKeyNameError(name));
-  for (const source of ["", "sample ", " sample", "한글", "_sample", "a".repeat(121), "admin-ui", "ADMIN-UI", "waf-internal-test", "WAF-INTERNAL-model-test-x", "sample/path", "sample\n"]) assert.match(validateServiceKeyDraft({ ...draft, source_system: source }), /Source System/);
+  for (const source of ["", "sample ", " sample", "한글", "_sample", "a".repeat(121), "admin-ui", "ADMIN-UI", "waf-internal-test", "WAF-INTERNAL-model-test-x", "sample/path", "sample\n"]) assert.match(validateServiceKeyDraft({ ...draft, source_system: source }), /연동 시스템/);
   for (const scopes of [[], ["admin"], ["ingest", "admin"], ["ingest", "ingest"], ["review", "review"], "ingest"]) assert.match(validateServiceKeyDraft({ ...draft, scopes }), /권한/);
   assert.equal(validateServiceKeyDraft({ ...draft, scopes: ["review"] }), "");
   assert.equal(validateServiceKeyDraft({ ...draft, scopes: ["review", "ingest"] }), "");
@@ -112,15 +113,45 @@ test("DB-only catalog accepts items without any bootstrap field and never inspec
 
 const bundled = buildSync({ entryPoints: [fileURLToPath(new URL("./ServiceApiKeys.jsx", import.meta.url))], bundle: true, write: false, platform: "node", format: "cjs", packages: "external", jsx: "automatic", loader: { ".css": "empty" }, logLevel: "silent" }).outputFiles[0].text;
 const module = { exports: {} }; runInNewContext(bundled, { module, exports: module.exports, require: createRequire(import.meta.url), process, URL });
-const { ServiceApiKeysView } = module.exports;
+const { ServiceApiKeysView, IssuedServiceKey } = module.exports;
 const markup = state => renderToStaticMarkup(createElement(ServiceApiKeysView, { state, controller: {} }));
 
 test("service key UI displays only DB-issued keys and one-time secrets with escaped text and no admin scope", () => {
   const html = markup({ ...emptyServiceKeysState(), catalog: catalog([item({ name: '<script>SYNTHETIC</script>' }), item({ id: "revoked", revoked_at: "2026-09-07T01:00:00Z" })]) });
-  assert.match(html, /LLM 제공자/); assert.match(html, /만료일이 없습니다/); assert.match(html, /DB에 등록한 키만 사용/); assert.doesNotMatch(html, /WAF_BOOTSTRAP_API_KEY|기존 서비스 키|환경 키|service-key-bootstrap/); assert.match(html, /다시 활성화할 수 없습니다/); assert.match(html, /60초 간격/);
+  assert.match(html, /<h2>서비스 API 키<\/h2>/); assert.match(html, /최근 인증/); assert.doesNotMatch(html, /서비스 API 키 설명|최근 키 사용 설명/); assert.match(html, /연동 시스템/); assert.match(html, /분석 접수·조회/); assert.doesNotMatch(html, /WAF_BOOTSTRAP_API_KEY|기존 서비스 키|환경 키|service-key-bootstrap/); assert.doesNotMatch(html, /synthetic-key-id|wafsvc_syntheticpublicid|service-key-form/); assert.match(html, /기술정보/);
+  const source = readFileSync(new URL("./ServiceApiKeys.jsx", import.meta.url), "utf8");
+  assert.match(html, /LLM 제공자 인증 키와는 별개/);
+  assert.match(source, /<HelpTooltip label="연동 시스템"/); assert.doesNotMatch(source, /<HelpTooltip label="서비스 키 권한"/);
+  assert.match(source, /같은 값을 사용하는 키들은 동일한 데이터 범위를 공유/); assert.match(source, /선택한 연동 시스템만 접근 · 관리자 권한 제외/);
+  assert.match(source, /최대 60초 간격으로 갱신되며 분석 완료 시각과는 다릅니다/);
   assert.match(html, /&lt;script&gt;SYNTHETIC&lt;\/script&gt;/); assert.doesNotMatch(html, /<script>|발급된 API Key 원문|value="admin"/);
-  const secret = markup({ ...emptyServiceKeysState(), catalog: catalog(), issued: { item: item(), api_key: "SYNTHETIC_ONCE_UI" } }); assert.match(secret, /SYNTHETIC_ONCE_UI/); assert.match(secret, /원문은 한 번만/); assert.match(secret, /키 복사/); assert.match(secret, /원문 닫기/); assert.match(secret, /<label for="issued-service-api-key">발급된 API Key 원문<\/label><textarea id="issued-service-api-key"/);
+  const secret = renderToStaticMarkup(createElement(IssuedServiceKey, { issued: { item: item(), api_key: "SYNTHETIC_ONCE_UI" }, onClose() {} })); assert.match(secret, /SYNTHETIC_ONCE_UI/); assert.match(secret, /원문은 한 번만/); assert.match(secret, /키 복사/); assert.match(secret, /원문 닫기/); assert.match(secret, /<label for="issued-service-api-key">발급된 API Key 원문<\/label><textarea id="issued-service-api-key"/);
   const failureHtml = markup({ ...emptyServiceKeysState(), error: "조회 실패" }); assert.match(failureHtml, /role="alert">조회 실패/); assert.doesNotMatch(failureHtml, /발급된 서비스 API Key가 없습니다/);
+});
+
+test("delete removes only key metadata after one explicit request and preserves the rest of the catalog", async () => {
+  let deleted = false; const calls = [];
+  const { controller } = harness({ serviceApiKeys: async () => catalog(deleted ? [item({ id: "retained" })] : [item(), item({ id: "retained" })]), deleteServiceApiKey: async id => { calls.push(id); deleted = true; } });
+  await controller.refresh(); assert.deepEqual(calls, []);
+  assert.equal(await controller.remove(item()), true); assert.deepEqual(calls, ["synthetic-key-id"]);
+  assert.deepEqual(controller.getState().catalog.items.map(value => value.id), ["retained"]);
+  assert.match(controller.getState().notice, /분석 결과와 감사 이력은 보존/); controller.dispose();
+});
+
+test("delete is deduplicated, may remove an already revoked key, and clears a displayed secret", async () => {
+  const pending = deferred(); let deletes = 0;
+  const { controller, fill } = harness({ deleteServiceApiKey: async () => { deletes += 1; return pending.promise; }, serviceApiKeys: async () => catalog(deletes ? [] : [item()]) });
+  await controller.refresh(); fill(); await controller.issue();
+  const deleting = controller.remove(item({ revoked_at: "synthetic-revoked" }));
+  assert.equal(await controller.remove(item()), false); assert.equal(deletes, 1);
+  pending.resolve(); assert.equal(await deleting, true); assert.equal(controller.getState().issued, null); assert.deepEqual(controller.getState().catalog.items, []); controller.dispose();
+});
+
+test("an uncertain delete never automatically repeats the mutation and refreshes metadata", async () => {
+  let deletes = 0; let reads = 0;
+  const { controller } = harness({ serviceApiKeys: async () => { reads += 1; return catalog(); }, deleteServiceApiKey: async () => { deletes += 1; throw new Error("SYNTHETIC_NETWORK_FAILURE"); } });
+  await controller.refresh(); assert.equal(await controller.remove(item()), false); assert.equal(deletes, 1); assert.equal(reads, 2);
+  assert.equal(controller.getState().catalog.items.length, 1); assert.doesNotMatch(controller.getState().error, /SYNTHETIC_NETWORK_FAILURE/); controller.dispose();
 });
 
 test("service key API requests are administrator-only routes, no-store and issue exactly once", { concurrency: false }, async () => {

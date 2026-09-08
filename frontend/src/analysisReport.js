@@ -107,7 +107,7 @@ export function buildAnalysisReport(input, { decoding = null, includeAppendix = 
     "저장된 자동 분석 결과를 정리한 보고서입니다. 보고서 조회로 새 분석이 실행되지는 않습니다.",
   ];
   // Always end with the analyst's next steps, including when the optional
-  // execution/Label appendix is included. No generic checklist for every result.
+  // execution/답안 appendix is included. No generic checklist for every result.
   const finishReport = () => {
     if (followUp.visible) {
       report.push("## 추가 확인 사항", escapeText(followUp.introduction_ko), "안내된 자료를 시스템이 이미 조회했다는 뜻은 아닙니다.");
@@ -124,11 +124,10 @@ export function buildAnalysisReport(input, { decoding = null, includeAppendix = 
   if (final) report.push("자동 분석 결과 · 최종 판단은 분석가가 검토합니다. 공격 시도와 실제 피해 발생은 구분합니다.");
 
   const overview = ["## 분석 개요", table([
-    ["Event ID", detail.event_id],
     ["처리 상태", named(detail.status, { pending: "대기", processing: "처리 중", completed: "완료", failed: "실패" })],
     ["회사명", detail.company_name],
-    ["Source IP", detail.src_ip], ["Source Port", detail.src_port],
-    ["Destination IP", detail.dest_ip], ["Destination Port", detail.dest_port],
+    ["출발 IP", detail.src_ip], ["출발 포트", detail.src_port],
+    ["목적 IP", detail.dest_ip], ["목적 포트", detail.dest_port],
     ["WAF 벤더", detail.waf_vendor], ["WAF Action", named(detail.waf_action, { D: "Deny", A: "Allow" })],
     ["이벤트명", detail.event_name], ["입력 시그니처", detail.signature],
   ]), "WAF Action은 관측값이며 AI 판정의 정답이나 공격 성공 여부가 아닙니다."];
@@ -198,15 +197,15 @@ export function buildAnalysisReport(input, { decoding = null, includeAppendix = 
   if (!includeAppendix) return finishReport();
   const evaluation = isRecord(detail.evaluation) ? detail.evaluation : null;
   const reference = isRecord(evaluation?.reference_label) ? evaluation.reference_label : null;
-  report.push("## 부록 · 참조 Label 평가", table([
-    ["참조 Label", reference ? (referenceVerdicts[reference.verdict] || "미기록") : "미라벨"],
-    ["Label 비교 결과", evaluationOutcomeText(evaluation)],
-    ["Label 출처", reference ? referenceSourceText(reference) : "해당 없음"],
+  report.push("## 부록 · 참고 답안 평가", table([
+    ["참고 답안", reference ? (referenceVerdicts[reference.verdict] || "미기록") : "답안 없음"],
+    ["답안 비교 결과", evaluationOutcomeText(evaluation)],
+    ["답안 출처", reference ? referenceSourceText(reference) : "해당 없음"],
     ["답안 출처 / 버전", reference?.source_ref ?? "해당 없음"],
-    ["Label 작성 시 AI 결과 열람", reference ? referenceVisibilityText(reference.ai_visible) : "해당 없음"],
-    ["Label revision", reference?.revision ?? "해당 없음"],
-    ["Label 연결 시각 (UTC)", reference?.created_at ?? "해당 없음"],
-  ]), evaluationExplanation(evaluation), "이 기능에서 연결한 Label은 AI 입력이나 학습에 사용하지 않습니다. 합성 기대값·지원 판정은 검증된 운영 정답이 아니며, 리뷰 등록 상태는 Label 일치 여부와 별개입니다.");
+    ["답안 작성 시 AI 결과 열람", reference ? referenceVisibilityText(reference.ai_visible) : "해당 없음"],
+    ["답안 버전", reference?.revision ?? "해당 없음"],
+    ["답안 연결 시각 (UTC)", reference?.created_at ?? "해당 없음"],
+  ]), evaluationExplanation(evaluation), "이 기능에서 연결한 답안은 AI 입력이나 학습에 사용하지 않습니다. 기대 답안·AI 지원 판정은 검증된 운영 정답이 아니며, 리뷰 등록 상태는 답안 일치 여부와 별개입니다.");
 
   report.push("## 부록 · 독립 검증");
   if (!verifier) report.push("독립 검증 실행 정보가 저장되지 않았습니다. 이전 결과의 정보 부재를 미실행이나 성공으로 추정하지 않습니다.");
@@ -222,12 +221,12 @@ export function buildAnalysisReport(input, { decoding = null, includeAppendix = 
   }
 
   report.push("## 부록 · 실행 정보", table([
-    ["분석 ID", detail.id], ["Source System", detail.source_system],
+    ["분석 ID", detail.id], ["이벤트 ID", detail.event_id], ["분석 출처", detail.source_system],
     ["분석 목적", named(detail.analysis_purpose, { production: "프로덕션", test: "테스트", legacy_unknown: "기존 미분류" })],
-    ["유입 경로", named(detail.ingest_channel, { service_api: "서비스 API", file_upload: "파일 업로드", test_lab: "직접 입력", model_validation: "모델 검증", legacy_unknown: "기존 미분류" })],
+    ["유입 경로", named(detail.ingest_channel, { service_api: "서비스 API", file_upload: "배치 파일 분석", test_lab: "단건 분석", model_validation: "모델 검증", legacy_unknown: "기존 미분류" })],
     ["리뷰 상태", named(detail.review_state, { unreviewed: "미검토", confirmed: "리뷰 등록됨", deferred: "리뷰 보류" })],
     ["모델 자기평가 신뢰도", confidence(finalValue("confidence_score"))], ["모델 프로필", detail.model_profile],
-    ["LLM Provider", result?.agent?.llm_provider], ["모델 ID", result?.agent?.model_name],
+    ["LLM 공급자", result?.agent?.llm_provider], ["모델 ID", result?.agent?.model_name],
     ["프롬프트 버전", detail.prompt_version], ["결과 계약", result?.schema_version], ["분석 실패 코드", detail.error_code],
   ]), "신뢰도는 모델의 자기평가값이며 보정된 확률이나 분석 정확도가 아닙니다. 리뷰 등록 여부는 AI 판정과 사람 판정의 일치를 의미하지 않습니다.");
   return finishReport();

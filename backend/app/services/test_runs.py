@@ -14,7 +14,7 @@ from ..test_run_schemas import TestRunCreate, TestRunDetail, TestRunItemResponse
 from .analysis import AnalysisIngestError
 from .evaluation import evaluation_relation, metadata_from_row, summarize_evaluations
 from .internal_egress import allowed_targets_from_db
-from .prompt_snapshots import pin_analysis_prompt
+from .prompt_snapshots import load_analysis_prompt, pin_analysis_prompt
 from .input_schemas import InputSchemaError, pin_schema
 from .upload_expected_labels import enqueue_test_upload_row
 from .uploads import UploadFormatError, extract_test_upload_row, normalize_upload_row
@@ -126,6 +126,7 @@ def add_run_items(db, crypto, settings, run, rows, *, ai_visible=None, source_re
         snapshot = pin_schema(db, crypto, run, selection_origin="legacy_default")
     except InputSchemaError as exc:
         raise AnalysisIngestError(exc.code, exc.status_code) from None
+    prompt = load_analysis_prompt(run, crypto)
     for number, raw in enumerate(rows, 1):
         item = TestRunItem(test_run_id=run.id, row_number=number, ingest_status="rejected")
         try:
@@ -152,6 +153,7 @@ def add_run_items(db, crypto, settings, run, rows, *, ai_visible=None, source_re
                     attachment_id=run.model_test_run_id or run.id, ai_visible=ai_visible, label_source_ref=source_ref,
                     ingest_channel="model_validation" if run.model_test_run_id else "test_lab" if run.kind == "direct" else "file_upload",
                     schema_snapshot=snapshot,
+                    prompt_snapshot=prompt,
                 )
                 if not duplicate:
                     pin_item_prompt(analysis, run)
@@ -249,6 +251,7 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
         completed=processing.get("completed", 0), failed=processing.get("failed", 0),
         execution_mode=run.execution_mode, profile_metadata=run.profile_metadata,
         prompt_version=run.prompt_version, model_test_run_id=run.model_test_run_id,
+        prompt_policy_version_id=run.prompt_policy_version_id,
         evaluation_summary=evaluation_summary,
         started_at=started, completed_at=finished, total_elapsed_ms=elapsed,
     )

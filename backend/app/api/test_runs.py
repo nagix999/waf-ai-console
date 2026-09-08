@@ -10,6 +10,8 @@ from ..models import TestRun
 from ..security import Principal, require_scope
 from ..test_run_schemas import TestRunCreate, TestRunDetail, TestRunList
 from ..services.analysis import AnalysisIngestError
+from ..services.prompt_policies import PromptPolicyError
+from ..services.prompt_snapshots import PromptSnapshotError
 from ..services.analysis_query import contains_text
 from ..services.test_runs import describe_run, enqueue_named_run, read_snapshot
 from ..services.uploads import UploadFormatError, parse_upload
@@ -24,8 +26,10 @@ def submit(db, request, principal, **kwargs):
     try:
         return enqueue_named_run(db, request.app.state.crypto, request.app.state.settings,
             actor=principal.username or "admin", **kwargs)
-    except AnalysisIngestError as exc:
+    except (AnalysisIngestError, PromptPolicyError) as exc:
         raise HTTPException(exc.status_code, exc.code) from None
+    except PromptSnapshotError as exc:
+        raise HTTPException(503, exc.code) from None
     except ValidationError:
         raise HTTPException(422, "invalid_test_run_metadata") from None
     except (TargetNotAllowedError, UploadFormatError) as exc:
@@ -49,6 +53,10 @@ def create_test_run(payload: TestRunCreate, request: Request, db: DbSession, pri
 @router.post("/uploads", response_model=TestRunDetail, status_code=202)
 async def upload_test_run(request: Request, db: DbSession, principal: Admin,
                           name: str = Form(...), idempotency_key: str = Form(...), file: UploadFile = File(...)):
+    # Multipart ignores unknown controls by default. Explicitly reject prompt
+    # overrides rather than silently accepting a request we will not honor.
+    if {"prompt_policy_version_id", "fixed_rules_version", "prompt_template"}.intersection(await request.form()):
+        raise HTTPException(422, "test_prompt_selection_not_supported")
     content = await file.read(request.app.state.settings.upload_max_bytes + 1)
     if len(content) > request.app.state.settings.upload_max_bytes:
         raise HTTPException(413, "upload_too_large")

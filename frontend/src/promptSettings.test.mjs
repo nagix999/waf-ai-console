@@ -265,7 +265,12 @@ test("timeouts end a request, do not retry writes, and dispose cancels pending r
 test("UI source renders plain text and exposes no mutation of saved or fixed instructions", async () => {
   const source = await readFile(new URL("./PromptSettings.jsx", import.meta.url), "utf8");
   assert.doesNotMatch(source, /dangerouslySetInnerHTML|ReactMarkdown|runModelProfileTest|createAnalysis|localStorage|sessionStorage/);
-  for (const phrase of ["고정 시스템 규칙 · 읽기 전용", "모델 품질", "참고 답안", "확인한 버전 운영 적용", "복제하여 새 버전 작성", "이후 새로 접수되는 분석", "컨텍스트가 부족"]) assert.ok(source.includes(phrase), phrase);
+  for (const phrase of ["시스템 규칙 · 읽기 전용", "모델 품질", "정답", "공통 적용 확인", "새 버전 작성", "이후 새로 접수되는 분석", "컨텍스트가 부족", "닫기 · 초안 유지"]) assert.ok(source.includes(phrase), phrase);
+  assert.match(source, /<Dialog open=\{view === "technical"/); assert.match(source, /긴 지침은 로그 입력 공간을 줄입니다/);
+  assert.match(source, /컨텍스트가 부족하면 모델을 호출할 수 없습니다/); assert.doesNotMatch(source, /<HelpTooltip/);
+  assert.doesNotMatch(source, /<HelpTooltip label="(?:프롬프트 버전 관리|시스템 규칙)"/);
+  assert.match(source, /코드에서 관리하는 읽기 전용 안전·출력 규칙/);
+  assert.match(source, /저장만으로 공통 적용 버전이 바뀌거나 LLM이 호출되지/);
 });
 
 test("prompt API methods use only the four agreed endpoints and explicit POST bodies", async () => {

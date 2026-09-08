@@ -85,7 +85,7 @@ def test_decisive_summary_remains_the_final_summary_not_a_new_decision():
 
 
 def test_prompt_requires_specific_followups_and_untrusted_derived_hints():
-    assert PROMPT_VERSION == "waf-judgment-v2.5"
+    assert PROMPT_VERSION == "waf-judgment-v2.6"
     for term in ["source_ko", "check_ko", "why_ko", "decoded_payload_hints", "디코딩 전 원문", "공격 성공"]:
         assert term in BASE_INSTRUCTIONS
 
@@ -121,7 +121,9 @@ def test_internal_summary_fallback_preserves_the_actual_verdict(verdict):
 
 
 def test_prompt_distinguishes_check_purpose_and_discourages_repeated_evidence():
-    for term in ["판정 보류를 해소", "선택적 후속 확인", "두 목록 모두 빈 배열", "보정된 정탐 확률이 아닌", "같은 관찰을 다른 말로 반복", "반대 방향의 의미"]:
+    # v2.6 keeps these boundaries in shorter wording, without prescribing a
+    # fixed sentence count or requiring follow-ups for decisive verdicts.
+    for term in ["보류는 구분에 필요한 1~3개", "확정은 기본 빈 배열", "유용할 때만 선택적 1~2개", "두 목록 모두 빈 배열", "보정된 정탐 확률이 아닌", "같은 관찰은 한 근거에 모으고", "별개 출처·반대 근거는 보존"]:
         assert term in BASE_INSTRUCTIONS
 
 

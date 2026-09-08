@@ -58,6 +58,7 @@ class TestRunSummary(UTCResponse):
     execution_mode: str
     profile_metadata: dict[str, Any]
     prompt_version: str
+    prompt_policy_version_id: str | None = None
     model_test_run_id: str | None
     evaluation_summary: EvaluationSummary
     started_at: datetime | None

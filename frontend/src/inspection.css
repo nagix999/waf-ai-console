@@ -1,0 +1,45 @@
+.text-inspector { min-width: 0; display: grid; gap: 10px; }
+.inspector-tools, .inspector-search { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.inspector-tools { justify-content: space-between; }
+.inspector-search { flex: 1; min-width: min(260px, 100%); }
+.inspector-search input { width: 180px; flex: 1; min-width: 90px; }
+.inspector-search [role="status"] { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.text-inspector .inspector-content { margin: 0; max-height: 480px; min-height: 120px; overflow: auto; white-space: pre; word-break: normal; overflow-wrap: normal; unicode-bidi: plaintext; line-height: 1.75; padding: 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+.text-inspector .inspector-content code { white-space: inherit; overflow-wrap: inherit; font-size: 13px; }
+.text-inspector .inspector-wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+.inspector-content mark { background: #ffe293; color: #272317; border-radius: 2px; }
+.inspector-compact .inspector-tools { justify-content: flex-end; }
+.inspector-compact .inspector-tools button { padding: 4px 9px; font-size: 12px; }
+.inspector-compact .inspector-content { min-height: 64px; max-height: 220px; padding: 12px; }
+.decision-card > .decision-summary-line { align-items: flex-start; flex-wrap: nowrap; }
+.decision-summary-line > strong { min-width: 0; font-size: 17px; line-height: 1.6; overflow-wrap: anywhere; }
+.inspection-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
+.inspection-stats > div { display: grid; gap: 8px; padding: 14px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+.inspection-stats span { font-size: 12px; color: var(--muted); }
+.inspection-stats strong { font-size: 13px; overflow-wrap: anywhere; }
+.inspection-agent-grid { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 20px; }
+.inspection-steps { display: flex; flex-direction: column; gap: 8px; }
+.inspection-steps button { display: flex; align-items: flex-start; gap: 10px; text-align: left; padding: 13px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); }
+.inspection-steps button[aria-current="step"] { border-color: var(--accent); background: var(--accent-soft, #127d6717); }
+.inspection-steps small { display: block; color: var(--muted); margin-top: 6px; }
+.inspection-step-number { border: 1px solid var(--line); border-radius: 50%; width: 22px; height: 22px; display: inline-grid; place-items: center; flex-shrink: 0; font-size: 12px; }
+.inspection-step-detail { min-width: 0; }
+.inspection-step-detail h3 { margin: 0; }
+.inspection-step-detail .step-timing { flex-wrap: wrap; }
+.inspection-history select { margin-top: 7px; }
+.inspection-dialog { width: min(1100px, calc(100vw - 32px)); }
+.inspection-section-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 20px; }
+.inspection-section-head h2 { margin: 0; font-size: 16px; }
+.inspection-section-head p { margin: 6px 0 0; }
+.login-card .login-password { display: flex; align-items: stretch; gap: 8px; }
+.login-password input { min-width: 0; flex: 1; }
+.login-card .login-password button { flex-shrink: 0; width: auto; margin: 0; }
+.login-card .login-footnote { display: flex; justify-content: center; align-items: center; }
+.decoding-step-list { display: grid; gap: 18px; padding-left: 24px; }
+@media (max-width: 700px) {
+  .inspection-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inspection-agent-grid { grid-template-columns: minmax(0, 1fr); }
+  .inspection-steps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inspection-steps button { min-width: 0; }
+  .inspection-steps strong { overflow-wrap: anywhere; }
+}

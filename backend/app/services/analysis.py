@@ -10,7 +10,7 @@ from ..models import Analysis, Review
 from ..schemas import AnalysisDetail, AnalysisInput, AnalysisSummary
 from .crypto import CryptoService
 from .timing import analysis_timings
-from .prompt_snapshots import pin_analysis_prompt
+from .prompt_snapshots import PromptSnapshot, PromptSnapshotError, load_analysis_prompt, pin_analysis_prompt
 from .prompt_policies import PromptPolicyError
 from .evaluation import attach_evaluations
 from .input_schemas import InputSchemaError, pin_schema, read_schema_snapshot, schema_metadata, validate_event
@@ -63,6 +63,9 @@ def to_summary(analysis: Analysis) -> AnalysisSummary:
         review_state=review_state(analysis),
         evaluation=getattr(analysis, "_evaluation", EvaluationMetadata()),
         test_run_id=getattr(analysis, "_test_run_id", None),
+        service_api_key_id=analysis.service_api_key_id,
+        retry_of_analysis_id=analysis.retry_of_analysis_id,
+        retry_analysis_id=getattr(analysis, "_retry_analysis_id", None),
     )
 
 
@@ -98,6 +101,8 @@ def enqueue_analysis(
     payload_max_bytes: int = 2 * 1024 * 1024,
     commit: bool = True,
     schema_snapshot: dict | None = None,
+    prompt_snapshot: PromptSnapshot | None = None,
+    service_api_key_id: str | None = None,
 ) -> tuple[Analysis, bool]:
     """Enqueue an event; commit=False leaves the entire transaction to its caller."""
     try:
@@ -110,7 +115,8 @@ def enqueue_analysis(
     existing = db.scalar(
         select(Analysis)
         .options(selectinload(Analysis.reviews))
-        .where(Analysis.source_system == source_system, Analysis.event_id == payload.event_id)
+        .where(Analysis.source_system == source_system, Analysis.event_id == payload.event_id,
+               Analysis.retry_of_analysis_id.is_(None))
     )
     if existing:
         check_duplicate(existing, crypto, fingerprint, analysis_purpose)
@@ -135,6 +141,7 @@ def enqueue_analysis(
         payload_ciphertext=crypto.encrypt_text(payload.payload),
         encryption_key_version=crypto.key_version,
         extra_fields=payload.extra_values(),
+        service_api_key_id=service_api_key_id,
     )
     # Pin the complete instructions with the new event. Duplicate submissions
     # above retain the original version and do not acquire the current policy.
@@ -150,7 +157,15 @@ def enqueue_analysis(
             if commit:
                 db.rollback()
             raise AnalysisIngestError("input_schema_validation_failed", 422, issues)
-        pin_analysis_prompt(db, crypto, row)
+        if prompt_snapshot is None:
+            pin_analysis_prompt(db, crypto, row)
+        else:
+            # Trusted named-test snapshot, never an external event/API field.
+            # Do not reselect the active common policy for each run item.
+            row.prompt_policy_version_id = prompt_snapshot.policy_version_id
+            row.prompt_version = prompt_snapshot.prompt_version
+            row.prompt_snapshot_ciphertext = crypto.encrypt_text(prompt_snapshot.model_dump_json())
+            load_analysis_prompt(row, crypto)
     except InputSchemaError as exc:
         if commit:
             db.rollback()
@@ -160,6 +175,10 @@ def enqueue_analysis(
             db.rollback()
         # A policy-store failure is not an invalid WAF event and must never
         # silently fall back to whichever instructions happen to be in code.
+        raise AnalysisIngestError(exc.code, 503) from None
+    except PromptSnapshotError as exc:
+        if commit:
+            db.rollback()
         raise AnalysisIngestError(exc.code, 503) from None
     db.add(row)
     try:
@@ -176,7 +195,8 @@ def enqueue_analysis(
         existing = db.scalar(
             select(Analysis)
             .options(selectinload(Analysis.reviews))
-            .where(Analysis.source_system == source_system, Analysis.event_id == payload.event_id)
+            .where(Analysis.source_system == source_system, Analysis.event_id == payload.event_id,
+                   Analysis.retry_of_analysis_id.is_(None))
         )
         if existing is None:
             raise
@@ -221,7 +241,17 @@ def fetch_analysis(db: Session, analysis_id: str, source_system: str | None = No
         attach_evaluations(db, [row])
         from .test_runs import attach_test_run_ids
         attach_test_run_ids(db, [row])
+        attach_retry_ids(db, [row])
     return row
+
+
+def attach_retry_ids(db: Session, rows: list[Analysis]) -> None:
+    if not rows:
+        return
+    links = dict(db.execute(select(Analysis.retry_of_analysis_id, Analysis.id).where(
+        Analysis.retry_of_analysis_id.in_([row.id for row in rows]))).all())
+    for row in rows:
+        row._retry_analysis_id = links.get(row.id)
 
 
 def count_analyses(db: Session) -> int:

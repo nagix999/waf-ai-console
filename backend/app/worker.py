@@ -338,6 +338,8 @@ def _decode_payload_step(db: Session, crypto: CryptoService, run: AgentRun, raw_
 
 
 def process_stub(db: Session, crypto: CryptoService, analysis: Analysis) -> None:
+    if analysis.retry_of_analysis_id:
+        raise WorkerExecutionError("retry_requires_moduagent_mode")
     with measured_run(db, analysis) as run:
         with measured_step(db, crypto, run, 1, "input", "이벤트 입력 검증") as step:
             schema_snapshot = pin_schema(db, crypto, analysis, selection_origin="legacy_default")
@@ -582,6 +584,11 @@ def _process_moduagent_steps(
     *, request_check=None,
 ) -> None:
     with measured_step(db, crypto, run, 1, "input", "이벤트 입력 검증") as step:
+        from .services.analysis_retries import (check_profile, execution_request_check, load_execution_snapshot,
+                                               make_execution_snapshot)
+        # Check retries BEFORE either legacy pin function could reconstruct a
+        # missing snapshot using a current/default policy or field definition.
+        pinned_execution = load_execution_snapshot(analysis, crypto) if analysis.retry_of_analysis_id else None
         # History only: definitions never enter system/user messages. An old
         # unversioned queued event uses the original default, not today's rules.
         schema_snapshot = pin_schema(db, crypto, analysis, selection_origin="legacy_default")
@@ -603,7 +610,20 @@ def _process_moduagent_steps(
             request_check = combined_check
             verifier_confidence_threshold = named_run.profile_metadata["verifier_confidence_threshold"]
         prompt = pin_analysis_prompt(db, crypto, analysis, origin="legacy_execution")
-        if analysis.model_test_run_id:
+        # Explicit retries alone override role selection. Ordinary queue lease
+        # recovery and candidate-validation claim/qualification guards retain
+        # their original paths. The current attempt is captured below.
+        if pinned_execution is not None:
+            profile = check_profile(db, pinned_execution)
+            verifier_confidence_threshold = pinned_execution.verifier_confidence_threshold
+            snapshot_check = execution_request_check(db.get_bind(), pinned_execution)
+            before_snapshot_check = request_check
+            def check_snapshot():
+                if before_snapshot_check:
+                    before_snapshot_check()
+                snapshot_check()
+            request_check = check_snapshot
+        elif analysis.model_test_run_id:
             test_run = db.get(VLLMTestRun, analysis.model_test_run_id)
             claim = db.info.get("model_validation_claim")
             if analysis.analysis_purpose != "test" or test_run is None or not test_run.include_dataset or not claim or claim[0] != analysis.model_test_run_id:
@@ -654,6 +674,13 @@ def _process_moduagent_steps(
         }
         # Capture the selected profile even when a later model call fails.
         analysis.model_profile = profile.name
+        if pinned_execution is None:
+            execution = make_execution_snapshot(analysis, profile, prompt, verifier_confidence_threshold)
+            analysis.execution_snapshot_ciphertext = crypto.encrypt_text(execution.model_dump_json())
+            # Persist before parsing/context/Primary failures can lose provenance.
+            # The measured-step commit also persists this; the early commit is
+            # deliberate so failures inside this same input step remain pinned.
+            db.commit()
         raw_payload = crypto.decrypt_text(analysis.payload_ciphertext)
         input_fingerprint = hashlib.sha256(
             f"{prompt.instructions_hash}:{profile_fingerprint(profile)}:{analysis.source_system}:{analysis.event_id}:{raw_payload}".encode(
@@ -665,6 +692,7 @@ def _process_moduagent_steps(
         step_output(crypto, step, {"valid": True, "payload_chars": len(raw_payload), "input_schema": schema_snapshot}, {
             "input_fingerprint": input_fingerprint,
             "prompt": prompt.metadata(),
+            "verifier_confidence_threshold": verifier_confidence_threshold,
             **profile_metadata,
         })
 
@@ -957,6 +985,8 @@ def main() -> None:
             if analysis is not None:
                 try:
                     if settings.agent_mode == "stub":
+                        if analysis.retry_of_analysis_id:
+                            raise WorkerExecutionError("retry_requires_moduagent_mode")
                         process_stub(db, crypto, analysis)
                     else:
                         process_moduagent(

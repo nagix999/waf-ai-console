@@ -1,0 +1,96 @@
+# Standalone operations example. Do not merge with docker-compose.yml: its
+# published API/development ports would otherwise remain in the merged config.
+# Use a private env file and a fixed project name, for example:
+# docker compose --env-file .env.production -p waf-ai-console-prod -f docker-compose.production.yml config --quiet
+# TLS and access restrictions belong to the host's HTTPS reverse proxy.
+services:
+  api:
+    image: ${WAF_BACKEND_IMAGE:?Set WAF_BACKEND_IMAGE to an explicit deployment tag}
+    build: ./backend
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+    environment: &backend-env
+      WAF_DATABASE_URL: sqlite+pysqlite:////data/waf.db
+      WAF_ADMIN_USERNAME: ${WAF_ADMIN_USERNAME:?Set WAF_ADMIN_USERNAME}
+      WAF_ADMIN_PASSWORD: ${WAF_ADMIN_PASSWORD:?Set a private WAF_ADMIN_PASSWORD}
+      WAF_SESSION_SECRET: ${WAF_SESSION_SECRET:?Set a private WAF_SESSION_SECRET}
+      WAF_SESSION_HTTPS_ONLY: ${WAF_SESSION_HTTPS_ONLY:-true}
+      WAF_DATA_ENCRYPTION_KEY: ${WAF_DATA_ENCRYPTION_KEY:?Set a private WAF_DATA_ENCRYPTION_KEY}
+      WAF_ENCRYPTION_KEY_VERSION: ${WAF_ENCRYPTION_KEY_VERSION:?Set WAF_ENCRYPTION_KEY_VERSION}
+      WAF_AGENT_MODE: ${WAF_AGENT_MODE:-moduagent}
+      WAF_WORKER_POLL_SECONDS: ${WAF_WORKER_POLL_SECONDS:-1}
+      WAF_JOB_LEASE_SECONDS: ${WAF_JOB_LEASE_SECONDS:-300}
+      WAF_VLLM_TEST_LEASE_SECONDS: ${WAF_VLLM_TEST_LEASE_SECONDS:-900}
+      WAF_VERIFIER_CONFIDENCE_THRESHOLD: ${WAF_VERIFIER_CONFIDENCE_THRESHOLD:-0.75}
+    volumes:
+      - waf-data:/data
+    # No host API port: UI and service integrations use the HTTPS origin /api/.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    stop_grace_period: 60s
+    restart: unless-stopped
+    security_opt: &security-options
+      - no-new-privileges:true
+    logging: &bounded-logs
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  worker:
+    image: ${WAF_BACKEND_IMAGE:?Set WAF_BACKEND_IMAGE to an explicit deployment tag}
+    build: ./backend
+    command: ["python", "-m", "app.worker"]
+    environment:
+      <<: *backend-env
+      WAF_WORKER_ROLE: analysis
+    volumes:
+      - waf-data:/data
+    depends_on:
+      api:
+        condition: service_healthy
+    stop_grace_period: 120s
+    restart: unless-stopped
+    security_opt: *security-options
+    logging: *bounded-logs
+
+  model-tester:
+    image: ${WAF_BACKEND_IMAGE:?Set WAF_BACKEND_IMAGE to an explicit deployment tag}
+    build: ./backend
+    command: ["python", "-m", "app.worker"]
+    environment:
+      <<: *backend-env
+      WAF_WORKER_ROLE: model_test
+    volumes:
+      - waf-data:/data
+    depends_on:
+      api:
+        condition: service_healthy
+    stop_grace_period: 120s
+    restart: unless-stopped
+    security_opt: *security-options
+    logging: *bounded-logs
+
+  frontend:
+    image: ${WAF_FRONTEND_IMAGE:?Set WAF_FRONTEND_IMAGE to an explicit deployment tag}
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "127.0.0.1:${WAF_WEB_PORT:-18080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    stop_grace_period: 30s
+    restart: unless-stopped
+    security_opt: *security-options
+    logging: *bounded-logs
+
+volumes:
+  waf-data:
+    # Shared only by this deployment's three backend services on one host.
+    # New installation only: confirm no existing database uses this volume.
+    # Never use `down -v`; changing this name selects a different database.
+    name: waf-ai-console-production-data

@@ -203,7 +203,7 @@ export function createPromptSettingsController({ api, onChange, setTimer = setTi
     try {
       const result = await request((options) => api.activatePromptPolicy(target.id, body, options));
       if (disposed) return false;
-      update({ busy: "", confirmation: null, acknowledged: false, catalog: { ...state.catalog, ...result }, notice: `운영 프롬프트를 v${target.version_number}으로 변경했습니다. 기존 분석 결과는 그대로 유지됩니다.` });
+      update({ busy: "", confirmation: null, acknowledged: false, catalog: { ...state.catalog, ...result }, notice: `공통 프롬프트를 v${target.version_number}으로 변경했습니다. 기존 분석 결과는 그대로 유지됩니다.` });
       await refresh(target.id);
       return true;
     } catch (error) {

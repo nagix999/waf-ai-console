@@ -1,7 +1,13 @@
 .env
 .env.*
 !.env.example
+!.env.production.example
 .local-deploy/
+.agents/
+.codex/
+test-results/
+playwright-report/
+*.log
 .venv/
 __pycache__/
 *.py[cod]

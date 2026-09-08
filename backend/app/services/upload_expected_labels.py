@@ -15,6 +15,7 @@ from ..models import AccessAudit, Analysis, AnalysisLabel
 from ..schemas import AnalysisInput
 from .analysis import AnalysisIngestError, enqueue_analysis
 from .crypto import CryptoService
+from .prompt_snapshots import PromptSnapshot
 
 
 UPLOAD_LABEL_SOURCE_REF = "test-upload:expected_verdict"
@@ -36,6 +37,7 @@ def enqueue_test_upload_row(
     ai_visible: bool | None = None,
     ingest_channel: str = "file_upload",
     schema_snapshot: dict | None = None,
+    prompt_snapshot: PromptSnapshot | None = None,
 ) -> tuple[Analysis, bool, str | None]:
     """Return (analysis, duplicate, 'attached'/'unchanged'/None).
 
@@ -57,6 +59,7 @@ def enqueue_test_upload_row(
             analysis_purpose="test", ingest_channel=ingest_channel,
             payload_max_bytes=payload_max_bytes, commit=False,
             schema_snapshot=schema_snapshot,
+            prompt_snapshot=prompt_snapshot,
         )
         label_state = None
         if expected_verdict is not None:

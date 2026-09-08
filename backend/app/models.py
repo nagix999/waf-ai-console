@@ -79,7 +79,8 @@ class ModelTestStatus(str, enum.Enum):
 class Analysis(Base):
     __tablename__ = "analyses"
     __table_args__ = (
-        UniqueConstraint("source_system", "event_id", name="uq_analysis_source_event"),
+        Index("uq_analysis_source_event_original", "source_system", "event_id", unique=True,
+              sqlite_where=text("retry_of_analysis_id IS NULL"), postgresql_where=text("retry_of_analysis_id IS NULL")),
         Index("ix_analyses_status_created", "status", "created_at"),
         Index("ix_analyses_purpose_created", "analysis_purpose", "created_at"),
         Index("ix_analyses_severity_created", "severity", "created_at"),
@@ -128,6 +129,10 @@ class Analysis(Base):
     input_schema_snapshot_ciphertext: Mapped[str | None] = mapped_column(Text)
     model_profile: Mapped[str | None] = mapped_column(String(120))
     model_test_run_id: Mapped[str | None] = mapped_column(ForeignKey("vllm_test_runs.id", ondelete="RESTRICT"), index=True)
+    service_api_key_id: Mapped[str | None] = mapped_column(ForeignKey("service_api_keys.id", ondelete="RESTRICT"), index=True)
+    retry_of_analysis_id: Mapped[str | None] = mapped_column(ForeignKey("analyses.id", ondelete="RESTRICT"), unique=True)
+    retry_idempotency_key: Mapped[str | None] = mapped_column(String(120), unique=True)
+    execution_snapshot_ciphertext: Mapped[str | None] = mapped_column(Text)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
@@ -459,3 +464,5 @@ class ServiceApiKey(Base):
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_by: Mapped[str | None] = mapped_column(String(255))
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_by: Mapped[str | None] = mapped_column(String(255))

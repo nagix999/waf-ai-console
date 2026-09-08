@@ -156,7 +156,7 @@ test("the stored final result takes priority and the decision is the first secti
   assert.ok(text(document).includes(detail.result.summary_ko));
   assert.ok(!text(document).includes("STALE_SUMMARY"));
   assert.ok(text(document).includes("WAF 설정을 자동 변경하지 않습니다"));
-  assert.ok(!text(document).includes("Label"));
+  assert.ok(!text(document).includes("답안"));
   assert.ok(!text(document).includes("독립 검증"));
   assert.ok(!text(document).includes("모델 자기평가 신뢰도"));
 });
@@ -172,7 +172,7 @@ test("zeros, false, null and explicit final null are not replaced by fallback va
   const document = parsed(detail);
   assert.equal(cell(document, "판정"), "미기록 (null)");
   assert.equal(cell(parsed(detail, { includeAppendix: true }), "모델 자기평가 신뢰도"), "0 (0%)");
-  assert.equal(cell(document, "Source Port"), "0");
+  assert.equal(cell(document, "출발 포트"), "0");
   assert.equal(cell(document, "제안 여부"), "false");
   assert.equal(cell(document, "전체 경과 시간"), "0 ms");
   assert.equal(cell(document, "큐 대기 시간"), "미측정 (null)");
@@ -224,9 +224,9 @@ test("every persisted stub marker identifies a mock report including legacy stub
 test("provider identity uses persisted execution metadata, never a profile-name guess", () => {
   const detail = fixture();
   detail.model_profile = "openai-looking-profile-name";
-  assert.equal(cell(parsed(detail, { includeAppendix: true }), "LLM Provider"), "미기록");
+  assert.equal(cell(parsed(detail, { includeAppendix: true }), "LLM 공급자"), "미기록");
   detail.result.agent = { llm_provider: "openai", model_name: "synthetic-chat-model" };
-  assert.equal(cell(parsed(detail, { includeAppendix: true }), "LLM Provider"), "openai");
+  assert.equal(cell(parsed(detail, { includeAppendix: true }), "LLM 공급자"), "openai");
   assert.equal(cell(parsed(detail, { includeAppendix: true }), "모델 ID"), "synthetic-chat-model");
 });
 
@@ -236,11 +236,11 @@ test("the report preserves server evaluation and synthetic source without gradin
   detail.result.verdict = "inconclusive";
   detail.result.primary = { verdict: "true_positive", summary_ko: "NEVER_USE_PRIMARY_FOR_EVALUATION" };
   const document = parsed(detail, { includeAppendix: true });
-  assert.equal(cell(document, "Label 비교 결과"), "모델 판단 보류");
-  assert.equal(cell(document, "참조 Label"), "정탐");
-  assert.equal(cell(document, "Label 출처"), "합성 기대값");
-  assert.equal(cell(document, "Label 작성 시 AI 결과 열람"), "AI 열람 여부 미확인");
-  assert.equal(cell(document, "Label revision"), "3");
+  assert.equal(cell(document, "답안 비교 결과"), "모델 판단 보류");
+  assert.equal(cell(document, "참고 답안"), "정탐");
+  assert.equal(cell(document, "답안 출처"), "기대 답안");
+  assert.equal(cell(document, "답안 작성 시 AI 결과 열람"), "AI 열람 여부 미확인");
+  assert.equal(cell(document, "답안 버전"), "3");
   assert.ok(!text(document).includes("NEVER_USE_PRIMARY_FOR_EVALUATION"));
 });
 
@@ -249,17 +249,17 @@ test("report reference metadata is allowlisted and malicious source text remains
   const source = "synthetic | <img src=https://synthetic.example.test/x> [click](javascript:synthetic) ```\r\n";
   detail.evaluation = { outcome: "match", reference_label: { verdict: "false_positive", source_kind: "reference", source_ref: source, ai_visible: true, revision: 1, payload: "NEVER_INCLUDE_REFERENCE_PAYLOAD", rationale_ko: "NEVER_INCLUDE_REFERENCE_EXPLANATION", api_key: "NEVER_INCLUDE_REFERENCE_SECRET" } };
   const document = parsed(detail, { includeAppendix: true });
-  assert.equal(cell(document, "Label 비교 결과"), "지원 판정 일치");
+  assert.equal(cell(document, "답안 비교 결과"), "지원 판정 일치");
   assert.equal(cell(document, "답안 출처 / 버전"), source);
   assert.ok(!buildAnalysisReport(detail, { includeAppendix: true }).includes("NEVER_INCLUDE_REFERENCE"));
-  assert.equal(document.sections.filter((section) => section.title === "부록 · 참조 Label 평가").length, 1);
+  assert.equal(document.sections.filter((section) => section.title === "부록 · 참고 답안 평가").length, 1);
 });
 
 test("report evaluation exclusions and expected abstention remain separate", () => {
-  for (const [outcome, expected] of [["stub", "모의 실행 · 평가 제외"], ["failed", "실행 실패 · 평가 제외"], ["unlabeled", "미라벨"], ["input_contaminated", "정답 포함 입력 · 평가 제외"], ["expected_abstention_match", "기대 보류 일치"]]) {
+  for (const [outcome, expected] of [["stub", "모의 실행 · 평가 제외"], ["failed", "실행 실패 · 평가 제외"], ["unlabeled", "답안 없음"], ["input_contaminated", "정답 포함 입력 · 평가 제외"], ["expected_abstention_match", "기대 보류 일치"]]) {
     const detail = fixture();
     detail.evaluation = { outcome, reference_label: null };
-    assert.equal(cell(parsed(detail, { includeAppendix: true }), "Label 비교 결과"), expected);
+    assert.equal(cell(parsed(detail, { includeAppendix: true }), "답안 비교 결과"), expected);
   }
 });
 
@@ -386,12 +386,12 @@ test("analyst guidance replaces internal diagnostics without changing the saved 
   assert.equal(JSON.stringify(detail), before);
 });
 
-test("technical and reference Label details are an explicit appendix, never a default read", () => {
+test("technical and reference answer details are an explicit appendix, never a default read", () => {
   const detail = fixture();
   // The existing evaluation.outcome='stub' safety marker can still identify a
   // mock execution, but default reports never inspect the reference answer.
   detail.evaluation = { outcome: "match" };
-  Object.defineProperty(detail.evaluation, "reference_label", { get() { throw new Error("Unexpected Label read"); } });
+  Object.defineProperty(detail.evaluation, "reference_label", { get() { throw new Error("Unexpected 답안 read"); } });
   Object.defineProperty(detail.result, "verifier", { get() { throw new Error("Unexpected technical read"); } });
   assert.doesNotThrow(() => buildAnalysisReport(detail));
   const other = fixture();
@@ -400,8 +400,8 @@ test("technical and reference Label details are an explicit appendix, never a de
   const [baseBody, baseChecks] = base.split("## 추가 확인 사항");
   assert.ok(extended.startsWith(baseBody));
   assert.ok(extended.endsWith(`## 추가 확인 사항${baseChecks}`));
-  assert.doesNotMatch(base, /## 부록|Label|독립 검증|실패 ID|프롬프트 버전/);
-  assert.match(extended, /## 부록 · 참조 Label 평가/);
+  assert.doesNotMatch(base, /## 부록|답안|독립 검증|실패 ID|프롬프트 버전/);
+  assert.match(extended, /## 부록 · 참고 답안 평가/);
   assert.match(extended, /## 부록 · 독립 검증/);
   assert.match(extended, /## 부록 · 실행 정보/);
 });

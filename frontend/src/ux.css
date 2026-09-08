@@ -1,0 +1,21 @@
+.metric-help { display: inline-flex; margin-left: 5px; vertical-align: middle; }
+.metric-help-trigger { display: inline-flex; align-items: center; justify-content: center; width: 19px; height: 19px; padding: 0; border: 1px solid var(--muted, #65758d); border-radius: 50%; color: var(--muted, #65758d); background: transparent; font-size: 11px; line-height: 1; cursor: help; }
+.metric-help-trigger:focus-visible { outline: 2px solid var(--accent, #127d67); outline-offset: 3px; }
+.metric-help-tooltip { position: fixed; z-index: 10000; width: max-content; max-width: min(360px, calc(100vw - 16px)); max-height: calc(100dvh - 16px); overflow: auto; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); box-shadow: 0 8px 30px #0b172629; font-size: 13px; font-weight: 400; line-height: 1.7; white-space: pre-line; overflow-wrap: anywhere; }
+.ux-dialog { width: min(920px, calc(100vw - 32px)); max-height: calc(100dvh - 40px); padding: 0; border: 1px solid var(--line); border-radius: 16px; color: var(--text); background: var(--panel); box-shadow: 0 24px 80px #06142144; }
+.ux-dialog::backdrop { background: #09162580; }
+.ux-dialog:not([open]) { display: none !important; }
+.ux-dialog-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; position: sticky; top: 0; z-index: 2; padding: 18px 24px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.ux-dialog-head h2 { margin: 0; font-size: 18px; }
+.ux-dialog-body { padding: 24px; display: grid; gap: 20px; min-width: 0; }
+.ux-dialog-body > * { min-width: 0; }
+.ux-dialog pre, .ux-dialog code { overflow-wrap: anywhere; }
+.ux-dialog .panel { margin: 0; box-shadow: none; }
+.ux-inline-help { display: inline-flex; align-items: center; gap: 4px; }
+.ux-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.ux-toolbar > .ux-grow { flex: 1; }
+.ux-muted { color: var(--muted, #65758d); font-size: 13px; }
+.evaluation-overview .quality-metrics { padding: 16px 20px 0; margin: 0; }
+.evaluation-overview > .evaluation-footnote { margin: 12px 20px 16px; }
+.evaluation-overview .quality-metric strong { font-size: 24px; }
+@media (max-width: 600px) { .ux-dialog-head, .ux-dialog-body { padding: 16px; } }

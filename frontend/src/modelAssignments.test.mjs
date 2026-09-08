@@ -92,7 +92,7 @@ const render = (Component, props) => renderToStaticMarkup(createElement(Componen
 
 test("role cards show independent names, unassigned state and read failure without claiming missing assignments", () => {
   const html = render(ModelAssignmentCards, { profiles: [profile({ status: "production", name: "prod-only" }), profile({ id: "test", is_test: true, name: "test-only" })], onUnassignTest() {} });
-  assert.match(html, /prod-only/); assert.match(html, /test-only/); assert.match(html, /Test 지정 해제/); assert.match(html, /각각 지정/);
+  assert.match(html, /prod-only/); assert.match(html, /test-only/); assert.match(html, /Test 지정 해제/); assert.doesNotMatch(html, /metric-help-trigger/);
   const missing = render(ModelAssignmentCards, { profiles: [], onUnassignTest() {} }); assert.match(missing, /Production으로 자동 대체하지/);
   const failed = render(ModelAssignmentCards, { profiles: [], error: "synthetic", onUnassignTest() {} }); assert.match(failed, /조회하지 못/); assert.doesNotMatch(failed, />미지정</);
 });
@@ -105,9 +105,9 @@ test("confirmation explains scope, OpenAI transmission and disable-all impact wi
 });
 
 test("ordinary test notice distinguishes selected Test, missing Test and stub without using a candidate validation profile", () => {
-  const html = render(TestModelNotice, { state: { profiles: [profile({ is_test: true })], loading: false, error: "" }, agentMode: "moduagent" }); assert.match(html, /이 테스트에 사용할 Test 모델/); assert.match(html, /synthetic-model/); assert.match(html, /접수 당시 Test 모델/);
+  const html = render(TestModelNotice, { state: { profiles: [profile({ is_test: true })], loading: false, error: "" }, agentMode: "moduagent" }); assert.match(html, /테스트 모델/); assert.match(html, /synthetic-model/); assert.match(html, /접수 당시 테스트 모델·공통 지침/); assert.doesNotMatch(html, /metric-help-trigger/);
   const missing = render(TestModelNotice, { state: { profiles: [profile({ status: "production" })], loading: false }, agentMode: "moduagent" }); assert.match(missing, /Test 모델이 지정되지/); assert.match(missing, /Production으로 자동 대체하지/);
-  const stub = render(TestModelNotice, { state: { profiles: [], loading: false }, agentMode: "stub" }); assert.match(stub, /실제 LLM은 호출하지/);
+  const stub = render(TestModelNotice, { state: { profiles: [], loading: false }, agentMode: "stub" }); assert.match(stub, /실제 LLM을 호출하지/);
 });
 
 test("role APIs send only profile fingerprint and never launch tests or alter the other role", { concurrency: false }, async () => {

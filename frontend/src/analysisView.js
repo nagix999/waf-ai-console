@@ -1,7 +1,7 @@
 export const searchFields = [
-  ["all", "전체 검색 필드"], ["event_id", "Event ID"], ["company_name", "회사명"],
-  ["source_system", "Source System"], ["src_ip", "Source IP (정확히)"],
-  ["dest_ip", "Destination IP (정확히)"], ["signature", "Signature"],
+  ["all", "전체"], ["event_id", "이벤트 ID"], ["company_name", "회사명"],
+  ["source_system", "연동 시스템"], ["src_ip", "출발지 IP"],
+  ["dest_ip", "목적지 IP"], ["signature", "탐지명"],
   ["event_name", "이벤트명"], ["threat_category", "위협 유형"]
 ];
 
@@ -13,7 +13,7 @@ export const emptyFilters = {
   event_id: "", company_name: "", source_system: "", src_ip: "", dest_ip: "",
   signature: "", event_name: "", threat_category: "",
   label_presence: "", evaluation_outcome: "", reference_label: "", label_source_kind: "", label_source_ref: "", label_ai_visible: "",
-  test_run_id: "", test_difficulty: "", test_category: ""
+  test_run_id: "", test_difficulty: "", test_category: "", service_api_key_id: ""
 };
 
 export function initialListState(purpose = "") {
@@ -52,11 +52,11 @@ const filterLabels = {
   analysis_purpose: "분석 구분", ingest_channel: "유입 경로", q: "검색어", status: "처리 상태", verdict: "판정", severity: "심각도",
   waf_vendor: "WAF 벤더", waf_action: "WAF 조치", review_state: "분석가 리뷰", model_profile: "모델 프로필", input_truncated: "입력 잘림",
   src_port: "출발지 포트", dest_port: "목적지 포트", confidence_min: "최소 신뢰도", confidence_max: "최대 신뢰도",
-  created_from: "접수 시작", created_to: "접수 종료", event_id: "이벤트 ID", company_name: "회사명", source_system: "Source System",
-  src_ip: "출발지 IP", dest_ip: "목적지 IP", signature: "시그니처", event_name: "이벤트명", threat_category: "위협 유형",
+  created_from: "접수 시작", created_to: "접수 종료", event_id: "이벤트 ID", company_name: "회사명", source_system: "연동 시스템",
+  src_ip: "출발지 IP", dest_ip: "목적지 IP", signature: "탐지명", event_name: "이벤트명", threat_category: "위협 유형",
   label_presence: "참고 답안", evaluation_outcome: "답안 비교", reference_label: "참고 판정", label_source_kind: "답안 종류",
   label_source_ref: "답안 출처 / 버전", label_ai_visible: "답안 작성 시 AI 열람",
-  test_run_id: "테스트 실행 ID", test_difficulty: "테스트 난이도", test_category: "테스트 유형",
+  test_run_id: "테스트 실행 ID", test_difficulty: "테스트 난이도", test_category: "테스트 유형", service_api_key_id: "연동 키",
 };
 
 // Reflect applied server-query filters, not edits awaiting the Search button.
@@ -73,7 +73,7 @@ export function appliedFilterTags(filters, valueLabels = {}) {
     // query. Match analysisQuery's Date parsing; DB timestamps use a different
     // UTC fallback in dateValue and must not be reused for these input values.
     const filterDate = ["created_from", "created_to"].includes(key) ? new Date(value) : null;
-    const display = named && Object.hasOwn(named, value) ? named[value]
+    const display = key === "service_api_key_id" ? "대시보드에서 선택" : named && Object.hasOwn(named, value) ? named[value]
       : filterDate ? (Number.isNaN(filterDate.getTime()) ? "시각 확인 필요" : filterDate.toLocaleString("ko-KR")) : value;
     const label = key === "q" ? searchFields.find(([field]) => field === filters.search_field)?.[1] || filterLabels.q : filterLabels[key];
     tags.push({ key, label, value: display });

@@ -110,6 +110,7 @@ def preview_labels(db: Session, *, answers: list, source_system: str, source_kin
         normalized.append((number, event_id, verdict))
     analyses = db.execute(select(Analysis.id, Analysis.event_id).where(
         Analysis.source_system == source_system, Analysis.event_id.in_([row[1] for row in normalized]),
+        Analysis.retry_of_analysis_id.is_(None),
     )).mappings()
     by_event = {row["event_id"]: row["id"] for row in analyses}
     labels = latest_labels()

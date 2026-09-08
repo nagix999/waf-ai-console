@@ -1,4 +1,10 @@
 .prompt-settings { display: grid; gap: 18px; min-width: 0; }
+.prompt-settings .prompt-change-note { color: var(--muted); font-size: 13px; margin-bottom: 16px; }
+.prompt-dialog { width: min(860px, calc(100vw - 32px)); }
+.prompt-dialog .prompt-editor, .prompt-dialog .prompt-confirmation { padding: 0; border: 0; }
+.prompt-dialog .prompt-editor > label { margin-top: 18px; }
+.prompt-dialog .prompt-integrity dd { margin: 5px 0 16px; overflow-wrap: anywhere; }
+.prompt-dialog .prompt-privacy { padding: 12px; margin-bottom: 16px; color: var(--warn); background: var(--warn-soft); border-radius: 8px; }
 .prompt-settings .prompt-overview, .prompt-settings .prompt-detail, .prompt-settings .prompt-editor, .prompt-settings .prompt-confirmation { padding: 22px; }
 .prompt-settings .prompt-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 16px; }
 .prompt-settings .prompt-heading > div { min-width: 0; }

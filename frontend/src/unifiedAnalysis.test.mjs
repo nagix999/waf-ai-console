@@ -44,7 +44,16 @@ test("unified list has exactly six stable columns without a WAF column or altern
   assert.doesNotMatch(html, /NEVER_SHOW_WAF_VENDOR_COLUMN|Deny|status-completed|분석 보기|평가 보기/);
   assert.match(html, /class="sr-only">분석 완료/);
   assert.match(html, /unified-event-title[^>]*>Synthetic detection/);
-  assert.match(html, /unified-event-id[^>]*><span[^>]*>synthetic-complete/);
+  assert.doesNotMatch(html, /unified-event-id|synthetic-complete/);
+  const opened = [];
+  const tree = AnalysisTable({ items: [fixture("complete")], onOpen: id => opened.push(id) });
+  function visit(node) {
+    if (Array.isArray(node)) return node.flatMap(visit);
+    if (!node || typeof node !== "object") return [];
+    return [...(node.type === "button" ? [node] : []), ...visit(node.props?.children)];
+  }
+  visit(tree).find(button => button.props.className.includes("unified-event-title")).props.onClick();
+  assert.deepEqual(opened, ["complete"], "displayed event IDs are hidden, but navigation still uses the immutable analysis ID");
   assert.match(table([]), /colSpan="6"/i);
 });
 
@@ -93,7 +102,7 @@ test("applied chips reflect all active filters including false, zero and hidden 
   const filters = { ...emptyFilters, search_field: "src_ip", q: " 192.0.2.10 ", input_truncated: false, confidence_min: 0,
     label_presence: "labeled", label_source_ref: " synthetic-v1 ", label_ai_visible: "unknown", waf_action: "D", injected: "NEVER_SHOW" };
   const tags = appliedFilterTags(filters, { label_presence: { labeled: "있음" } });
-  assert.deepEqual(tags.find(tag => tag.key === "q"), { key: "q", label: "Source IP (정확히)", value: "192.0.2.10" });
+  assert.deepEqual(tags.find(tag => tag.key === "q"), { key: "q", label: "출발지 IP", value: "192.0.2.10" });
   assert.equal(tags.find(tag => tag.key === "label_presence").value, "있음");
   assert.equal(tags.find(tag => tag.key === "input_truncated").value, "false");
   assert.equal(tags.find(tag => tag.key === "confidence_min").value, "0");
@@ -156,19 +165,25 @@ test("removing one applied filter preserves unrelated draft edits, scope and AND
   assert.equal(removeAppliedFilter(state, "__proto__"), state);
 });
 
-test("actual list always exposes reference filters, an attachment action and an open quality summary without view controls", () => {
+test("actual list exposes basic comparison and quality overview while retaining advanced reference filters and applied chips", () => {
   const state = initialListState("test");
   state.applied.label_source_ref = "synthetic-reference";
   state.draft = { ...state.applied };
   const html = renderToStaticMarkup(createElement(AnalysisList, { state, setState() {}, onOpen() {}, onUnauthorized() {} }));
-  assert.match(html, /name="label_presence"/);
+  assert.doesNotMatch(html, /name="label_presence"/);
   assert.match(html, /name="evaluation_outcome"/);
   assert.match(html, /aria-label="적용된 검색 조건"/);
   assert.match(html, /답안 출처 \/ 버전: synthetic-reference 조건 해제/);
   assert.match(html, /aria-controls="analysis-label-attachment"/);
-  assert.match(html, /<details class="panel analysis-evaluation-overview" open="">/);
-  assert.match(html, /판정 평가 지표/);
+  assert.match(html, /<section class="panel evaluation-overview" aria-label="평가 지표">/);
+  assert.match(html, /답안 표본 기준 · 운영 전체 정확도는 아닙니다/);
+  assert.doesNotMatch(html, /aria-label="평가 범위 설명"/);
+  assert.match(html, /aria-expanded="false" aria-controls="advanced-filters"/);
   assert.doesNotMatch(html, /목록 표시 방식|분석 보기|평가 보기/);
+  const expanded = renderToStaticMarkup(createElement(AnalysisList, { state: { ...state, advanced: true }, setState() {}, onOpen() {}, onUnauthorized() {} }));
+  for (const name of ["label_presence", "reference_label", "label_source_kind", "label_source_ref", "label_ai_visible"]) assert.ok(expanded.includes(`name="${name}"`));
+  assert.match(expanded, /aria-expanded="true" aria-controls="advanced-filters"/);
+  assert.equal(state.advanced, false);
 });
 
 test("unified list keeps hostile summary, title and Event ID inert and does not read payloads", () => {

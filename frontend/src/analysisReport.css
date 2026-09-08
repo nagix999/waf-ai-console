@@ -12,6 +12,7 @@
 .report-appendix-option small { font-size: 11px; }
 .report-scope { display: flex; align-items: flex-start; gap: 8px; margin: 0 4px 3px; color: var(--muted); font-size: 11px; line-height: 1.7; }
 .report-scope svg { flex-shrink: 0; margin-top: 2px; }
+.report-scope-note { color: var(--muted); font-size: 12px; line-height: 1.7; }
 .report-paper { max-width: 940px; margin: 0 auto; padding: 40px 48px; border-top: 4px solid var(--accent); }
 .report-cover { padding-bottom: 26px; border-bottom: 1px solid var(--line); }
 .report-cover .eyebrow { color: var(--accent); letter-spacing: .13em; font-size: 10px; }
@@ -43,6 +44,15 @@
 .report-source-head small { font-size: 11px; }
 .report-source pre { margin: 0; padding: 22px; border-radius: 0; max-height: 80vh; min-height: 380px; line-height: 1.9; }
 .report-source pre:focus-visible { outline-offset: -3px; }
+.report-appendix-option > label { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
+.report-reading-tools { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.report-reading-tools .report-scope-note { display: inline-flex; align-items: center; gap: 7px; }
+.report-jump { display: flex; align-items: center; gap: 8px; min-width: 0; margin: 0; font-size: 12px; color: var(--muted); }
+.report-jump select { width: 220px; max-width: 65vw; }
+.report-section, .analysis-report { scroll-margin-top: 90px; }
+.report-back-top { margin-top: 20px; font-size: 11px; }
+.report-paper { width: 100%; min-width: 0; }
+.report-paper p, .report-paper li { max-width: 72ch; }
 
 @media (max-width: 700px) {
   .report-toolbar { padding: 15px; gap: 14px; }

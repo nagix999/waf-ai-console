@@ -4,6 +4,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 from .schemas import UTCResponse
+from .evaluation_schemas import EvaluationSummary
 
 
 class DashboardWindow(UTCResponse):
@@ -49,8 +50,24 @@ class DashboardRuntime(BaseModel):
     worker_health_verified: Literal[False] = False
 
 
+class DashboardServiceKey(BaseModel):
+    id: str
+    name: str
+    source_system: str
+
+
+class DashboardTrendPoint(BaseModel):
+    date: str
+    total: int
+    evaluation_summary: EvaluationSummary
+
+
 class DashboardSummary(BaseModel):
     window: DashboardWindow
     counts: DashboardCounts
     severity_counts: DashboardSeverityCounts
     runtime: DashboardRuntime
+    service_api_key: DashboardServiceKey | None = None
+    attribution_unknown_count: int = 0
+    evaluation_summary: EvaluationSummary = Field(default_factory=EvaluationSummary)
+    trend: list[DashboardTrendPoint] = Field(default_factory=list)

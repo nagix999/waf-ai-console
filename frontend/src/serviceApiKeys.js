@@ -9,8 +9,8 @@ export function serviceKeyNameError(name) {
 export function validateServiceKeyDraft(draft) {
   const nameError = serviceKeyNameError(draft.name);
   if (nameError) return nameError;
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/.test(draft.source_system) || draft.source_system.toLowerCase() === "admin-ui" || draft.source_system.toLowerCase().startsWith("waf-internal-")) return "Source System은 1~120자의 영문·숫자·._-로 입력하세요. admin-ui와 waf-internal-로 시작하는 값은 대소문자와 관계없이 예약되어 있습니다.";
-  if (!Array.isArray(draft.scopes) || !draft.scopes.length || draft.scopes.some((scope) => !knownScopes.includes(scope)) || new Set(draft.scopes).size !== draft.scopes.length) return "ingest(접수·조회), review(리뷰 등록) 중 필요한 권한을 하나 이상 선택하세요.";
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/.test(draft.source_system) || draft.source_system.toLowerCase() === "admin-ui" || draft.source_system.toLowerCase().startsWith("waf-internal-")) return "연동 시스템은 1~120자의 영문·숫자·._-로 입력하세요. admin-ui와 waf-internal-로 시작하는 값은 대소문자와 관계없이 예약되어 있습니다.";
+  if (!Array.isArray(draft.scopes) || !draft.scopes.length || draft.scopes.some((scope) => !knownScopes.includes(scope)) || new Set(draft.scopes).size !== draft.scopes.length) return "분석 접수·조회, 분석가 판정 등록 중 필요한 권한을 하나 이상 선택하세요.";
   return "";
 }
 
@@ -31,7 +31,7 @@ export function serviceKeyError(error, { issuing = false } = {}) {
   if (Object.hasOwn(messages, error?.message)) return messages[error.message];
   if (error?.status === 401) return "로그인 세션을 확인하고 다시 시도하세요.";
   if (error?.status === 403) return "서비스 API Key 관리는 관리자만 사용할 수 있습니다.";
-  if (error?.status === 422) return "키 이름·Source System·권한 형식을 확인하세요. 관리자 권한은 발급할 수 없습니다.";
+  if (error?.status === 422) return "키 이름·연동 시스템·권한 형식을 확인하세요. 관리자 권한은 발급할 수 없습니다.";
   return issuing ? "발급 응답을 확인하지 못했습니다. 키가 발급되었을 수 있으므로 목록을 새로고침해 확인하세요. 원문을 받지 못한 키는 폐기하고 새로 발급하세요. 자동으로 재발급하지 않습니다."
     : "서비스 API Key 요청을 처리하지 못했습니다. 연결 상태를 확인하고 다시 시도하세요.";
 }
@@ -88,7 +88,7 @@ export function createServiceKeysController({ api, onChange }) {
     try {
       await api.renameServiceApiKey(state.editing.id, { name: state.editName.trim() });
       if (disposed) return false;
-      publish({ editing: null, editName: "", notice: "키 이름을 변경했습니다. 키 원문·Source System·권한은 바뀌지 않았습니다." });
+      publish({ editing: null, editName: "", notice: "키 이름을 변경했습니다. 키 원문·연동 시스템·권한은 바뀌지 않았습니다." });
       await refresh(); return true;
     } catch (error) {
       if (!disposed) { publish({ error: serviceKeyError(error) }); if ([404, 409].includes(error.status)) await refresh({ preserveError: true }); }
@@ -106,5 +106,18 @@ export function createServiceKeysController({ api, onChange }) {
     } catch (error) { if (!disposed) publish({ error: serviceKeyError(error) }); return false; }
     finally { publish({ busy: "" }); }
   }
-  return { refresh, update, issue, closeIssued, edit, updateName, cancelEdit, rename, revoke, getState: () => state, dispose() { disposed = true; generation += 1; request?.abort(); state = { ...state, issued: null }; } };
+  async function remove(item) {
+    if (blocked() || !item?.id) return false;
+    publish({ busy: `delete-${item.id}`, error: "", notice: "" });
+    try {
+      await api.deleteServiceApiKey(item.id);
+      if (disposed) return false;
+      publish({ catalog: { items: state.catalog.items.filter(value => value.id !== item.id) }, notice: "API 키를 삭제했습니다. 분석 결과와 감사 이력은 보존됩니다.", ...(state.issued?.item.id === item.id ? { issued: null } : {}), ...(state.editing?.id === item.id ? { editing: null, editName: "" } : {}) });
+      await refresh(); return true;
+    } catch (error) {
+      if (!disposed) { publish({ error: serviceKeyError(error), needsRefresh: true }); await refresh({ preserveError: true }); }
+      return false;
+    } finally { publish({ busy: "" }); }
+  }
+  return { refresh, update, issue, closeIssued, edit, updateName, cancelEdit, rename, revoke, remove, getState: () => state, dispose() { disposed = true; generation += 1; request?.abort(); state = { ...state, issued: null }; } };
 }

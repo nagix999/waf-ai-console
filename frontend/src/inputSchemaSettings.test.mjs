@@ -160,15 +160,23 @@ test("API bindings isolate schema metadata from event submission and use no-stor
 });
 test("settings offers schema management without displacing existing model, prompt or key controls", () => {
   const html = render(app.Settings, { onProductionChange() {}, onViewDataset() {} });
-  for (const label of ["LLM 프로필", "프롬프트", "입력 스키마", "Internal Egress", "서비스 API Key"]) assert.ok(html.includes(label));
+  for (const label of ["LLM 프로필", "프롬프트", "입력 스키마"]) assert.ok(html.includes(label));
+  assert.match(html, /Internal Egress|내부 연결 허용/); assert.match(html, /서비스 API Key|서비스 API 키|API 키/);
   const schema = render(components.default);
-  assert.match(schema, /설명을 LLM 입력에 추가하지 않습니다/); assert.match(schema, /이미 접수된 분석과 테스트/); assert.match(schema, /운영 적용 이력/);
+  assert.match(schema, /<h2>입력 스키마<\/h2>/); assert.match(schema, /적용 이력/); assert.doesNotMatch(schema, /입력 스키마 설명|<textarea|버전 ID|필드 정의 지문/);
+  const source = readFileSync(new URL("./InputSchemaSettings.jsx", import.meta.url), "utf8");
+  assert.match(source, /LLM 입력에는 추가하지 않습니다/); assert.match(source, /기존 분석·접수된 테스트는 변경하지 않습니다/); assert.match(source, /닫기 · 초안 유지/);
+  for (const label of ["null 허용", "샘플 검증", "스키마 편집 범위", "필드 정의 한도"]) assert.ok(source.includes(`<HelpTooltip label="${label}"`), label);
+  assert.doesNotMatch(source, /<HelpTooltip label="(?:입력 스키마|필드 변경 비교)"/);
+  assert.match(source, /공개 API 문서와 실행 이력/); assert.match(source, /비밀값·실제 로그·개인정보를 넣지/);
 });
 test("schema fields and nested hostile strings render as inert text, not links or HTML", () => {
   const hostile = '<img src=x onerror="alert(1)">';
   const html = render(components.SchemaFields, { fields: [{ ...base, description: hostile, enum: [hostile], properties: [{ ...base, description: hostile }] }] });
   assert.doesNotMatch(html, /<img|<script|javascript:/); assert.match(html, /&lt;img/); assert.match(html, /null 불가/);
-  const diff = render(components.SchemaDiff, { before: [base], after: [{ ...base, description: hostile }] }); assert.doesNotMatch(diff, /<img/); assert.match(diff, /변경 전/); assert.match(diff, /변경 후/);
+  const diff = render(components.SchemaDiff, { before: [base], after: [{ ...base, description: hostile }] }); assert.doesNotMatch(diff, /<img/); assert.match(diff, /변경 전후 보기/); assert.doesNotMatch(diff, /<details|필드 변경 비교 설명/);
+  const content = render(components.SchemaChangeContent, { change: schemaFieldDiff([base], [{ ...base, description: hostile }])[0] });
+  assert.match(content, /변경 전/); assert.match(content, /변경 후/); assert.match(content, /&lt;img/); assert.doesNotMatch(content, /<img|<script/);
 });
 test("technical metadata shows historical version only and never guesses current definitions for legacy analyses", () => {
   const legacy = render(components.InputSchemaMetadata, { metadata: null }); assert.match(legacy, /현재 설정으로 추정하지 않습니다/);
@@ -178,5 +186,6 @@ test("technical metadata shows historical version only and never guesses current
 test("Production documentation waits for active server definitions and never offers a stale build-time schema download", () => {
   const html = render(production.default); assert.match(html, /현재 운영 스키마로 정의서를 불러오는 중/); assert.doesNotMatch(html, /download=|api-doc-layout/);
   const source = readFileSync(new URL("./ProductionApi.jsx", import.meta.url), "utf8");
-  assert.doesNotMatch(source, /\.md\?raw|빌드 시점/); assert.match(source, /api\.productionApi/); assert.match(source, /new Blob\(\[reference\.markdown\]/); assert.match(source, /parseApiDocument\(reference\?\.markdown/); assert.match(source, /URL\.revokeObjectURL/);
+  assert.doesNotMatch(source, /\.md\?raw|빌드 시점|new Blob\(\[reference\.markdown\]/); assert.match(source, /api\.productionApi/); assert.match(source, /fetchApiDocumentPdf\(reference\.input_schema/); assert.match(source, /parseApiDocument\(reference\?\.markdown/);
+  assert.match(html, /<button[^>]*disabled=""[^>]*>[\s\S]*?PDF 다운로드/);
 });

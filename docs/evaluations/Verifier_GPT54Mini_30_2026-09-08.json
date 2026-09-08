@@ -1,0 +1,3208 @@
+{
+  "evaluation_method": {
+    "dataset": "waf-dummy-v1",
+    "dataset_sha256": "505a0a5c801cf6bfeeecbadd73e4ccd56a16b06f49bf19054bf3465cc6763142",
+    "sample_sha256": "387936a15a30acff4514b0a2fc159d1bd25224168b829f031e8d2e69c4a3a61a",
+    "sampling_seed": 20260908,
+    "selection": "Python random.Random(20260908); difficulty easy/medium/hard; sorted event IDs per label; sample 4 TP, 4 FP, 2 hold per difficulty; shuffle each difficulty then interleave",
+    "baseline": "Validated and source-grounded Primary output from the same execution; no separate Primary-only API call",
+    "reference": "synthetic_expected; no independent operational accuracy claim",
+    "quantile": "nearest rank",
+    "excludes_raw_payload_prompts_and_model_narratives": true
+  },
+  "checks": {
+    "passed": true,
+    "counts": {
+      "primary": {
+        "matrix": {
+          "tp": 10,
+          "fn": 2,
+          "fp": 0,
+          "tn": 12,
+          "abstained_positive": 0,
+          "abstained_negative": 0
+        },
+        "matches": 23,
+        "expectedHoldMatches": 1
+      },
+      "final": {
+        "matrix": {
+          "tp": 10,
+          "fn": 2,
+          "fp": 0,
+          "tn": 12,
+          "abstained_positive": 0,
+          "abstained_negative": 0
+        },
+        "matches": 25,
+        "expectedHoldMatches": 3
+      }
+    },
+    "role_cost_usd_estimate": {
+      "llm_primary": 0.16575975,
+      "llm_verifier": 0.149499
+    },
+    "total_cost_usd_estimate": 0.31525875000000003
+  },
+  "run": {
+    "id": "3decdd13-e135-4314-8c85-d4a6cd85c849",
+    "name": "gpt-5.4-mini Verifier 효용 평가 30건 · 2026-09-08",
+    "status": "completed",
+    "total": 30,
+    "accepted": 30,
+    "rejected": 0,
+    "pending": 0,
+    "processing": 0,
+    "completed": 30,
+    "failed": 0,
+    "total_elapsed_ms": 553930,
+    "prompt_version": "waf-judgment-v2.5/policy-1",
+    "created_at": "2026-09-08T01:02:27.311409Z",
+    "started_at": "2026-09-08T01:02:29.164825Z",
+    "completed_at": "2026-09-08T01:11:41.241919Z"
+  },
+  "errors": {},
+  "rows": [
+    {
+      "row": 1,
+      "analysis_id": "70becf2e-b47e-4d1a-b0f4-637d00dda635",
+      "event_id": "waf-syn-a3e3dffd71ab",
+      "difficulty": "easy",
+      "category": "sql_injection",
+      "case_name": "SQL SLEEP 시간 지연 탐침",
+      "reference": "true_positive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "match",
+      "status": "completed",
+      "error_code": null,
+      "final": "true_positive",
+      "execution_identity_valid": true,
+      "primary": "true_positive",
+      "primary_confidence": 0.98,
+      "verifier": "true_positive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "evidence_grounding_failed"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.98,
+      "elapsed_ms": 19122,
+      "processing_ms": 17294,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 11029,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3540,
+            "output_tokens": 689,
+            "total_tokens": 4229
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 1,
+            "rejected_count": 1,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 6133,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3553,
+            "output_tokens": 663,
+            "total_tokens": 4216
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 1,
+            "rejected_count": 1,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "adb2c832-6b6e-4680-a5f0-b89c640efb90",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 17277,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 2,
+      "analysis_id": "0b6b1db9-cbe7-4ace-846d-d237dce8cfc8",
+      "event_id": "waf-syn-c41711f73003",
+      "difficulty": "medium",
+      "category": "benign_search",
+      "case_name": "검색 문장의 인코딩 앰퍼샌드",
+      "reference": "false_positive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "match",
+      "status": "completed",
+      "error_code": null,
+      "final": "false_positive",
+      "execution_identity_valid": true,
+      "primary": "false_positive",
+      "primary_confidence": 0.98,
+      "verifier": "false_positive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "signature_not_exact",
+        "false_positive_but_denied"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.96,
+      "elapsed_ms": 29040,
+      "processing_ms": 9950,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 4381,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3518,
+            "output_tokens": 578,
+            "total_tokens": 4096
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 5444,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3531,
+            "output_tokens": 724,
+            "total_tokens": 4255
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 3,
+            "accepted_count": 3,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "b34896d5-f5e5-4c0a-a1f6-b4d4b2134e56",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 9931,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 3,
+      "analysis_id": "2bc83a16-a75f-42a0-88be-4aeecee52202",
+      "event_id": "waf-syn-1133ca1b5ed6",
+      "difficulty": "hard",
+      "category": "benign_cookie_text",
+      "case_name": "쿠키 표시명에 들어 있는 작은따옴표",
+      "reference": "false_positive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "match",
+      "status": "completed",
+      "error_code": null,
+      "final": "false_positive",
+      "execution_identity_valid": true,
+      "primary": "false_positive",
+      "primary_confidence": 0.91,
+      "verifier": "false_positive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "signature_not_exact"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.91,
+      "elapsed_ms": 39890,
+      "processing_ms": 10875,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 5642,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3520,
+            "output_tokens": 633,
+            "total_tokens": 4153
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 5123,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3533,
+            "output_tokens": 607,
+            "total_tokens": 4140
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "2aeb604d-5cd9-4d47-bb2f-8d2326326d0e",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 10857,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 4,
+      "analysis_id": "27427e21-46d9-4072-8023-611e74ef4d35",
+      "event_id": "waf-syn-abd3246ddb2b",
+      "difficulty": "easy",
+      "category": "benign_keyword_match",
+      "case_name": "JSON 불리언 자료형",
+      "reference": "false_positive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "match",
+      "status": "completed",
+      "error_code": null,
+      "final": "false_positive",
+      "execution_identity_valid": true,
+      "primary": "false_positive",
+      "primary_confidence": 0.98,
+      "verifier": "false_positive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "signature_not_exact",
+        "false_positive_but_denied"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.97,
+      "elapsed_ms": 51726,
+      "processing_ms": 11862,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 4484,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3458,
+            "output_tokens": 551,
+            "total_tokens": 4009
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 7238,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3471,
+            "output_tokens": 539,
+            "total_tokens": 4010
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "dd7277bd-50f6-4e31-81a6-1c65b3b25598",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 11844,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 5,
+      "analysis_id": "7c5ad7ce-df43-44cc-a5cb-67bcb2954a26",
+      "event_id": "waf-syn-4198661f108f",
+      "difficulty": "medium",
+      "category": "cross_site_scripting",
+      "case_name": "폼 링크값의 스크립트 URI",
+      "reference": "true_positive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "match",
+      "status": "completed",
+      "error_code": null,
+      "final": "true_positive",
+      "execution_identity_valid": true,
+      "primary": "true_positive",
+      "primary_confidence": 0.98,
+      "verifier": null,
+      "verifier_executed": false,
+      "verifier_reasons": [],
+      "verifier_error": null,
+      "final_confidence": 0.98,
+      "elapsed_ms": 56720,
+      "processing_ms": 5019,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 4894,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3592,
+            "output_tokens": 640,
+            "total_tokens": 4232
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "f2fac364-558a-466d-b66d-fd64274f09c3",
+          "status": "completed",
+          "same_primary_verifier_input": null
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 4993,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 6,
+      "analysis_id": "9ef6c029-e35e-4d71-b9a4-18ecd0fb3c3f",
+      "event_id": "waf-syn-a58100ed266c",
+      "difficulty": "hard",
+      "category": "benign_query_parameters",
+      "case_name": "조회 필드명에 겹치는 SQL 단어",
+      "reference": "false_positive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "match",
+      "status": "completed",
+      "error_code": null,
+      "final": "false_positive",
+      "execution_identity_valid": true,
+      "primary": "false_positive",
+      "primary_confidence": 0.92,
+      "verifier": "false_positive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "signature_not_exact",
+        "false_positive_but_denied"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.92,
+      "elapsed_ms": 68756,
+      "processing_ms": 12065,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 5988,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3520,
+            "output_tokens": 734,
+            "total_tokens": 4254
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 3,
+            "accepted_count": 3,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 5968,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3533,
+            "output_tokens": 752,
+            "total_tokens": 4285
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 3,
+            "accepted_count": 3,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "0ca21859-545f-4d94-911e-2ea73a3b0968",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 12050,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 7,
+      "analysis_id": "e7af2707-3b37-4bce-b08d-3888c3eb9174",
+      "event_id": "waf-syn-44043d420b0f",
+      "difficulty": "easy",
+      "category": "cross_site_scripting",
+      "case_name": "쿼리 값의 script 요소",
+      "reference": "true_positive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "match",
+      "status": "completed",
+      "error_code": null,
+      "final": "true_positive",
+      "execution_identity_valid": true,
+      "primary": "true_positive",
+      "primary_confidence": 0.99,
+      "verifier": "true_positive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "true_positive_but_allowed"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.99,
+      "elapsed_ms": 80190,
+      "processing_ms": 11460,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 4458,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3617,
+            "output_tokens": 661,
+            "total_tokens": 4278
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 6865,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3630,
+            "output_tokens": 633,
+            "total_tokens": 4263
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "2f8200d0-b065-4526-8d57-0022e402ef81",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 11435,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 8,
+      "analysis_id": "87b6b930-4a68-4fad-a6f3-f2483201de29",
+      "event_id": "waf-syn-541dafcbf92b",
+      "difficulty": "medium",
+      "category": "active_content_policy",
+      "case_name": "SVG 외래 콘텐츠의 업로드 정책 미상",
+      "reference": "inconclusive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "expected_abstention_mismatch",
+      "status": "completed",
+      "error_code": null,
+      "final": "true_positive",
+      "execution_identity_valid": true,
+      "primary": "true_positive",
+      "primary_confidence": 0.97,
+      "verifier": null,
+      "verifier_executed": false,
+      "verifier_reasons": [],
+      "verifier_error": null,
+      "final_confidence": 0.97,
+      "elapsed_ms": 86196,
+      "processing_ms": 6031,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 5864,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3558,
+            "output_tokens": 658,
+            "total_tokens": 4216
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "f12ae1c7-ecbb-4343-a93f-3add68122e1c",
+          "status": "completed",
+          "same_primary_verifier_input": null
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 5980,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 9,
+      "analysis_id": "8148614a-33ad-4a8e-ba0f-e15a78b6f734",
+      "event_id": "waf-syn-05e83bd84d42",
+      "difficulty": "hard",
+      "category": "ldap_injection",
+      "case_name": "디렉터리 사용자 필터의 논리식 확장",
+      "reference": "true_positive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "match",
+      "status": "completed",
+      "error_code": null,
+      "final": "true_positive",
+      "execution_identity_valid": true,
+      "primary": "true_positive",
+      "primary_confidence": 0.96,
+      "verifier": "true_positive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "true_positive_but_allowed"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.96,
+      "elapsed_ms": 96707,
+      "processing_ms": 10536,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 5228,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3475,
+            "output_tokens": 656,
+            "total_tokens": 4131
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 5181,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3488,
+            "output_tokens": 716,
+            "total_tokens": 4204
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 3,
+            "accepted_count": 3,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "915c8355-64c3-489c-b272-f3b2fd0e0fe3",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 10521,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 10,
+      "analysis_id": "c462b606-edfd-492e-83d2-3873050b0e00",
+      "event_id": "waf-syn-01a318275d98",
+      "difficulty": "easy",
+      "category": "insufficient_data",
+      "case_name": "압축 본문 형식 헤더만 남은 요청",
+      "reference": "inconclusive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "expected_abstention_match",
+      "status": "completed",
+      "error_code": null,
+      "final": "inconclusive",
+      "execution_identity_valid": true,
+      "primary": "false_positive",
+      "primary_confidence": 0.95,
+      "verifier": "inconclusive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "signature_not_exact",
+        "false_positive_but_denied",
+        "parser_incomplete"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.49,
+      "elapsed_ms": 109094,
+      "processing_ms": 12409,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 3993,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3420,
+            "output_tokens": 574,
+            "total_tokens": 3994
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 3,
+            "accepted_count": 3,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 8284,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3433,
+            "output_tokens": 958,
+            "total_tokens": 4391
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 3,
+            "accepted_count": 3,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "fb34a343-9fe5-4700-bd36-c0bd1980f64a",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 12389,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 11,
+      "analysis_id": "d5be4232-ec18-43b1-a018-279951c2e403",
+      "event_id": "waf-syn-b106f2ae1331",
+      "difficulty": "medium",
+      "category": "sql_injection",
+      "case_name": "XML 식별자 속 SQL 논리식",
+      "reference": "true_positive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "match",
+      "status": "completed",
+      "error_code": null,
+      "final": "true_positive",
+      "execution_identity_valid": true,
+      "primary": "true_positive",
+      "primary_confidence": 0.98,
+      "verifier": "true_positive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "true_positive_but_allowed"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.98,
+      "elapsed_ms": 119957,
+      "processing_ms": 10888,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 5002,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3472,
+            "output_tokens": 608,
+            "total_tokens": 4080
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 5762,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3485,
+            "output_tokens": 597,
+            "total_tokens": 4082
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "00105fab-4bc4-4c70-bc43-e7007073094a",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 10870,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 12,
+      "analysis_id": "09d21f18-3f74-46ac-9431-3f775fde91c4",
+      "event_id": "waf-syn-5e6ce289ab3a",
+      "difficulty": "hard",
+      "category": "http_framing_ambiguity",
+      "case_name": "Transfer-Encoding 목록의 비정상 순서",
+      "reference": "inconclusive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "expected_abstention_match",
+      "status": "completed",
+      "error_code": null,
+      "final": "inconclusive",
+      "execution_identity_valid": true,
+      "primary": "false_positive",
+      "primary_confidence": 0.96,
+      "verifier": "true_positive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "false_positive_but_denied"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.49,
+      "elapsed_ms": 136646,
+      "processing_ms": 16712,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 9159,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3455,
+            "output_tokens": 718,
+            "total_tokens": 4173
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 7444,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3468,
+            "output_tokens": 716,
+            "total_tokens": 4184
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 3,
+            "accepted_count": 3,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "551022ce-3cae-437f-96c4-9c58fdba817b",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 16695,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 13,
+      "analysis_id": "04a2e834-3634-4543-8b01-60597f094231",
+      "event_id": "waf-syn-4014724b1858",
+      "difficulty": "easy",
+      "category": "benign_keyword_match",
+      "case_name": "외부 엔터티 없는 XML 검색 데이터",
+      "reference": "false_positive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "match",
+      "status": "completed",
+      "error_code": null,
+      "final": "false_positive",
+      "execution_identity_valid": true,
+      "primary": "false_positive",
+      "primary_confidence": 0.97,
+      "verifier": "false_positive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "signature_not_exact"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.97,
+      "elapsed_ms": 145642,
+      "processing_ms": 9019,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 4026,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3468,
+            "output_tokens": 528,
+            "total_tokens": 3996
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 4847,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3481,
+            "output_tokens": 676,
+            "total_tokens": 4157
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 3,
+            "accepted_count": 3,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "cd86b617-6f89-47d9-9ae0-a04c225ea8d4",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 9001,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 14,
+      "analysis_id": "18b8b948-f620-469f-aa60-fbce14e90ef1",
+      "event_id": "waf-syn-89bc7fb812cb",
+      "difficulty": "medium",
+      "category": "cross_site_scripting",
+      "case_name": "인코딩된 속성 종료와 마우스 이벤트",
+      "reference": "true_positive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "match",
+      "status": "completed",
+      "error_code": null,
+      "final": "true_positive",
+      "execution_identity_valid": true,
+      "primary": "true_positive",
+      "primary_confidence": 0.97,
+      "verifier": "true_positive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "true_positive_but_allowed"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.97,
+      "elapsed_ms": 276056,
+      "processing_ms": 130438,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 125364,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3643,
+            "output_tokens": 713,
+            "total_tokens": 4356
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 4965,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3656,
+            "output_tokens": 753,
+            "total_tokens": 4409
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "1beb265b-7a47-4066-be95-8e9f657c97ea",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 130423,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 15,
+      "analysis_id": "a1c698da-697b-432a-9bbd-ddc466a24d10",
+      "event_id": "waf-syn-548d7a75d349",
+      "difficulty": "hard",
+      "category": "command_injection",
+      "case_name": "변환 파일명의 명령 치환",
+      "reference": "true_positive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "match",
+      "status": "completed",
+      "error_code": null,
+      "final": "true_positive",
+      "execution_identity_valid": true,
+      "primary": "true_positive",
+      "primary_confidence": 0.98,
+      "verifier": "true_positive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "true_positive_but_allowed"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.97,
+      "elapsed_ms": 284429,
+      "processing_ms": 8398,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 4126,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3463,
+            "output_tokens": 513,
+            "total_tokens": 3976
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 1,
+            "accepted_count": 1,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 4128,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3476,
+            "output_tokens": 609,
+            "total_tokens": 4085
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "767a65b2-2b6a-4850-8c4b-1bda24fe06ba",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 8381,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 16,
+      "analysis_id": "4fb71b86-bb0a-4184-b68d-405f2f5d6dac",
+      "event_id": "waf-syn-745ecbc6a5c8",
+      "difficulty": "easy",
+      "category": "benign_keyword_match",
+      "case_name": "파일명 안의 연속 마침표",
+      "reference": "false_positive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "match",
+      "status": "completed",
+      "error_code": null,
+      "final": "false_positive",
+      "execution_identity_valid": true,
+      "primary": "false_positive",
+      "primary_confidence": 0.91,
+      "verifier": "false_positive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "signature_not_exact",
+        "false_positive_but_denied"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.88,
+      "elapsed_ms": 293081,
+      "processing_ms": 8672,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 4336,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3436,
+            "output_tokens": 598,
+            "total_tokens": 4034
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 4179,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3449,
+            "output_tokens": 593,
+            "total_tokens": 4042
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "6d0997f1-69d0-4bb1-8635-f8098a09d09d",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 8641,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 17,
+      "analysis_id": "adf47d67-f65d-4058-a636-701486f0597a",
+      "event_id": "waf-syn-152e0a3ee163",
+      "difficulty": "medium",
+      "category": "benign_file_upload",
+      "case_name": "multipart 파일명의 세미콜론",
+      "reference": "false_positive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "match",
+      "status": "completed",
+      "error_code": null,
+      "final": "false_positive",
+      "execution_identity_valid": true,
+      "primary": "false_positive",
+      "primary_confidence": 0.96,
+      "verifier": "false_positive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "signature_not_exact",
+        "false_positive_but_denied"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.94,
+      "elapsed_ms": 301806,
+      "processing_ms": 8744,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 4113,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3521,
+            "output_tokens": 653,
+            "total_tokens": 4174
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 3,
+            "accepted_count": 3,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 4483,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3534,
+            "output_tokens": 669,
+            "total_tokens": 4203
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 3,
+            "accepted_count": 3,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "be904102-8336-45f0-87ab-053b19ef733e",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 8724,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 18,
+      "analysis_id": "47aefbdf-3a26-4649-9351-4ded160748ae",
+      "event_id": "waf-syn-f5b9984f4fe1",
+      "difficulty": "hard",
+      "category": "benign_repeated_parameter",
+      "case_name": "정상 다중 선택의 반복 파라미터",
+      "reference": "false_positive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "match",
+      "status": "completed",
+      "error_code": null,
+      "final": "false_positive",
+      "execution_identity_valid": true,
+      "primary": "false_positive",
+      "primary_confidence": 0.95,
+      "verifier": "false_positive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "signature_not_exact",
+        "false_positive_but_denied"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.93,
+      "elapsed_ms": 316859,
+      "processing_ms": 15076,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 9687,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3450,
+            "output_tokens": 658,
+            "total_tokens": 4108
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 5272,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3463,
+            "output_tokens": 672,
+            "total_tokens": 4135
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "683fd990-571d-42a0-87c3-cc98dcdcbbdf",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 15060,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 19,
+      "analysis_id": "8434fc60-b24a-4112-b783-a96f23eaca7b",
+      "event_id": "waf-syn-2c475ec6b3a9",
+      "difficulty": "easy",
+      "category": "insufficient_data",
+      "case_name": "로그인 헤더에서 끝난 캡처",
+      "reference": "inconclusive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "expected_abstention_match",
+      "status": "completed",
+      "error_code": null,
+      "final": "inconclusive",
+      "execution_identity_valid": true,
+      "primary": "inconclusive",
+      "primary_confidence": 0.77,
+      "verifier": "inconclusive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "primary_inconclusive",
+        "signature_not_exact",
+        "parser_incomplete",
+        "evidence_grounding_failed"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.77,
+      "elapsed_ms": 337490,
+      "processing_ms": 20654,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 10583,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3414,
+            "output_tokens": 775,
+            "total_tokens": 4189
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 3,
+            "accepted_count": 2,
+            "rejected_count": 1,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 9936,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3427,
+            "output_tokens": 704,
+            "total_tokens": 4131
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "e3ee5bd2-56ee-4351-b8ab-b2c39f2049de",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 20630,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 20,
+      "analysis_id": "48db9160-ef46-48b5-8a1c-dd374792aaa2",
+      "event_id": "waf-syn-7e1deb0a8b61",
+      "difficulty": "medium",
+      "category": "benign_encoded_data",
+      "case_name": "합성 표식을 표현한 Base64 데이터",
+      "reference": "false_positive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "match",
+      "status": "completed",
+      "error_code": null,
+      "final": "false_positive",
+      "execution_identity_valid": true,
+      "primary": "false_positive",
+      "primary_confidence": 0.93,
+      "verifier": "false_positive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "signature_not_exact",
+        "false_positive_but_denied",
+        "evidence_grounding_failed"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.93,
+      "elapsed_ms": 348200,
+      "processing_ms": 10734,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 5364,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3571,
+            "output_tokens": 750,
+            "total_tokens": 4321
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 3,
+            "accepted_count": 2,
+            "rejected_count": 1,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 5238,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3584,
+            "output_tokens": 752,
+            "total_tokens": 4336
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 3,
+            "accepted_count": 2,
+            "rejected_count": 1,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "6e15ee2b-52cf-46de-854b-59b46d0b2198",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 10715,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 21,
+      "analysis_id": "4488313d-d1a1-43a5-9d5b-19ace98bad09",
+      "event_id": "waf-syn-635a3987a50e",
+      "difficulty": "hard",
+      "category": "parameter_semantics_missing",
+      "case_name": "반복 공개 범위 값의 상충",
+      "reference": "inconclusive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "expected_abstention_mismatch",
+      "status": "completed",
+      "error_code": null,
+      "final": "false_positive",
+      "execution_identity_valid": true,
+      "primary": "false_positive",
+      "primary_confidence": 0.91,
+      "verifier": "false_positive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "signature_not_exact",
+        "evidence_grounding_failed"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.91,
+      "elapsed_ms": 358761,
+      "processing_ms": 10584,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 4198,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3460,
+            "output_tokens": 663,
+            "total_tokens": 4123
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 1,
+            "rejected_count": 1,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 6254,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3473,
+            "output_tokens": 765,
+            "total_tokens": 4238
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 1,
+            "rejected_count": 1,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "97a28ed3-5d86-4e3f-8418-d6fb1cf96b30",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 10569,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 22,
+      "analysis_id": "6c11fd87-30a7-406a-a54a-f725bc9ff70e",
+      "event_id": "waf-syn-2d8c8ebf94b7",
+      "difficulty": "easy",
+      "category": "command_injection",
+      "case_name": "Shellshock 함수 선언 헤더",
+      "reference": "true_positive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "match",
+      "status": "completed",
+      "error_code": null,
+      "final": "true_positive",
+      "execution_identity_valid": true,
+      "primary": "true_positive",
+      "primary_confidence": 0.98,
+      "verifier": null,
+      "verifier_executed": false,
+      "verifier_reasons": [],
+      "verifier_error": null,
+      "final_confidence": 0.98,
+      "elapsed_ms": 362673,
+      "processing_ms": 3934,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 3812,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3425,
+            "output_tokens": 533,
+            "total_tokens": 3958
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "94899566-f9e8-45ce-9f49-ef06a613167d",
+          "status": "completed",
+          "same_primary_verifier_input": null
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 3917,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 23,
+      "analysis_id": "77e61e0f-03f3-40b3-8edf-2553a887f0ca",
+      "event_id": "waf-syn-b61e21ff1eaa",
+      "difficulty": "medium",
+      "category": "path_traversal",
+      "case_name": "XSS 시그니처와 불일치하는 JSON 경로 탈출",
+      "reference": "true_positive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "false_negative",
+      "status": "completed",
+      "error_code": null,
+      "final": "false_positive",
+      "execution_identity_valid": true,
+      "primary": "false_positive",
+      "primary_confidence": 0.95,
+      "verifier": "false_positive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "signature_not_exact"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.95,
+      "elapsed_ms": 370732,
+      "processing_ms": 8084,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 3217,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3469,
+            "output_tokens": 537,
+            "total_tokens": 4006
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 4751,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3482,
+            "output_tokens": 717,
+            "total_tokens": 4199
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 3,
+            "accepted_count": 3,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "a3af996f-9e45-45d5-bdeb-c27a6348ee1d",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 8070,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 24,
+      "analysis_id": "74b23cd0-c346-442a-a701-513bdbb81627",
+      "event_id": "waf-syn-a516d7053109",
+      "difficulty": "hard",
+      "category": "benign_schema_pattern",
+      "case_name": "템플릿 문자를 검사하는 정규식 설정",
+      "reference": "false_positive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "match",
+      "status": "completed",
+      "error_code": null,
+      "final": "false_positive",
+      "execution_identity_valid": true,
+      "primary": "false_positive",
+      "primary_confidence": 0.92,
+      "verifier": "false_positive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "signature_not_exact",
+        "false_positive_but_denied"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.92,
+      "elapsed_ms": 380395,
+      "processing_ms": 9696,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 4984,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3466,
+            "output_tokens": 692,
+            "total_tokens": 4158
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 4595,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3479,
+            "output_tokens": 756,
+            "total_tokens": 4235
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 3,
+            "accepted_count": 3,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "51935486-55a1-499e-ba72-639db428a6ef",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 9675,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 25,
+      "analysis_id": "d1c7597f-8878-41cf-bb0c-143758c36258",
+      "event_id": "waf-syn-41fecb39f9a1",
+      "difficulty": "easy",
+      "category": "cross_site_scripting",
+      "case_name": "이미지 오류 이벤트 삽입",
+      "reference": "true_positive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "match",
+      "status": "completed",
+      "error_code": null,
+      "final": "true_positive",
+      "execution_identity_valid": true,
+      "primary": "true_positive",
+      "primary_confidence": 0.98,
+      "verifier": null,
+      "verifier_executed": false,
+      "verifier_reasons": [],
+      "verifier_error": null,
+      "final_confidence": 0.98,
+      "elapsed_ms": 384491,
+      "processing_ms": 4124,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 4022,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3464,
+            "output_tokens": 618,
+            "total_tokens": 4082
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "166272d6-51d9-4088-ae48-e9d5c8ba67a2",
+          "status": "completed",
+          "same_primary_verifier_input": null
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 4110,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 26,
+      "analysis_id": "ca96ba7d-475b-4efd-8ccb-71bbfc884efe",
+      "event_id": "waf-syn-0e883085f066",
+      "difficulty": "medium",
+      "category": "benign_structured_data",
+      "case_name": "JSON 안내문에 포함된 집합 표기",
+      "reference": "false_positive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "match",
+      "status": "completed",
+      "error_code": null,
+      "final": "false_positive",
+      "execution_identity_valid": true,
+      "primary": "false_positive",
+      "primary_confidence": 0.96,
+      "verifier": "false_positive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "signature_not_exact"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.95,
+      "elapsed_ms": 518050,
+      "processing_ms": 133589,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 125203,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3466,
+            "output_tokens": 762,
+            "total_tokens": 4228
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 3,
+            "accepted_count": 3,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 8246,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3479,
+            "output_tokens": 760,
+            "total_tokens": 4239
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "add9cd3c-4199-4da0-88ba-7a5305a8aca1",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 133568,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 27,
+      "analysis_id": "28b7e6da-cc96-464a-903d-0878a27770e1",
+      "event_id": "waf-syn-c73e281a0b4d",
+      "difficulty": "hard",
+      "category": "sql_injection",
+      "case_name": "주석으로 토큰을 분리한 검색 조건",
+      "reference": "true_positive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "false_negative",
+      "status": "completed",
+      "error_code": null,
+      "final": "false_positive",
+      "execution_identity_valid": true,
+      "primary": "false_positive",
+      "primary_confidence": 0.95,
+      "verifier": "false_positive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "signature_not_exact",
+        "evidence_grounding_failed"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.92,
+      "elapsed_ms": 527889,
+      "processing_ms": 9865,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 4890,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3621,
+            "output_tokens": 770,
+            "total_tokens": 4391
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 1,
+            "rejected_count": 1,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 4862,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3634,
+            "output_tokens": 742,
+            "total_tokens": 4376
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "656f3ec8-c10c-4b5c-bf59-4b04cb044416",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 9849,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 28,
+      "analysis_id": "6a65b80a-1418-410a-aac7-bdf08aebcb4c",
+      "event_id": "waf-syn-4e76e2d74f71",
+      "difficulty": "easy",
+      "category": "benign_protocol_match",
+      "case_name": "CORS 사전 확인 요청의 OPTIONS",
+      "reference": "false_positive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "match",
+      "status": "completed",
+      "error_code": null,
+      "final": "false_positive",
+      "execution_identity_valid": true,
+      "primary": "false_positive",
+      "primary_confidence": 0.97,
+      "verifier": "false_positive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "signature_not_exact"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.93,
+      "elapsed_ms": 536111,
+      "processing_ms": 8247,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 4371,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3468,
+            "output_tokens": 590,
+            "total_tokens": 4058
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 3,
+            "accepted_count": 3,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 3752,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3481,
+            "output_tokens": 624,
+            "total_tokens": 4105
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 3,
+            "accepted_count": 3,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "8bf899a0-9df8-47ff-8db2-bb4cae2de9c7",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 8227,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 29,
+      "analysis_id": "86199d8d-f7c9-42a9-b471-76e0a3149df6",
+      "event_id": "waf-syn-e2e0dceddd00",
+      "difficulty": "medium",
+      "category": "nosql_injection",
+      "case_name": "JSON 필터의 서버 측 조건 기능 여부 미상",
+      "reference": "inconclusive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "expected_abstention_mismatch",
+      "status": "completed",
+      "error_code": null,
+      "final": "true_positive",
+      "execution_identity_valid": true,
+      "primary": "true_positive",
+      "primary_confidence": 0.97,
+      "verifier": "true_positive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "true_positive_but_allowed"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.97,
+      "elapsed_ms": 543721,
+      "processing_ms": 7632,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 3488,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3469,
+            "output_tokens": 589,
+            "total_tokens": 4058
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 4027,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3482,
+            "output_tokens": 614,
+            "total_tokens": 4096
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "a57d8425-cc3a-46ec-b234-aaaa81b4ce78",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 7615,
+      "missing_run_duration_count": 0
+    },
+    {
+      "row": 30,
+      "analysis_id": "b532356b-d8f0-42d4-8724-8131fa4ec78e",
+      "event_id": "waf-syn-9e8774931806",
+      "difficulty": "hard",
+      "category": "path_traversal",
+      "case_name": "슬래시 종류를 혼합한 경로 이탈",
+      "reference": "true_positive",
+      "label_source": "synthetic_expected",
+      "ai_visible": null,
+      "evaluation_outcome": "match",
+      "status": "completed",
+      "error_code": null,
+      "final": "true_positive",
+      "execution_identity_valid": true,
+      "primary": "true_positive",
+      "primary_confidence": 0.95,
+      "verifier": "true_positive",
+      "verifier_executed": true,
+      "verifier_reasons": [
+        "true_positive_but_allowed"
+      ],
+      "verifier_error": null,
+      "final_confidence": 0.95,
+      "elapsed_ms": 552996,
+      "processing_ms": 9300,
+      "prompt_version": "waf-judgment-v2.5/policy-1",
+      "run_count": 1,
+      "steps": [
+        {
+          "role": "llm_primary",
+          "status": "completed",
+          "duration_ms": 4491,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3566,
+            "output_tokens": 696,
+            "total_tokens": 4262
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        },
+        {
+          "role": "llm_verifier",
+          "status": "completed",
+          "duration_ms": 4686,
+          "error_code": null,
+          "usage": {
+            "input_tokens": 3579,
+            "output_tokens": 697,
+            "total_tokens": 4276
+          },
+          "grounding": {
+            "mode": "field_exact_substring",
+            "checked_count": 2,
+            "accepted_count": 2,
+            "rejected_count": 0,
+            "downgraded_to_inconclusive": false,
+            "raw_values_stored": false
+          },
+          "repair_attempted": false,
+          "repair_recovered": false,
+          "attempt_count": 1,
+          "validation_issues": [
+            []
+          ]
+        }
+      ],
+      "input_comparisons": [
+        {
+          "run_id": "6018f35c-8e73-47db-a5ba-f4c1aae859ca",
+          "status": "completed",
+          "same_primary_verifier_input": true
+        }
+      ],
+      "test_metadata_in_event": [],
+      "known_run_duration_ms": 9284,
+      "missing_run_duration_count": 0
+    }
+  ],
+  "summary": {
+    "primary_all": {
+      "comparable": 30,
+      "excluded": 0,
+      "matches_including_expected_hold": 23,
+      "expected_hold_total": 6,
+      "expected_hold_matches": 1,
+      "matrix": {
+        "tp": 10,
+        "fn": 2,
+        "fp": 0,
+        "tn": 12,
+        "abstained_positive": 0,
+        "abstained_negative": 0
+      },
+      "metrics": {
+        "basis": "decided_binary",
+        "accuracy": 0.9166666666666666,
+        "precision": 1,
+        "recall": 0.8333333333333334,
+        "f1": 0.9090909090909091,
+        "specificity": 1,
+        "false_positive_rate": 0,
+        "false_negative_rate": 0.16666666666666666,
+        "balanced_accuracy": 0.9166666666666667,
+        "macro_f1": 0.916083916083916,
+        "mcc": 0.8451542547285166,
+        "coverage": 1,
+        "abstention_rate": 0,
+        "overall_binary_correct_rate": 0.9166666666666666
+      }
+    },
+    "final_all": {
+      "comparable": 30,
+      "excluded": 0,
+      "matches_including_expected_hold": 25,
+      "expected_hold_total": 6,
+      "expected_hold_matches": 3,
+      "matrix": {
+        "tp": 10,
+        "fn": 2,
+        "fp": 0,
+        "tn": 12,
+        "abstained_positive": 0,
+        "abstained_negative": 0
+      },
+      "metrics": {
+        "basis": "decided_binary",
+        "accuracy": 0.9166666666666666,
+        "precision": 1,
+        "recall": 0.8333333333333334,
+        "f1": 0.9090909090909091,
+        "specificity": 1,
+        "false_positive_rate": 0,
+        "false_negative_rate": 0.16666666666666666,
+        "balanced_accuracy": 0.9166666666666667,
+        "macro_f1": 0.916083916083916,
+        "mcc": 0.8451542547285166,
+        "coverage": 1,
+        "abstention_rate": 0,
+        "overall_binary_correct_rate": 0.9166666666666666
+      }
+    },
+    "paired_count": 30,
+    "paired_primary": {
+      "comparable": 30,
+      "excluded": 0,
+      "matches_including_expected_hold": 23,
+      "expected_hold_total": 6,
+      "expected_hold_matches": 1,
+      "matrix": {
+        "tp": 10,
+        "fn": 2,
+        "fp": 0,
+        "tn": 12,
+        "abstained_positive": 0,
+        "abstained_negative": 0
+      },
+      "metrics": {
+        "basis": "decided_binary",
+        "accuracy": 0.9166666666666666,
+        "precision": 1,
+        "recall": 0.8333333333333334,
+        "f1": 0.9090909090909091,
+        "specificity": 1,
+        "false_positive_rate": 0,
+        "false_negative_rate": 0.16666666666666666,
+        "balanced_accuracy": 0.9166666666666667,
+        "macro_f1": 0.916083916083916,
+        "mcc": 0.8451542547285166,
+        "coverage": 1,
+        "abstention_rate": 0,
+        "overall_binary_correct_rate": 0.9166666666666666
+      }
+    },
+    "paired_final": {
+      "comparable": 30,
+      "excluded": 0,
+      "matches_including_expected_hold": 25,
+      "expected_hold_total": 6,
+      "expected_hold_matches": 3,
+      "matrix": {
+        "tp": 10,
+        "fn": 2,
+        "fp": 0,
+        "tn": 12,
+        "abstained_positive": 0,
+        "abstained_negative": 0
+      },
+      "metrics": {
+        "basis": "decided_binary",
+        "accuracy": 0.9166666666666666,
+        "precision": 1,
+        "recall": 0.8333333333333334,
+        "f1": 0.9090909090909091,
+        "specificity": 1,
+        "false_positive_rate": 0,
+        "false_negative_rate": 0.16666666666666666,
+        "balanced_accuracy": 0.9166666666666667,
+        "macro_f1": 0.916083916083916,
+        "mcc": 0.8451542547285166,
+        "coverage": 1,
+        "abstention_rate": 0,
+        "overall_binary_correct_rate": 0.9166666666666666
+      }
+    },
+    "binary_error_to_hold_rows": [],
+    "binary_correct_to_hold_rows": [],
+    "binary_wrong_agreement_rows": [
+      23,
+      27
+    ],
+    "verifier_executed": 26,
+    "verifier_reasons": {
+      "evidence_grounding_failed": 5,
+      "signature_not_exact": 17,
+      "false_positive_but_denied": 10,
+      "true_positive_but_allowed": 7,
+      "parser_incomplete": 2,
+      "primary_inconclusive": 1
+    },
+    "transitions": {
+      "true_positive -> true_positive": 12,
+      "false_positive -> false_positive": 15,
+      "false_positive -> inconclusive": 2,
+      "inconclusive -> inconclusive": 1
+    },
+    "by_difficulty": {
+      "easy": {
+        "primary": {
+          "comparable": 10,
+          "excluded": 0,
+          "matches_including_expected_hold": 9,
+          "expected_hold_total": 2,
+          "expected_hold_matches": 1,
+          "matrix": {
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "tn": 4,
+            "abstained_positive": 0,
+            "abstained_negative": 0
+          },
+          "metrics": {
+            "basis": "decided_binary",
+            "accuracy": 1,
+            "precision": 1,
+            "recall": 1,
+            "f1": 1,
+            "specificity": 1,
+            "false_positive_rate": 0,
+            "false_negative_rate": 0,
+            "balanced_accuracy": 1,
+            "macro_f1": 1,
+            "mcc": 1,
+            "coverage": 1,
+            "abstention_rate": 0,
+            "overall_binary_correct_rate": 1
+          }
+        },
+        "final": {
+          "comparable": 10,
+          "excluded": 0,
+          "matches_including_expected_hold": 10,
+          "expected_hold_total": 2,
+          "expected_hold_matches": 2,
+          "matrix": {
+            "tp": 4,
+            "fn": 0,
+            "fp": 0,
+            "tn": 4,
+            "abstained_positive": 0,
+            "abstained_negative": 0
+          },
+          "metrics": {
+            "basis": "decided_binary",
+            "accuracy": 1,
+            "precision": 1,
+            "recall": 1,
+            "f1": 1,
+            "specificity": 1,
+            "false_positive_rate": 0,
+            "false_negative_rate": 0,
+            "balanced_accuracy": 1,
+            "macro_f1": 1,
+            "mcc": 1,
+            "coverage": 1,
+            "abstention_rate": 0,
+            "overall_binary_correct_rate": 1
+          }
+        }
+      },
+      "medium": {
+        "primary": {
+          "comparable": 10,
+          "excluded": 0,
+          "matches_including_expected_hold": 7,
+          "expected_hold_total": 2,
+          "expected_hold_matches": 0,
+          "matrix": {
+            "tp": 3,
+            "fn": 1,
+            "fp": 0,
+            "tn": 4,
+            "abstained_positive": 0,
+            "abstained_negative": 0
+          },
+          "metrics": {
+            "basis": "decided_binary",
+            "accuracy": 0.875,
+            "precision": 1,
+            "recall": 0.75,
+            "f1": 0.8571428571428571,
+            "specificity": 1,
+            "false_positive_rate": 0,
+            "false_negative_rate": 0.25,
+            "balanced_accuracy": 0.875,
+            "macro_f1": 0.873015873015873,
+            "mcc": 0.7745966692414834,
+            "coverage": 1,
+            "abstention_rate": 0,
+            "overall_binary_correct_rate": 0.875
+          }
+        },
+        "final": {
+          "comparable": 10,
+          "excluded": 0,
+          "matches_including_expected_hold": 7,
+          "expected_hold_total": 2,
+          "expected_hold_matches": 0,
+          "matrix": {
+            "tp": 3,
+            "fn": 1,
+            "fp": 0,
+            "tn": 4,
+            "abstained_positive": 0,
+            "abstained_negative": 0
+          },
+          "metrics": {
+            "basis": "decided_binary",
+            "accuracy": 0.875,
+            "precision": 1,
+            "recall": 0.75,
+            "f1": 0.8571428571428571,
+            "specificity": 1,
+            "false_positive_rate": 0,
+            "false_negative_rate": 0.25,
+            "balanced_accuracy": 0.875,
+            "macro_f1": 0.873015873015873,
+            "mcc": 0.7745966692414834,
+            "coverage": 1,
+            "abstention_rate": 0,
+            "overall_binary_correct_rate": 0.875
+          }
+        }
+      },
+      "hard": {
+        "primary": {
+          "comparable": 10,
+          "excluded": 0,
+          "matches_including_expected_hold": 7,
+          "expected_hold_total": 2,
+          "expected_hold_matches": 0,
+          "matrix": {
+            "tp": 3,
+            "fn": 1,
+            "fp": 0,
+            "tn": 4,
+            "abstained_positive": 0,
+            "abstained_negative": 0
+          },
+          "metrics": {
+            "basis": "decided_binary",
+            "accuracy": 0.875,
+            "precision": 1,
+            "recall": 0.75,
+            "f1": 0.8571428571428571,
+            "specificity": 1,
+            "false_positive_rate": 0,
+            "false_negative_rate": 0.25,
+            "balanced_accuracy": 0.875,
+            "macro_f1": 0.873015873015873,
+            "mcc": 0.7745966692414834,
+            "coverage": 1,
+            "abstention_rate": 0,
+            "overall_binary_correct_rate": 0.875
+          }
+        },
+        "final": {
+          "comparable": 10,
+          "excluded": 0,
+          "matches_including_expected_hold": 8,
+          "expected_hold_total": 2,
+          "expected_hold_matches": 1,
+          "matrix": {
+            "tp": 3,
+            "fn": 1,
+            "fp": 0,
+            "tn": 4,
+            "abstained_positive": 0,
+            "abstained_negative": 0
+          },
+          "metrics": {
+            "basis": "decided_binary",
+            "accuracy": 0.875,
+            "precision": 1,
+            "recall": 0.75,
+            "f1": 0.8571428571428571,
+            "specificity": 1,
+            "false_positive_rate": 0,
+            "false_negative_rate": 0.25,
+            "balanced_accuracy": 0.875,
+            "macro_f1": 0.873015873015873,
+            "mcc": 0.7745966692414834,
+            "coverage": 1,
+            "abstention_rate": 0,
+            "overall_binary_correct_rate": 0.875
+          }
+        }
+      }
+    },
+    "timing": {
+      "llm_primary": {
+        "count": 30,
+        "total_ms": 400397,
+        "mean_ms": 13346.566666666668,
+        "p50_ms": 4491,
+        "p95_ms": 125203
+      },
+      "llm_verifier": {
+        "count": 26,
+        "total_ms": 147663,
+        "mean_ms": 5679.346153846154,
+        "p50_ms": 5181,
+        "p95_ms": 8284
+      }
+    },
+    "processing_timing": {
+      "count": 30,
+      "total_ms": 551891,
+      "mean_ms": 18396.366666666665,
+      "p50_ms": 9950,
+      "p95_ms": 130438
+    },
+    "usage": {
+      "llm_primary": {
+        "input_tokens": {
+          "known_sum": 104985,
+          "measured_steps": 30,
+          "missing_steps": 0
+        },
+        "output_tokens": {
+          "known_sum": 19338,
+          "measured_steps": 30,
+          "missing_steps": 0
+        },
+        "total_tokens": {
+          "known_sum": 124323,
+          "measured_steps": 30,
+          "missing_steps": 0
+        }
+      },
+      "llm_verifier": {
+        "input_tokens": {
+          "known_sum": 91284,
+          "measured_steps": 26,
+          "missing_steps": 0
+        },
+        "output_tokens": {
+          "known_sum": 18008,
+          "measured_steps": 26,
+          "missing_steps": 0
+        },
+        "total_tokens": {
+          "known_sum": 109292,
+          "measured_steps": 26,
+          "missing_steps": 0
+        }
+      }
+    },
+    "missing_usage_steps": 0,
+    "repair_steps": 0,
+    "repair_recovered_steps": 0,
+    "failed_llm_steps": 0
+  },
+  "api_evaluation_summary": {
+    "binary_evaluable": 24,
+    "binary_decided": 24,
+    "binary_correct": 22,
+    "support_positive": 12,
+    "support_negative": 12,
+    "decided_support_positive": 12,
+    "decided_support_negative": 12,
+    "confusion_matrix": {
+      "tp": 10,
+      "fn": 2,
+      "fp": 0,
+      "tn": 12,
+      "abstained_positive": 0,
+      "abstained_negative": 0
+    },
+    "metrics": {
+      "basis": "decided_binary",
+      "accuracy": 0.9166666666666666,
+      "precision": 1,
+      "recall": 0.8333333333333334,
+      "f1": 0.9090909090909091,
+      "specificity": 1,
+      "false_positive_rate": 0,
+      "false_negative_rate": 0.16666666666666666,
+      "balanced_accuracy": 0.9166666666666667,
+      "macro_f1": 0.916083916083916,
+      "mcc": 0.8451542547285166,
+      "coverage": 1,
+      "abstention_rate": 0,
+      "overall_binary_correct_rate": 0.9166666666666666
+    },
+    "total": 30,
+    "labeled": 30,
+    "evaluable": 30,
+    "matches": 25,
+    "label_coverage": 1,
+    "outcomes": {
+      "unlabeled": 0,
+      "pending": 0,
+      "failed": 0,
+      "stub": 0,
+      "unknown_provenance": 0,
+      "input_contaminated": 0,
+      "match": 22,
+      "false_negative": 2,
+      "false_positive": 0,
+      "abstained": 0,
+      "expected_abstention_match": 3,
+      "expected_abstention_mismatch": 3
+    },
+    "source_groups": [
+      {
+        "binary_evaluable": 24,
+        "binary_decided": 24,
+        "binary_correct": 22,
+        "support_positive": 12,
+        "support_negative": 12,
+        "decided_support_positive": 12,
+        "decided_support_negative": 12,
+        "confusion_matrix": {
+          "tp": 10,
+          "fn": 2,
+          "fp": 0,
+          "tn": 12,
+          "abstained_positive": 0,
+          "abstained_negative": 0
+        },
+        "metrics": {
+          "basis": "decided_binary",
+          "accuracy": 0.9166666666666666,
+          "precision": 1,
+          "recall": 0.8333333333333334,
+          "f1": 0.9090909090909091,
+          "specificity": 1,
+          "false_positive_rate": 0,
+          "false_negative_rate": 0.16666666666666666,
+          "balanced_accuracy": 0.9166666666666667,
+          "macro_f1": 0.916083916083916,
+          "mcc": 0.8451542547285166,
+          "coverage": 1,
+          "abstention_rate": 0,
+          "overall_binary_correct_rate": 0.9166666666666666
+        },
+        "source_kind": "synthetic_expected",
+        "ai_visible": null,
+        "labeled": 30,
+        "evaluable": 30,
+        "matches": 25,
+        "false_negatives": 2,
+        "false_positives": 0,
+        "abstained": 0,
+        "expected_abstention_matches": 3,
+        "expected_abstention_mismatches": 3
+      }
+    ]
+  },
+  "profile_unchanged": true
+}

@@ -1,0 +1,30 @@
+# Only the runtime build inputs may leave the host as Docker build context.
+**
+!.dockerignore
+!Dockerfile
+!pyproject.toml
+!alembic.ini
+!alembic/
+!alembic/**
+!app/
+!app/**
+
+# Keep sensitive/generated files excluded even beneath runtime directories.
+**/.env*
+**/*.env
+**/*.db
+**/*.db-*
+**/*.sqlite*
+**/*.key
+**/*.pem
+**/*.p12
+**/*.pfx
+**/id_rsa*
+**/id_ed25519*
+**/keys
+**/secrets
+**/.git
+**/.venv
+**/__pycache__
+**/*.pyc
+**/*.log

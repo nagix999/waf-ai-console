@@ -153,14 +153,14 @@ def test_rename_conflicts_and_idempotent_revocation_preserve_history(client, eve
     assert issued["api_key"] not in repeated.text and original_hash not in repeated.text
     denied_rename = client.patch(f"{BASE}/{key_id}", json={"name": "Resurrect"})
     assert denied_rename.status_code == 409 and denied_rename.json()["detail"] == "service_api_key_revoked"
-    assert client.delete(f"{BASE}/{key_id}").status_code == 405
-    assert [entry["name"] for entry in client.get(BASE).json()["items"]] == ["After", "Taken"]
+    assert client.delete(f"{BASE}/{key_id}").status_code == 204
+    assert [entry["name"] for entry in client.get(BASE).json()["items"]] == ["Taken"]
     with client.app.state.session_factory() as db:
         persisted = db.get(ServiceApiKey, key_id)
         assert persisted.key_hash == original_hash and persisted.revoked_by == "admin"
         assert db.get(Analysis, created["id"]).status == "pending"
         actions = db.scalars(select(AccessAudit.action).where(AccessAudit.resource_id == key_id)).all()
-        assert actions == ["issue_service_api_key", "rename_service_api_key", "revoke_service_api_key"]
+        assert actions == ["issue_service_api_key", "rename_service_api_key", "revoke_service_api_key", "delete_service_api_key"]
     logout(client)
     assert client.get("/api/v1/auth/me", headers=headers(issued)).status_code == 401
     assert client.get("/api/v1/auth/me", headers=headers(second)).status_code == 200

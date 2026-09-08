@@ -30,6 +30,9 @@ from ..services.payload_decoding import decode_payload
 from ..services.uploads import UploadFormatError, extract_test_upload_row, normalize_upload_row, parse_upload
 from ..services.upload_expected_labels import enqueue_test_upload_row
 from ..services.input_schemas import InputSchemaError, pin_schema
+from ..retry_schemas import RetryEligibility, RetryRequest, RetryResponse
+from ..services.analysis_retries import RetryError, eligibility, enqueue_retry
+from sqlalchemy.exc import SQLAlchemyError
 
 router = APIRouter(tags=["analyses"])
 DbSession = Annotated[Session, Depends(get_db)]
@@ -142,6 +145,7 @@ async def submit_analysis(
             db, request.app.state.crypto, require_source(principal), payload,
             analysis_purpose=purpose, ingest_channel=channel,
             payload_max_bytes=request.app.state.settings.payload_max_bytes,
+            service_api_key_id=principal.service_api_key_id,
         )
     except AnalysisIngestError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.issues or exc.code) from None
@@ -209,6 +213,34 @@ def get_raw_event(
         encryption_key_version=row.encryption_key_version,
         decoding=decode_payload(payload),
     )
+
+
+@router.get("/analyses/{analysis_id}/retry-eligibility", response_model=RetryEligibility)
+def get_retry_eligibility(analysis_id: str, request: Request, db: DbSession,
+                          _principal: Annotated[Principal, Depends(require_scope("admin"))]) -> RetryEligibility:
+    try:
+        return eligibility(db, request.app.state.crypto, analysis_id, request.app.state.settings.agent_mode)
+    except RetryError as exc:
+        raise HTTPException(exc.status_code, exc.code) from None
+    except SQLAlchemyError:
+        raise HTTPException(503, "retry_storage_unavailable") from None
+
+
+@router.post("/analyses/{analysis_id}/retry", response_model=RetryResponse, status_code=202)
+def retry_failed_analysis(analysis_id: str, payload: RetryRequest, request: Request, db: DbSession,
+                           principal: Annotated[Principal, Depends(require_scope("admin"))]) -> RetryResponse:
+    try:
+        return enqueue_retry(db, request.app.state.crypto, request.app.state.settings,
+                             analysis_id, payload, principal.username or "unknown")
+    except RetryError as exc:
+        db.rollback()
+        raise HTTPException(exc.status_code, exc.code) from None
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "retry_concurrent_request_conflict") from None
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(503, "retry_storage_unavailable") from None
 
 
 @router.post("/analyses/{analysis_id}/reviews", response_model=ReviewResponse, status_code=status.HTTP_201_CREATED)
@@ -410,6 +442,7 @@ async def submit_upload(
                     analysis_purpose=purpose, ingest_channel=channel,
                     payload_max_bytes=request.app.state.settings.payload_max_bytes,
                     schema_snapshot=schema_snapshot,
+                    service_api_key_id=principal.service_api_key_id,
                 )
             analysis_ids.append(analysis.id)
             if duplicate:

@@ -33,7 +33,7 @@ test("only explicit unlabeled metadata yields a dash, never absent or unknown in
 });
 
 test("compact provenance does not turn synthetic, assisted, unknown or self-reported answers into gold", () => {
-  assert.equal(compactEvaluation(comparison("match", { source_kind: "synthetic_expected", ai_visible: true })).sourceText, "합성 기대값 · 지원 판정");
+  assert.equal(compactEvaluation(comparison("match", { source_kind: "synthetic_expected", ai_visible: true })).sourceText, "기대 답안 · 지원 판정");
   assert.equal(compactEvaluation(comparison("match", { ai_visible: false })).sourceText, "참고 답안 · AI 미열람 (신고)");
   assert.equal(compactEvaluation(comparison("match", { ai_visible: null })).sourceText, "참고 답안 · AI 열람 미확인");
   assert.equal(compactEvaluation(comparison("match", { source_kind: "toString", ai_visible: null })).sourceText, "출처 미기록 · AI 열람 미확인");
@@ -62,7 +62,7 @@ test("mock execution display is independent of label presence and never inferred
 test("synthetic expectations and assisted judgments are never presented as measured accuracy", () => {
   assert.equal(evaluationOutcomeText({ outcome: "match", reference_label: { source_kind: "synthetic_expected", ai_visible: false } }), "기대 일치");
   assert.equal(evaluationOutcomeText({ outcome: "match", reference_label: { source_kind: "reference", ai_visible: true } }), "지원 판정 일치");
-  assert.equal(evaluationOutcomeText({ outcome: "match", reference_label: { source_kind: "reference", ai_visible: false } }), "맞음 · Label 기준");
+  assert.equal(evaluationOutcomeText({ outcome: "match", reference_label: { source_kind: "reference", ai_visible: false } }), "맞음 · 답안 기준");
   assert.match(evaluationOutcomeText({ outcome: "false_negative", reference_label: { source_kind: "synthetic_expected" } }), /기대 불일치.*미탐 방향/);
   assert.match(evaluationOutcomeText({ outcome: "false_positive", reference_label: { source_kind: "reference" } }), /틀림.*과탐 방향/);
   assert.equal(referenceVisibilityText(null), "AI 열람 여부 미확인");
@@ -101,7 +101,7 @@ test("answer attachment requires explicit source and AI-visible choice without d
   assert.equal(validateLabelAttachment(file, form), "");
   for (const ai_visible of ["unknown", "true", "false"]) assert.equal(validateLabelAttachment(file, { ...form, ai_visible }), "");
   assert.match(validateLabelAttachment(file, { ...form, ai_visible: "" }), /명시적으로/);
-  assert.match(validateLabelAttachment(file, { ...form, source_system: " " }), /Source System/);
+  assert.match(validateLabelAttachment(file, { ...form, source_system: " " }), /분석 출처/);
   assert.match(validateLabelAttachment(file, { ...form, source_ref: " " }), /출처/);
   assert.match(validateLabelAttachment(file, { ...form, source_ref: "synthetic <img>" }), /120자/);
   assert.match(validateLabelAttachment(file, { ...form, source_ref: "x".repeat(121) }), /120자/);
@@ -117,9 +117,9 @@ test("answer attachment checks file format and exact two-MiB boundary without re
 
 test("safe server attachment errors provide bounded corrective guidance", () => {
   assert.match(labelAttachmentError("too_many_label_rows"), /최대 500행/);
-  assert.match(labelAttachmentError("analysis_not_found_in_source"), /Source System/);
+  assert.match(labelAttachmentError("analysis_not_found_in_source"), /분석 출처/);
   assert.match(labelAttachmentError("label_preview_stale"), /이력이 변경/);
-  assert.match(labelAttachmentError("inconclusive_requires_synthetic_expected"), /합성 기대값/);
+  assert.match(labelAttachmentError("inconclusive_requires_synthetic_expected"), /기대 답안에서만 허용/);
   assert.equal(labelAttachmentError("HTTP 403"), "HTTP 403");
 });
 

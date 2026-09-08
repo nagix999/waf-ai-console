@@ -50,7 +50,7 @@ def issue_key(db: Session, payload: ServiceApiKeyCreate, actor: str) -> tuple[Se
 
 def get_key(db: Session, key_id: str) -> ServiceApiKey:
     key = db.get(ServiceApiKey, key_id, populate_existing=True)
-    if key is None:
+    if key is None or key.deleted_at is not None:
         raise ServiceApiKeyError("service_api_key_not_found", 404)
     return key
 
@@ -79,7 +79,7 @@ def authenticate_key(db: Session, supplied: str) -> ServiceApiKey | None:
     if match is None:
         return None
     key = db.get(ServiceApiKey, str(uuid.UUID(hex=match[1])), populate_existing=True)
-    if key is None or key.revoked_at is not None:
+    if key is None or key.revoked_at is not None or key.deleted_at is not None:
         return None
     if not isinstance(key.key_hash, str) or DIGEST_PATTERN.fullmatch(key.key_hash) is None:
         return None
@@ -102,3 +102,19 @@ def authenticate_key(db: Session, supplied: str) -> ServiceApiKey | None:
                           or_(ServiceApiKey.last_used_at.is_(None), ServiceApiKey.last_used_at <= now - timedelta(seconds=LAST_USED_INTERVAL_SECONDS)))
                    .values(last_used_at=now).execution_options(synchronize_session=False))
     return key
+
+
+def delete_key(db: Session, key_id: str, actor: str) -> bool:
+    """Retain the tombstone for attribution/audit; never delete analyses."""
+    key = db.get(ServiceApiKey, key_id, populate_existing=True)
+    if key is None:
+        raise ServiceApiKeyError("service_api_key_not_found", 404)
+    if key.deleted_at is not None:
+        return False
+    now = utcnow()
+    changed = db.execute(update(ServiceApiKey).where(
+        ServiceApiKey.id == key_id, ServiceApiKey.deleted_at.is_(None),
+    ).values(deleted_at=now, deleted_by=actor,
+             revoked_at=key.revoked_at or now, revoked_by=key.revoked_by or actor)
+      .execution_options(synchronize_session=False))
+    return changed.rowcount == 1

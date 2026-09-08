@@ -164,6 +164,11 @@ def summarize_evaluations(db: Session, relation, conditions) -> EvaluationSummar
         func.count().label("count"),
     ).select_from(Analysis).join(relation, relation.c.analysis_id == Analysis.id).where(*conditions)
         .group_by(relation.c.outcome, relation.c.source_kind, relation.c.ai_visible, relation.c.reference_verdict)).mappings()
+    return summarize_evaluation_rows(rows)
+
+
+def summarize_evaluation_rows(rows) -> EvaluationSummary:
+    """Use identical count-based formulas for global and date-grouped cohorts."""
     summary = EvaluationSummary()
     groups = {}
     for row in rows:

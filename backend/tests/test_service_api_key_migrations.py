@@ -7,7 +7,7 @@ from alembic import command
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import inspect, text
+from sqlalchemy import ForeignKeyConstraint, MetaData, inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from app.config import Settings
@@ -35,10 +35,27 @@ def synthetic_row(**overrides):
 def test_upgrade_is_empty_additive_and_preserves_history(tmp_path, monkeypatch):
     monkeypatch.setenv("WAF_BOOTSTRAP_API_KEY", "synthetic-environment-key-never-imported")
     engine = build_engine(f"sqlite+pysqlite:///{tmp_path / 'service-keys-legacy.db'}")
-    Base.metadata.create_all(engine)
+    # Rehearse 0008's historical boundary, not a downgrade of the current app.
+    # 0013 later added Analysis -> ServiceApiKey attribution. Keeping that
+    # future FK while removing its table makes pre-0008 inserts impossible on
+    # SQLite even when the attribution column is NULL. Clone metadata locally;
+    # never change application metadata or turn off foreign-key enforcement.
+    legacy_metadata = MetaData()
+    for table in Base.metadata.tables.values():
+        table.to_metadata(legacy_metadata)
+    legacy_analyses = legacy_metadata.tables["analyses"]
+    for constraint in tuple(legacy_analyses.constraints):
+        if isinstance(constraint, ForeignKeyConstraint) and any(
+            element.parent.name == "service_api_key_id" for element in constraint.elements
+        ):
+            legacy_analyses.constraints.remove(constraint)
+    legacy_metadata.create_all(engine)
     migration = migration_module()
     try:
         with engine.begin() as connection:
+            assert connection.scalar(text("PRAGMA foreign_keys")) == 1
+            assert all(row["from"] != "service_api_key_id" for row in connection.execute(
+                text("PRAGMA foreign_key_list(analyses)")).mappings())
             with Operations.context(MigrationContext.configure(connection)):
                 migration.downgrade()
             seed_history(connection)

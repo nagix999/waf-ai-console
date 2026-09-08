@@ -1,4 +1,9 @@
 .input-schema-settings { min-width: 0; --border: var(--line); --surface: var(--panel); --surface-hover: var(--accent-soft); }
+.schema-dialog { width: min(960px, calc(100vw - 32px)); }
+.schema-dialog .schema-validation { border: 0; padding: 0; margin: 0; }
+.schema-dialog .schema-safety-note { padding: 12px; background: var(--warn-soft); color: var(--warn); border-radius: 8px; }
+.schema-dialog .schema-identifiers { border: 0; padding-top: 0; }
+.schema-overview .schema-actions { margin-top: 0; }
 .schema-overview, .schema-workspace > .panel { padding: 24px; }
 .schema-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .schema-heading p, .schema-help { color: var(--muted); font-size: 13px; line-height: 1.7; }
@@ -16,20 +21,26 @@
 .schema-field-table pre, .schema-diff pre { max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
 .schema-identifiers dd, .schema-analysis-metadata dd { margin: 5px 0 12px; overflow-wrap: anywhere; font-family: monospace; font-size: 12px; }
 .schema-identifiers, .schema-validation, .schema-activation { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
-.schema-validation label, .schema-draft label { display: grid; gap: 8px; margin: 12px 0; font-size: 13px; }
-.schema-validation textarea, .schema-draft textarea { width: 100%; resize: vertical; }
-.schema-validation > label > textarea, .schema-field-editor textarea[spellcheck="false"] { font-family: monospace; }
+.schema-validation label, .schema-draft label, .schema-editor-grid label { display: grid; gap: 8px; margin: 12px 0; font-size: 13px; }
+.schema-validation textarea, .schema-draft textarea, .schema-editor-grid textarea { width: 100%; resize: vertical; }
+.schema-validation > label > textarea, .schema-editor-grid textarea[spellcheck="false"] { font-family: monospace; }
 .schema-check { display: flex !important; flex-direction: row; align-items: center; gap: 10px; line-height: 1.6; }
 .schema-check input { width: auto; flex-shrink: 0; }
 .schema-field-editor { margin: 16px 0; padding: 14px; border: 1px solid var(--border); border-radius: 10px; }
-.schema-field-editor summary { display: flex; justify-content: space-between; gap: 10px; cursor: pointer; font-size: 13px; }
-.schema-field-editor summary span { color: var(--muted); font-size: 11px; }
+.schema-field-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.schema-field-heading > div { min-width: 0; overflow-wrap: anywhere; }
+.schema-field-heading small { display: block; margin-top: 6px; color: var(--muted); font-size: 11px; }
+.schema-field-heading > button { flex-shrink: 0; }
+.schema-change-list { display: grid; gap: 10px; }
+.schema-change-list > button { display: flex; flex-wrap: wrap; gap: 10px; text-align: left; }
+.schema-change-list > button > span:last-child { margin-left: auto; font-size: 12px; }
+.schema-json { white-space: pre-wrap; overflow-wrap: anywhere; }
+.schema-dialog > .ux-dialog-body > fieldset { min-width: 0; border: 0; padding: 0; margin: 0; }
 .schema-draft fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .schema-editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 16px; }
 .schema-editor-grid small { font-size: 11px; color: var(--muted); }
 .schema-full { grid-column: 1 / -1; }
 .schema-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
-.schema-diff > details { padding: 10px 0; border-bottom: 1px solid var(--border); }
 .schema-diff > p { font-size: 13px; color: var(--muted); }
 .schema-diff-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .schema-diff-columns > div { min-width: 0; }

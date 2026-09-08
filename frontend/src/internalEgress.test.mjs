@@ -6,6 +6,7 @@ import { runInNewContext } from "node:vm";
 import { buildSync } from "esbuild";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
 import { api } from "./api.js";
 import {
   allowedInternalTarget, canonicalPrivateIP, createInternalEgressController, emptyInternalEgressState,
@@ -172,8 +173,11 @@ const markup = state => renderToStaticMarkup(createElement(InternalEgressView, {
 test("settings render usage locks, private range guidance, missing data and errors without claiming connection validation", () => {
   const item = target({ description: '<script>SYNTHETIC</script>', in_use_profiles: [{ id: "p", name: "synthetic-draft", status: "draft" }] });
   const html = markup({ ...emptyInternalEgressState(), items: [item], editing: item, draft: { ip_address: item.ip_address, port: "8000", description: item.description } });
-  assert.match(html, /RFC1918 IPv4/); assert.match(html, /ULA IPv6/); assert.match(html, /OpenAI 설정에는 영향을 주지/); assert.match(html, /이 화면은 모델을 호출하지/);
-  assert.match(html, /readOnly=""[^>]*value="10.0.0.10"/i); assert.match(html, /disabled="" aria-label="10.0.0.10:8000 삭제"/);
+  assert.match(html, /<h2>내부 연결 허용<\/h2>/); assert.match(html, /설명만 수정 가능 · 주소 변경·삭제는 연결 프로필을 모두 비활성화한 뒤/); assert.doesNotMatch(html, /내부 연결 허용 설명|사용 중인 내부 대상 설명|revision|<form/);
+  assert.match(html, /disabled="" aria-label="10.0.0.10:8000 삭제"/);
+  const source = readFileSync(new URL("./InternalEgressSettings.jsx", import.meta.url), "utf8");
+  assert.match(source, /RFC1918 IPv4와 ULA IPv6/); assert.match(html, /OpenAI 설정에는 영향이 없으며 방화벽 설정·연결 검증을 대신하지/); assert.match(source, /readOnly=\{inUse\}/); assert.match(source, /닫기 · 입력 유지/);
+  assert.match(source, /<HelpTooltip label="내부 IP"/); assert.match(source, /주소 변경·삭제는 연결 프로필을 모두 비활성화한 뒤/);
   assert.match(html, /&lt;script&gt;SYNTHETIC&lt;\/script&gt;/); assert.doesNotMatch(html, /<script>/);
   const failed = markup({ ...emptyInternalEgressState(), error: "조회 실패", needsRefresh: true });
   assert.match(failed, /role="alert">조회 실패/); assert.doesNotMatch(failed, /등록된 내부 대상이 없습니다/);

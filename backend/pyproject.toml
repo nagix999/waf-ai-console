@@ -15,6 +15,7 @@ dependencies = [
   "moduagent==0.6.2",
   "pydantic-settings==2.7.1",
   "python-multipart==0.0.20",
+  "reportlab==5.0.1",
   "sqlalchemy==2.0.38",
   "uvicorn[standard]==0.34.0",
 ]
@@ -29,7 +30,7 @@ include = ["app*"]
 namespaces = true
 
 [tool.setuptools.package-data]
-app = ["data/*.json", "data/*.md"]
+app = ["data/*.json", "data/*.md", "assets/fonts/*.ttf", "assets/fonts/*.txt"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

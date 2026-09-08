@@ -1,0 +1,7 @@
+.analysis-downloads { min-width: 0; }
+.analysis-download-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.analysis-download-actions > button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.download-scope { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); }
+.download-status { display: block; margin-top: 7px; color: var(--muted); font-size: 12px; }
+.download-error { margin: 8px 0 0; font-size: 12px; color: var(--danger, #b33b45); line-height: 1.6; }
+@media (max-width: 700px) { .analysis-download-actions { gap: 6px; } }

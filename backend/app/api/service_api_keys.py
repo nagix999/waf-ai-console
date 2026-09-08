@@ -9,7 +9,7 @@ from ..api_key_schemas import ServiceApiKeyCreate, ServiceApiKeyIssued, ServiceA
 from ..database import get_db
 from ..models import AccessAudit, ServiceApiKey
 from ..security import Principal, require_scope
-from ..services.service_api_keys import ServiceApiKeyError, issue_key, rename_key, revoke_key, to_key_item
+from ..services.service_api_keys import ServiceApiKeyError, delete_key, issue_key, rename_key, revoke_key, to_key_item
 
 
 router = APIRouter(prefix="/admin/service-api-keys", tags=["service-api-keys"])
@@ -40,7 +40,7 @@ def api_error(db: Session, exc: Exception) -> HTTPException:
 def list_keys(response: Response, db: DbSession, _principal: AdminPrincipal) -> ServiceApiKeyList:
     no_store(response)
     try:
-        rows = db.scalars(select(ServiceApiKey).order_by(ServiceApiKey.name, ServiceApiKey.id)).all()
+        rows = db.scalars(select(ServiceApiKey).where(ServiceApiKey.deleted_at.is_(None)).order_by(ServiceApiKey.name, ServiceApiKey.id)).all()
     except SQLAlchemyError as exc:
         raise api_error(db, exc) from None
     return ServiceApiKeyList(items=[to_key_item(row) for row in rows])
@@ -82,5 +82,16 @@ def revoke_service_key(key_id: str, response: Response, db: DbSession, principal
             audit(db, principal, "revoke_service_api_key", key.id)
         db.commit()
         return result
+    except (ServiceApiKeyError, SQLAlchemyError) as exc:
+        raise api_error(db, exc) from None
+
+
+@router.delete("/{key_id}", status_code=204)
+def delete_service_key(key_id: str, db: DbSession, principal: AdminPrincipal) -> Response:
+    try:
+        if delete_key(db, key_id, principal.username or "unknown"):
+            audit(db, principal, "delete_service_api_key", key_id)
+        db.commit()
+        return Response(status_code=204, headers=NO_STORE_HEADERS)
     except (ServiceApiKeyError, SQLAlchemyError) as exc:
         raise api_error(db, exc) from None

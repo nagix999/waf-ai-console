@@ -1,6 +1,6 @@
 import { initialListState } from "./analysisView.js";
 import { modelProfileError, providerOf } from "./llmProfiles.js";
-import { newTestRequestKey, validateTestName } from "./testRuns.js";
+import { autoTestName, newTestRequestKey, validateTestName } from "./testRuns.js";
 
 const validFingerprint = value => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 
@@ -11,7 +11,7 @@ export function modelTestPayload(mode, includeDataset = false, expectedFingerpri
   return { mode, include_dataset: includeDataset, ...(expectedFingerprint === undefined ? {} : { expected_profile_fingerprint: expectedFingerprint }), ...(runOptions ? { name: runOptions.name.trim(), idempotency_key: runOptions.idempotency_key } : {}) };
 }
 
-export const emptyFullValidationState = () => ({ profile: null, name: "", idempotencyKey: "", busy: false, error: "", needsReconfirm: false });
+export const emptyFullValidationState = () => ({ profile: null, name: "", idempotencyKey: "", submittedIncludeDataset: null, busy: false, error: "", needsReconfirm: false });
 
 export function createFullValidationController({ api, onChange, onSubmitted, onRequireRefresh }) {
   let state = emptyFullValidationState(); let disposed = false;
@@ -19,18 +19,20 @@ export function createFullValidationController({ api, onChange, onSubmitted, onR
   function open(profile) {
     if (state.busy || disposed) return;
     const missingFingerprint = !validFingerprint(profile.profile_fingerprint);
-    publish({ profile: { id: profile.id, name: profile.name, model_name: profile.model_name, provider: providerOf(profile), profile_fingerprint: profile.profile_fingerprint }, name: "", idempotencyKey: newTestRequestKey(), needsReconfirm: missingFingerprint,
+    publish({ profile: { id: profile.id, name: profile.name, model_name: profile.model_name, provider: providerOf(profile), profile_fingerprint: profile.profile_fingerprint }, name: "", idempotencyKey: newTestRequestKey(), submittedIncludeDataset: null, needsReconfirm: missingFingerprint,
       error: missingFingerprint ? "설정 식별 정보를 확인하지 못했습니다. 목록을 다시 조회합니다. 취소한 뒤 최신 프로필의 전체 검증을 다시 열어 확인하세요." : "" });
     if (missingFingerprint) onRequireRefresh?.();
   }
   function close() { if (!state.busy) publish({ profile: null, error: "", needsReconfirm: false }); }
   async function submit(includeDataset) {
     if (disposed || state.busy || !state.profile || state.needsReconfirm || !validFingerprint(state.profile.profile_fingerprint) || typeof includeDataset !== "boolean") return false;
-    const nameError = validateTestName(state.name); if (nameError) { publish({ error: nameError }); return false; }
+    const idempotencyKey = state.submittedIncludeDataset !== null && state.submittedIncludeDataset !== includeDataset ? newTestRequestKey() : state.idempotencyKey;
+    const name = autoTestName(state.name, idempotencyKey);
+    const nameError = validateTestName(name); if (nameError) { publish({ error: nameError }); return false; }
     const profile = state.profile;
-    publish({ busy: true, error: "" });
+    publish({ busy: true, error: "", idempotencyKey, submittedIncludeDataset: includeDataset });
     try {
-      const result = await api.runModelProfileTest(profile.id, "full", includeDataset, profile.profile_fingerprint, { name: state.name.trim(), idempotency_key: state.idempotencyKey });
+      const result = await api.runModelProfileTest(profile.id, "full", includeDataset, profile.profile_fingerprint, { name, idempotency_key: idempotencyKey });
       if (disposed) return false;
       publish({ profile: null, busy: false });
       onSubmitted?.(result, profile, includeDataset); return true;
@@ -43,7 +45,7 @@ export function createFullValidationController({ api, onChange, onSubmitted, onR
       return false;
     }
   }
-  return { open, close, submit, setName(name) { if (!state.busy && !disposed) publish({ name, idempotencyKey: newTestRequestKey(), error: "" }); }, getState: () => state, dispose() { disposed = true; state = emptyFullValidationState(); } };
+  return { open, close, submit, setName(name) { if (!state.busy && !disposed) publish({ name, idempotencyKey: newTestRequestKey(), submittedIncludeDataset: null, error: "" }); }, getState: () => state, dispose() { disposed = true; state = emptyFullValidationState(); } };
 }
 
 export function datasetListState(source) {
@@ -60,7 +62,7 @@ export function datasetEvaluationStatus(status) {
 
 export function uploadLabelNotice(result) {
   if (!Number.isInteger(result?.label_attached) || !Number.isInteger(result?.label_unchanged)) return "";
-  return `합성 기대값 연결 ${result.label_attached}건 · 기존 답안과 동일 ${result.label_unchanged}건. 분석이 완료되면 최종 판정과 비교합니다.`;
+  return `기대 답안 연결 ${result.label_attached}건 · 기존 답안과 동일 ${result.label_unchanged}건. 분석이 완료되면 최종 판정과 비교합니다.`;
 }
 
 export function expectedVerdictUploadError(item) {

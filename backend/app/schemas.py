@@ -84,6 +84,9 @@ class AnalysisSummary(UTCResponse):
     review_state: Literal["unreviewed", "confirmed", "deferred"] = "unreviewed"
     evaluation: EvaluationMetadata = Field(default_factory=EvaluationMetadata)
     test_run_id: str | None = None
+    service_api_key_id: str | None = None
+    retry_of_analysis_id: str | None = None
+    retry_analysis_id: str | None = None
 
 
 class AnalysisResultV2(WAFAnalysisOutput):

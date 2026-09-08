@@ -19,6 +19,11 @@ const { EvaluationSummary } = bundle("./ReferenceLabels.jsx");
 const { MetricCards, ConfusionMatrix, AdditionalMetrics, MetricHelp } = bundle("./EvaluationMetrics.jsx");
 const { TestRunRows, TestRunItemRows, TestRunHistory, TestRunHistoryEmpty, TestRunDetail, initialTestRunHistoryState, initialTestRunFilters, testRunHistoryChange, testRunFilterChange, watchTestRunRead } = bundle("./TestRuns.jsx");
 const render = (Component, props) => renderToStaticMarkup(createElement(Component, props));
+function descendants(node) {
+  if (Array.isArray(node)) return node.flatMap(descendants);
+  if (!node || typeof node !== "object") return [];
+  return [node, ...descendants(node.props?.children)];
+}
 const summaryFixture = () => ({ total: 13, labeled: 11, evaluable: 8, matches: 5, binary_evaluable: 7, binary_decided: 5, support_positive: 4, support_negative: 3, label_coverage: 11 / 13,
   outcomes: { match: 4, false_negative: 1, abstained: 2, expected_abstention_match: 1, pending: 1, failed: 1, stub: 1, unlabeled: 2 }, source_groups: [],
   confusion_matrix: { tp: 2, fn: 1, fp: 0, tn: 2, abstained_positive: 1, abstained_negative: 1 },
@@ -45,7 +50,17 @@ test("main and extra metric cards render server values without deriving scores f
   const { metrics } = summaryFixture(); const html = render(MetricCards, { metrics });
   for (const [, label] of mainMetrics) assert.ok(html.includes(label));
   assert.match(html, /80.0%/); assert.match(html, /71.4%/); assert.match(html, /28.6%/);
-  const additional = render(AdditionalMetrics, { metrics: { ...metrics, mcc: -.25 } }); assert.match(additional, /-0.250/); assert.match(additional, /Macro F1/); assert.match(additional, /보류 포함 정답률/);
+  const closed = render(AdditionalMetrics, { metrics: { ...metrics, mcc: -.25 } });
+  assert.match(closed, /추가 지표/); assert.doesNotMatch(closed, /-0.250|Macro F1/);
+  // Native dialog content is not part of SSR. Inspect the actual prepared body,
+  // without changing component state or pretending the dialog starts open.
+  let additionalTree;
+  function CaptureAdditional() { additionalTree = AdditionalMetrics({ metrics: { ...metrics, mcc: -.25 } }); return null; }
+  render(CaptureAdditional);
+  const dialog = additionalTree.props.children.find(child => child.props?.title === "추가 평가 지표");
+  assert.equal(dialog.props.open, false);
+  const additional = renderToStaticMarkup(dialog.props.children);
+  assert.match(additional, /-0.250/); assert.match(additional, /Macro F1/); assert.match(additional, /보류 포함 정답률/);
   const unavailable = render(MetricCards, { metrics: {} }); assert.equal((unavailable.match(/계산 불가/g) || []).length, 6); assert.doesNotMatch(unavailable, /0.0%/);
 });
 
@@ -81,8 +96,26 @@ test("test and production quality summary retain provenance and all exclusion an
   for (const scopeLabel of ["프로덕션", "선택한 테스트 실행·난이도·유형"]) {
     const html = render(EvaluationSummary, { summary, scopeLabel });
     assert.ok(html.includes(scopeLabel)); assert.match(html, /전체 13건 · 현재 페이지 한정 아님/); assert.match(html, /확정 판정 기준/);
-    assert.match(html, /진행 중 1 · 실행 실패 1 · 모의 실행 1/); assert.match(html, /정답 포함 입력/); assert.match(html, /미라벨/);
-    assert.match(html, /기대 보류 일치 1건/); assert.match(html, /출처·AI 열람 여부별 지표/); assert.match(html, /Production 전체 품질로 일반화하지/);
+    assert.match(html, /답안 없음/); assert.match(html, /제외·보류 내역/); assert.match(html, /출처별 지표/);
+    let tree;
+    function CaptureSummary() { tree = EvaluationSummary({ summary, scopeLabel }); return null; }
+    render(CaptureSummary);
+    const nodes = descendants(tree);
+    const excluded = nodes.find(node => node.props?.title === "평가 제외·보류 내역");
+    assert.equal(excluded.props.open, false);
+    const exclusions = renderToStaticMarkup(excluded.props.children);
+    assert.match(exclusions, /진행 중 1 · 실행 실패 1 · 모의 실행 1/); assert.match(exclusions, /정답 포함 입력/);
+    assert.match(exclusions, /기대 보류 일치 1건/); assert.match(exclusions, /일치율 분모에서 제외/);
+    const sources = nodes.find(node => node.props?.title === "답안 출처별 지표");
+    assert.equal(sources.props.open, false);
+    const provenance = renderToStaticMarkup(sources.props.children);
+    assert.match(provenance, /답안 출처·AI 열람 여부별 표본입니다/); assert.match(provenance, /서로 다른 그룹을 하나의 독립 정확도로 해석하지 마세요/);
+    assert.doesNotMatch(provenance, /답안 출처·AI 열람 여부별 비교 설명/); assert.match(provenance, /미탐 방향 1 · 과탐 방향 0 · 모델 보류 2건/);
+    const scopeHelp = nodes.find(node => node.props?.label === "평가 기준");
+    assert.match(scopeHelp.props.children, /프로덕션 전체 품질로 일반화하지/);
+    assert.match(scopeHelp.props.children, /일치율 = 기준과 같은 최종 판정/);
+    assert.match(scopeHelp.props.children, /서로 다른 답안 출처가 섞인 경우 출처별 지표/);
+    assert.equal(nodes.filter(node => node.props?.label === "평가 범위").length, 0);
   }
   assert.equal(JSON.stringify(summary), before);
 });
@@ -92,7 +125,9 @@ test("named run rows and case names are escaped and rejected rows do not display
   const html = render(TestRunRows, { items: [{ id: "run", name: hostile, kind: "upload", status: "completed", execution_mode: "moduagent", created_at: "2026-09-07T00:00:00Z", profile_metadata: { model_name: hostile }, prompt_version: "synthetic-policy", accepted: 1, total: 1, rejected: 0, failed: 0, completed: 1, total_elapsed_ms: 1000, evaluation_summary: summaryFixture() }], onSelect() {} });
   assert.match(html, /&lt;script&gt;synthetic/); assert.doesNotMatch(html, /<script/); assert.match(html, /80.0%/); assert.match(html, /1.00초/);
   const cases = render(TestRunItemRows, { items: [{ id: "case", row_number: 1, case_name: hostile, ingest_status: "rejected", verdict: "true_positive", error_code: "invalid_expected_verdict" }], onOpen() {} });
-  assert.match(cases, /접수 거부 · 평가 제외/); assert.doesNotMatch(cases, /<script|>정탐</); assert.match(cases, /invalid_expected_verdict/);
+  assert.match(cases, /접수 거부 · 평가 제외/); assert.doesNotMatch(cases, /<script|>정탐</); assert.match(cases, /오류 정보/); assert.doesNotMatch(cases, /invalid_expected_verdict/);
+  const unmeasured = render(TestRunRows, { items: [{ id: "missing", name: "정보 미기록", kind: "direct", status: "completed", evaluation_summary: null }], onSelect() {} });
+  assert.match(unmeasured, /평가 정보 미기록/); assert.doesNotMatch(unmeasured, /확정 판정 0건/);
 });
 
 test("test list state preserves draft, applied search and page independently across navigation", () => {
@@ -124,6 +159,11 @@ test("run detail filters preserve population scope during row and page changes a
   assert.equal(limit.limit, 100); assert.equal(limit.offset, 0); assert.equal(limit.cell, "fn"); assert.equal(selected.offset, 50);
   assert.equal(testRunFilterChange(cell, { type: "cell", value: "fn" }).cell, "");
   assert.equal(initial.difficulty, ""); assert.equal(initial.offset, 0);
+  const clearedRows = testRunFilterChange(page, { type: "clear_rows" });
+  assert.equal(clearedRows.difficulty, "hard"); assert.equal(clearedRows.test_category_missing, true);
+  assert.equal(clearedRows.cell, ""); assert.equal(clearedRows.status, ""); assert.equal(clearedRows.evaluation_outcome, ""); assert.equal(clearedRows.offset, 0);
+  const firstPage = testRunFilterChange(page, { type: "first_page" });
+  assert.equal(firstPage.offset, 0); assert.equal(firstPage.cell, "fn"); assert.equal(firstPage.difficulty, "hard");
 });
 
 test("test list supports preserved controlled search, default navigation guidance and custom headings as inert text", () => {
@@ -139,11 +179,11 @@ test("test list supports preserved controlled search, default navigation guidanc
 
 test("empty test list distinguishes no runs, no search match and an empty page with an optional real legacy navigation action", () => {
   const empty = render(TestRunHistoryEmpty, { query: { q: "", offset: 0 } });
-  assert.match(empty, /아직 이름이 있는 테스트 실행이 없습니다/); assert.match(empty, /과거 파일 단위를 임의로 묶지/); assert.doesNotMatch(empty, /<button/);
+  assert.match(empty, /아직 접수한 테스트가 없습니다/); assert.match(empty, /이전 개별 분석은 별도 목록에서 확인/); assert.doesNotMatch(empty, /개별 테스트 분석 보기|이전 테스트 자료 설명|help-trigger/);
   const searched = render(TestRunHistoryEmpty, { query: { q: "없는 이름", offset: 0 }, onClear() {}, onViewAnalyses() {} });
-  assert.match(searched, /검색한 이름에 해당하는 테스트가 없습니다/); assert.match(searched, /검색 초기화/); assert.match(searched, /개별 테스트 분석 보기/); assert.doesNotMatch(searched, /아직 이름이 있는/);
+  assert.match(searched, /검색한 이름에 해당하는 테스트가 없습니다/); assert.match(searched, /검색 초기화/); assert.match(searched, /개별 테스트 분석 보기/); assert.doesNotMatch(searched, /아직 접수한/);
   const page = render(TestRunHistoryEmpty, { query: { q: "", offset: 10 } });
-  assert.match(page, /이 페이지에 표시할 테스트가 없습니다/); assert.doesNotMatch(page, /아직 이름이 있는/);
+  assert.match(page, /이 페이지에 표시할 테스트가 없습니다/); assert.doesNotMatch(page, /아직 접수한/);
 });
 
 test("test and case navigation uses immutable IDs even when names repeat and legacy navigation calls its supplied action", () => {
@@ -194,13 +234,19 @@ test("read errors expose no server text, never retry automatically and propagate
   }
 });
 
-test("test names are required and new submission keys are distinct while model validation rejects missing names", async () => {
+test("test names are validated after automatic naming and model validation preserves explicit names", async () => {
   for (const name of ["", "   ", null, "a".repeat(121)]) assert.match(validateTestName(name), /1~120자/);
   assert.equal(validateTestName(" 합성 검증 "), ""); assert.notEqual(newTestRequestKey(), newTestRequestKey());
-  let requests = 0; const controller = createFullValidationController({ api: { runModelProfileTest: async () => { requests++; return {}; } }, onChange() {} });
-  controller.open({ id: "model", name: "synthetic", provider: "vllm", model_name: "model", profile_fingerprint: "a".repeat(64) });
-  assert.equal(await controller.submit(true), false); assert.equal(requests, 0); assert.match(controller.getState().error, /테스트명/);
-  controller.setName("합성 150건 1차"); assert.equal(await controller.submit(true), true); assert.equal(requests, 1); controller.dispose();
+  const requests = []; const controller = createFullValidationController({ api: { runModelProfileTest: async (...args) => { requests.push(args); return {}; } }, onChange() {} });
+  const profile = { id: "model", name: "synthetic", provider: "vllm", model_name: "model", profile_fingerprint: "a".repeat(64) };
+  controller.open(profile);
+  const generatedKey = controller.getState().idempotencyKey;
+  assert.equal(await controller.submit(true), true); assert.equal(requests.length, 1);
+  assert.equal(requests[0][4].name, generatedKey); assert.equal(requests[0][4].idempotency_key, generatedKey);
+  controller.open(profile); controller.setName("a".repeat(121));
+  assert.equal(await controller.submit(true), false); assert.equal(requests.length, 1); assert.match(controller.getState().error, /테스트명/);
+  controller.setName("합성 150건 1차"); assert.equal(await controller.submit(true), true); assert.equal(requests.length, 2);
+  assert.equal(requests[1][4].name, "합성 150건 1차"); controller.dispose();
   assert.deepEqual(modelTestPayload("full", true, "a".repeat(64), { name: " 합성 150건 ", idempotency_key: "synthetic-key" }), { mode: "full", include_dataset: true, expected_profile_fingerprint: "a".repeat(64), name: "합성 150건", idempotency_key: "synthetic-key" });
 });
 

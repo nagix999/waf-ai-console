@@ -1,4 +1,9 @@
 .internal-egress-settings { display: grid; gap: 18px; min-width: 0; }
+.internal-egress-settings .egress-list-first { grid-template-columns: minmax(0, 1fr); }
+.internal-egress-settings .egress-heading .egress-actions { margin-top: 0; flex-shrink: 0; }
+.egress-dialog { width: min(680px, calc(100vw - 32px)); }
+.egress-dialog .egress-editor { padding: 0; }
+.egress-dialog dd { margin: 5px 0 18px; overflow-wrap: anywhere; }
 .internal-egress-settings .egress-overview, .internal-egress-settings .egress-editor { padding: 22px; }
 .internal-egress-settings .egress-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; margin-bottom: 15px; }
 .internal-egress-settings .egress-heading > div { min-width: 0; }
