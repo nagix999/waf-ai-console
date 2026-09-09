@@ -3,6 +3,8 @@ services:
     build: ./backend
     command: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
     environment: &backend-env
+      WAF_ENVIRONMENT: ${WAF_ENVIRONMENT:-development}
+      WAF_PUBLIC_ORIGIN: ${WAF_PUBLIC_ORIGIN:-}
       WAF_DATABASE_URL: sqlite+pysqlite:////data/waf.db
       WAF_ADMIN_USERNAME: ${WAF_ADMIN_USERNAME:-admin}
       WAF_ADMIN_PASSWORD: ${WAF_ADMIN_PASSWORD:-change-me-now}

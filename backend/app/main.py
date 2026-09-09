@@ -22,6 +22,7 @@ from .api.test_comparisons import router as test_comparisons_router
 from .api.input_schemas import router as input_schemas_router
 from .api.production_api import router as production_api_router
 from .config import Settings, get_settings
+from .browser_security import BrowserSecurityMiddleware
 from .database import Base, build_engine, build_session_factory
 from .services.crypto import CryptoService
 from .services.input_schemas import InputSchemaError
@@ -76,12 +77,15 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
     app.state.engine = engine
     app.state.session_factory = session_factory
     app.state.crypto = CryptoService(settings.data_encryption_key, settings.encryption_key_version)
+    app.add_middleware(BrowserSecurityMiddleware, public_origin=settings.public_origin)
+    # Added last so the signed session is available to browser-write protection.
     app.add_middleware(
         SessionMiddleware,
         secret_key=settings.session_secret,
         max_age=settings.session_max_age_seconds,
         same_site="strict",
         https_only=settings.session_https_only,
+        session_cookie="__Host-waf_session" if settings.session_https_only else "session",
     )
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(analyses_router, prefix="/api/v1", responses=ANALYSIS_ERROR_RESPONSES)

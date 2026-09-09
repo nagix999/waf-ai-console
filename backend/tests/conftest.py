@@ -19,7 +19,9 @@ def settings() -> Settings:
 @pytest.fixture
 def client(settings: Settings):
     app = create_app(settings, create_schema=True)
-    with TestClient(app) as test_client:
+    # Simulate the same-origin header browsers send on state-changing requests.
+    # Security regressions use separate raw clients to exercise missing headers.
+    with TestClient(app, headers={"Origin": "http://testserver"}) as test_client:
         yield test_client
 
 

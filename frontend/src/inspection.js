@@ -1,4 +1,5 @@
-// Display helpers only. Never decode, execute, persist or send inspected text.
+// Never decode, execute, persist or send inspected text. Session actions below
+// use injected callbacks and never include inspected values.
 export function textMatches(text, query, limit = 200) {
   if (typeof text !== "string" || !query) return { positions: [], limited: false };
   const positions = [];
@@ -21,8 +22,42 @@ const steps = {
 export const stepLabel = name => steps[name] || name || "이름 없는 단계";
 export const recordText = value => typeof value === "string" ? value : value == null ? "" : JSON.stringify(value, null, 2);
 
+function isSessionAccessError(error) {
+  return ["csrf_origin_required", "csrf_origin_invalid", "untrusted_host"].includes(error?.message)
+    || error?.status === 403 || error?.status === 421;
+}
+
 export function loginError(error) {
+  if (isSessionAccessError(error)) return "접속이 허용되지 않았습니다. 서비스 주소를 확인하세요.";
   if (error?.message === "invalid_credentials" || error?.status === 401) return "아이디와 비밀번호를 확인하세요.";
   if (error?.status === 429) return "로그인 시도가 많습니다. 잠시 후 다시 시도하세요.";
   return "로그인 서버에 연결하지 못했습니다. 잠시 후 다시 시도하세요.";
+}
+
+export function logoutError(error) {
+  if (isSessionAccessError(error)) return "로그아웃하지 못했습니다. 서비스 주소를 확인하세요.";
+  return "로그아웃하지 못했습니다. 잠시 후 다시 시도하세요.";
+}
+
+export function createLogoutController({ logout, onSuccess, onChange }) {
+  let busy = false;
+  return {
+    async submit() {
+      if (busy) return false;
+      busy = true;
+      let error = "";
+      onChange({ busy: true, error });
+      try {
+        await logout();
+        onSuccess();
+        return true;
+      } catch (failure) {
+        error = logoutError(failure);
+        return false;
+      } finally {
+        busy = false;
+        onChange({ busy: false, error });
+      }
+    }
+  };
 }

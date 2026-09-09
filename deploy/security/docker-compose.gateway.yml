@@ -1,0 +1,13 @@
+# Optional extension to docker-compose.production.yml ONLY, not development.
+# The existing gateway and waf-web are the only participants of this edge net.
+services:
+  waf-web:
+    networks:
+      waf-private:
+        ipv4_address: ${WAF_PRIVATE_WEB_IP:?Set WAF_PRIVATE_WEB_IP}
+      waf-edge: {}
+
+networks:
+  waf-edge:
+    external: true
+    name: ${WAF_EDGE_NETWORK:?Set an existing dedicated WAF edge network name}

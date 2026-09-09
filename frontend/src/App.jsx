@@ -20,7 +20,7 @@ import RawEventView from "./RawEventView.jsx";
 import AgentHistory from "./AgentHistory.jsx";
 import QuickValidationDialog from "./QuickValidationDialog.jsx";
 import TextInspector from "./TextInspector.jsx";
-import { loginError } from "./inspection.js";
+import { createLogoutController, loginError } from "./inspection.js";
 import PromptSettings from "./PromptSettings.jsx";
 import InputSchemaSettings, { InputSchemaMetadata } from "./InputSchemaSettings.jsx";
 import InternalEgressSettings from "./InternalEgressSettings.jsx";
@@ -799,6 +799,7 @@ function initialNavigationSnapshot() {
 export default function App() {
   const [principal, setPrincipal] = useState(null);
   const [checking, setChecking] = useState(true);
+  const [logoutState, setLogoutState] = useState({ busy: false, error: "" });
   const [navigation] = useState(() => createBrowserHistory({ browser: window, initialSnapshot: initialNavigationSnapshot, readHash: readAppHash, writeHash: writeAppHash, applyRoute: applyAppRoute }));
   const screen = useSyncExternalStore(navigation.subscribe, navigation.getSnapshot, navigation.getSnapshot);
   const { page, listState, selectedId, resultsPurpose, testResults, detailReturnPage, settingsTab, detailTab, days, serviceApiKeyId = "" } = screen;
@@ -814,6 +815,7 @@ export default function App() {
   });
 
   const onUnauthorized = useCallback(() => { navigation.reset(); setPrincipal(null); }, [navigation]);
+  const logoutController = useMemo(() => createLogoutController({ logout: api.logout, onSuccess: onUnauthorized, onChange: setLogoutState }), [onUnauthorized]);
   async function checkSession() {
     try { setPrincipal(await api.me()); } catch { onUnauthorized(); }
     finally { setChecking(false); }
@@ -896,8 +898,9 @@ export default function App() {
         <div className="sidebar-footer"><span>INTERNAL WORKSPACE</span><span>v0.2.0</span></div>
       </aside>
       <main className="workspace">
-        <header className="app-header"><div><div className="app-heading"><h1>{title}</h1></div><p className="page-description">{description}</p></div><div className="header-actions"><button className="icon-button" aria-label={theme === "light" ? "다크 모드로 전환" : "라이트 모드로 전환"} title={theme === "light" ? "다크 모드" : "라이트 모드"} onClick={() => setTheme(theme === "light" ? "dark" : "light")}><Icon name={theme === "light" ? "moon" : "sun"} size={19} /></button><span className="admin-avatar" aria-hidden="true">A</span><button className="secondary logout-button" onClick={async () => { await api.logout(); onUnauthorized(); }}><Icon name="logout" size={16} />로그아웃</button></div></header>
+        <header className="app-header"><div><div className="app-heading"><h1>{title}</h1></div><p className="page-description">{description}</p></div><div className="header-actions"><button className="icon-button" aria-label={theme === "light" ? "다크 모드로 전환" : "라이트 모드로 전환"} title={theme === "light" ? "다크 모드" : "라이트 모드"} onClick={() => setTheme(theme === "light" ? "dark" : "light")}><Icon name={theme === "light" ? "moon" : "sun"} size={19} /></button><span className="admin-avatar" aria-hidden="true">A</span><button type="button" className="secondary logout-button" disabled={logoutState.busy} onClick={() => logoutController.submit()}><Icon name="logout" size={16} />{logoutState.busy ? "로그아웃 중…" : "로그아웃"}</button></div></header>
         <div className="content" id="workspace-content" tabIndex={-1}>
+          {logoutState.error && <div className="error" role="alert">{logoutState.error}</div>}
           {mode === "stub" && <div className="runtime-banner"><Icon name="test" size={18} /><div><strong>로컬 모의 분석 모드</strong><span>API 설정이 stub입니다. 모의 결과는 실제 LLM의 보안 판정이 아니며, worker의 실제 실행 상태는 별도 확인이 필요합니다.</span></div><span className="runtime-tag">STUB</span></div>}
           {summaryError && page !== "dashboard" && <div className="error" role="alert">실행 설정을 확인하지 못했습니다. {summaryError}</div>}
           {page === "dashboard" && <DashboardView onOpen={openDetail} onUnauthorized={onUnauthorized} days={days} onDaysChange={setDays} serviceApiKeyId={serviceApiKeyId} onKeyChange={value => navigation.remember(current => ({ ...current, serviceApiKeyId: value }))} onFilter={filterProduction} Table={AnalysisTable} />}

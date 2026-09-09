@@ -6,7 +6,7 @@ import { runInNewContext } from "node:vm";
 import { buildSync } from "esbuild";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { loginError, recordText, stepLabel, textMatches } from "./inspection.js";
+import { createLogoutController, loginError, logoutError, recordText, stepLabel, textMatches } from "./inspection.js";
 
 function component(file, name = "default") {
   const bundle = buildSync({ entryPoints: [fileURLToPath(new URL(file, import.meta.url))], bundle: true, write: false, platform: "node", format: "cjs", packages: "external", jsx: "automatic", loader: { ".css": "empty" }, logLevel: "silent" }).outputFiles[0].text;
@@ -59,4 +59,92 @@ test("login starts empty, uses placeholders and does not disclose upstream error
   assert.match(loginError({ status: 429 }), /잠시 후/);
   assert.match(loginError({ message: "invalid_credentials" }), /아이디와 비밀번호/);
   assert.ok(!loginError({ message: "SECRET upstream body" }).includes("SECRET"));
+});
+
+for (const error of [
+  { message: "csrf_origin_required" },
+  { message: "csrf_origin_invalid" },
+  { message: "untrusted_host" },
+  { status: 403, message: "SECRET proxy response" },
+  { status: 421, message: "SECRET unexpected host" },
+]) {
+  test(`session access rejection gives safe address guidance: ${error.message}`, () => {
+    assert.match(loginError(error), /서비스 주소를 확인/);
+    assert.doesNotMatch(loginError(error), /서버에 연결|SECRET|csrf_|untrusted_host/);
+    assert.match(logoutError(error), /로그아웃하지 못했습니다.*서비스 주소를 확인/);
+    assert.doesNotMatch(logoutError(error), /SECRET|csrf_|untrusted_host/);
+  });
+}
+
+test("logout errors never disclose raw server messages", () => {
+  for (const error of [undefined, { status: 401 }, { status: 429 }, new Error("SECRET network response")]) {
+    assert.match(logoutError(error), /로그아웃하지 못했습니다.*다시 시도/);
+    assert.doesNotMatch(logoutError(error), /SECRET/);
+  }
+  assert.match(loginError({ status: 401 }), /아이디와 비밀번호/);
+  assert.match(loginError({ status: 429 }), /로그인 시도가 많습니다/);
+});
+
+test("logout failure preserves the session and screen and allows a successful retry", async () => {
+  const changes = [];
+  let fail = true;
+  let attempts = 0;
+  let principal = "existing-admin";
+  let screen = "settings-draft";
+  const controller = createLogoutController({
+    async logout() { attempts += 1; if (fail) throw Object.assign(new Error("csrf_origin_invalid"), { status: 403 }); },
+    onSuccess() { principal = null; screen = "login"; },
+    onChange(state) { changes.push(state); },
+  });
+  assert.equal(await controller.submit(), false);
+  assert.equal(principal, "existing-admin");
+  assert.equal(screen, "settings-draft");
+  assert.deepEqual(changes[0], { busy: true, error: "" });
+  assert.equal(changes.at(-1).busy, false);
+  assert.match(changes.at(-1).error, /로그아웃하지 못했습니다/);
+  fail = false;
+  assert.equal(await controller.submit(), true);
+  assert.equal(attempts, 2);
+  assert.equal(principal, null);
+  assert.equal(screen, "login");
+  assert.deepEqual(changes.slice(-2), [{ busy: true, error: "" }, { busy: false, error: "" }]);
+});
+
+test("logout waits for the server and ignores repeated clicks while pending", async () => {
+  let resolve;
+  let calls = 0;
+  let completed = 0;
+  let state;
+  const controller = createLogoutController({
+    logout() { calls += 1; return new Promise(done => { resolve = done; }); },
+    onSuccess() { completed += 1; },
+    onChange(value) { state = value; },
+  });
+  const first = controller.submit();
+  assert.equal(state.busy, true);
+  assert.equal(completed, 0);
+  assert.equal(await controller.submit(), false);
+  assert.equal(calls, 1);
+  resolve();
+  assert.equal(await first, true);
+  assert.equal(completed, 1);
+  assert.deepEqual(state, { busy: false, error: "" });
+});
+
+test("a delayed logout rejection is handled without switching to the login screen", async () => {
+  let reject;
+  let completed = false;
+  let state;
+  const controller = createLogoutController({
+    logout: () => new Promise((_resolve, fail) => { reject = fail; }),
+    onSuccess() { completed = true; },
+    onChange(value) { state = value; },
+  });
+  const pending = controller.submit();
+  reject(new Error("SECRET network detail"));
+  assert.equal(await pending, false);
+  assert.equal(completed, false);
+  assert.equal(state.busy, false);
+  assert.match(state.error, /로그아웃하지 못했습니다/);
+  assert.doesNotMatch(state.error, /SECRET/);
 });

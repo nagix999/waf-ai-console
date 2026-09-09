@@ -2,13 +2,17 @@
 # published API/development ports would otherwise remain in the merged config.
 # Use a private env file and a fixed project name, for example:
 # docker compose --env-file .env.production -p waf-ai-console-prod -f docker-compose.production.yml config --quiet
-# TLS and access restrictions belong to the host's HTTPS reverse proxy.
+# TLS and company/VPN admission belong to the approved HTTPS gateway/firewall.
+# Render deploy/security policy before starting; do not reuse development nginx.
 services:
   api:
     image: ${WAF_BACKEND_IMAGE:?Set WAF_BACKEND_IMAGE to an explicit deployment tag}
     build: ./backend
-    command: ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --no-access-log"]
     environment: &backend-env
+      WAF_ENVIRONMENT: production
+      WAF_PUBLIC_ORIGIN: ${WAF_PUBLIC_ORIGIN:?Set the exact public HTTPS origin}
+      FORWARDED_ALLOW_IPS: ${WAF_PRIVATE_WEB_IP:?Set the fixed private IP of waf-web}
       WAF_DATABASE_URL: sqlite+pysqlite:////data/waf.db
       WAF_ADMIN_USERNAME: ${WAF_ADMIN_USERNAME:?Set WAF_ADMIN_USERNAME}
       WAF_ADMIN_PASSWORD: ${WAF_ADMIN_PASSWORD:?Set a private WAF_ADMIN_PASSWORD}
@@ -23,6 +27,8 @@ services:
       WAF_VERIFIER_CONFIDENCE_THRESHOLD: ${WAF_VERIFIER_CONFIDENCE_THRESHOLD:-0.75}
     volumes:
       - waf-data:/data
+    networks:
+      - waf-private
     # No host API port: UI and service integrations use the HTTPS origin /api/.
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=2)"]
@@ -48,6 +54,8 @@ services:
       WAF_WORKER_ROLE: analysis
     volumes:
       - waf-data:/data
+    networks:
+      - waf-private
     depends_on:
       api:
         condition: service_healthy
@@ -65,6 +73,8 @@ services:
       WAF_WORKER_ROLE: model_test
     volumes:
       - waf-data:/data
+    networks:
+      - waf-private
     depends_on:
       api:
         condition: service_healthy
@@ -73,13 +83,29 @@ services:
     security_opt: *security-options
     logging: *bounded-logs
 
-  frontend:
+  waf-web:
     image: ${WAF_FRONTEND_IMAGE:?Set WAF_FRONTEND_IMAGE to an explicit deployment tag}
     build:
       context: .
       dockerfile: frontend/Dockerfile
     ports:
       - "127.0.0.1:${WAF_WEB_PORT:-18080}:80"
+    volumes:
+      - type: bind
+        source: ./frontend/nginx.production.conf
+        target: /etc/nginx/conf.d/default.conf
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./.local-deploy/production-security
+        target: /etc/nginx/waf-security
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      waf-private:
+        ipv4_address: ${WAF_PRIVATE_WEB_IP:?Set the fixed private IP of waf-web}
     depends_on:
       api:
         condition: service_healthy
@@ -87,6 +113,14 @@ services:
     restart: unless-stopped
     security_opt: *security-options
     logging: *bounded-logs
+
+networks:
+  waf-private:
+    # Select a non-overlapping local Docker subnet. This is NOT a company/VPN
+    # allowlist. Only waf-web is trusted by Uvicorn for forwarded HTTPS/client IP.
+    ipam:
+      config:
+        - subnet: ${WAF_PRIVATE_SUBNET:?Set an unused private Docker IPv4 subnet}
 
 volumes:
   waf-data:

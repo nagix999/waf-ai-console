@@ -169,7 +169,7 @@ def test_validation_token_bound_to_version_session_and_expiration(client, event_
     body = {"expected_revision": 1, "validation_token": checked["validation_token"]}
     assert client.post(PREFIX + f"/{version2}/activate", json=body).status_code == 422
     # Reuse the already-running app without entering/disposal of its lifespan.
-    other = TestClient(client.app)
+    other = TestClient(client.app, headers={"Origin": "http://testserver"})
     login(other)
     assert other.post(PREFIX + f"/{DEFAULT_VERSION_ID}/activate", json=body).status_code == 422
     other.close()

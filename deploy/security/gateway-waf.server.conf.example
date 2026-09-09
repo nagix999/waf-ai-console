@@ -1,0 +1,39 @@
+# INSERT into the existing production server template, not conf.d: the team
+# gateway renders one /tmp/platform-server.conf file and does not include conf.d.
+# Keep its existing default TLS rejection and platform/Jupyter server blocks.
+# Keep its existing $platform_ingress_allowed map and firewall admission policy.
+# Confirm this exact name is included by the deployed certificate's SANs.
+server {
+  listen 3030 ssl;
+  http2 on;
+  server_name waf.cyberailabs.team;
+  # Runtime resolution: WAF being absent must not prevent existing sites from
+  # starting/reloading. This resolver is for Docker gateway containers only.
+  resolver 127.0.0.11 valid=10s ipv6=off;
+  set $waf_web_target waf-web:80;
+  ssl_certificate /run/platform-tls/tls.crt;
+  ssl_certificate_key /run/platform-tls/tls.key;
+  client_max_body_size 11m;
+  add_header Strict-Transport-Security 'max-age=31536000' always;
+  if ($platform_ingress_allowed = 0) { return 444; }
+  if ($http_host != waf.cyberailabs.team) { return 421; }
+  if ($ssl_server_name != $host) { return 421; }
+
+  # Existing gateway access/error formats can expose full request/query data.
+  # WAF's downstream minimal access log records status and restored client IP.
+  access_log off;
+  error_log /dev/null crit;
+
+  location / {
+    proxy_pass http://$waf_web_target;
+    proxy_read_timeout 75s;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Forwarded-For $remote_addr;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_set_header X-Forwarded-Port 443;
+    proxy_set_header Forwarded "";
+    proxy_set_header X-Original-URL "";
+  }
+}

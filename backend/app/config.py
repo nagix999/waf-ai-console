@@ -1,14 +1,17 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from .browser_security import normalize_origin
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="WAF_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="WAF_", env_file=".env", extra="ignore", hide_input_in_errors=True)
 
     app_name: str = "WAF AI Analysis Console"
     environment: str = "development"
+    public_origin: str = ""
     database_url: str = "sqlite+pysqlite:///./waf.db"
 
     admin_username: str = "admin"
@@ -30,6 +33,19 @@ class Settings(BaseSettings):
     vllm_allowed_targets: str = ""
     vllm_test_lease_seconds: int = Field(default=900, ge=60, le=3600)
     verifier_confidence_threshold: float = Field(default=0.75, ge=0, le=1)
+
+    @field_validator("public_origin")
+    @classmethod
+    def validate_public_origin(cls, value: str) -> str:
+        return normalize_origin(value) if value else ""
+
+    @model_validator(mode="after")
+    def require_secure_production_origin(self):
+        if self.environment == "production" and (
+            not self.public_origin.startswith("https://") or not self.session_https_only
+        ):
+            raise ValueError("production requires an HTTPS WAF_PUBLIC_ORIGIN and WAF_SESSION_HTTPS_ONLY=true")
+        return self
 
 
 @lru_cache

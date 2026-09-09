@@ -20,6 +20,8 @@
 
 관리자 세션 Cookie와 API Key를 함께 보내면 관리자 세션이 우선한다. 관리자 로그인 상태의 Swagger도 이 규칙을 따른다. 서비스 권한·source를 검증할 때는 Cookie가 없는 HTTP 클라이언트를 사용하고 `/auth/me` 응답을 확인한다.
 
+쿠키 없는 서비스 API Key 접수·업로드·리뷰에는 Origin/CSRF 토큰을 요구하지 않는다. 로그인·로그아웃과 관리자 세션의 변경 요청은 정확한 서비스 Origin을 검사하며, Origin이 없을 때만 같은 출처의 Referer를 허용한다. 둘 다 없거나 다른 출처이면 403이고 API Key를 함께 보내도 우회되지 않는다. 운영 설정의 `WAF_PUBLIC_ORIGIN`과 다른 Host는 421로 거부한다. 수집기는 IP 직결 주소 대신 승인된 HTTPS 서비스 주소를 사용한다.
+
 인증 확인:
 
 ```http
