@@ -1,6 +1,8 @@
-# 기존 Gateway에 WAF 서브도메인 추가
+# 기존 Gateway에 WAF 서브도메인 추가 — 수동 대안
 
 기준: 2026-09-09. `team-workspace-platform`과 WAF를 **같은 Docker 호스트**에 신규 병행 설치할 때의 안내다. 실제 운영 서버에 적용한 기록은 아니다. 기본 [신규 설치 가이드](Production_Docker_Compose_Guide.md)의 비밀값 생성·빈 DB·모델 검증 절차도 따른다.
+
+**권장 경로는 [환경 파일 기반 자동 배포](Automated_Team_Deployment.md)다.** WAF의 `.env.production`만 편집하고 스크립트를 실행하며, 팀 프로젝트의 코드·Compose·환경 파일은 수정하지 않는다. 아래 절차는 팀 프로젝트의 Gateway 설정을 직접 관리하기로 선택한 경우만 사용하는 수동 대안이다. 두 배포 방식을 섞지 않는다.
 
 ## 유지할 경계
 
@@ -33,7 +35,9 @@
 검토 후 전용 공유 네트워크를 한 번 생성한다. 동명 네트워크가 있다면 소유·설정·참여 컨테이너를 먼저 확인하며 삭제하거나 무조건 재사용하지 않는다.
 
 ```bash
-docker network create --internal --subnet 172.30.250.0/24 waf-console-edge
+docker network create --internal \
+  --subnet 172.30.250.0/24 --gateway 172.30.250.1 \
+  --ip-range 172.30.250.128/25 waf-console-edge
 ```
 
 WAF의 비공개 `.env.production`에 검토한 값을 넣는다.
@@ -47,6 +51,8 @@ WAF_EDGE_NETWORK=waf-console-edge
 ```
 
 `WAF_TRUSTED_PROXY_IP`는 **Gateway가 공유 네트워크에서 사용하는 IP**, `WAF_PRIVATE_WEB_IP`는 **WAF 웹이 API에 연결할 때 사용하는 IP**다. 두 값을 같은 값으로 지정하지 않는다.
+
+공유망의 자동 할당 범위를 `/25`로 제한해 Gateway의 고정 주소 `.2`와 WAF 웹의 자동 주소가 경합하지 않게 한다. 대역을 바꾸면 고정 IP와 자동 할당 범위도 함께 검토한다.
 
 ## 2. WAF Compose와 정책
 
