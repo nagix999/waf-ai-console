@@ -3,22 +3,17 @@
 The structured checks come from the model; fallback checks are openly
 suggested sources, never claims that a remote system has been queried.
 """
-import re
-
 from .contracts import AgentVerdict, AnalystCheck, WAFAnalysisOutput
+from ..services.analyst_presentation import INPUT_LIMITATION, analyst_text as display_text
 
 
-_INTERNAL = re.compile(
-    r"primary|verifier|독립\s*검증|1차\s*판정|실패\s*ID|failure[_ ]?id|"
-    r"(?:판정|분석\s*결과).{0,30}(?:서로\s*다|불일치|일치하지)", re.IGNORECASE,
-)
 FOLLOW_UP_SUMMARY = "현재 분석에서는 정탐·오탐 판정을 보류했습니다."
 EVIDENCE_SOURCE_CHECK = "일부 LLM 근거가 지정된 필드의 원문과 일치하지 않아 제외되었습니다. 남은 근거를 직접 확인하세요."
 EVIDENCE_SOURCE_NOTICE = "일부 발췌는 지정한 원문에서 확인되지 않아 판정 근거에서 제외했습니다."
 
 
 def analyst_text(value: str) -> bool:
-    return bool(value.strip()) and _INTERNAL.search(value) is None
+    return bool(display_text(value, ""))
 
 
 def merge_analyst_checks(*outputs: WAFAnalysisOutput) -> list[AnalystCheck]:
@@ -59,7 +54,7 @@ def build_analyst_guidance(output: WAFAnalysisOutput, *, incomplete_execution: b
                 })
             if len(checks) == 5:
                 break
-    if output.verdict == AgentVerdict.inconclusive and not checks:
+    if output.verdict == AgentVerdict.inconclusive and not checks and not incomplete_execution:
         checks.append({
             "source_ko": "대상 애플리케이션의 요청 처리 규격 또는 담당자",
             "check_ko": "탐지된 입력이 해당 기능에서 허용되는 업무 데이터인지, 저장·출력·명령 실행 중 어떤 처리 경로로 사용되는지 확인하세요.",
@@ -67,7 +62,7 @@ def build_analyst_guidance(output: WAFAnalysisOutput, *, incomplete_execution: b
         })
     limitations = [EVIDENCE_SOURCE_NOTICE] if source_notice else []
     if output.input_truncated:
-        limitations.append("원문 전체가 분석 입력에 포함되지 않았습니다. 생략된 구간을 원문에서 확인하세요.")
+        limitations.append(INPUT_LIMITATION)
     if incomplete_execution:
         limitations.append("자동 분석 절차를 모두 완료하지 못했습니다. 현재 판정을 확정 결과로 사용하지 말고 확인 항목을 검토하세요. 실행 상태는 기술 정보에서 확인할 수 있습니다.")
     summary = output.summary_ko

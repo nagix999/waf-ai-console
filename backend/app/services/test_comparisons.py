@@ -109,6 +109,17 @@ def _timing(values):
 
 
 def _step_usage(metadata):
+    grounding = _object(metadata.get("evidence_grounding_retry"))
+    if isinstance(grounding.get("attempts"), list) and grounding["attempts"]:
+        counters = []
+        for attempt in grounding["attempts"]:
+            counters.append(_step_usage(_object(attempt)))
+        expected = grounding.get("attempt_count")
+        if type(expected) is int and expected > len(grounding["attempts"]):
+            counters.append(None)
+        return {key: sum(counter[key] for counter in counters)
+                if all(isinstance(counter, dict) and counter.get(key) is not None for counter in counters) else None
+                for key in TOKEN_KEYS}
     retry = _object(metadata.get("output_validation_retry"))
     attempts = retry.get("attempts")
     if isinstance(attempts, list) and attempts:
@@ -150,7 +161,8 @@ def _performance(db, rows, warnings):
             durations.append(duration if measured and row["status"] in {"completed", "failed"} else None)
             usages.append(_step_usage(metadata))
             retry = _object(metadata.get("output_validation_retry"))
-            repair_count += retry.get("attempted") is True
+            grounding = _object(metadata.get("evidence_grounding_retry"))
+            repair_count += retry.get("attempted") is True or grounding.get("attempted") is True
     counters = {}
     for key in TOKEN_KEYS:
         measured = [usage[key] for usage in usages if usage[key] is not None]
@@ -180,6 +192,8 @@ def _warn_difference(warnings, name, left, right):
 
 def _configuration_warnings(db, baseline, candidate, paired, warnings):
     _warn_difference(warnings, "model_configuration", baseline.profile_fingerprint, candidate.profile_fingerprint)
+    verifier_fingerprint = lambda run: _object(_object(run.profile_metadata).get("verifier_profile")).get("profile_fingerprint") or run.profile_fingerprint
+    _warn_difference(warnings, "verifier_configuration", verifier_fingerprint(baseline), verifier_fingerprint(candidate))
     _warn_difference(warnings, "execution_mode", baseline.execution_mode, candidate.execution_mode)
     _warn_difference(warnings, "verifier_threshold",
         _object(baseline.profile_metadata).get("verifier_confidence_threshold"),
@@ -210,10 +224,14 @@ def _configuration_warnings(db, baseline, candidate, paired, warnings):
 
 def _run_summary(db, run):
     summary = describe_run(db, run, detail=False)
+    verifier = _object(_object(summary.profile_metadata).get("verifier_profile"))
     # Do not expand the safe comparison response with arbitrary stored metadata.
     return summary.model_copy(update={"profile_metadata": {
-        key: value for key, value in _object(summary.profile_metadata).items()
-        if key in PROFILE_KEYS and (value is None or type(value) in (str, int, float, bool))
+        **({"verifier_profile": {key: value for key, value in verifier.items()
+                                 if key in PROFILE_KEYS and (value is None or type(value) in (str, int, float, bool))}}
+           if verifier else {}),
+        **{key: value for key, value in _object(summary.profile_metadata).items()
+           if key in PROFILE_KEYS and (value is None or type(value) in (str, int, float, bool))},
     }})
 
 

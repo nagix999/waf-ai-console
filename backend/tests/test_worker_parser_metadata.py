@@ -1,6 +1,7 @@
 import json
 
 import pytest
+from agent_selection_helpers import model_output
 from sqlalchemy import select
 
 from app import worker
@@ -31,7 +32,7 @@ def test_parser_status_is_recorded_without_claiming_an_extractor_call(
     async def fake_execute(**kwargs):
         calls.append(kwargs)
         return AgentCallResult(
-            output=primary_output(excerpt="synthetic", field="payload"),
+            output=model_output(primary_output(excerpt="synthetic", field="payload"), kwargs),
             framework_run_id=f"synthetic-{len(calls)}",
             agent_fingerprint="synthetic-fingerprint",
             finish_reason="completed",

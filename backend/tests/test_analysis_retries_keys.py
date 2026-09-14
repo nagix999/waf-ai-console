@@ -4,6 +4,7 @@ import uuid
 from datetime import timedelta
 
 import pytest
+from agent_selection_helpers import model_output
 from sqlalchemy import func, select
 
 from app import worker
@@ -136,7 +137,7 @@ def test_retry_keeps_failure_and_pinned_context_idempotency_and_original_ingest(
     async def execute(**kwargs):
         kwargs["egress_check"]()
         calls.append(kwargs)
-        return AgentCallResult(fake_output(), "synthetic-run", "synthetic-fingerprint", "completed", None, None, {})
+        return AgentCallResult(model_output(fake_output(), kwargs), "synthetic-run", "synthetic-fingerprint", "completed", None, None, {})
     monkeypatch.setattr(worker, "execute_structured_agent", execute)
     with client.app.state.session_factory() as db:
         child = db.get(Analysis, child_id)

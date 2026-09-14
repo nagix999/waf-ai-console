@@ -66,16 +66,15 @@ def test_failed_verification_is_not_disguised_as_success_or_claimed_missing_evid
     assert "자료가 부족" not in guidance["summary_ko"]
 
 
-def test_internal_check_is_not_turned_into_an_analyst_investigation_task():
+def test_checks_are_not_deleted_by_role_word_substrings():
     model_output = output("inconclusive").model_copy(update={
-        "analyst_checks": [check("Verifier 모델")],
+        "analyst_checks": [check("code_verifier 요청 파라미터")],
         "recommended_checks": ["검증 모델 연결과 실패 ID를 확인한 뒤 다시 분석하세요."],
         "input_truncated": True,
     })
     guidance = build_analyst_guidance(model_output)
-    assert guidance["checks"][0]["source_ko"] == "대상 애플리케이션의 요청 처리 규격 또는 담당자"
-    assert "생략된 구간" in guidance["limitations"][0]
-    assert "Verifier" not in str(guidance)
+    assert guidance["checks"][0]["source_ko"] == "code_verifier 요청 파라미터"
+    assert "일부가 생략" in guidance["limitations"][0]
 
 
 def test_decisive_summary_remains_the_final_summary_not_a_new_decision():
@@ -85,7 +84,7 @@ def test_decisive_summary_remains_the_final_summary_not_a_new_decision():
 
 
 def test_prompt_requires_specific_followups_and_untrusted_derived_hints():
-    assert PROMPT_VERSION == "waf-judgment-v2.6"
+    assert PROMPT_VERSION == "waf-judgment-v2.12"
     for term in ["source_ko", "check_ko", "why_ko", "decoded_payload_hints", "디코딩 전 원문", "공격 성공"]:
         assert term in BASE_INSTRUCTIONS
 

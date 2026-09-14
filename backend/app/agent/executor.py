@@ -1,11 +1,12 @@
 from contextlib import AsyncExitStack
-from dataclasses import dataclass, is_dataclass
+from dataclasses import dataclass, field, is_dataclass
 from enum import Enum
 from importlib.metadata import PackageNotFoundError, version
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Mapping, get_args
 
 import httpx
 from pydantic import BaseModel
+from pydantic_core import ErrorType
 
 from ..models import VLLMProfile
 from ..services.provider_options import (
@@ -16,11 +17,13 @@ from ..services.provider_options import (
     safe_openai_usage,
     strict_json_schema,
 )
-from .contracts import WAFAnalysisOutput
+from .contracts import (CONTRACT_ERRORS, EvidenceCorrectionOutput, WAFAnalysisOutput,
+                        EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput)
 
 
 OUTPUT_VALIDATION_FAILURE_CODE = "output_validation_failed"
 OUTPUT_VALIDATION_MAX_ATTEMPTS = 2
+SAFE_VALIDATION_TYPES = frozenset(get_args(ErrorType)) | CONTRACT_ERRORS.keys()
 OUTPUT_VALIDATION_REPAIR_INSTRUCTIONS = """
 이전 실행은 output_validation_failed로 종료되었다. 원본 이벤트를 처음부터 다시 분석하고,
 다음 교정 규칙을 모두 지켜 완전한 구조화 결과를 새로 생성하라.
@@ -29,7 +32,7 @@ OUTPUT_VALIDATION_REPAIR_INSTRUCTIONS = """
 - verdict, signature relation, severity와 tuning scope는 스키마에 정의된 enum 값만 사용한다.
 - threat_analysis, signature_assessment, tuning_recommendation의 중첩 객체 구조를 정확히 지킨다.
 - true_positive 또는 false_positive에는 원문에 실제 존재하는 발췌 근거를 최소 1개 포함한다.
-- evidence의 excerpt는 입력 원문을 그대로 인용하고, interpretation_ko는 관찰 사실과 판정의 연결을 설명한다.
+- evidence는 현재 출력 스키마를 따른다. source_id 계약이면 제공된 원문 후보 번호만 선택하고 field/excerpt를 쓰지 않는다. excerpt 계약이면 원문을 그대로 인용한다. interpretation_ko는 관찰과 판정의 연결을 설명한다.
 - 숫자 범위, 문자열 길이와 배열 최대 개수를 지킨다.
 - JSON 구조화 결과 외의 서문, 설명, Markdown 코드 블록을 출력하지 않는다.
 
@@ -38,20 +41,21 @@ OUTPUT_VALIDATION_REPAIR_INSTRUCTIONS = """
 
 
 class _TrackingOutputCodec:
-    def __init__(self, delegate: Any, *, strict: bool = False) -> None:
+    def __init__(self, delegate: Any, *, strict: bool = False, output_model: type[BaseModel] = WAFAnalysisOutput) -> None:
         self.delegate = delegate
         self.strict = strict
+        self.output_model = output_model
         self.validation_issues: list[dict[str, str]] = []
 
     def schema(self) -> Mapping[str, Any] | None:
         schema = self.delegate.schema()
         return strict_json_schema(schema) if self.strict and schema is not None else schema
 
-    def decode(self, response: Any) -> WAFAnalysisOutput:
+    def decode(self, response: Any) -> BaseModel:
         try:
             return self.delegate.decode(response)
         except Exception as exc:
-            self.validation_issues = _safe_validation_issues(exc)
+            self.validation_issues = _safe_validation_issues(exc, self.output_model)
             raise
 
 
@@ -112,13 +116,16 @@ class _VLLMEgressTransport:
 
 @dataclass(frozen=True)
 class AgentCallResult:
-    output: WAFAnalysisOutput | None
+    output: WAFAnalysisOutput | EvidenceCorrectionOutput | None
     framework_run_id: str | None
     agent_fingerprint: str | None
     finish_reason: str
     failure_id: str | None
     error: str | None
     telemetry: dict[str, Any]
+    # Structured outputs/request corrections only; encrypted step output, never
+    # telemetry, raw provider responses or private reasoning.
+    grounding_history: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def succeeded(self) -> bool:
@@ -180,7 +187,7 @@ def _error_code(error_summary: Any) -> str | None:
     return str(code) if code is not None else None
 
 
-def _safe_validation_issues(exc: Exception) -> list[dict[str, str]]:
+def _safe_validation_issues(exc: Exception, output_model: type[BaseModel] = WAFAnalysisOutput) -> list[dict[str, str]]:
     errors = getattr(exc, "errors", None)
     if not callable(errors):
         return [{"field": "$", "type": "decode_error"}]
@@ -189,7 +196,7 @@ def _safe_validation_issues(exc: Exception) -> list[dict[str, str]]:
     except TypeError:  # pragma: no cover - Pydantic v1 compatibility
         values = errors()
     issues: list[dict[str, str]] = []
-    allowed_fields = _output_schema_field_names()
+    allowed_fields = _output_schema_field_names(output_model)
     for value in values[:12]:
         if not isinstance(value, Mapping):
             continue
@@ -207,10 +214,10 @@ def _safe_validation_issues(exc: Exception) -> list[dict[str, str]]:
         else:
             field = location if isinstance(location, str) and location in allowed_fields else "<unknown>"
         error_type = str(value.get("type") or "validation_error")
-        if not error_type or not all(
-            character in "abcdefghijklmnopqrstuvwxyz0123456789_.-" for character in error_type
-        ):
+        if error_type not in SAFE_VALIDATION_TYPES:
             error_type = "validation_error"
+        if error_type in CONTRACT_ERRORS:
+            field = CONTRACT_ERRORS[error_type][0]
         issues.append(
             {
                 "field": (field or "$")[:256],
@@ -220,8 +227,8 @@ def _safe_validation_issues(exc: Exception) -> list[dict[str, str]]:
     return issues or [{"field": "$", "type": "validation_error"}]
 
 
-def _output_schema_field_names() -> frozenset[str]:
-    schema = WAFAnalysisOutput.model_json_schema()
+def _output_schema_field_names(output_model: type[BaseModel] = WAFAnalysisOutput) -> frozenset[str]:
+    schema = output_model.model_json_schema()
     fields: set[str] = set()
     pending: list[Any] = [schema]
     seen: set[int] = set()
@@ -245,7 +252,9 @@ def _repair_instructions(validation_issues: list[dict[str, str]]) -> str:
     if not validation_issues:
         return OUTPUT_VALIDATION_REPAIR_INSTRUCTIONS
     issue_lines = "\n".join(
-        f"- {issue['field']}: {issue['type']}" for issue in validation_issues
+        f"- {issue['field']}: {issue['type']}"
+        + (f" — {CONTRACT_ERRORS[issue['type']][1]}" if issue["type"] in CONTRACT_ERRORS else "")
+        for issue in validation_issues
     )
     return (
         f"{OUTPUT_VALIDATION_REPAIR_INSTRUCTIONS}\n\n"
@@ -283,7 +292,15 @@ async def execute_structured_agent(
     session_id: str,
     agent_name: str,
     egress_check: Callable[[], None] | None = None,
+    output_validation_max_attempts: int = OUTPUT_VALIDATION_MAX_ATTEMPTS,
+    output_model: type[WAFAnalysisOutput] | type[EvidenceCorrectionOutput] = WAFAnalysisOutput,
 ) -> AgentCallResult:
+    if output_validation_max_attempts not in {1, 2}:
+        raise ValueError("invalid_output_validation_attempt_limit")
+    if output_model not in {WAFAnalysisOutput, EvidenceCorrectionOutput, EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput}:
+        raise ValueError("unsupported_agent_output_contract")
+    if issubclass(output_model, EvidenceCorrectionOutput) and output_validation_max_attempts != 1:
+        raise ValueError("evidence_correction_requires_single_attempt")
     provider = provider_name(profile)
     base_url = profile.base_url
     if provider == "vllm":
@@ -340,14 +357,16 @@ async def execute_structured_agent(
         result = None
         spec = None
         previous_validation_issues: list[dict[str, str]] = []
-        for attempt in range(1, OUTPUT_VALIDATION_MAX_ATTEMPTS + 1):
+        for attempt in range(1, output_validation_max_attempts + 1):
             repairing_output = attempt > 1
             run_instructions = (
                 f"{instructions}\n\n{_repair_instructions(previous_validation_issues)}"
                 if repairing_output
                 else instructions
             )
-            output_codec = _TrackingOutputCodec(PydanticOutputCodec(WAFAnalysisOutput), strict=provider == "openai")
+            output_codec = _TrackingOutputCodec(
+                PydanticOutputCodec(output_model), strict=provider == "openai", output_model=output_model,
+            )
             agent = Agent.create(
                 name=f"{agent_name}-output-repair" if repairing_output else agent_name,
                 model=model,
@@ -379,13 +398,13 @@ async def execute_structured_agent(
             if (
                 result.output is not None
                 or _error_code(result.error_summary) != OUTPUT_VALIDATION_FAILURE_CODE
-                or attempt == OUTPUT_VALIDATION_MAX_ATTEMPTS
+                or attempt == output_validation_max_attempts
             ):
                 break
 
         if result is None or spec is None:  # pragma: no cover - defensive invariant
             raise RuntimeError("agent_execution_produced_no_result")
-        output = result.output if isinstance(result.output, WAFAnalysisOutput) else None
+        output = result.output if isinstance(result.output, output_model) else None
         finish_reason = getattr(result.finish_reason, "value", result.finish_reason)
         error_summary = _jsonable(result.error_summary)
         safe_error = str(result.error) if result.error is not None else None
@@ -409,7 +428,7 @@ async def execute_structured_agent(
             "output_validation_retry": {
                 "attempted": len(attempts) > 1,
                 "attempt_count": len(attempts),
-                "max_attempts": OUTPUT_VALIDATION_MAX_ATTEMPTS,
+                "max_attempts": output_validation_max_attempts,
                 "recovered": len(attempts) > 1 and str(finish_reason) == "completed" and output is not None,
                 "attempts": attempts,
             },

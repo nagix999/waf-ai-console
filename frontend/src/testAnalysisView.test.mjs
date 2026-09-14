@@ -76,7 +76,7 @@ test("actual result component retains unresolved status, distinct interpretation
   detail.result.tuning_recommendation.risk_ko = "예외를 넓히면 다른 공격이 허용될 수 있습니다.";
   detail.result.analyst_guidance.limitations = ["분석 입력 일부 생략"];
   const html = renderToStaticMarkup(createElement(ResultView, { detail }));
-  assert.match(html, /판정 보류 상태입니다/);
+  assert.match(html, /확정된 결론으로 사용하지 마세요/);
   assert.match(html, /합성 원문 근거/);
   assert.match(html, /정상 동작일 수 있습니다/);
   assert.equal(html.split("원문 발췌").length - 1, 1);

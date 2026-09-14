@@ -40,10 +40,10 @@ test("presentation keeps the stored final verdict and explicit null; never reads
 });
 
 test("legacy internal disagreement and technical failures become neutral guidance, not invented missing evidence", () => {
-  for (const summary of ["Primary와 Verifier 판정이 다릅니다.", "독립 검증 실패로 보류합니다.", "분석 결과가 서로 다릅니다.", "판정 불일치 발생", "판정이 일치하지 않아 보류", "1차 판정의 신뢰도가 낮습니다", "실패 ID 확인", "failure_id synthetic"]) {
+  for (const summary of ["Primary와 Verifier 판정이 다릅니다.", "독립 검증 실패로 보류합니다.", "분석 결과가 서로 다릅니다.", "판정 불일치 발생", "판정이 일치하지 않아 보류", "1차 판정의 신뢰도가 낮습니다", "실패 ID 확인", "failure_id"]) {
     const detail = fixture(); detail.result.summary_ko = summary;
     const text = analystSummary(detail);
-    assert.equal(text, "현재 분석에서는 정탐·오탐 판정을 보류했습니다.");
+    assert.equal(text, "보류 판정은 저장되어 있지만 구체적인 사유를 확인할 수 없습니다.");
     assert.equal(isTechnicalText(text), false);
     assert.equal(text.includes("근거가 부족"), false);
     assert.equal(detail.result.summary_ko, summary);
@@ -213,7 +213,7 @@ test("follow-up checks distinguish unresolved judgment from optional decisive-re
     const detail = fixture();
     detail.result.confidence_score = confidence_score;
     assert.equal(analystFollowUp(detail).visible, true);
-    assert.match(analystFollowUp(detail).introduction_ko, /판정 보류를 해소하려면 아래 자료/);
+    assert.match(analystFollowUp(detail).introduction_ko, /원문과 기록된 확인 항목/);
     for (const verdict of ["true_positive", "false_positive"]) {
       detail.result.verdict = verdict;
       assert.equal(analystFollowUp(detail).visible, true);

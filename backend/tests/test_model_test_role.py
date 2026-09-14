@@ -3,6 +3,7 @@ import json
 import uuid
 
 import pytest
+from agent_selection_helpers import model_output
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
@@ -255,7 +256,7 @@ def test_worker_routes_each_purpose_to_its_own_selected_profile(client, event_pa
         assert kwargs["egress_check"] is not None
         kwargs["egress_check"]()
         calls.append(kwargs["profile"].id)
-        return AgentCallResult(output=fake_output(), framework_run_id="synthetic", agent_fingerprint="synthetic",
+        return AgentCallResult(output=model_output(fake_output(), kwargs), framework_run_id="synthetic", agent_fingerprint="synthetic",
             finish_reason="completed", failure_id=None, error=None, telemetry={"framework_version": "0.6.2"})
     monkeypatch.setattr(worker, "execute_structured_agent", execute)
     with client.app.state.session_factory() as db:

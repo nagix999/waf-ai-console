@@ -1,4 +1,4 @@
-"""Static safeguards for the shared, shorter v2.6 instructions.
+"""Static safeguards for the shared, compact v2.12 instructions.
 
 These checks establish text/contract boundaries, not model obedience, tokenizer
 savings or an improvement in verdict quality on any particular serving model.
@@ -20,8 +20,8 @@ from app.agent.prompts import (
 
 
 def test_shared_revision_and_default_exports_are_consistent():
-    assert PROMPT_VERSION == "waf-judgment-v2.6"
-    assert FIXED_RULES_VERSION == "waf-system-v2.6"
+    assert PROMPT_VERSION == "waf-judgment-v2.12"
+    assert FIXED_RULES_VERSION == "waf-system-v2.12"
     assert build_role_instructions(DEFAULT_POLICY_TEXT) == (
         PRIMARY_INSTRUCTIONS,
         VERIFIER_INSTRUCTIONS,
@@ -58,16 +58,13 @@ def test_instruction_and_default_policy_length_decrease_in_chars_and_utf8_bytes(
             "signature/event_name과 실제 요청의 의미를 별도로 대조",
         ),
         (
-            "확정 판정에는 evidence 1개 이상",
-            "excerpt는 해당 field 원문의 정확한 부분 문자열(300자 이하)",
-            "다른 필드·파서 힌트·디코딩 값·합친 문자열을 원문처럼 인용하지 않는다",
-            "구조가 모호하면 payload를 쓴다",
-            "payload.headers.Cookie",
-            "payload.query.q",
-            "extra_fields.items.0.value",
-            "event. 접두사는 허용",
-            "uri는 요청 대상 전체, path는 쿼리 제외 경로",
-            "쿼리 이름도 디코딩 전 이름",
+            "evidence_candidates.items의 source_id, interpretation_ko, supports",
+            "field/excerpt나 파서·디코딩 필드명을 출력하지 않는다",
+            "요청 내용(payload 또는 실제 추가 필드)",
+            "후보가 1개 이상 필요",
+            "시그니처·IP·WAF action만으로 확정하지 않는다",
+            "필요한 근거를 선택할 수 없으면 보류",
+            "후보에 없다는 것을 공격 부재로 해석하지 않는다",
         ),
         (
             "interpretation_ko에는 관찰 → 공격/정상 의미 → 판정 연결을 충분히 설명",
@@ -78,7 +75,7 @@ def test_instruction_and_default_policy_length_decrease_in_chars_and_utf8_bytes(
         (
             "decoded_payload_hints의 original/decoded/steps를 대조",
             "인코딩 자체는 공격이 아니며",
-            "제한된 정적 변환이지 서버의 실제 해석이 아니다",
+            "정적 변환이지 서버의 실제 해석이 아니다",
             "경고·생략·한도를 존중",
             "제공하지 않은 변환을 도구로 확인했다고 쓰지 않는다",
             "디코딩 전 원문만 발췌",

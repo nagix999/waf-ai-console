@@ -1,13 +1,12 @@
 import { isMockAnalysis } from "./labelEvaluation.js";
+import { decisionExplanation, genericHoldSummary, genericTuningRisk, isGenericCheck } from "./decisionExplanation.js";
+import { analystText, isTechnicalText } from "./analystText.js";
+import { holdReview } from "./holdReview.js";
+export { analystText, isTechnicalText } from "./analystText.js";
 
 const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
-const technicalLanguage = /primary|verifier|1차\s*판정|독립\s*(검증|판정)|검증\s*실패|(?:판정|분석\s*결과).{0,30}(?:불일치|일치하지|서로\s*다|다릅)|(?:실패|failure)[\s_]*id|output_validation_failed|framework_run_id/i;
 const legacyGroundingCheck = "일부 LLM 근거가 지정된 필드의 원문과 일치하지 않아 제외되었습니다. 남은 근거를 직접 확인하세요.";
 const groundingLimitation = "일부 발췌는 지정한 원문에서 확인되지 않아 판정 근거에서 제외했습니다.";
-
-export function isTechnicalText(value) {
-  return typeof value === "string" && technicalLanguage.test(value);
-}
 
 // Presentation only. Never replace the stored final verdict with an intermediate
 // result, a reference Label or a guess based on WAF action.
@@ -15,9 +14,6 @@ export function finalValue(detail, key) {
   return record(detail?.result) && Object.hasOwn(detail.result, key) ? detail.result[key] : detail?.[key];
 }
 
-export function analystText(value, fallback = "미기록") {
-  return typeof value === "string" && value.trim() && !isTechnicalText(value) ? value : fallback;
-}
 
 // Display names only: keep the exact stored path for auditing and quotation
 // grounding. An unknown field remains literal; never infer its source.
@@ -47,7 +43,7 @@ export function analystItems(value) {
 
 export function hasTuningContent(value) {
   return record(value) && (value.recommended === true
-    || [value.scope, value.proposal_ko, value.risk_ko, value.validation_ko].some((item) => analystText(item, "") !== ""));
+    || [value.scope, value.proposal_ko, value.risk_ko === genericTuningRisk ? null : value.risk_ko, value.validation_ko].some((item) => analystText(item, "") !== ""));
 }
 
 export function analystSummary(detail) {
@@ -58,7 +54,10 @@ export function analystSummary(detail) {
   const fallback = finalValue(detail, "verdict") === "inconclusive"
     ? "현재 분석에서는 정탐·오탐 판정을 보류했습니다."
     : "저장된 최종 판정과 원문 근거를 확인해 주세요.";
-  return analystText(guidance.summary_ko, analystText(finalValue(detail, "summary_ko"), fallback));
+  const saved = analystText(guidance.summary_ko, analystText(finalValue(detail, "summary_ko"), fallback));
+  const explanation = isMockAnalysis(detail) ? null : decisionExplanation(detail);
+  return explanation && (!explanation.use_recorded_summary || saved === genericHoldSummary)
+    ? explanation.reason_ko : saved;
 }
 
 export function analystGuidance(detail) {
@@ -71,7 +70,7 @@ export function analystGuidance(detail) {
   const savedLimitations = Array.isArray(guidance.limitations) ? guidance.limitations : [];
   const hasGroundingDiagnostic = structured.some((item) => record(item) && item.check_ko === legacyGroundingCheck)
     || recommended.includes(legacyGroundingCheck) || savedLimitations.includes(legacyGroundingCheck);
-  let checks = structured.filter(record).filter((item) => typeof item.check_ko === "string"
+  let checks = structured.filter(record).filter(item => !isGenericCheck(item)).filter((item) => typeof item.check_ko === "string"
     && item.check_ko.trim() && item.check_ko !== legacyGroundingCheck && ![item.source_ko, item.check_ko, item.why_ko].some(isTechnicalText))
     .map((item) => ({
       source_ko: analystText(item.source_ko, "확인 위치 미기록"),
@@ -83,8 +82,12 @@ export function analystGuidance(detail) {
   if (!explicitChecks && !checks.length) checks = recommended
     .filter((item) => typeof item === "string" && item.trim() && item !== legacyGroundingCheck && !isTechnicalText(item))
     .map((check_ko) => ({ source_ko: "확인 위치 미기록", check_ko, why_ko: "확인 목적 미기록" }));
+  // Explicit [] remains authoritative for decisive results. On a final hold,
+  // fill only an empty visible list from saved, evidence-linked review points.
+  if (!checks.length && !isMockAnalysis(detail)) checks = holdReview(detail, decisionExplanation(detail)).checks;
+  checks = checks.filter((item, index) => checks.findIndex(other => JSON.stringify(other) === JSON.stringify(item)) === index);
   const limitations = savedLimitations.filter((item) => typeof item === "string" && item.trim() && !isTechnicalText(item))
-    .map((item) => item === legacyGroundingCheck ? groundingLimitation : item);
+    .map((item) => item === legacyGroundingCheck ? groundingLimitation : analystText(item));
   if (hasGroundingDiagnostic) limitations.push(groundingLimitation);
   return {
     summary_ko: analystSummary(detail), checks,
@@ -95,13 +98,15 @@ export function analystGuidance(detail) {
 export function analystFollowUp(detail) {
   const guidance = analystGuidance(detail);
   const inconclusive = finalValue(detail, "verdict") === "inconclusive";
+  const explanation = isMockAnalysis(detail) ? null : decisionExplanation(detail);
   return {
     ...guidance,
     visible: detail?.status === "completed" && record(detail?.result) && (inconclusive || guidance.checks.length > 0),
     introduction_ko: inconclusive
-      ? "판정 보류를 해소하려면 아래 자료를 확인해 주세요. 확인한 내용과 요청 문맥을 함께 검토해 판단해야 합니다."
+      ? (explanation?.action_ko ?? "원문과 기록된 확인 항목을 검토해 주세요. 추가 자료가 필요한지는 요청별로 판단해야 합니다.")
       : "위 판정과 별개로, 필요한 경우 아래 자료를 통해 영향 범위나 후속 대응을 확인해 주세요.",
-    empty_ko: "구체적인 확인 자료는 기록되지 않았습니다. 저장된 원문과 대상 서비스의 처리 문맥을 함께 검토해 주세요.",
+    empty_ko: !explanation || ["model_abstained", "reason_unrecorded", "assessment_pending"].includes(explanation.code)
+      ? "구체적인 확인 자료는 기록되지 않았습니다." : "",
   };
 }
 

@@ -1,0 +1,20 @@
+.agent-settings-panel { padding: 20px; }
+.agent-settings-panel > .panel-head { padding: 0 0 18px; margin-bottom: 20px; flex-wrap: wrap; }
+.agent-settings-panel > .panel-head > .ux-toolbar { flex-shrink: 0; }
+.agent-settings-panel button { white-space: nowrap; }
+.agent-settings-panel > p { margin: 10px 0 16px; }
+.agent-settings-panel > h3 { margin: 24px 0 12px; }
+.agent-role-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.agent-role-grid fieldset { border: 1px solid var(--line); border-radius: 12px; padding: 20px; min-width: 0; margin: 0; }
+.agent-role-grid legend { padding: 0 8px; font-weight: 700; }
+.agent-role-grid label { display: grid; gap: 8px; margin-bottom: 20px; }
+.agent-role-grid label:last-child { margin-bottom: 0; }
+.agent-role-grid small { overflow-wrap: anywhere; }
+.agent-settings [hidden] { display: none; }
+.agent-stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 24px; }
+.agent-stat-grid dd { margin: 8px 0 0; font-weight: 700; font-size: 1.2rem; }
+@media (max-width: 760px) {
+  .agent-role-grid, .agent-stat-grid { grid-template-columns: 1fr; }
+  .agent-settings-panel { padding: 16px; }
+  .agent-role-grid fieldset { padding: 16px; }
+}

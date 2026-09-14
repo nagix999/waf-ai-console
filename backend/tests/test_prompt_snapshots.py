@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from agent_selection_helpers import model_output
 
 from app import worker
 from app.agent.contracts import WAFAnalysisOutput
@@ -85,7 +86,7 @@ def test_worker_and_verifier_use_queued_snapshot_after_activation_and_code_chang
     async def execute(**kwargs):
         calls.append(kwargs)
         return AgentCallResult(
-            output=fake_output(), framework_run_id="mock-run", agent_fingerprint="mock-fingerprint",
+            output=model_output(fake_output(), kwargs), framework_run_id="mock-run", agent_fingerprint="mock-fingerprint",
             finish_reason="completed", failure_id=None, error=None, telemetry={"framework_version": "0.6.2"},
         )
 

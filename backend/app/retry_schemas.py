@@ -18,6 +18,9 @@ class RetryEligibility(BaseModel):
     model_profile: str | None = None
     model_name: str | None = None
     provider: str | None = None
+    verifier_model_profile: str | None = None
+    verifier_model_name: str | None = None
+    verifier_provider: str | None = None
     prompt_version: str | None = None
     costs_may_apply: bool = True
 

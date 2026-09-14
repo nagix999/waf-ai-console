@@ -1,0 +1,121 @@
+{
+  "version": "request-integrity-v1",
+  "fixed_rules": "waf-system-v2.9",
+  "scope": "offline_structure_and_mocked_worker_only",
+  "actual_llm_calls": 0,
+  "new_docker_deployment": false,
+  "reference_labels_changed": false,
+  "production_settings_changed": false,
+  "db_migrations_added": false,
+  "runtime_dependencies_changed": false,
+  "quality_improvement_proven": false,
+  "primary_instructions_chars": {
+    "before": 3692,
+    "after": 3905
+  },
+  "backend": {
+    "tests": 1757,
+    "failures": 0,
+    "warnings": 1,
+    "duration_seconds": 611.06,
+    "warning": "Existing Starlette/AnyIO BlockingPortal deprecation",
+    "focused_tests_passed": 267,
+    "additional_guard_combinations_passed": 21
+  },
+  "frontend": {
+    "test_files_passed": 29,
+    "failed": 0,
+    "build": "passed",
+    "build_modules": 98,
+    "build_seconds": 8.47,
+    "node_version": "24.11.1"
+  },
+  "fixture_input_budget_test": {
+    "context_window": 32768,
+    "max_output_tokens": 3072,
+    "reserved_tokens": 4096,
+    "evidence_selection": true,
+    "actual_model_tokenizer_verified": false
+  },
+  "cohorts": [
+    {
+      "file": "samples/waf-parser-stress-v1/parser_stress_50.json",
+      "sha256": "147ab601d5ec69ed8ba371ba3e92b2280c9a8b447d3c8a718ea1595d80ac7f8f",
+      "events": 50,
+      "inspection_statuses": {
+        "not_checked": 41,
+        "no_issue_observed": 8,
+        "issues_observed": 1
+      },
+      "observation_counts": {
+        "content_length_conflict": 1
+      },
+      "limitations": {
+        "http_structure_not_supported": 40,
+        "header_inspection_limit": 1,
+        "chunk_framing_not_supported": 1
+      },
+      "guard_eligible_observations_by_reference": {
+        "inconclusive": 1
+      }
+    },
+    {
+      "file": "samples/waf-dummy-v1/hard_50.json",
+      "sha256": "0bd259c02732fdf559588c1116e1a597657ac7b6d9aa73d09b5690c804c27aa2",
+      "events": 50,
+      "inspection_statuses": {
+        "no_issue_observed": 44,
+        "issues_observed": 6
+      },
+      "observation_counts": {
+        "declared_body_not_captured": 1,
+        "transfer_encoding_content_length": 1,
+        "data_after_chunked_body": 1,
+        "json_duplicate_keys": 2,
+        "json_container_unclosed": 1,
+        "content_length_conflict": 1
+      },
+      "limitations": {
+        "wire_body_length_not_comparable": 1,
+        "transfer_coding_not_supported": 1
+      },
+      "guard_eligible_observations_by_reference": {
+        "inconclusive": 4
+      }
+    },
+    {
+      "file": "samples/waf-dummy-v1/medium_50.json",
+      "sha256": "e5b0f1dc37014e2ea7c04d40d05d7820d728ec574c26048e2f380ecc506b0c22",
+      "events": 50,
+      "inspection_statuses": {
+        "no_issue_observed": 49,
+        "issues_observed": 1
+      },
+      "observation_counts": {
+        "json_container_unclosed": 1
+      },
+      "limitations": {},
+      "guard_eligible_observations_by_reference": {
+        "inconclusive": 1
+      }
+    }
+  ],
+  "verified_source_sha256": {
+    "backend/app/services/request_integrity.py": "b39dc85da10fd3c7a6c04701e60585fcdf3bb8abdd714a1c4bd2de89a9bf8484",
+    "backend/app/agent/input_integrity.py": "f866dac4c0528600089c5c2a84e009744b999374734bc0643f2a73eb1e7088a4",
+    "backend/app/agent/input_builder.py": "2b97da39dbe00773bad5c55593e6978c2750271a029f9d489ce7b059cba7035f",
+    "backend/app/agent/prompts.py": "2d58fa29781908a0c21fbf08da464244a15c21d724712a9cb589b36570af9a89",
+    "backend/app/agent/evidence_candidates.py": "9b0d6644be83a76f1acfd7095ae122887dfa245daaa68b6fde8417fedcdd5f40",
+    "backend/app/worker.py": "d8e73d8c5af710e0aaff4ac2a56e39b01a147c2f39fb452531a103a424347400",
+    "backend/app/api/agent_settings.py": "e18c62cd4109d3a8acbca8a38bb830e7b0c5194eb05a6622f8bf5d22086a6b10",
+    "frontend/src/agentSettings.js": "846c32afe2af7b2a717af4d02ddaf6d3a37816980a8dc81f4c4a9acd369dbd29",
+    "frontend/src/AgentSettings.jsx": "fed9c574612360def0411579532b6593563699e3c912da4e3e1b0db712efcadc"
+  },
+  "limitations": [
+    "Observed structural issues do not prove attack intent, log truncation or model quality.",
+    "41 parser-stress examples are outside the supported structure/inspection bounds.",
+    "Missing ownership, authorization and application policy are not inferred.",
+    "Eligible observation does not mean a final verdict was changed; source visibility and normal evidence overlap are also required.",
+    "Gemma4 and gpt-5.4-mini were not re-evaluated in this implementation step."
+  ]
+}

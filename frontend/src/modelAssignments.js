@@ -1,7 +1,7 @@
 import { providerOf } from "./llmProfiles.js";
 
 const fingerprintValid = value => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
-export const roleAssigned = profile => profile?.status === "production" || profile?.is_test === true;
+export const roleAssigned = profile => profile?.status === "production" || profile?.is_test === true || Boolean(profile?.agent_roles?.length);
 export function modelAssignmentPayload(fingerprint) {
   if (!fingerprintValid(fingerprint)) throw new Error("invalid_model_profile_fingerprint");
   return { expected_profile_fingerprint: fingerprint };
@@ -26,7 +26,7 @@ export function testModelAvailability({ profiles, loading, error, agentMode }) {
   if (loading) return { blocked: "Test 모델 지정 상태를 확인하는 중입니다.", profile: null };
   if (error || !Array.isArray(profiles)) return { blocked: "Test 모델 지정 상태를 조회하지 못했습니다. 새로고침으로 다시 확인하세요.", profile: null };
   const candidates = profiles.filter(profile => profile.is_test === true);
-  if (candidates.length !== 1) return { blocked: candidates.length ? "Test 모델 지정 정보가 올바르지 않습니다. 설정을 확인하세요." : "Test 모델이 지정되지 않았습니다. 설정 → LLM 프로필에서 전체 검증을 통과한 프로필을 Test로 지정하세요. Production으로 자동 대체하지 않습니다.", profile: null };
+  if (candidates.length !== 1) return { blocked: candidates.length ? "Test 모델 지정 정보가 올바르지 않습니다. 설정을 확인하세요." : "Test 모델이 지정되지 않았습니다. 설정 → Agent 설정에서 전체 검증을 통과한 프로필을 Test로 지정하세요. Production으로 자동 대체하지 않습니다.", profile: null };
   const profile = candidates[0];
   return { blocked: assignmentBlockReason(profile), profile, message: "접수 당시 Test 모델과 프롬프트를 고정합니다. 지정 변경은 새 테스트에만 적용하며 Production 모델은 바꾸지 않습니다." };
 }

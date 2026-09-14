@@ -9,6 +9,7 @@ import json
 import uuid
 
 import pytest
+from agent_selection_helpers import model_output
 from sqlalchemy import func, select
 
 from app import worker
@@ -199,7 +200,7 @@ def test_different_llm_roles_execute_identical_frozen_prompts_after_activation(c
         if kwargs.get("egress_check"):
             kwargs["egress_check"]()
         calls.append(kwargs)
-        return AgentCallResult(output=fake_output(), framework_run_id="synthetic-common-prompt",
+        return AgentCallResult(output=model_output(fake_output(), kwargs), framework_run_id="synthetic-common-prompt",
             agent_fingerprint="synthetic", finish_reason="completed", failure_id=None,
             error=None, telemetry={"framework_version": "0.6.2"})
 

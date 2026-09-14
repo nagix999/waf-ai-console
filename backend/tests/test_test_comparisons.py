@@ -146,7 +146,8 @@ def test_reference_provenance_must_match(comparison_client, event_payload, field
     assert result["counts"]["exclusions"] == {"reference_mismatch": 1}
 
 
-def test_retry_usage_has_no_double_count_and_includes_recorded_prior_runs(comparison_client, event_payload):
+@pytest.mark.parametrize("repair_kind", ["output_validation_retry", "evidence_grounding_retry"])
+def test_retry_usage_has_no_double_count_and_includes_recorded_prior_runs(comparison_client, event_payload, repair_kind):
     baseline = submit(comparison_client, event_payload, ["true_positive"])
     candidate = submit(comparison_client, event_payload, ["true_positive"])
     finish(comparison_client, baseline, ["true_positive"])
@@ -155,7 +156,7 @@ def test_retry_usage_has_no_double_count_and_includes_recorded_prior_runs(compar
     with comparison_client.app.state.session_factory() as db:
         for index, metadata in enumerate([
             {"usage": {"input_tokens": 99999, "output_tokens": 99999, "total_tokens": 99999},
-             "output_validation_retry": {"attempted": True, "attempt_count": 2, "attempts": [
+             repair_kind: {"attempted": True, "attempt_count": 2, "attempts": [
                  {"usage": {"input_tokens": 100, "output_tokens": 10, "total_tokens": 110}},
                  {"usage": {"input_tokens": 200, "output_tokens": 20, "total_tokens": 220}}]}},
             {"usage": {"input_tokens": 3, "output_tokens": None, "total_tokens": None}},

@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from agent_selection_helpers import model_output
 from sqlalchemy import event, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -275,7 +276,7 @@ def test_primary_and_verifier_receive_no_upload_answer_or_provenance(
     async def fake_execute(**kwargs):
         calls.append(kwargs)
         return AgentCallResult(
-            output=primary_output("test").model_copy(update={"confidence_score": 0.5}),
+            output=model_output(primary_output("test").model_copy(update={"confidence_score": 0.5}), kwargs),
             framework_run_id="synthetic-no-network", agent_fingerprint="synthetic-offline",
             finish_reason="completed", failure_id=None, error=None,
             telemetry={"framework": "moduagent", "framework_version": "0.6.2", "tool_trace": []},

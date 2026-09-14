@@ -2,64 +2,53 @@
 
 import re
 from collections.abc import Mapping
-
-
-_REQUEST_LINE = re.compile(r"([!#$%&'*+.^_`|~0-9A-Za-z-]+)[ \t]+([^ \t\r\n]+)[ \t]+(HTTP/\d+(?:\.\d+)?)")
-_HEADER_NAME = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+")
+from ..services.http_parser import parse_http_payload
 
 
 class EvidenceSourceResolver:
     """Validate location and exact text only; this does not validate its meaning."""
 
-    def __init__(self, raw_payload: str, event: Mapping[str, object]) -> None:
+    def __init__(
+        self, raw_payload: str, event: Mapping[str, object], parsed: dict | None = None,
+        *, submitted_payload_spans: tuple[tuple[int, int], ...] | None = None,
+        submitted_event: Mapping[str, object] | None = None,
+        decoding_hints: dict | None = None,
+    ) -> None:
         self.raw_payload = raw_payload
         self.event = event
-        self.payload_parts: dict[str, str] = {}
-        self.header_lines: list[str] = []
-        separator = re.search(r"\r?\n\r?\n", raw_payload)
-        head = raw_payload[:separator.start()] if separator else raw_payload
-        first_break = re.search(r"\r?\n", head)
-        request_line = head[:first_break.start()] if first_break else head
-        request = _REQUEST_LINE.fullmatch(request_line)
-        if request is None:
-            # Unrecognized formats can still cite the full raw payload. Do not
-            # invent a body/query/header boundary from an ambiguous payload.
-            return
-        method, target, protocol = request.groups()
-        headers = head[first_break.end():] if first_break else ""
-        self.header_lines = re.split(r"\r?\n", headers) if headers else []
-        self.payload_parts = {
-            "request_line": request_line,
-            "method": method,
-            "uri": target,
-            "request_target": target,
-            "protocol": protocol,
-            "headers": headers,
-        }
-        target_without_fragment = target.split("#", 1)[0]
-        path, query_separator, query = target_without_fragment.partition("?")
-        # Preserve raw absolute-form request targets; remove only the authority
-        # prefix for the path view. URL parsing/decoding could alter evidence.
-        absolute_prefix = re.match(r"[A-Za-z][A-Za-z0-9+.-]*://[^/]*", path)
-        has_path = path.startswith("/") or absolute_prefix is not None
-        if absolute_prefix:
-            path = path[absolute_prefix.end():]
-        if has_path:
-            self.payload_parts["path"] = path
-        if has_path and query_separator:
-            self.payload_parts["query"] = query
-        if separator:
-            self.payload_parts["body"] = raw_payload[separator.end():]
+        self.spans = (parsed if parsed is not None else parse_http_payload(raw_payload))["raw_source_spans"]
+        self.submitted_spans = submitted_payload_spans
+        self.submitted_event = submitted_event
+        self.decoding_hints = decoding_hints or {}
 
     def matches(self, field: str, excerpt: str) -> bool:
+        return self.rejection_reason(field, excerpt) is None
+
+    def rejection_reason(self, field: str, excerpt: str) -> str | None:
+        """Only fixed codes leave this function; never raw model/event text."""
         if not excerpt.strip():
-            return False
+            return "empty_excerpt"
+        sources = self.sources(field)
+        if not sources:
+            return "source_not_found"
+        if not any(excerpt in source for source in sources):
+            return "excerpt_not_in_source"
+        submitted = self._submitted_sources(field)
+        if submitted is not None and not any(excerpt in source for source in submitted):
+            return "excerpt_not_submitted"
+        return None
+
+    def sources(self, field: str) -> list[str]:
         field = field.strip().removeprefix("event.")
         if field in {"payload", "raw_payload"}:
-            return excerpt in self.raw_payload
+            return [self.raw_payload]
         if field.startswith("payload."):
-            return any(excerpt in source for source in self._payload_sources(field[8:]))
-        value: object = self.event
+            return self._payload_sources(field[8:])
+        return self._event_sources(self.event, field)
+
+    @staticmethod
+    def _event_sources(event: Mapping[str, object], field: str) -> list[str]:
+        value: object = event
         # Both extra_fields.items.0.value and items[0].value identify the same
         # concrete scalar. Container fields never search all their descendants.
         path = re.sub(r"\[(0|[1-9][0-9]*)\]", r".\1", field)
@@ -69,32 +58,59 @@ class EvidenceSourceResolver:
             elif isinstance(value, (list, tuple)) and part.isascii() and part.isdecimal():
                 index = int(part)
                 if index >= len(value):
-                    return False
+                    return []
                 value = value[index]
             else:
-                return False
+                return []
         if isinstance(value, bool) or value is None:
-            return False
+            return []
         if isinstance(value, (str, int, float)):
-            return excerpt in str(value)
-        return False
+            return [str(value)]
+        return []
+
+    def _submitted_sources(self, field: str) -> list[str] | None:
+        field = field.strip().removeprefix("event.")
+        if field in {"payload", "raw_payload"} or field.startswith("payload."):
+            if self.submitted_spans is None:
+                return None
+            ranges = ([(0, len(self.raw_payload))] if field in {"payload", "raw_payload"}
+                      else self._payload_ranges(field[8:]))
+            return [self.raw_payload[max(start, a):min(end, b)]
+                    for start, end in ranges for a, b in self.submitted_spans
+                    if max(start, a) < min(end, b)]
+        if self.submitted_event is None:
+            return None
+        return self._event_sources(self.submitted_event, field)
+
+    def resolve_decoder_original(self, field: str, excerpt: str) -> dict | None:
+        """Resolve only a submitted tool artifact's exact *original* occurrence.
+
+        No decoded values, general field guessing, whitespace normalization or
+        search of other fields. The caller records the mapping in encrypted I/O.
+        """
+        match = re.fullmatch(r"decoded_payload_hints\.items(?:\.(0|[1-9][0-9]*)|\[(0|[1-9][0-9]*)\])\.original", field.strip())
+        if not match or not excerpt.strip() or self.submitted_spans is None:
+            return None
+        if self.decoding_hints.get("raw_source_field") != "payload":
+            return None
+        index = int(match[1] or match[2])
+        items = self.decoding_hints.get("items", [])
+        if index >= len(items):
+            return None
+        item = items[index]
+        start, end, original = item.get("start"), item.get("end"), item.get("original")
+        if (type(start) is not int or type(end) is not int
+                or not 0 <= start < end <= len(self.raw_payload)
+                or not isinstance(original, str) or excerpt not in original
+                or self.raw_payload[start:end] != original
+                or not any(a <= start < end <= b for a, b in self.submitted_spans)):
+            return None
+        return {"field": "payload", "start": start, "end": end, "hint_index": index}
 
     def _payload_sources(self, field: str) -> list[str]:
-        if field in self.payload_parts:
-            return [self.payload_parts[field]]
+        return [self.raw_payload[start:end] for start, end in self._payload_ranges(field)]
+
+    def _payload_ranges(self, field: str) -> list:
         if field.startswith("headers."):
-            requested_name = field[len("headers."):]
-            if not _HEADER_NAME.fullmatch(requested_name):
-                return []
-            return [
-                line for line in self.header_lines
-                if line.partition(":")[1]
-                and line.partition(":")[0].lower() == requested_name.lower()
-            ]
-        if field.startswith("query."):
-            requested_name = field[len("query."):]
-            return [
-                pair for pair in self.payload_parts.get("query", "").split("&")
-                if pair.partition("=")[0] == requested_name
-            ]
-        return []
+            field = field.lower()
+        return self.spans.get(field, [])

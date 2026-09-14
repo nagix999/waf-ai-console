@@ -35,6 +35,8 @@ export const comparisonWarnings = {
   case_metadata_different: "문항명·난이도·유형 중 다른 정보가 있습니다. 문항 표는 기준 실행 정보를 우선 표시합니다.",
   model_configuration_unknown: "모델 설정 기록이 부족해 같은 조건인지 확인할 수 없습니다.",
   model_configuration_different: "모델 또는 실행 설정이 달라 프롬프트만의 비교가 아닙니다.",
+  verifier_configuration_unknown: "Verifier 모델 설정 기록이 부족합니다.",
+  verifier_configuration_different: "Verifier 모델 설정이 다릅니다. Primary나 프롬프트만의 효과로 해석하지 마세요.",
   execution_mode_unknown: "실행 모드 기록을 확인할 수 없습니다.", execution_mode_different: "두 실행의 실행 모드가 다릅니다.",
   verifier_threshold_unknown: "독립 검증 호출 임계값 기록이 부족합니다.", verifier_threshold_different: "독립 검증 호출 임계값이 다릅니다.",
   input_schema_unknown: "입력 스키마 버전 기록이 부족합니다.", input_schema_different: "두 실행의 입력 스키마 정의가 다릅니다.",

@@ -3,9 +3,9 @@ from typing import Any
 from urllib.parse import parse_qsl, urlsplit
 
 
-HTTP_PARSER_VERSION = "generic-http-v2"
+HTTP_PARSER_VERSION = "generic-http-v3"
 _TOKEN = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+\Z")
-_PROTOCOL = re.compile(r"HTTP/[0-9]\.[0-9]\Z")
+_PROTOCOL = re.compile(r"HTTP/[0-9](?:\.[0-9])?\Z")
 _HEADER_SEPARATOR = re.compile(r"\r?\n\r?\n")
 _CONTROL = re.compile(r"[\x00-\x08\x0a-\x1f\x7f]")
 
@@ -52,7 +52,7 @@ def parse_http_payload(payload: str) -> dict[str, Any]:
             protocol = parts[2]
         else:
             warn("request_protocol_not_recognized")
-        if re.search(r"[\x00-\x20\x7f]", target) or "#" in target:
+        if re.search(r"[\x00-\x20\x7f]", target) or "#" in target or "\\n" in target or "\\r" in target:
             warn("request_target_not_recognized")
         if separator is None:
             warn("headers_terminator_missing")
@@ -96,6 +96,45 @@ def parse_http_payload(payload: str) -> dict[str, Any]:
         except ValueError:
             # urllib errors may contain an input value; never expose them.
             warn("request_target_not_recognized")
+    # The parser and evidence validator share these exact, unmodified source
+    # ranges. A missing protocol does not erase a recognizable query/body.
+    spans: dict[str, list[list[int]]] = {}
+    def add(field: str, start: int, end: int) -> None:
+        spans.setdefault(field, []).append([start, end])
+
+    if recognizable:
+        add("request_line", 0, len(first_line))
+        add("method", 0, len(method))
+        target_start = len(method) + 1
+        if "request_target_not_recognized" not in warnings:
+            add("uri", target_start, target_start + len(target))
+            add("request_target", target_start, target_start + len(target))
+            path, question, raw_query = target.partition("?")
+            prefix = re.match(r"https?://[^/]*", path)
+            if target.startswith("/") or prefix:
+                path_start = prefix.end() if prefix else 0
+                add("path", target_start + path_start, target_start + len(path))
+                if question:
+                    query_start = target_start + len(path) + 1
+                    add("query", query_start, query_start + len(raw_query))
+                    position = query_start
+                    for pair in raw_query.split("&"):
+                        add("query." + pair.partition("=")[0], position, position + len(pair))
+                        position += len(pair) + 1
+        if protocol:
+            add("protocol", len(first_line) - len(protocol), len(first_line))
+        first_break = re.search(r"\r?\n", head)
+        header_start = first_break.end() if first_break else len(head)
+        add("headers", header_start, len(head))
+        for match in re.finditer(r"[^\n]+", head[header_start:]):
+            line = match.group()
+            if header_start + match.end() < len(head):
+                line = line.removesuffix("\r")
+            name, colon, value = line.partition(":")
+            if colon and _TOKEN.fullmatch(name) and not _CONTROL.search(value):
+                add("headers." + name.lower(), header_start + match.start(), header_start + match.start() + len(line))
+        if separator:
+            add("body", separator.end(), len(payload))
     return {
         "parse_status": ("partial" if warnings else "success") if recognizable else "failed",
         "request_line": first_line,
@@ -106,4 +145,6 @@ def parse_http_payload(payload: str) -> dict[str, Any]:
         "headers": headers,
         "body": body,
         "warnings": warnings,
+        "raw_source_spans": spans,
+        "raw_query_parameter_names": [key[6:] for key in spans if key.startswith("query.")],
     }

@@ -1,0 +1,45 @@
+[
+  {
+    "name": "opposing_interpretations_and_exact_duplicate",
+    "result": {
+      "analyst_assessment": {
+        "version": "analyst-assessment-v1",
+        "evidence": [
+          {"evidence_id": "e1", "field": "payload.body", "excerpt": "code_verifier=fixture", "interpretation_ko": "code_verifier 값에서 조건식 형태가 보입니다.", "supports": "true_positive"},
+          {"evidence_id": "e2", "field": "payload.body", "excerpt": "code_verifier=fixture", "interpretation_ko": "code_verifier는 인증 검증에 사용하는 요청 값입니다.", "supports": "false_positive"},
+          {"evidence_id": "e3", "field": "payload.body", "excerpt": "code_verifier=fixture", "interpretation_ko": "code_verifier 값에서 조건식 형태가 보입니다.", "supports": "true_positive"},
+          {"evidence_id": "e4", "field": "waf_action", "excerpt": "D", "interpretation_ko": "WAF가 요청을 차단했습니다. 공격 성공 여부는 알 수 없습니다.", "supports": "context"}
+        ],
+        "decision_issues": [
+          {"point_ko": "code_verifier의 값이 인증 데이터인지 구문으로 해석되는지 구분해야 합니다.", "evidence_ids": ["e3", "e2"], "missing_condition_ko": "해당 필드의 허용 형식은 제공되지 않았습니다."},
+          {"point_ko": "연결할 수 없는 쟁점", "evidence_ids": ["e999"], "missing_condition_ko": null}
+        ]
+      }
+    },
+    "expected": {
+      "evidence": [
+        {"number": 1, "field": "payload.body", "excerpt": "code_verifier=fixture", "interpretation_ko": "code_verifier 값에서 조건식 형태가 보입니다.", "supports": "true_positive", "related_numbers": [2]},
+        {"number": 2, "field": "payload.body", "excerpt": "code_verifier=fixture", "interpretation_ko": "code_verifier는 인증 검증에 사용하는 요청 값입니다.", "supports": "false_positive", "related_numbers": [1]},
+        {"number": 3, "field": "waf_action", "excerpt": "D", "interpretation_ko": "WAF가 요청을 차단했습니다. 공격 성공 여부는 알 수 없습니다.", "supports": "context", "related_numbers": []}
+      ],
+      "issues": [{"point_ko": "code_verifier의 값이 인증 데이터인지 구문으로 해석되는지 구분해야 합니다.", "evidence_numbers": [1, 2], "missing_condition_ko": "해당 필드의 허용 형식은 제공되지 않았습니다."}]
+    }
+  },
+  {
+    "name": "unknown_or_missing_direction_is_not_the_verdict",
+    "result": {
+      "verdict": "true_positive",
+      "analyst_assessment": {"version": "analyst-assessment-v1", "evidence": [
+        {"evidence_id": "e1", "field": "extra_fields.primary_email", "excerpt": "fixture@example.invalid", "interpretation_ko": "primary_email은 연락처입니다."},
+        {"evidence_id": "e2", "field": "payload", "excerpt": "<script>fixture</script>", "interpretation_ko": "primary 필드의 내용입니다.", "supports": "__proto__"}
+      ], "decision_issues": []}
+    },
+    "expected": {"evidence": [
+      {"number": 1, "field": "extra_fields.primary_email", "excerpt": "fixture@example.invalid", "interpretation_ko": "primary_email은 연락처입니다.", "supports": "unclassified", "related_numbers": []},
+      {"number": 2, "field": "payload", "excerpt": "<script>fixture</script>", "interpretation_ko": "primary 필드의 내용입니다.", "supports": "unclassified", "related_numbers": []}
+    ], "issues": []}
+  },
+  {"name": "old_result_is_not_reclassified", "result": {"verdict": "false_positive", "evidence": [{"field": "payload", "excerpt": "fixture", "interpretation_ko": "기존 설명"}]}, "expected": null},
+  {"name": "future_metadata_is_not_assumed", "result": {"analyst_assessment": {"version": "analyst-assessment-v999", "evidence": []}}, "expected": null},
+  {"name": "malformed_metadata_stays_empty", "result": {"analyst_assessment": {"version": "analyst-assessment-v1", "evidence": [null, {}, {"field": "payload", "excerpt": "fixture", "interpretation_ko": {"secret": "NEVER_DUMP"}}], "decision_issues": [null, {}, {"point_ko": "fixture", "evidence_ids": [{}]}]}}, "expected": {"evidence": [], "issues": []}}
+]

@@ -264,6 +264,7 @@ class VLLMProfileUpdate(BaseModel):
 
 
 class VLLMProfileResponse(BaseModel):
+    agent_roles: list[str] = Field(default_factory=list)
     id: str
     profile_fingerprint: str
     name: str

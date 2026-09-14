@@ -1,0 +1,1211 @@
+[
+  {
+    "name": "linked_missing_condition",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "schema_version": "waf-analysis-v2",
+        "agent": {
+          "framework": "moduagent"
+        },
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "verdict_disagreement"
+          ]
+        },
+        "analyst_guidance": {
+          "checks": []
+        },
+        "analyst_assessment": {
+          "version": "analyst-assessment-v1",
+          "evidence": [
+            {
+              "evidence_id": "e1",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "계산식으로 해석할 수 있습니다.",
+              "supports": "true_positive"
+            },
+            {
+              "evidence_id": "e2",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "일반 데이터로 해석할 수 있습니다.",
+              "supports": "false_positive"
+            }
+          ],
+          "decision_issues": [
+            {
+              "point_ko": "이 값이 실행 구문으로 처리되는지 확인이 필요합니다.",
+              "evidence_ids": [
+                "e1",
+                "e2"
+              ],
+              "missing_condition_ko": "해당 필드의 허용 형식"
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "issue_numbers": [
+        [
+          1,
+          2
+        ]
+      ],
+      "conditions": [
+        "해당 필드의 허용 형식"
+      ],
+      "check_sources": [
+        "해당 기능의 담당자 또는 입력·처리 규격"
+      ],
+      "contains": [
+        "해당 필드의 허용 형식"
+      ]
+    }
+  },
+  {
+    "name": "null_condition_is_source_review",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "schema_version": "waf-analysis-v2",
+        "agent": {
+          "framework": "moduagent"
+        },
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "verdict_disagreement"
+          ]
+        },
+        "analyst_guidance": {
+          "checks": []
+        },
+        "analyst_assessment": {
+          "version": "analyst-assessment-v1",
+          "evidence": [
+            {
+              "evidence_id": "e1",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "계산식으로 해석할 수 있습니다.",
+              "supports": "true_positive"
+            },
+            {
+              "evidence_id": "e2",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "일반 데이터로 해석할 수 있습니다.",
+              "supports": "false_positive"
+            }
+          ],
+          "decision_issues": [
+            {
+              "point_ko": "이 값이 실행 구문으로 처리되는지 확인이 필요합니다.",
+              "evidence_ids": [
+                "e1",
+                "e2"
+              ],
+              "missing_condition_ko": null
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "issue_numbers": [
+        [
+          1,
+          2
+        ]
+      ],
+      "conditions": [
+        null
+      ],
+      "check_sources": [
+        "저장된 HTTP 원문과 판정 근거"
+      ],
+      "contains": [
+        "추가 자료가 부족하다고 확인된 것은 아닙니다"
+      ]
+    }
+  },
+  {
+    "name": "missing_point_anchors_saved_body",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "schema_version": "waf-analysis-v2",
+        "agent": {
+          "framework": "moduagent"
+        },
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "verdict_disagreement"
+          ]
+        },
+        "analyst_guidance": {
+          "checks": []
+        },
+        "analyst_assessment": {
+          "version": "analyst-assessment-v1",
+          "evidence": [
+            {
+              "evidence_id": "e1",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "계산식으로 해석할 수 있습니다.",
+              "supports": "true_positive"
+            },
+            {
+              "evidence_id": "e2",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "일반 데이터로 해석할 수 있습니다.",
+              "supports": "false_positive"
+            }
+          ],
+          "decision_issues": []
+        }
+      }
+    },
+    "expected": {
+      "issue_numbers": [
+        [
+          1,
+          2
+        ]
+      ],
+      "conditions": [
+        null
+      ],
+      "check_sources": [
+        "저장된 HTTP 원문과 판정 근거"
+      ],
+      "contains": [
+        "요청 본문",
+        "근거 1 · 2"
+      ]
+    }
+  },
+  {
+    "name": "invalid_link_never_becomes_missing_data",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "schema_version": "waf-analysis-v2",
+        "agent": {
+          "framework": "moduagent"
+        },
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "verdict_disagreement"
+          ]
+        },
+        "analyst_guidance": {
+          "checks": []
+        },
+        "analyst_assessment": {
+          "version": "analyst-assessment-v1",
+          "evidence": [
+            {
+              "evidence_id": "e1",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "계산식으로 해석할 수 있습니다.",
+              "supports": "true_positive"
+            },
+            {
+              "evidence_id": "e2",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "일반 데이터로 해석할 수 있습니다.",
+              "supports": "false_positive"
+            }
+          ],
+          "decision_issues": [
+            {
+              "point_ko": "이 값이 실행 구문으로 처리되는지 확인이 필요합니다.",
+              "evidence_ids": [
+                "missing"
+              ],
+              "missing_condition_ko": "해당 필드의 허용 형식"
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "issue_numbers": [
+        [
+          1,
+          2
+        ]
+      ],
+      "conditions": [
+        null
+      ],
+      "check_sources": [
+        "저장된 HTTP 원문과 판정 근거"
+      ],
+      "contains": []
+    }
+  },
+  {
+    "name": "ambiguous_id_not_used_for_recorded_condition",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "schema_version": "waf-analysis-v2",
+        "agent": {
+          "framework": "moduagent"
+        },
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "verdict_disagreement"
+          ]
+        },
+        "analyst_guidance": {
+          "checks": []
+        },
+        "analyst_assessment": {
+          "version": "analyst-assessment-v1",
+          "evidence": [
+            {
+              "evidence_id": "e1",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "계산식으로 해석할 수 있습니다.",
+              "supports": "true_positive"
+            },
+            {
+              "evidence_id": "e1",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "일반 데이터로 해석할 수 있습니다.",
+              "supports": "false_positive"
+            }
+          ],
+          "decision_issues": [
+            {
+              "point_ko": "이 값이 실행 구문으로 처리되는지 확인이 필요합니다.",
+              "evidence_ids": [
+                "e1",
+                "e2"
+              ],
+              "missing_condition_ko": "해당 필드의 허용 형식"
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "issue_numbers": [
+        [
+          1,
+          2
+        ]
+      ],
+      "conditions": [
+        null
+      ],
+      "check_sources": [
+        "저장된 HTTP 원문과 판정 근거"
+      ],
+      "contains": []
+    }
+  },
+  {
+    "name": "unclassified_does_not_infer_an_attack",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "schema_version": "waf-analysis-v2",
+        "agent": {
+          "framework": "moduagent"
+        },
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "verdict_disagreement"
+          ]
+        },
+        "analyst_guidance": {
+          "checks": []
+        },
+        "analyst_assessment": {
+          "version": "analyst-assessment-v1",
+          "evidence": [
+            {
+              "evidence_id": "e1",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "계산식으로 해석할 수 있습니다."
+            },
+            {
+              "evidence_id": "e2",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "일반 데이터로 해석할 수 있습니다."
+            }
+          ],
+          "decision_issues": []
+        }
+      }
+    },
+    "expected": {
+      "issue_numbers": [
+        [
+          1,
+          2
+        ]
+      ],
+      "conditions": [
+        null
+      ],
+      "check_sources": [
+        "저장된 HTTP 원문과 판정 근거"
+      ],
+      "contains": []
+    }
+  },
+  {
+    "name": "metadata_only_does_not_create_request_claim",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "schema_version": "waf-analysis-v2",
+        "agent": {
+          "framework": "moduagent"
+        },
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "verdict_disagreement"
+          ]
+        },
+        "analyst_guidance": {
+          "checks": []
+        },
+        "analyst_assessment": {
+          "version": "analyst-assessment-v1",
+          "evidence": [
+            {
+              "evidence_id": "e1",
+              "field": "company_name",
+              "excerpt": "value=1",
+              "interpretation_ko": "계산식으로 해석할 수 있습니다.",
+              "supports": "true_positive"
+            },
+            {
+              "evidence_id": "e2",
+              "field": "company_name",
+              "excerpt": "value=1",
+              "interpretation_ko": "일반 데이터로 해석할 수 있습니다.",
+              "supports": "false_positive"
+            }
+          ],
+          "decision_issues": []
+        }
+      }
+    },
+    "expected": {
+      "issue_numbers": [],
+      "conditions": [],
+      "check_sources": [],
+      "contains": []
+    }
+  },
+  {
+    "name": "no_evidence_cannot_anchor_missing_condition",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "schema_version": "waf-analysis-v2",
+        "agent": {
+          "framework": "moduagent"
+        },
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "verdict_disagreement"
+          ]
+        },
+        "analyst_guidance": {
+          "checks": []
+        },
+        "analyst_assessment": {
+          "version": "analyst-assessment-v1",
+          "evidence": [],
+          "decision_issues": [
+            {
+              "point_ko": "이 값이 실행 구문으로 처리되는지 확인이 필요합니다.",
+              "evidence_ids": [
+                "e1",
+                "e2"
+              ],
+              "missing_condition_ko": "해당 필드의 허용 형식"
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "issue_numbers": [],
+      "conditions": [],
+      "check_sources": [],
+      "contains": []
+    }
+  },
+  {
+    "name": "future_contract_not_assumed",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "schema_version": "waf-analysis-v2",
+        "agent": {
+          "framework": "moduagent"
+        },
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "verdict_disagreement"
+          ]
+        },
+        "analyst_guidance": {
+          "checks": []
+        },
+        "analyst_assessment": {
+          "version": "future",
+          "evidence": [
+            {
+              "evidence_id": "e1",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "계산식으로 해석할 수 있습니다.",
+              "supports": "true_positive"
+            },
+            {
+              "evidence_id": "e2",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "일반 데이터로 해석할 수 있습니다.",
+              "supports": "false_positive"
+            }
+          ],
+          "decision_issues": [
+            {
+              "point_ko": "이 값이 실행 구문으로 처리되는지 확인이 필요합니다.",
+              "evidence_ids": [
+                "e1",
+                "e2"
+              ],
+              "missing_condition_ko": "해당 필드의 허용 형식"
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "issue_numbers": [],
+      "conditions": [],
+      "check_sources": [],
+      "contains": []
+    }
+  },
+  {
+    "name": "legacy_not_reinterpreted",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "schema_version": "waf-analysis-v2",
+        "agent": {
+          "framework": "moduagent"
+        },
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "verdict_disagreement"
+          ]
+        },
+        "analyst_guidance": {
+          "checks": []
+        }
+      }
+    },
+    "expected": {
+      "issue_numbers": [],
+      "conditions": [],
+      "check_sources": [],
+      "contains": []
+    }
+  },
+  {
+    "name": "verifier_failed",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "schema_version": "waf-analysis-v2",
+        "agent": {
+          "framework": "moduagent"
+        },
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "verifier_failed"
+          ]
+        },
+        "analyst_guidance": {
+          "checks": []
+        },
+        "analyst_assessment": {
+          "version": "analyst-assessment-v1",
+          "evidence": [
+            {
+              "evidence_id": "e1",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "계산식으로 해석할 수 있습니다.",
+              "supports": "true_positive"
+            },
+            {
+              "evidence_id": "e2",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "일반 데이터로 해석할 수 있습니다.",
+              "supports": "false_positive"
+            }
+          ],
+          "decision_issues": [
+            {
+              "point_ko": "이 값이 실행 구문으로 처리되는지 확인이 필요합니다.",
+              "evidence_ids": [
+                "e1",
+                "e2"
+              ],
+              "missing_condition_ko": "해당 필드의 허용 형식"
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "issue_numbers": [],
+      "conditions": [],
+      "check_sources": [],
+      "contains": []
+    }
+  },
+  {
+    "name": "primary_evidence_rejected",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "schema_version": "waf-analysis-v2",
+        "agent": {
+          "framework": "moduagent"
+        },
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "primary_evidence_rejected"
+          ]
+        },
+        "analyst_guidance": {
+          "checks": []
+        },
+        "analyst_assessment": {
+          "version": "analyst-assessment-v1",
+          "evidence": [
+            {
+              "evidence_id": "e1",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "계산식으로 해석할 수 있습니다.",
+              "supports": "true_positive"
+            },
+            {
+              "evidence_id": "e2",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "일반 데이터로 해석할 수 있습니다.",
+              "supports": "false_positive"
+            }
+          ],
+          "decision_issues": [
+            {
+              "point_ko": "이 값이 실행 구문으로 처리되는지 확인이 필요합니다.",
+              "evidence_ids": [
+                "e1",
+                "e2"
+              ],
+              "missing_condition_ko": "해당 필드의 허용 형식"
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "issue_numbers": [],
+      "conditions": [],
+      "check_sources": [],
+      "contains": []
+    }
+  },
+  {
+    "name": "true_positive",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "true_positive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "schema_version": "waf-analysis-v2",
+        "agent": {
+          "framework": "moduagent"
+        },
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "verdict_disagreement"
+          ]
+        },
+        "analyst_guidance": {
+          "checks": []
+        },
+        "analyst_assessment": {
+          "version": "analyst-assessment-v1",
+          "evidence": [
+            {
+              "evidence_id": "e1",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "계산식으로 해석할 수 있습니다.",
+              "supports": "true_positive"
+            },
+            {
+              "evidence_id": "e2",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "일반 데이터로 해석할 수 있습니다.",
+              "supports": "false_positive"
+            }
+          ],
+          "decision_issues": [
+            {
+              "point_ko": "이 값이 실행 구문으로 처리되는지 확인이 필요합니다.",
+              "evidence_ids": [
+                "e1",
+                "e2"
+              ],
+              "missing_condition_ko": "해당 필드의 허용 형식"
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "issue_numbers": [],
+      "conditions": [],
+      "check_sources": [],
+      "contains": []
+    }
+  },
+  {
+    "name": "false_positive",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "false_positive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "schema_version": "waf-analysis-v2",
+        "agent": {
+          "framework": "moduagent"
+        },
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "verdict_disagreement"
+          ]
+        },
+        "analyst_guidance": {
+          "checks": []
+        },
+        "analyst_assessment": {
+          "version": "analyst-assessment-v1",
+          "evidence": [
+            {
+              "evidence_id": "e1",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "계산식으로 해석할 수 있습니다.",
+              "supports": "true_positive"
+            },
+            {
+              "evidence_id": "e2",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "일반 데이터로 해석할 수 있습니다.",
+              "supports": "false_positive"
+            }
+          ],
+          "decision_issues": [
+            {
+              "point_ko": "이 값이 실행 구문으로 처리되는지 확인이 필요합니다.",
+              "evidence_ids": [
+                "e1",
+                "e2"
+              ],
+              "missing_condition_ko": "해당 필드의 허용 형식"
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "issue_numbers": [],
+      "conditions": [],
+      "check_sources": [],
+      "contains": []
+    }
+  },
+  {
+    "name": "pending",
+    "detail": {
+      "status": "pending",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "schema_version": "waf-analysis-v2",
+        "agent": {
+          "framework": "moduagent"
+        },
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "verdict_disagreement"
+          ]
+        },
+        "analyst_guidance": {
+          "checks": []
+        },
+        "analyst_assessment": {
+          "version": "analyst-assessment-v1",
+          "evidence": [
+            {
+              "evidence_id": "e1",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "계산식으로 해석할 수 있습니다.",
+              "supports": "true_positive"
+            },
+            {
+              "evidence_id": "e2",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "일반 데이터로 해석할 수 있습니다.",
+              "supports": "false_positive"
+            }
+          ],
+          "decision_issues": [
+            {
+              "point_ko": "이 값이 실행 구문으로 처리되는지 확인이 필요합니다.",
+              "evidence_ids": [
+                "e1",
+                "e2"
+              ],
+              "missing_condition_ko": "해당 필드의 허용 형식"
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "issue_numbers": [],
+      "conditions": [],
+      "check_sources": [],
+      "contains": []
+    }
+  },
+  {
+    "name": "processing",
+    "detail": {
+      "status": "processing",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "schema_version": "waf-analysis-v2",
+        "agent": {
+          "framework": "moduagent"
+        },
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "verdict_disagreement"
+          ]
+        },
+        "analyst_guidance": {
+          "checks": []
+        },
+        "analyst_assessment": {
+          "version": "analyst-assessment-v1",
+          "evidence": [
+            {
+              "evidence_id": "e1",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "계산식으로 해석할 수 있습니다.",
+              "supports": "true_positive"
+            },
+            {
+              "evidence_id": "e2",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "일반 데이터로 해석할 수 있습니다.",
+              "supports": "false_positive"
+            }
+          ],
+          "decision_issues": [
+            {
+              "point_ko": "이 값이 실행 구문으로 처리되는지 확인이 필요합니다.",
+              "evidence_ids": [
+                "e1",
+                "e2"
+              ],
+              "missing_condition_ko": "해당 필드의 허용 형식"
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "issue_numbers": [],
+      "conditions": [],
+      "check_sources": [],
+      "contains": []
+    }
+  },
+  {
+    "name": "failed",
+    "detail": {
+      "status": "failed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "schema_version": "waf-analysis-v2",
+        "agent": {
+          "framework": "moduagent"
+        },
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "verdict_disagreement"
+          ]
+        },
+        "analyst_guidance": {
+          "checks": []
+        },
+        "analyst_assessment": {
+          "version": "analyst-assessment-v1",
+          "evidence": [
+            {
+              "evidence_id": "e1",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "계산식으로 해석할 수 있습니다.",
+              "supports": "true_positive"
+            },
+            {
+              "evidence_id": "e2",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "일반 데이터로 해석할 수 있습니다.",
+              "supports": "false_positive"
+            }
+          ],
+          "decision_issues": [
+            {
+              "point_ko": "이 값이 실행 구문으로 처리되는지 확인이 필요합니다.",
+              "evidence_ids": [
+                "e1",
+                "e2"
+              ],
+              "missing_condition_ko": "해당 필드의 허용 형식"
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "issue_numbers": [],
+      "conditions": [],
+      "check_sources": [],
+      "contains": []
+    }
+  },
+  {
+    "name": "model_hold_uses_linked_condition",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "schema_version": "waf-analysis-v2",
+        "agent": {
+          "framework": "moduagent"
+        },
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "primary_model_inconclusive"
+          ]
+        },
+        "analyst_guidance": {
+          "checks": []
+        },
+        "analyst_assessment": {
+          "version": "analyst-assessment-v1",
+          "evidence": [
+            {
+              "evidence_id": "e1",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "계산식으로 해석할 수 있습니다.",
+              "supports": "true_positive"
+            },
+            {
+              "evidence_id": "e2",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "일반 데이터로 해석할 수 있습니다.",
+              "supports": "false_positive"
+            }
+          ],
+          "decision_issues": [
+            {
+              "point_ko": "이 값이 실행 구문으로 처리되는지 확인이 필요합니다.",
+              "evidence_ids": [
+                "e1",
+                "e2"
+              ],
+              "missing_condition_ko": "해당 필드의 허용 형식"
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "issue_numbers": [
+        [
+          1,
+          2
+        ]
+      ],
+      "conditions": [
+        "해당 필드의 허용 형식"
+      ],
+      "check_sources": [
+        "해당 기능의 담당자 또는 입력·처리 규격"
+      ],
+      "contains": []
+    }
+  },
+  {
+    "name": "parser_partial_is_not_itself_a_cause",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "schema_version": "waf-analysis-v2",
+        "agent": {
+          "framework": "moduagent"
+        },
+        "diagnostics": {
+          "input_signals": [
+            "parser_partial"
+          ],
+          "inconclusive_reasons": []
+        },
+        "analyst_guidance": {
+          "checks": []
+        },
+        "analyst_assessment": {
+          "version": "analyst-assessment-v1",
+          "evidence": [
+            {
+              "evidence_id": "e1",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "계산식으로 해석할 수 있습니다.",
+              "supports": "true_positive"
+            },
+            {
+              "evidence_id": "e2",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "일반 데이터로 해석할 수 있습니다.",
+              "supports": "false_positive"
+            }
+          ],
+          "decision_issues": []
+        }
+      }
+    },
+    "expected": {
+      "issue_numbers": [],
+      "conditions": [],
+      "check_sources": [],
+      "contains": []
+    }
+  },
+  {
+    "name": "integrity_reason_has_priority_no_business_check",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "schema_version": "waf-analysis-v2",
+        "agent": {
+          "framework": "moduagent"
+        },
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "input_integrity_limited"
+          ],
+          "request_integrity": {
+            "downgraded_to_inconclusive": true,
+            "affected_issue_codes": [
+              "declared_body_not_captured"
+            ]
+          }
+        },
+        "analyst_guidance": {
+          "checks": []
+        },
+        "analyst_assessment": {
+          "version": "analyst-assessment-v1",
+          "evidence": [
+            {
+              "evidence_id": "e1",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "계산식으로 해석할 수 있습니다.",
+              "supports": "true_positive"
+            },
+            {
+              "evidence_id": "e2",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "일반 데이터로 해석할 수 있습니다.",
+              "supports": "false_positive"
+            }
+          ],
+          "decision_issues": [
+            {
+              "point_ko": "이 값이 실행 구문으로 처리되는지 확인이 필요합니다.",
+              "evidence_ids": [
+                "e1",
+                "e2"
+              ],
+              "missing_condition_ko": "해당 필드의 허용 형식"
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "issue_numbers": [
+        [
+          1,
+          2
+        ]
+      ],
+      "conditions": [
+        "해당 필드의 허용 형식"
+      ],
+      "check_sources": [],
+      "contains": []
+    }
+  },
+  {
+    "name": "hostile_condition_is_literal_not_executed",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "schema_version": "waf-analysis-v2",
+        "agent": {
+          "framework": "moduagent"
+        },
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "verdict_disagreement"
+          ]
+        },
+        "analyst_guidance": {
+          "checks": []
+        },
+        "analyst_assessment": {
+          "version": "analyst-assessment-v1",
+          "evidence": [
+            {
+              "evidence_id": "e1",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "계산식으로 해석할 수 있습니다.",
+              "supports": "true_positive"
+            },
+            {
+              "evidence_id": "e2",
+              "field": "payload.body",
+              "excerpt": "value=1",
+              "interpretation_ko": "일반 데이터로 해석할 수 있습니다.",
+              "supports": "false_positive"
+            }
+          ],
+          "decision_issues": [
+            {
+              "point_ko": "이 값이 실행 구문으로 처리되는지 확인이 필요합니다.",
+              "evidence_ids": [
+                "e1",
+                "e2"
+              ],
+              "missing_condition_ko": "<img src=\"https://blocked.invalid/a\">"
+            }
+          ]
+        }
+      }
+    },
+    "expected": {
+      "issue_numbers": [
+        [
+          1,
+          2
+        ]
+      ],
+      "conditions": [
+        "<img src=\"https://blocked.invalid/a\">"
+      ],
+      "check_sources": [
+        "해당 기능의 담당자 또는 입력·처리 규격"
+      ],
+      "contains": [
+        "blocked.invalid"
+      ]
+    }
+  }
+]

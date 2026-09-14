@@ -162,8 +162,10 @@ def assignment_block_reason(db, profile: VLLMProfile) -> str | None:
 
 
 def to_profile_response(profile: VLLMProfile, db=None) -> VLLMProfileResponse:
+    from .agent_configuration import verifier_roles
     reason = assignment_block_reason(db, profile)
     return VLLMProfileResponse(
+        agent_roles=verifier_roles(db, profile.id) if db is not None else [],
         id=profile.id,
         profile_fingerprint=profile_fingerprint(profile),
         name=profile.name,

@@ -6,7 +6,7 @@ fallback to today's role assignment, policy, threshold or missing schema.
 """
 import uuid
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -33,6 +33,8 @@ class ExecutionSnapshot(BaseModel):
     execution_mode: str = Field(pattern=r"^moduagent$")
     profile_id: str = Field(min_length=1, max_length=36)
     profile_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+    verifier_profile_id: str | None = Field(default=None, min_length=1, max_length=36)
+    verifier_profile_fingerprint: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     verifier_confidence_threshold: float = Field(ge=0, le=1, allow_inf_nan=False)
     instructions_hash: str
     input_schema_version_id: str
@@ -40,9 +42,22 @@ class ExecutionSnapshot(BaseModel):
     event_id: str
     event_fingerprint: str | None
 
+    @model_validator(mode="after")
+    def validate_roles(self):
+        if self.schema_version not in {1, 2}:
+            raise ValueError("execution_snapshot_version_invalid")
+        if self.schema_version == 2 and (not self.verifier_profile_id or not self.verifier_profile_fingerprint):
+            raise ValueError("execution_snapshot_verifier_missing")
+        if self.schema_version == 1 and (self.verifier_profile_id or self.verifier_profile_fingerprint):
+            raise ValueError("execution_snapshot_roles_invalid")
+        return self
 
-def make_execution_snapshot(analysis, profile, prompt, threshold) -> ExecutionSnapshot:
+
+def make_execution_snapshot(analysis, profile, prompt, threshold, verifier_profile=None) -> ExecutionSnapshot:
+    verifier_profile = verifier_profile or profile
     return ExecutionSnapshot(
+        schema_version=2, verifier_profile_id=verifier_profile.id,
+        verifier_profile_fingerprint=profile_fingerprint(verifier_profile),
         execution_mode="moduagent", profile_id=profile.id, profile_fingerprint=profile_fingerprint(profile),
         verifier_confidence_threshold=threshold, instructions_hash=prompt.instructions_hash,
         input_schema_version_id=analysis.input_schema_version_id,
@@ -57,7 +72,7 @@ def validate_snapshot_binding(analysis, crypto, snapshot):
         read_schema_snapshot(crypto, analysis)
     except (PromptSnapshotError, InputSchemaError, ValueError):
         raise RetryError("retry_input_or_prompt_snapshot_unavailable") from None
-    if (snapshot.schema_version != 1 or snapshot.instructions_hash != prompt.instructions_hash
+    if (snapshot.instructions_hash != prompt.instructions_hash
             or snapshot.input_schema_version_id != analysis.input_schema_version_id
             or snapshot.source_system != analysis.source_system or snapshot.event_id != analysis.event_id
             or snapshot.event_fingerprint != analysis.event_fingerprint):
@@ -92,13 +107,15 @@ def load_execution_snapshot(analysis, crypto) -> ExecutionSnapshot:
     return validate_snapshot_binding(analysis, crypto, snapshot)
 
 
-def check_profile(db, snapshot) -> VLLMProfile:
-    profile = db.get(VLLMProfile, snapshot.profile_id, populate_existing=True)
+def check_profile(db, snapshot, *, role="primary") -> VLLMProfile:
+    identifier = snapshot.verifier_profile_id if role == "verifier" and snapshot.schema_version == 2 else snapshot.profile_id
+    fingerprint = snapshot.verifier_profile_fingerprint if role == "verifier" and snapshot.schema_version == 2 else snapshot.profile_fingerprint
+    profile = db.get(VLLMProfile, identifier, populate_existing=True)
     if profile is None:
         raise RetryError("retry_original_profile_missing")
     if profile.status == "disabled":
         raise RetryError("retry_original_profile_disabled")
-    if profile_fingerprint(profile) != snapshot.profile_fingerprint:
+    if profile_fingerprint(profile) != fingerprint:
         raise RetryError("retry_original_profile_changed")
     if assignment_block_reason(db, profile):
         raise RetryError("retry_original_profile_not_verified")
@@ -117,6 +134,7 @@ def execution_request_check(engine, snapshot):
         # Fresh short transaction on EVERY transport/repair/Verifier call.
         with Session(engine) as db:
             check_profile(db, snapshot)
+            check_profile(db, snapshot, role="verifier")
     return check
 
 
@@ -173,6 +191,7 @@ def retry_context(db, crypto, analysis, agent_mode):
         raise RetryError("retry_model_validation_requires_new_validation")
     snapshot = original_execution_snapshot(db, crypto, analysis)
     profile = check_profile(db, snapshot)
+    check_profile(db, snapshot, role="verifier")
     return snapshot, profile
 
 
@@ -191,8 +210,11 @@ def eligibility(db, crypto, analysis_id, agent_mode):
     except RetryError as exc:
         response.blocked_reason = exc.code
         return response
+    verifier = check_profile(db, _snapshot, role="verifier")
     return response.model_copy(update={"allowed": True, "provider": profile.provider, "model_profile_id": profile.id,
-                                       "model_profile": profile.name, "model_name": profile.model_name})
+                                       "model_profile": profile.name, "model_name": profile.model_name,
+                                       "verifier_model_profile": verifier.name, "verifier_model_name": verifier.model_name,
+                                       "verifier_provider": verifier.provider})
 
 
 def enqueue_retry(db, crypto, settings, analysis_id, request, actor):

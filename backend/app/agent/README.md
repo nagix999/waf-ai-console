@@ -1,5 +1,23 @@
 # WAF Agent 판정 정책 v2
 
+2026-09-14 **부분 로그·보류 안내 보완**: [처리 계약](../../../docs/Partial_Input_and_Hold_Review_2026-09-14.md)에 따라 v2.12의 새 실행은 request-integrity-v2를 쓴다. HTTP 버전만 빠진 로그에서 명시된 본문 길이와 수집본을 대조하되 미지원 구조는 추정하지 않는다. 과거 v2.9~v2.11은 v1을 유지한다. 보류 안내는 저장된 근거·조건에 연결하며 새 모델 출력이나 판정을 만들지 않는다. 프롬프트 문구는 v2.11과 동일하고 DB·새 패키지·LLM 단계·운영 설정 변경은 없다.
+
+2026-09-14 **요청 의미 판단 v2**: [보완 계약](../../../docs/Context_Judgment_v2_2026-09-14.md)에 따라 새 공통 지침 v2.11은 입력 문맥·공격/정상 의미·판정을 가르는 조건을 순서대로 평가하도록 한다. 전달 형식과 공격 구문, 시도와 성공, 시그니처 일치와 전체 공격성을 구분한다. v2.10의 근거 구분·입력 검사·독립 Verifier·과거 스냅샷은 유지한다. 별도 검수 자료 18건을 추가했지만 모델 품질 향상을 확인한 것은 아니다. DB·모델·편집 지침 변경이나 재배포·실제 LLM 재평가는 없다.
+
+2026-09-14 후속 실제 모델 평가: v2.10·gpt-5.4-mini 파싱/Hard/Medium 각 50건을 완료했다. v2.8 대비 참고 답안 일치 119→120건, 실행 실패 0건이며 새 근거 분류 150건·보류 쟁점 18/19건을 확인했다. 미탐 0→1건과 설명 품질 문제가 남아 운영 확대 근거로 삼지 않는다. [비교 보고서](../../../docs/evaluations/Analyst_Assessment_GPT54Mini_150_2026-09-14.md)가 아래 구현 당시 미검증 안내 이후의 상태다. 설정·기존 데이터는 유지했고 Gemma4·운영 로그는 미검증이다.
+
+2026-09-14 **근거 구분·보류 설명 1~3단계**: [분석가 설명 계약](../../../docs/Analyst_Evidence_and_Hold_Explanation_2026-09-14.md)이 새 공통 지침 v2.10의 출력·표시 계약에 우선한다. 근거별 `supports`와 근거에 연결한 `decision_issue`를 기록하고, 두 역할의 유효 근거를 별도 `analyst_assessment`에 최대 10개 보존한다. 기존 `evidence` 최대 5개·최종 결합·독립성·과거 v2.6~v2.9 스냅샷은 유지한다. 필드명에 포함된 단어 때문에 설명을 삭제하지 않는다. 새 DB/패키지/LLM 단계는 없으며 코드·오프라인 검증 범위다.
+
+2026-09-11 **요청 입력 검사 v1**: [입력 검사 계약](../../../docs/Request_Integrity_v1_2026-09-11.md)에 따라 공통 지침 v2.9의 새 ModuAgent 실행에 `request-integrity-v1`을 적용한다. 본문 누락·길이/전송 경계·JSON 구조를 검사하고, 문제가 있는 구간을 근거로 한 정상 판정만 독립 검증·최종 보류로 제한한다. 원문 출처 검증과 의미 검증은 다르며 공격 판정을 일괄 강등하지 않는다. 관찰과 실제 제한 사유를 구분하고 과거 v2.6~v2.8 입력·지침·출력은 유지한다. 새 DB/패키지 변경과 실제 모델 검증·배포는 없다.
+
+2026-09-10 **요청 문맥 판단 v1**: [문맥 판단 보강 계약](../../../docs/Context_Judgment_v1_2026-09-10.md)에 따라 새 공통 지침 v2.8은 패턴 일치와 공격 시도, 인용/설정/표시 데이터와 실행 입력을 구분하도록 요구한다. 원문 후보 선택 계약과 Verifier 정책은 유지한다. 과거 v2.7 스냅샷도 후보 선택을 유지하며 v2.6은 기존 인용 계약으로 실행한다. DB·운영 의존성 변경은 없다.
+
+2026-09-10 **원문 후보 선택 v1**은 [원문 후보 선택 계약](../../../docs/Evidence_Selection_v1_2026-09-10.md)을 따른다. 새 공통 지침 v2.7로 고정한 실행은 모델이 원문 후보 번호와 해석만 출력하고 서버가 원문·위치·제출 범위를 검증해 기존 결과 형식으로 연결한다. 디코딩 해석은 원문 후보와 연결하며 디코딩 값을 원문으로 인정하지 않는다. 과거 지침 스냅샷은 기존 인용 계약을 유지한다. 관리자 지침, 모델, Verifier 정책, DB와 운영 패키지는 변경하지 않는다. 아래 과거 계약과 충돌하면 새 실행에는 이 계약이 우선한다.
+
+2026-09-10 후속 **인용 교정 v2**는 [원문 인용 교정 계약](../../../docs/Evidence_Citation_Repair_v2_2026-09-10.md)을 따른다. 제출된 원문 위치와 연결된 decoder `original`만 원문 필드로 해석하고, 원문과 실제 제출 구간 양쪽에서 인용을 검증한다. 오류가 남으면 같은 역할에서 별도 인용 교정 계약으로 최대 1회 요청하며 판정·해석·유효 근거를 전체 재작성하지 않는다. 미해결 인용·재판단 요청·메타데이터만 남은 경우에는 보류하고 유효 근거는 보존한다. 기본 판정 지침·모델 스냅샷은 바꾸지 않으며 교정 지침은 별도 `evidence-repair-v2`로 기록한다. 새 DB/운영 패키지는 없고 아래 과거 교정 설명에는 이 계약이 우선한다.
+
+2026-09-10 현재 계약은 [Agent 설정·근거 검증 1차 개선](../../../docs/Agent_Settings_and_Grounding_v0.2.0.md)을 따른다. 설정 → Agent 설정에 역할별 LLM·기존 공통 지침·보류 집계를 통합한다. 파서 `generic-http-v3`의 원문 위치를 근거 검증에 재사용하며 근거 오류는 역할별 1회 교정 후 기존 강등/결합 정책을 적용한다. 교정 전·후 구조화 출력은 암호화된 `grounding_history`, 안전한 건수·사유는 metadata 및 결과 `diagnostics`에 기록한다. 새 마이그레이션은 `0014_agent_configuration`이며 실제 모델 품질·운영 배포는 별도 검증이다.
+
 이 디렉터리는 ModuAgent 실행 자체와 독립적인 도메인 계약을 보관합니다. 모델이나 프롬프트를 교체해도 아래 최종 판정 규칙은 애플리케이션 코드가 강제합니다.
 
 ## 출력 계약
@@ -64,7 +82,7 @@ Verifier 실패 또는 판정 불일치는 최종 `inconclusive`/`UNKNOWN`으로
 
 ## 실행 및 이력
 
-- 새 parser 단계는 `parser_version=generic-http-v2`, 실제 `parse_status`, `fallback_llm_used=false`를 기록합니다. 별도 Payload Extractor를 실행한 것으로 표시하지 않습니다. 원문을 자동 복원/디코딩하지 않으며, 파서 상태는 best-effort 요청·헤더 구조의 인식 수준이지 메시지 완전성이나 공격성 검증 결과가 아닙니다.
+- 새 parser 단계는 `parser_version=generic-http-v3`, 실제 `parse_status`, `fallback_llm_used=false`를 기록합니다. 원문 위치 `raw_source_spans`는 근거 검증에서도 그대로 사용합니다. 별도 Payload Extractor를 실행한 것으로 표시하지 않습니다. 원문을 자동 복원/디코딩하지 않으며, 파서 상태는 best-effort 요청·헤더 구조의 인식 수준이지 메시지 완전성이나 공격성 검증 결과가 아닙니다.
 - ModuAgent 0.6.2 Standard execution
 - Pydantic 구조화 출력
 - timeout/network/HTTP 408/5xx에 한해 1회 재시도
@@ -92,7 +110,7 @@ worker는 parser 다음 `decoder`, `agent_input` 단계를 기록합니다. 전�
 
 ## LLM Provider
 
-Production과 Test는 provider 전체에서 각각 최대 하나만 지정하며, 둘 다 현재 설정으로 전체 검증을 통과해야 지정할 수 있습니다. 같은 프로필의 양쪽 지정은 명시적으로 허용합니다. 일반 테스트는 Test를 사용하고 Production으로 자동 대체하지 않습니다. Primary와 독립 Verifier는 해당 실행에서 선택한 같은 프로필을 사용합니다. OpenAI로 자동 우회하거나 기존 vLLM 프로필을 자동 변경하지 않습니다. `provider=vllm`은 DB의 Internal Egress 목록에 등록한 개별 내부 IP·포트와 `VLLMClient`를 사용하고, `provider=openai`는 공식 HTTPS API와 `OpenAICompatibleClient`를 사용합니다. 새로운 프레임워크나 SDK 의존성은 추가하지 않습니다.
+Production과 Test는 provider 전체에서 각각 Primary 하나를 지정하며, Verifier는 Primary와 동일 또는 별도 검증 프로필을 선택합니다. 모든 새 배정에는 현재 설정으로 전체 검증을 통과해야 합니다. 일반 테스트는 Test를 사용하고 Production으로 자동 대체하지 않습니다. 두 역할의 입력은 작은 쪽 예산에 맞춰 동일하게 구성하고 Primary 출력은 Verifier에 전달하지 않습니다. 후보 150건 검증은 후보 모델을 양 역할에 사용합니다. OpenAI로 자동 우회하거나 기존 vLLM 프로필을 자동 변경하지 않습니다. `provider=vllm`은 DB의 Internal Egress 목록에 등록한 개별 내부 IP·포트와 `VLLMClient`를 사용하고, `provider=openai`는 공식 HTTPS API와 `OpenAICompatibleClient`를 사용합니다. 새로운 프레임워크나 SDK 의존성은 추가하지 않습니다.
 
 vLLM의 기존 `WAF_VLLM_ALLOWED_TARGETS`는 무시하며 호스트명/CIDR 허용을 유지하지 않습니다. 관리자 설정에서 RFC1918 IPv4 또는 ULA IPv6와 포트를 등록해야 합니다. 새 허용 목록은 자동 초기화하지 않고 비어 있으면 차단합니다. worker 진입 시와 실제 HTTP 요청 직전(Primary/Verifier/출력 교정/SDK 재시도/연결 테스트 모두)에 DB를 재조회합니다. vLLM 프로필이 비활성화되거나 대상이 해제되면 이후 요청은 전송하지 않습니다. 이미 보낸 요청은 취소하지 않습니다. 양쪽 provider 모두 명시적인 HTTP 클라이언트로 redirect와 환경 프록시를 비활성화합니다. 관련 스키마/API/배포 전환은 `docs/Internal_Egress_v0.1.md`를 참고하세요.
 

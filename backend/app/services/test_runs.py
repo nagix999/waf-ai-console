@@ -79,6 +79,10 @@ def create_run_record(db, crypto, settings, *, name, idempotency_key, request_ha
         metadata.update(llm_provider=profile.provider, model_profile=profile.name,
                         model_profile_id=profile.id, model_name=profile.model_name,
                         profile_fingerprint=profile_fingerprint(profile))
+        from .agent_configuration import profile_metadata, select_verifier
+        # Candidate qualification deliberately tests the candidate in both roles.
+        verifier = profile if model_test else select_verifier(db, "test", profile)
+        metadata["verifier_profile"] = profile_metadata(verifier)
     else:
         profile = None
         metadata.update(model_profile="stub", llm_called=False)
@@ -322,6 +326,11 @@ def named_test_request_check(engine, run_id):
             if normalized != profile.base_url:
                 raise TargetNotAllowedError("test_run_profile_changed")
             validate_profile_provider_settings(profile, has_api_key=bool(profile.api_key_ciphertext))
+            verifier_metadata = run.profile_metadata.get("verifier_profile")
+            if verifier_metadata:
+                from .agent_configuration import validate_role_profile
+                validate_role_profile(latest, latest.get(VLLMProfile, verifier_metadata["model_profile_id"]),
+                                      verifier_metadata["profile_fingerprint"], require_verified=run.model_test_run_id is None)
     return check
 
 

@@ -37,7 +37,8 @@ export default function RetryAnalysis({ detail, onOpen }) {
       {info && <><p>기존 실패 이력은 보존하고 새 실행을 연결합니다. 기존 테스트의 평가 지표는 바꾸지 않습니다.</p><dl className="label-metadata"><dt>모델</dt><dd>{info.model_name || info.model_profile || "복원할 수 없음"}</dd><dt>지침</dt><dd>{info.prompt_version || "복원할 수 없음"}</dd></dl>
         {!info.allowed && <p className="notice">{retryError(info.blocked_reason)}</p>}
         {info.existing_retry_id && <button className="primary" type="button" onClick={() => { setOpen(false); onOpen(info.existing_retry_id); }}>재실행 결과 보기</button>}
-        {info.allowed && <><p className="notice">모델을 다시 호출하므로 처리 자원과 비용이 발생할 수 있습니다.{info.provider === "openai" && " HTTP 원문과 Cookie가 마스킹 없이 OpenAI로 다시 전송됩니다."}</p><label className="checkbox-row"><input type="checkbox" checked={approved} disabled={busy} onChange={event => setApproved(event.target.checked)} />당시 모델·지침과 호출 비용을 확인했습니다.</label><button type="button" className="primary" disabled={!approved || busy} onClick={submit}>{busy ? "접수 중…" : "재실행 시작"}</button></>}
+        {info.verifier_model_name && <p>Verifier: {info.verifier_model_profile} · {info.verifier_model_name}</p>}
+        {info.allowed && <><p className="notice">모델을 다시 호출하므로 처리 자원과 비용이 발생할 수 있습니다.{(info.provider === "openai" || info.verifier_provider === "openai") && " HTTP 원문과 Cookie가 마스킹 없이 OpenAI로 다시 전송됩니다."}</p><label className="checkbox-row"><input type="checkbox" checked={approved} disabled={busy} onChange={event => setApproved(event.target.checked)} />당시 모델·지침과 호출 비용을 확인했습니다.</label><button type="button" className="primary" disabled={!approved || busy} onClick={submit}>{busy ? "접수 중…" : "재실행 시작"}</button></>}
       </>}
       {error && <p className="error" role="alert">{error}</p>}
       {(error || info && !info.allowed && !info.existing_retry_id) && <button className="secondary" type="button" disabled={busy} onClick={() => setRefresh(value => value + 1)}>조건 다시 확인</button>}

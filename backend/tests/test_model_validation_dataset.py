@@ -5,11 +5,12 @@ from datetime import timedelta
 from pathlib import Path
 
 import pytest
+from agent_selection_helpers import model_output
 from sqlalchemy import func, select, update
 
 from app import worker
 from app.agent.executor import AgentCallResult
-from app.models import Analysis, AnalysisLabel, VLLMProfile, VLLMTestRun, utcnow
+from app.models import AgentConfiguration, Analysis, AnalysisLabel, VLLMProfile, VLLMTestRun, utcnow
 from app.services.evaluation import attach_evaluations
 from app.services.model_validation import DATASET_SIZE, dataset_evaluation, dataset_source, load_dataset
 from app.services.model_validation_worker import ModelTestLeaseLost, TestHeartbeat as LeaseHeartbeat, require_owned_test
@@ -42,7 +43,7 @@ def install_calls(monkeypatch, *, checks_pass=True, fail_case=False):
         if fail_case and len(calls) == 1:
             raise RuntimeError("synthetic_failure")
         return AgentCallResult(
-            output=WAFAnalysisOutput.model_validate(synthetic_output()), framework_run_id="synthetic-run",
+            output=model_output(WAFAnalysisOutput.model_validate(synthetic_output()), kwargs), framework_run_id="synthetic-run",
             agent_fingerprint="synthetic-agent", finish_reason="completed", failure_id=None, error=None,
             telemetry={"framework": "moduagent", "framework_version": "0.6.2"},
         )
@@ -171,7 +172,10 @@ def test_dataset_failure_rolls_back_run_and_all_cases(client, registered_vllm_ta
 def test_all_150_use_candidate_not_production_and_report_reference_comparison(client, registered_vllm_target, monkeypatch):
     profile, run = enqueue(client)
     with client.app.state.session_factory() as db:
-        db.add(VLLMProfile(name="different-production", model_name="other-model", base_url="http://10.0.0.99:8000/v1", status="production"))
+        other = VLLMProfile(name="different-production", model_name="other-model", base_url="http://10.0.0.99:8000/v1", status="production")
+        db.add(other)
+        db.flush()
+        db.add(AgentConfiguration(id=1, revision=1, production_verifier_profile_id=other.id, test_verifier_profile_id=other.id))
         db.commit()
     calls = install_calls(monkeypatch)
     run_claimed(client)
@@ -348,7 +352,7 @@ def test_review_lease_loss_during_actual_agent_step_discards_stale_output(
             replacement = worker.claim_next_vllm_test(newer, "synthetic-replacement", 900)
             owners["new"] = replacement.lease_owner
         return AgentCallResult(
-            output=WAFAnalysisOutput.model_validate(synthetic_output()),
+            output=model_output(WAFAnalysisOutput.model_validate(synthetic_output()), kwargs),
             framework_run_id="synthetic-stale-provider-response", agent_fingerprint="synthetic-stale-fingerprint",
             finish_reason="completed", failure_id=None, error=None,
             telemetry={"framework": "moduagent", "framework_version": "0.6.2"},

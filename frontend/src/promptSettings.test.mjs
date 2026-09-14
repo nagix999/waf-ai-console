@@ -117,7 +117,7 @@ test("error messages never echo unknown server text or submitted prompt contents
   assert.doesNotMatch(promptErrorMessage(error), /synthetic-sensitive/);
   assert.match(promptErrorMessage(error, "save"), /처리 결과.*새로고침/);
   assert.match(promptErrorMessage({ status: 409 }, "activate"), /다시 선택하고 동의/);
-  assert.match(promptErrorMessage({ status: 422, message: "prompt_policy_context_budget_too_small" }, "activate"), /현재 운영 모델의 입력 공간이 부족/);
+  assert.match(promptErrorMessage({ status: 422, message: "prompt_policy_context_budget_too_small" }, "activate"), /배정된 모델 중 입력 공간이 부족/);
   assert.doesNotMatch(promptErrorMessage({ status: 422, message: "unrelated" }, "activate"), /입력 공간/);
 });
 

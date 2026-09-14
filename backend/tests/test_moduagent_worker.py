@@ -1,6 +1,7 @@
 import pytest
+from agent_selection_helpers import model_output
 
-from app.agent.contracts import WAFAnalysisOutput
+from app.agent.contracts import EvidenceCorrectionOutput, WAFAnalysisOutput
 from app.agent.executor import AgentCallResult
 from app.models import Analysis, ModelProfileStatus, VLLMProfile
 from app.services.crypto import CryptoService
@@ -74,7 +75,7 @@ def test_moduagent_worker_uses_production_profile_and_stores_agent_steps(
     async def fake_execute(**kwargs):
         calls.append(kwargs)
         return AgentCallResult(
-            output=primary_output(),
+            output=model_output(primary_output(), kwargs),
             framework_run_id="framework-run-1",
             agent_fingerprint="agent-fingerprint-1",
             finish_reason="completed",
@@ -98,6 +99,8 @@ def test_moduagent_worker_uses_production_profile_and_stores_agent_steps(
     assert result["verdict"] == "true_positive"
     assert result["model_profile"] == "gemma4-prod"
     assert result["result"]["schema_version"] == "waf-analysis-v2"
+    assert result["result"]["analyst_assessment"]["version"] == "analyst-assessment-v1"
+    assert result["result"]["analyst_assessment"]["evidence"][0]["supports"] == "context"
     assert result["result"]["threat_analysis"]["severity"] == "HIGH"
     assert "uncertainties" not in result["result"]
     assert result["result"]["verifier"]["executed"] is False
@@ -113,11 +116,12 @@ def test_moduagent_worker_uses_production_profile_and_stores_agent_steps(
         "finalize",
     ]
     assert next(step for step in runs[0]["steps"] if step["step_type"] == "llm_primary")["metadata"]["evidence_grounding"] == {
-        "mode": "field_exact_substring",
+        "mode": "selected_raw_source",
         "checked_count": 1,
         "accepted_count": 1,
         "rejected_count": 0,
         "downgraded_to_inconclusive": False,
+        "correction_requires_review": False,
         "raw_values_stored": False,
     }
 
@@ -153,8 +157,11 @@ def test_ungrounded_decisive_evidence_is_downgraded_and_verified(
 
     async def fake_execute(**kwargs):
         calls.append(kwargs)
+        output = (EvidenceCorrectionOutput(corrections=[{"index": 0, "field": field, "excerpt": excerpt}],
+                                          requires_reanalysis=False)
+                  if "-evidence-repair" in kwargs["agent_name"] else primary_output(excerpt, field))
         return AgentCallResult(
-            output=primary_output(excerpt, field),
+            output=model_output(output, kwargs),
             framework_run_id=f"framework-run-{len(calls)}",
             agent_fingerprint=f"agent-fingerprint-{len(calls)}",
             finish_reason="completed",
@@ -168,7 +175,7 @@ def test_ungrounded_decisive_evidence_is_downgraded_and_verified(
     with client.app.state.session_factory() as db:
         process_moduagent(db, crypto, db.get(Analysis, created["id"]), "10.0.0.10:8000", 0.75)
 
-    assert [call["agent_name"] for call in calls] == ["waf-primary", "waf-verifier"]
+    assert [call["agent_name"] for call in calls] == ["waf-primary", "waf-primary-evidence-repair", "waf-verifier", "waf-verifier-evidence-repair"]
     client.post("/api/v1/auth/login", json={"username": "admin", "password": "test-password"})
     result = client.get(f"/api/v1/analyses/{created['id']}").json()["result"]
     assert result["verdict"] == "inconclusive"

@@ -14,6 +14,14 @@ from xml.sax.saxutils import escape
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from ..agent.analyst_guidance import EVIDENCE_SOURCE_CHECK, EVIDENCE_SOURCE_NOTICE
+from .hold_review import hold_review
+from .decision_explanation import (
+    GENERIC_HOLD_SUMMARY, GENERIC_TUNING_RISK, PROVISIONAL_ANALYSIS_NOTICE,
+    decision_explanation, is_generic_check, threat_category_label,
+)
+from .analyst_presentation import (
+    EVIDENCE_LABELS, EVIDENCE_NOTICE, LEGACY_EVIDENCE_NOTICE, analyst_text, assessment_view,
+)
 
 MAX_REPORT_BYTES = 512_000
 MAX_REPORT_ROWS = 1000
@@ -28,7 +36,6 @@ OUTCOMES = {
     "unknown_provenance": "평가 제외 · 실행 출처 미확인", "input_contaminated": "평가 제외 · 정답 포함 입력",
     "stub": "평가 제외 · 모의 실행", "failed": "평가 제외 · 실행 실패", "pending": "평가 제외 · 미완료",
 }
-_INTERNAL = re.compile(r"primary|verifier|1차\s*판정|독립\s*(검증|판정)|검증\s*실패|(?:판정|분석\s*결과).{0,30}(?:불일치|일치하지|서로\s*다|다릅)|(?:실패|failure)[\s_]*id|output_validation_failed|framework_run_id", re.I)
 _EXCEL_ESCAPE = re.compile(r"_x[0-9a-fA-F]{4}_")
 _FONT_LOCK = Lock()
 
@@ -67,7 +74,7 @@ def _text(value, fallback="미기록"):
 
 
 def _analyst(value, fallback="미기록"):
-    return value if isinstance(value, str) and value.strip() and not _INTERNAL.search(value) else fallback
+    return analyst_text(value, fallback)
 
 
 def _list(value):
@@ -127,15 +134,35 @@ def build_report(detail: dict, *, generated_at: datetime | None = None) -> Analy
     guidance, threat = _record(result.get("analyst_guidance")), _record(result.get("threat_analysis"))
     fallback = "현재 분석에서는 정탐·오탐 판정을 보류했습니다." if verdict == "inconclusive" else "저장된 최종 판정과 원문 근거를 확인해 주세요."
     summary = _analyst(guidance.get("summary_ko"), _analyst(result.get("summary_ko"), fallback))
+    decision = decision_explanation(detail)
+    if decision and (not decision["use_recorded_summary"] or summary == GENERIC_HOLD_SUMMARY):
+        summary = decision["reason_ko"]
     severity = threat.get("severity")
     if severity is None:
         severity = "미평가 · 이전 결과 또는 심각도 미기록"
+    elif severity in ("NONE", "UNKNOWN"):
+        severity = "해당 없음" if severity == "NONE" else "미확정"
+    assessment = _record(result.get("analyst_assessment"))
+    _list(assessment.get("evidence"))
+    _list(assessment.get("decision_issues"))
+    view = assessment_view(result)
     section("판정 요약", [
         ("최종 판정", VERDICTS[verdict]), ("심각도", severity), ("요약", summary),
+        *([("보류 구분", decision["title_ko"])] if decision else []),
         ("안내", "자동 분석 결과입니다. 공격 시도와 실제 피해 발생을 구분하고 최종 판단은 분석가가 검토합니다."),
     ])
+    review = hold_review(detail, decision)
+    if review["issues"]:
+        issue_rows = []
+        for issue in review["issues"]:
+            issue_rows += [("판단할 내용", issue["point_ko"]),
+                *([("아직 확인되지 않은 조건", issue["missing_condition_ko"])] if issue["missing_condition_ko"] else []),
+                ("관련 근거", " · ".join(map(str, issue["evidence_numbers"])))]
+        if issue_rows:
+            section("판단이 필요한 부분", issue_rows)
     if threat:
-        section("세부 분석", [("공격 유형", _analyst(threat.get("category"))),
+        section("세부 분석", [*([("안내", PROVISIONAL_ANALYSIS_NOTICE)] if verdict == "inconclusive" else []),
+            (threat_category_label(verdict), _analyst(threat.get("category"))),
             ("분석 위치", _text(threat.get("target"))), ("분석 내용", _analyst(threat.get("technique_ko"))),
             ("예상 영향", _analyst(threat.get("potential_impact_ko"))),
             *[("인코딩·난독화", value) for value in _list(threat.get("obfuscations")) if _analyst(value, "")]])
@@ -154,7 +181,21 @@ def build_report(detail: dict, *, generated_at: datetime | None = None) -> Analy
             continue
         seen.add(key)
         rows += [(f"근거 {len(seen)} · 위치", field), ("원문 발췌", excerpt), ("판정 근거", interpretation)]
-    section("판정 근거", rows or [("안내", "저장된 원문 발췌 근거가 없습니다.")])
+    if view is not None:
+        section("판정 근거", [("안내", EVIDENCE_NOTICE)])
+        for supports, label in EVIDENCE_LABELS.items():
+            items = [item for item in view["evidence"] if item["supports"] == supports]
+            if not items and supports in {"context", "unclassified"}:
+                continue
+            evidence_rows = []
+            for item in items:
+                evidence_rows += [(f"근거 {item['number']} · 위치", item["field"]),
+                    ("로그 발췌", item["excerpt"]), ("판단 이유", item["interpretation_ko"])]
+                if item["related_numbers"]:
+                    evidence_rows.append(("같은 로그 발췌", "근거 " + " · ".join(map(str, item["related_numbers"]))))
+            section(label, evidence_rows or [("안내", "기록된 근거가 없습니다.")])
+    else:
+        section("판정 근거", [("안내", LEGACY_EVIDENCE_NOTICE), *rows] if rows else [("안내", "저장된 원문 발췌 근거가 없습니다.")])
 
     limitations = [_analyst(value, "") for value in _list(guidance.get("limitations"))]
     if result.get("input_truncated") is True:
@@ -171,19 +212,24 @@ def build_report(detail: dict, *, generated_at: datetime | None = None) -> Analy
     for item in _list(structured):
         if not isinstance(item, dict):
             continue
+        if is_generic_check(item):
+            continue
         if item.get("check_ko") == EVIDENCE_SOURCE_CHECK:
             limitations.append(EVIDENCE_SOURCE_NOTICE)
-        elif _analyst(item.get("check_ko"), "") and not any(_INTERNAL.search(_text(item.get(key))) for key in ("source_ko", "check_ko", "why_ko")):
+        elif _analyst(item.get("check_ko"), ""):
             checks.append((_analyst(item.get("source_ko"), "확인 위치 미기록"), item["check_ko"], _analyst(item.get("why_ko"), "확인 목적 미기록")))
     for item in _list(result.get("recommended_checks")):
         if item == EVIDENCE_SOURCE_CHECK:
             limitations.append(EVIDENCE_SOURCE_NOTICE)
     if not explicit_checks and not checks:
         checks = [("확인 위치 미기록", value, "확인 목적 미기록") for value in _list(result.get("recommended_checks")) if _analyst(value, "") and value != EVIDENCE_SOURCE_CHECK]
+    if not checks:
+        checks = [(item["source_ko"], item["check_ko"], item["why_ko"]) for item in review["checks"]]
+    checks = list(dict.fromkeys(checks))
     if any(limitations):
         section("해석 시 주의사항", [("주의사항", value) for value in dict.fromkeys(limitations) if value])
     tuning = _record(result.get("tuning_recommendation"))
-    if tuning.get("recommended") is True or any(_analyst(tuning.get(key), "") for key in ("scope", "proposal_ko", "risk_ko", "validation_ko")):
+    if tuning.get("recommended") is True or any(_analyst(tuning.get(key), "") and not (key == "risk_ko" and tuning[key] == GENERIC_TUNING_RISK) for key in ("scope", "proposal_ko", "risk_ko", "validation_ko")):
         section("WAF 정책 검토", [("안내", "WAF 설정을 자동 변경하지 않습니다."),
             *[(label, _analyst(tuning.get(key))) for label, key in [("제안 범위", "scope"), ("제안", "proposal_ko"), ("주의사항", "risk_ko"), ("적용 전 확인", "validation_ko")] if _analyst(tuning.get(key), "")]])
     evaluation = _record(detail.get("evaluation"))
@@ -223,12 +269,13 @@ def build_report(detail: dict, *, generated_at: datetime | None = None) -> Analy
         ("출력 한도", f"본문 UTF-8 {MAX_REPORT_BYTES:,}바이트·{MAX_REPORT_ROWS:,}항목·PDF {MAX_PDF_PAGES}페이지·파일 10 MiB. 초과하면 부분 파일을 만들지 않습니다.")])
     # Follow-up stays last; explicit [] on decisive verdicts remains empty.
     if verdict == "inconclusive" or checks:
-        check_rows = [("안내", "판정 보류를 해소하려면 아래 자료를 확인해 주세요." if verdict == "inconclusive" else "현재 판정과 별개로 영향 범위·후속 대응에 유용한 선택적 확인입니다.")]
-        if not checks:
-            check_rows.append(("확인 사항", "구체적인 확인 자료는 기록되지 않았습니다. 저장된 원문과 대상 서비스의 처리 문맥을 함께 검토해 주세요."))
+        check_rows = [("안내", decision["action_ko"] if decision else "현재 판정과 별개로 영향 범위·후속 대응에 유용한 선택적 확인입니다.")]
+        if not checks and (not decision or decision["code"] in {"model_abstained", "reason_unrecorded", "assessment_pending"}):
+            check_rows.append(("확인 사항", "구체적인 확인 자료는 기록되지 않았습니다."))
         for index, (source, check, why) in enumerate(checks, 1):
             check_rows += [(f"확인 {index} · 자료", source), ("확인 내용", check), ("확인 목적", why)]
-        check_rows.append(("주의", "안내한 자료를 시스템이 이미 조회했다는 뜻이 아니며 확인 결과를 미리 단정하지 않습니다."))
+        if checks:
+            check_rows.append(("주의", "안내한 자료를 시스템이 이미 조회했다는 뜻이 아니며 확인 결과를 미리 단정하지 않습니다."))
         section("추가 확인 사항", check_rows)
     return AnalysisReport(_text(detail.get("id")), tuple(sections))
 

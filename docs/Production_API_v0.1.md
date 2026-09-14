@@ -205,12 +205,15 @@ curl --silent --show-error --fail-with-body \
 | `inconclusive` | 현재 근거로 확정 불가 | UNKNOWN |
 
 - 자동 연동은 최종 `verdict`와 `result.threat_analysis.severity`를 사용한다. 목록의 `severity`는 최종값의 조회용 복사본이다.
-- `confidence_score`는 0~1 모델 자기평가이며 보정된 확률이 아니다.
+- `confidence_score`는 0~1 모델 자기평가에 최종 결합 정책을 적용한 참고값이며 보정된 정탐 확률이 아니다.
 - 근거 최대 5개, 발췌 최대 300자, 한국어 해석 최대 2,000자. `evidence.field`가 지정한 원문 구간에서만 일치 여부를 검증하며 다른 필드에만 있는 발췌나 디코딩한 문자열은 인정하지 않는다. 확정 판정의 유효 근거가 모두 제거되면 inconclusive/UNKNOWN으로 강등한다. 출처 검증은 해석의 의미적 정확성을 보장하지 않는다.
 - `signature_assessment.relation`: exact / partial / mismatch / unknown.
 - Verifier 실패 또는 판정 불일치는 최종 inconclusive/UNKNOWN이다. Primary 출력 검증은 교정 1회 후에도 실패하면 분석 failed로 종료한다.
 - v2에는 `uncertainties`가 없다. 추가 확인 작업은 `recommended_checks`에 있다.
-- ModuAgent 모드의 현재 프롬프트 코드 기준은 `waf-judgment-v2.6`이며 새 접수의 `prompt_version`은 `waf-judgment-v2.6/policy-N` 형식이다. Production과 Test는 같은 활성 공통 프롬프트를 사용한다. 결과 계약은 `waf-analysis-v2`를 유지한다. stub 모드는 별도 프롬프트 식별값을 사용한다.
+- ModuAgent 모드의 현재 프롬프트 코드 기준은 `waf-judgment-v2.12`이며 새 접수의 `prompt_version`은 `waf-judgment-v2.12/policy-N` 형식이다. Production과 Test는 같은 활성 공통 프롬프트를 사용한다. 모델은 원문 후보 번호와 해석을 선택하고 서버가 원문 위치·제출 범위를 재검증해 기존 `field`/`excerpt`로 연결한다. 디코딩 결과는 원문이 아닌 해석으로 구분한다. 공통 지침은 입력 위치·구문·업무 의미, 공격 시도와 성공, 시그니처 일치와 요청 전체의 공격성을 구분하도록 요구한다. 미해결 후보 선택은 1회 교정 후 보류하며 시그니처·IP·WAF action만으로 확정하지 않는다. 과거 스냅샷은 이전 계약을 유지한다. 결과 계약은 `waf-analysis-v2`를 유지한다. stub 모드는 별도 프롬프트 식별값을 사용한다. v2.12는 입력 검사 버전을 고정하기 위한 변경이며 지침 문구는 v2.11과 같다.
+- 공통 지침 v2.12로 고정된 새 실행에는 `request-integrity-v2`를 적용한다. HTTP 버전만 빠지고 요청·헤더 경계가 분명한 부분 로그는 명시된 본문 길이와 수집본을 제한적으로 대조한다. 본문이 없을 때 Content-Type만으로 정상 판단한 경우도 해당 구간 제한에 포함한다. 그 외 부분 로그, 전송 인코딩, 비교할 수 없는 바이트 길이는 추정하지 않는다. v2.9~v2.11 스냅샷은 v1 검사 계약을 유지한다. 상세·보고서에서는 실제 보류 원인과 연결된 근거·확인 조건을 표시하되 저장된 결과와 판정은 재작성하지 않는다. [부분 로그·보류 안내 보완](Partial_Input_and_Hold_Review_2026-09-14.md)을 참고한다.
+- v2.10의 새 실행은 선택적 확장 `result.analyst_assessment`에 근거 방향(`supports`: true_positive/false_positive/context), 원문 대조된 근거 최대 10개, 근거에 연결한 판단 쟁점과 실제 미확인 조건을 기록한다. 버전은 `analyst-assessment-v1`이다. 정탐·오탐·참고 구분은 근거별 해석이며 최종 판정이 아니다. 기존 `evidence` 최대 5개와 판정 정책은 유지한다. 이전 결과에는 새 필드가 없고 임의 분류하지 않는다. 상세 필드·교정·호환 계약은 [분석가 설명 계약](Analyst_Evidence_and_Hold_Explanation_2026-09-14.md)을 따른다.
+- 공통 지침 v2.9의 새 실행은 `request-integrity-v1`으로 수집본의 누락·길이/전송 경계·JSON 구조를 제한적으로 검사한다. 확인된 문제 구간을 근거로 정상 판정한 경우에만 독립 검증과 최종 보류 제한을 적용한다. 공격 판정·관찰만 있는 중복 키·미지원 형식을 일괄 보류하지 않는다. `diagnostics.request_integrity`는 고정 코드·생략·제한 여부만 기록하며, `input_signals`의 `input_integrity_observed`와 실제 보류 원인 `input_integrity_limited`를 구분한다. 검사를 통과하거나 생략했다는 사실은 입력 완전성·정상 여부의 증명이 아니다. 기존 스냅샷·결과는 바꾸지 않는다.
 - 정책은 서버가 접수 시 선택·고정한다. 운영 버전 변경은 이후 새 접수에만 적용되며 대기 작업·재시도·재선점·중복 접수는 원래 버전을 유지한다. 요청에서 정책 ID·스냅샷·지침을 지정할 수 없다. 관리자 버전 관리 API와 `0006` 마이그레이션은 [프롬프트 버전 관리 정의서](Prompt_Policies_v0.1.md)를 참고한다.
 - `input_truncated=true`는 payload뿐 아니라 이벤트 메타데이터·파서 힌트가 축소된 경우도 포함한다. 정확한 모델 토큰 수는 운영 모델에서 별도 검증해야 한다.
 - v1 JSON은 그대로 보존한다. 과거 결과에 심각도가 없다면 응답 최상위 `severity`는 null이고 보존된 `result` 내부 키는 누락될 수 있다. 임의 추정하지 않는다.

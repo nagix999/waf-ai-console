@@ -80,7 +80,7 @@ export default function PromptSettings() {
 
   return <div className="prompt-settings">
     <section className="panel prompt-overview">
-      <div className="prompt-heading"><div><h2>판정 프롬프트</h2><p>운영·테스트에 사용할 공통 판정 지침을 관리합니다.</p></div>
+      <div className="prompt-heading"><div><h2>공통 판정 지침</h2><p>운영·테스트의 Primary와 Verifier에 같은 판정·작성 지침을 적용합니다. 역할별 고정 규칙은 유지합니다.</p></div>
         <button type="button" className="secondary" disabled={busy || state.loading} onClick={() => controller.current?.refresh()}>새로고침</button></div>
       <div className="prompt-active"><span className="prompt-tag prompt-tag-active">공통 적용 중</span><strong>{catalog ? versionName(active) : "조회 중…"}</strong><span className="prompt-tag prompt-tag-warning">모델 품질 미검증</span></div>
     </section>

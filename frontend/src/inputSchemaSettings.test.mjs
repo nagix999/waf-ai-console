@@ -160,7 +160,7 @@ test("API bindings isolate schema metadata from event submission and use no-stor
 });
 test("settings offers schema management without displacing existing model, prompt or key controls", () => {
   const html = render(app.Settings, { onProductionChange() {}, onViewDataset() {} });
-  for (const label of ["LLM 프로필", "프롬프트", "입력 스키마"]) assert.ok(html.includes(label));
+  for (const label of ["LLM 프로필", "Agent 설정", "입력 스키마"]) assert.ok(html.includes(label));
   assert.match(html, /Internal Egress|내부 연결 허용/); assert.match(html, /서비스 API Key|서비스 API 키|API 키/);
   const schema = render(components.default);
   assert.match(schema, /<h2>입력 스키마<\/h2>/); assert.match(schema, /적용 이력/); assert.doesNotMatch(schema, /입력 스키마 설명|<textarea|버전 ID|필드 정의 지문/);

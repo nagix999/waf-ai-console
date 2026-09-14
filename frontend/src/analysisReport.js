@@ -3,6 +3,8 @@
 // extension fields are intentionally outside this report's allowlist.
 import { evaluationExplanation, evaluationOutcomeText, isMockAnalysis, referenceSourceText, referenceVerdicts, referenceVisibilityText } from "./labelEvaluation.js";
 import { analystFieldLabel, analystFollowUp, analystGuidance, analystItems, analystText, decodingEncodingText, decodingItemStatus, decodingWarningText, groupedEvidence, hasTuningContent, isTechnicalText, visibleDecoding } from "./analystView.js";
+import { decisionExplanation, provisionalAnalysisNotice, threatCategoryLabel } from "./decisionExplanation.js";
+import { assessmentView, decisionIssues, evidenceLabels, evidenceNotice, legacyEvidenceNotice } from "./analystAssessment.js";
 const punctuation = /[\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e]/;
 const escapedPunctuation = /\\([\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e])/g;
 const entities = {
@@ -99,6 +101,7 @@ export function buildAnalysisReport(input, { decoding = null, includeAppendix = 
   const final = completed && result !== null && !stub;
   const inconclusive = finalValue("verdict") === "inconclusive";
   const guidance = analystGuidance(detail);
+  const decision = stub ? null : decisionExplanation(detail);
   const followUp = analystFollowUp(detail);
   const explanation = (value) => analystText(value, value === null ? "미기록 (null)" : "분석가가 원문과 확인 항목을 함께 검토해 주세요.");
   const analystList = (value) => textList(Array.isArray(value) ? value.filter((item) => typeof item === "string" && !isTechnicalText(item)) : []);
@@ -111,7 +114,7 @@ export function buildAnalysisReport(input, { decoding = null, includeAppendix = 
   const finishReport = () => {
     if (followUp.visible) {
       report.push("## 추가 확인 사항", escapeText(followUp.introduction_ko), "안내된 자료를 시스템이 이미 조회했다는 뜻은 아닙니다.");
-      if (!followUp.checks.length) report.push(escapeText(followUp.empty_ko));
+      if (!followUp.checks.length && followUp.empty_ko) report.push(escapeText(followUp.empty_ko));
       followUp.checks.forEach((item, index) => report.push(`### 확인 ${index + 1}`, table([
         ["확인 위치", item.source_ko], ["확인할 내용", item.check_ko], ["확인 목적", item.why_ko],
       ])));
@@ -137,14 +140,24 @@ export function buildAnalysisReport(input, { decoding = null, includeAppendix = 
       : (detail.severity ?? "미평가");
   report.push(`## ${stub ? "모의 판정 정보" : final ? "판정 요약" : "저장된 판정 정보 (최종 아님)"}`, table([
     ["판정", named(finalValue("verdict"), { true_positive: "정탐", false_positive: "오탐", inconclusive: "판단 보류" })],
-    ["위협 심각도", severity],
+    ["위협 심각도", severity === "NONE" ? "해당 없음" : severity === "UNKNOWN" ? "미확정" : severity],
+    ...(decision ? [["보류 구분", decision.title_ko]] : []),
     ["입력 잘림", named(finalValue("input_truncated"), { true: "있음", false: "없음" })],
   ]), escapeText(guidance.summary_ko));
-  if (inconclusive) report.push("아래 기법·영향·근거 해석은 검토할 가능성이며 확정된 공격이나 피해를 뜻하지 않습니다.");
+  if (inconclusive) report.push(provisionalAnalysisNotice);
+  const issues = !stub ? decisionIssues(detail) : [];
+  if (issues.length) {
+    report.push("### 판단이 필요한 부분");
+    issues.forEach(issue => report.push(table([
+      ["판단할 내용", issue.point_ko],
+      ...(issue.missing_condition_ko ? [["아직 확인되지 않은 조건", issue.missing_condition_ko]] : []),
+      ["관련 근거", issue.evidence_numbers.join(" · ")],
+    ])));
+  }
   report.push(...overview);
 
   report.push("## 세부 분석", table([
-    ["공격 유형", explanation(threat.category)], ["분석 위치", analystFieldLabel(analystText(threat.target))], ["분석 내용", explanation(threat.technique_ko)], ["예상 영향", explanation(threat.potential_impact_ko)],
+    [threatCategoryLabel(finalValue("verdict")), explanation(threat.category)], ["분석 위치", analystFieldLabel(analystText(threat.target))], ["분석 내용", explanation(threat.technique_ko)], ["예상 영향", explanation(threat.potential_impact_ko)],
   ]));
   if (analystItems(threat.obfuscations).length) report.push("### 인코딩·난독화", analystList(threat.obfuscations));
   if (isRecord(result?.signature_assessment)) report.push("### 탐지 내용과 요청의 연관성", table([
@@ -153,7 +166,23 @@ export function buildAnalysisReport(input, { decoding = null, includeAppendix = 
   ]));
 
   report.push("## 판정 근거");
+  const assessment = assessmentView(result);
+  if (assessment) {
+    report.push(evidenceNotice);
+    for (const [supports, label] of Object.entries(evidenceLabels)) {
+      const items = assessment.evidence.filter(item => item.supports === supports);
+      if (!items.length && ["context", "unclassified"].includes(supports)) continue;
+      report.push(`### ${label}`);
+      if (!items.length) report.push("기록된 근거가 없습니다.");
+      for (const item of items) {
+        report.push(`#### 근거 ${item.number}`, `위치: ${escapeText(analystFieldLabel(item.field))}`, "로그 발췌:",
+          fencedExcerpt(item.excerpt), "판단 이유:", escapeText(item.interpretation_ko));
+        if (item.related_numbers.length) report.push(`같은 로그 발췌: 근거 ${item.related_numbers.join(" · ")}`);
+      }
+    }
+  } else {
   const evidence = groupedEvidence(result?.evidence);
+  if (evidence.length) report.push(legacyEvidenceNotice);
   if (!evidence.length) report.push("저장된 원문 발췌 근거가 없습니다.");
   evidence.forEach((item, index) => {
     report.push(`### 근거 ${index + 1}`, `위치: ${escapeText(analystFieldLabel(item.field))}`, `필드: ${escapeText(item.field)}`, "원문 발췌:",
@@ -161,6 +190,7 @@ export function buildAnalysisReport(input, { decoding = null, includeAppendix = 
       "분석 내용:");
     item.interpretations.forEach((interpretation) => report.push(escapeText(explanation(interpretation))));
   });
+  }
   if (analystItems(result?.conflicting_evidence).length) report.push("## 함께 고려할 정황", analystList(result?.conflicting_evidence));
   if (guidance.limitations.length) report.push("## 해석 시 주의할 점", textList(guidance.limitations));
   if (hasTuningContent(tuning)) report.push("## WAF 정책 검토", "WAF 설정을 자동 변경하지 않습니다.", table([

@@ -506,6 +506,30 @@ pre { max-width: 100%; overflow: auto; padding: 13px; border-radius: 8px; backgr
 .analyst-notice { display: block; padding: 10px 13px; border-left: 3px solid var(--warn); border-radius: 5px; background: var(--warn-soft); color: var(--text); font-size: 12px; line-height: 1.65; overflow-wrap: anywhere; }
 .decision-card > small.analyst-notice { color: var(--text); }
 .decision-card > div { justify-content: flex-start; flex-wrap: wrap; }
+.decision-issues { min-width: 0; padding-top: 14px; border-top: 1px solid var(--line); }
+.decision-issues h3 { margin: 0 0 10px; font-size: 14px; }
+.decision-issues article + article { margin-top: 14px; }
+.decision-issues p { margin: 6px 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.decision-issues small, .issue-label { color: var(--muted); font-size: 12px; }
+.issue-label { display: block; margin-bottom: 3px; }
+.evidence-sides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+.evidence-side { min-width: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.evidence-side > h3 { margin: 0; padding: 12px 16px; background: var(--raised); font-size: 14px; }
+.evidence-true_positive > h3 { color: var(--danger); background: var(--danger-soft); }
+.evidence-false_positive > h3 { color: var(--ok); background: var(--ok-soft); }
+.evidence-context, .evidence-unclassified { grid-column: 1 / -1; }
+.evidence-item { padding: 16px; min-width: 0; }
+.evidence-item .evidence-heading { margin-bottom: 12px; }
+.evidence-item .evidence-interpretation { margin-top: 12px; }
+.evidence-item + .evidence-item { border-top: 1px solid var(--line); }
+.evidence-item .evidence-number { padding: 0; color: var(--muted); background: transparent; font-size: 12px; }
+.evidence-item code { display: block; white-space: pre-wrap; overflow-wrap: anywhere; unicode-bidi: plaintext; }
+.evidence-related { display: block; margin-top: 12px; color: var(--muted); }
+.evidence-empty { padding: 0 16px; }
+.evidence-notice { margin-bottom: 18px; }
+@media (max-width: 800px) {
+  .evidence-sides { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+}
 .analyst-checks > ol { list-style: none; display: grid; gap: 14px; padding: 0; margin: 18px 0 0; counter-reset: analyst-check; }
 .analyst-checks > ol > li { position: relative; min-width: 0; padding: 18px 18px 18px 58px; border: 1px solid var(--line); border-radius: 10px; background: var(--raised); counter-increment: analyst-check; }
 .analyst-checks > ol > li::before { content: counter(analyst-check, decimal-leading-zero); position: absolute; top: 19px; left: 17px; font-size: 13px; font-weight: 700; color: var(--accent); }

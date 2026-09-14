@@ -44,7 +44,7 @@ export function promptActivationPayload(confirmation, acknowledged) {
 }
 
 export function promptErrorMessage(error, operation = "read") {
-  if (error?.status === 422 && error?.message === "prompt_policy_context_budget_too_small") return "현재 운영 모델의 입력 공간이 부족합니다. 지침 길이나 모델의 입력·출력 한도를 확인해 주세요.";
+  if (error?.status === 422 && error?.message === "prompt_policy_context_budget_too_small") return "배정된 모델 중 입력 공간이 부족한 모델이 있습니다. 지침 길이와 Primary·Verifier의 입력·출력 한도를 확인해 주세요.";
   if (error?.status === 401) return "로그인이 만료되었습니다. 다시 로그인해 주세요.";
   if (error?.status === 403) return "프롬프트 설정은 관리자만 사용할 수 있습니다.";
   if (error?.status === 404) return "해당 버전을 찾을 수 없습니다. 목록을 새로고침해 주세요.";

@@ -1,0 +1,410 @@
+[
+  {
+    "name": "both models abstain",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "primary_model_inconclusive",
+            "verifier_model_inconclusive"
+          ]
+        }
+      }
+    },
+    "expected_code": "model_abstained"
+  },
+  {
+    "name": "opposite verdicts",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "verdict_disagreement"
+          ]
+        }
+      }
+    },
+    "expected_code": "assessment_pending"
+  },
+  {
+    "name": "mixed abstention",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "primary_model_inconclusive",
+            "verdict_disagreement"
+          ]
+        }
+      }
+    },
+    "expected_code": "assessment_pending"
+  },
+  {
+    "name": "missing reason",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다."
+      }
+    },
+    "expected_code": "reason_unrecorded"
+  },
+  {
+    "name": "parser signal is not cause",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "diagnostics": {
+          "input_signals": [
+            "parser_incomplete"
+          ]
+        }
+      }
+    },
+    "expected_code": "reason_unrecorded"
+  },
+  {
+    "name": "truncation signal is not cause",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "input_truncated": true,
+        "diagnostics": {
+          "input_signals": [
+            "input_truncated"
+          ]
+        }
+      }
+    },
+    "expected_code": "reason_unrecorded"
+  },
+  {
+    "name": "trigger is not cause",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "verifier": {
+          "executed": true,
+          "reasons": [
+            "parser_incomplete",
+            "low_confidence",
+            "evidence_grounding_failed"
+          ]
+        }
+      }
+    },
+    "expected_code": "reason_unrecorded"
+  },
+  {
+    "name": "execution failure",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "verifier_failed",
+            "verdict_disagreement"
+          ]
+        }
+      }
+    },
+    "expected_code": "execution_incomplete"
+  },
+  {
+    "name": "legacy failure",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "verifier": {
+          "executed": true,
+          "failure_id": "synthetic-do-not-display",
+          "error": null
+        }
+      }
+    },
+    "expected_code": "execution_incomplete"
+  },
+  {
+    "name": "not executed does not imply failure",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "verifier": {
+          "executed": false,
+          "failure_id": "stale-synthetic"
+        }
+      }
+    },
+    "expected_code": "reason_unrecorded"
+  },
+  {
+    "name": "evidence failure",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "primary_evidence_rejected",
+            "verdict_disagreement"
+          ]
+        }
+      }
+    },
+    "expected_code": "evidence_unverified"
+  },
+  {
+    "name": "citation repair requires review",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "verifier_evidence_rejected"
+          ],
+          "roles": {
+            "verifier": {
+              "correction_requires_review": true
+            }
+          }
+        }
+      }
+    },
+    "expected_code": "evidence_review"
+  },
+  {
+    "name": "metadata review without cause is not failure",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "diagnostics": {
+          "roles": {
+            "verifier": {
+              "correction_requires_review": true,
+              "grounding_rejected_count": 1
+            }
+          }
+        }
+      }
+    },
+    "expected_code": "reason_unrecorded"
+  },
+  {
+    "name": "integrity limited",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "input_integrity_limited"
+          ],
+          "request_integrity": {
+            "downgraded_to_inconclusive": true
+          }
+        }
+      }
+    },
+    "expected_code": "input_limited"
+  },
+  {
+    "name": "integrity observed but not causal",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "diagnostics": {
+          "input_signals": [
+            "input_integrity_observed"
+          ],
+          "request_integrity": {
+            "issue_codes": [
+              "declared_body_not_captured"
+            ],
+            "downgraded_to_inconclusive": false
+          }
+        }
+      }
+    },
+    "expected_code": "reason_unrecorded"
+  },
+  {
+    "name": "inconsistent integrity metadata",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "input_integrity_limited"
+          ],
+          "request_integrity": {
+            "downgraded_to_inconclusive": "true"
+          }
+        }
+      }
+    },
+    "expected_code": "reason_unrecorded"
+  },
+  {
+    "name": "malformed legacy metadata",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "verifier": [],
+        "diagnostics": {
+          "inconclusive_reasons": [
+            null,
+            {},
+            [
+              "verifier_failed"
+            ],
+            3
+          ],
+          "request_integrity": [],
+          "roles": []
+        }
+      }
+    },
+    "expected_code": "reason_unrecorded"
+  },
+  {
+    "name": "unknown reason is not guessed",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "future-reason"
+          ]
+        }
+      }
+    },
+    "expected_code": "reason_unrecorded"
+  },
+  {
+    "name": "status pending",
+    "detail": {
+      "status": "pending",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다."
+      }
+    },
+    "expected_code": null
+  },
+  {
+    "name": "status processing",
+    "detail": {
+      "status": "processing",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다."
+      }
+    },
+    "expected_code": null
+  },
+  {
+    "name": "status failed",
+    "detail": {
+      "status": "failed",
+      "result": {
+        "verdict": "inconclusive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다."
+      }
+    },
+    "expected_code": "execution_incomplete"
+  },
+  {
+    "name": "final true_positive",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "true_positive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "verifier_failed"
+          ]
+        }
+      }
+    },
+    "expected_code": null
+  },
+  {
+    "name": "final false_positive",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": "false_positive",
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "verifier_failed"
+          ]
+        }
+      }
+    },
+    "expected_code": null
+  },
+  {
+    "name": "final null",
+    "detail": {
+      "status": "completed",
+      "result": {
+        "verdict": null,
+        "summary_ko": "현재 분석에서는 정탐·오탐 판정을 보류했습니다.",
+        "diagnostics": {
+          "inconclusive_reasons": [
+            "verifier_failed"
+          ]
+        }
+      }
+    },
+    "expected_code": null
+  },
+  {
+    "name": "missing result",
+    "detail": {
+      "status": "completed",
+      "verdict": "inconclusive",
+      "result": null
+    },
+    "expected_code": null
+  }
+]

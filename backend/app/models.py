@@ -368,6 +368,16 @@ class VLLMProfile(Base):
     )
 
 
+class AgentConfiguration(Base):
+    __tablename__ = "agent_configurations"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_agent_configuration_singleton"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    revision: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    production_verifier_profile_id: Mapped[str | None] = mapped_column(ForeignKey("vllm_profiles.id", ondelete="RESTRICT"))
+    test_verifier_profile_id: Mapped[str | None] = mapped_column(ForeignKey("vllm_profiles.id", ondelete="RESTRICT"))
+
+
 class VLLMTestRun(Base):
     __tablename__ = "vllm_test_runs"
     __table_args__ = (Index("ix_vllm_test_status_created", "status", "created_at"),

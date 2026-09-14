@@ -128,6 +128,9 @@ def update_profile(
 ) -> VLLMProfileResponse:
     lock_egress_mutation(db)
     profile = get_profile_or_404(db, profile_id)
+    from ..services.agent_configuration import verifier_roles
+    if verifier_roles(db, profile_id):
+        raise HTTPException(409, "agent_profile_is_assigned")
     if profile.status == ModelProfileStatus.production.value:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="production_profile_is_immutable")
     if profile.is_test:
@@ -179,6 +182,9 @@ def update_profile(
 def disable_profile(profile_id: str, db: DbSession, principal: AdminPrincipal) -> VLLMProfileResponse:
     lock_egress_mutation(db)
     profile = get_profile_or_404(db, profile_id)
+    from ..services.agent_configuration import verifier_roles
+    if verifier_roles(db, profile_id):
+        raise HTTPException(409, "agent_profile_is_assigned")
     profile.status = ModelProfileStatus.disabled.value
     profile.is_test = False
     audit(db, principal, "disable_vllm_profile", profile.id)

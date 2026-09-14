@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { api } from "./api.js";
+import { decisionExplanation, provisionalAnalysisNotice, threatCategoryLabel } from "./decisionExplanation.js";
+import { AnalystEvidence, DecisionIssues } from "./AnalystEvidence.jsx";
+import { assessmentView, legacyEvidenceNotice } from "./analystAssessment.js";
 import { Icon } from "./Icon.jsx";
 import ProductionApi from "./ProductionApi.jsx";
 import AnalysisReport from "./AnalysisReport.jsx";
@@ -21,7 +24,7 @@ import AgentHistory from "./AgentHistory.jsx";
 import QuickValidationDialog from "./QuickValidationDialog.jsx";
 import TextInspector from "./TextInspector.jsx";
 import { createLogoutController, loginError } from "./inspection.js";
-import PromptSettings from "./PromptSettings.jsx";
+import AgentSettings from "./AgentSettings.jsx";
 import InputSchemaSettings, { InputSchemaMetadata } from "./InputSchemaSettings.jsx";
 import InternalEgressSettings from "./InternalEgressSettings.jsx";
 import ServiceApiKeys from "./ServiceApiKeys.jsx";
@@ -31,7 +34,7 @@ import { allowedInternalTarget, internalEgressError, internalTargetAddress, inte
 import "./unifiedAnalysis.css";
 import { initialTestRunFilters, initialTestRunHistoryState, TestRunDetail, TestRunHistory } from "./TestRuns.jsx";
 import { autoTestName, emptySingleTest, newTestRequestKey, singleTestEvent, testRunError, validateTestName } from "./testRuns.js";
-import { ModelAssignmentCards, ModelAssignmentDialog, TestModelNotice } from "./ModelAssignments.jsx";
+import { ModelAssignmentDialog, TestModelNotice } from "./ModelAssignments.jsx";
 import { assignmentBlockReason, createAssignmentController, emptyAssignmentState, roleAssigned, testModelAvailability } from "./modelAssignments.js";
 import { createBrowserHistory } from "./browserHistory.js";
 import { applyAppRoute, isDetailOrigin, readAppHash, writeAppHash } from "./appRoutes.js";
@@ -71,20 +74,20 @@ const severityLabels = {
   HIGH: "HIGH",
   MEDIUM: "MEDIUM",
   LOW: "LOW",
-  NONE: "위협 없음",
-  UNKNOWN: "확인 필요"
+  NONE: "해당 없음",
+  UNKNOWN: "미확정"
 };
 
 function Status({ value }) {
   return <span className={`status status-${value}`}>{labels[value] || value || "-"}</span>;
 }
 
-function Severity({ value }) {
+function Severity({ value, describe = false }) {
   const normalized = typeof value === "string" ? value.toUpperCase() : "";
   if (!severityLabels[normalized]) {
     return <span className="severity severity-unrated">미평가(이전 결과)</span>;
   }
-  return <span className={`severity severity-${normalized.toLowerCase()}`}>{severityLabels[normalized]}</span>;
+  return <span className={`severity severity-${normalized.toLowerCase()}`} aria-label={`심각도 ${severityLabels[normalized]}`}>{describe ? "심각도 " : ""}{severityLabels[normalized]}</span>;
 }
 
 export function Login({ onLogin }) {
@@ -451,14 +454,17 @@ function Detail({ id, onBack, onOpen, backLabel = "분석 결과", tab: controll
   if (!detail || view.id !== id) return <div className="page-stack">{navigation}{error ? <div className="error" role="alert">{error}</div> : <div className="loading">불러오는 중…</div>}</div>;
   const durationFallback = ["pending", "processing"].includes(detail.status) ? "진행 중" : "측정 전 데이터";
   const notices = analysisNotices(detail);
+  const decisionReason = isMockAnalysis(detail) ? null : decisionExplanation(detail);
   const rawFailure = rawError && <div className="error" role="alert"><p>원문 정보를 불러오지 못했습니다. {rawError}</p><button type="button" className="secondary" onClick={() => setRawAttempt((value) => value + 1)}>원문 다시 불러오기</button></div>;
   return (
     <div className="page-stack">
       {navigation}
       {error && <div className="error" role="alert">{error}</div>}
       <section className={`panel decision-card decision-${detail.status === "completed" ? finalValue(detail, "verdict") : "pending"}`}>
-        <div><span>{isMockAnalysis(detail) ? "모의 판정" : "판정 요약"}</span>{detail.status === "completed" ? <Status value={finalValue(detail, "verdict")} /> : <Status value={detail.status} />}{detail.status === "completed" ? <Severity value={detail.result?.threat_analysis?.severity} /> : <span className="muted">심각도 미확정</span>}</div>
+        <div><span>{isMockAnalysis(detail) ? "모의 판정" : "판정 요약"}</span>{detail.status === "completed" ? <Status value={finalValue(detail, "verdict")} /> : <Status value={detail.status} />}{detail.status === "completed" ? <Severity value={detail.result?.threat_analysis?.severity} describe /> : <span className="muted">심각도 미확정</span>}</div>
+        {decisionReason && <p className="decision-reason-label">{decisionReason.title_ko}</p>}
         <div className="decision-summary-line"><strong>{analystSummary(detail)}</strong></div>
+        {!isMockAnalysis(detail) && <DecisionIssues detail={detail} />}
         {notices.map((notice) => <small className="analyst-notice" key={notice}>{notice}</small>)}
       </section>
       <CompactEvaluationDetail detail={detail} history={labelHistory} historyError={labelHistoryError} />
@@ -481,7 +487,7 @@ function Detail({ id, onBack, onOpen, backLabel = "분석 결과", tab: controll
             <div><span>연동 시스템</span><strong>{detail.source_system}</strong></div>
             <div><span>모델</span><strong>{detail.model_profile || "미기록"}</strong></div>
             <div><span>분석 지침</span><strong>{detail.prompt_version || "미기록"}</strong></div>
-            <div><span>모델 신뢰도<HelpTooltip label="모델 신뢰도">모델이 스스로 평가한 값입니다. 보정된 정탐 확률이나 정확도가 아닙니다.</HelpTooltip></span><strong>{finalValue(detail, "confidence_score") ?? "미기록"}</strong></div>
+            <div><span>판정 점수<HelpTooltip label="판정 점수">모델의 자기평가에 최종 판정 정책을 적용한 참고값입니다. 실제 정탐 확률이나 정확도가 아닙니다.</HelpTooltip></span><strong>{finalValue(detail, "confidence_score") ?? "미기록"}</strong></div>
             <div><span>대기 시간</span><strong>{formatDuration(detail.queue_wait_ms)}</strong></div>
             <div><span>처리 시간</span><strong>{formatDuration(detail.processing_duration_ms)}</strong><small className="ux-muted">처리 시작~종료 · 재시도·복구 대기 포함</small></div>
             <div><span>접수 경로</span><strong>{channelLabels[detail.ingest_channel] || "기존 미분류"}</strong></div>
@@ -515,21 +521,22 @@ export function ResultView({ detail }) {
     <div className="result-stack">
       <section className="panel result-card detailed-analysis">
         <h2>세부 분석</h2>
-        {undecided && <p className="analyst-notice">판정 보류 상태입니다. 아래 내용만으로 공격이나 피해 발생이 확정된 것은 아닙니다.</p>}
-        {threat ? <dl><dt>공격 유형</dt><dd>{analystText(threat.category)}</dd><dt>분석 위치</dt><dd>{analystFieldLabel(analystText(threat.target))}</dd><dt>분석 내용</dt><dd>{analystText(threat.technique_ko, "저장된 설명은 기술정보에서 확인할 수 있습니다.")}</dd><dt>예상 영향</dt><dd>{analystText(threat.potential_impact_ko)}</dd>{!!obfuscations.length && <><dt>인코딩·난독화</dt><dd>{obfuscations.join(", ")}</dd></>}</dl> : <p>세부 분석 내용이 기록되지 않았습니다.</p>}
+        {undecided && <p className="analyst-notice">{provisionalAnalysisNotice}</p>}
+        {threat ? <dl><dt>{threatCategoryLabel(finalValue(detail, "verdict"))}</dt><dd>{analystText(threat.category)}</dd><dt>분석 위치</dt><dd>{analystFieldLabel(analystText(threat.target))}</dd><dt>분석 내용</dt><dd>{analystText(threat.technique_ko, "저장된 설명은 기술정보에서 확인할 수 있습니다.")}</dd><dt>예상 영향</dt><dd>{analystText(threat.potential_impact_ko)}</dd>{!!obfuscations.length && <><dt>인코딩·난독화</dt><dd>{obfuscations.join(", ")}</dd></>}</dl> : <p>세부 분석 내용이 기록되지 않았습니다.</p>}
         {signature && <div className="signature-context"><h3>탐지 내용과 요청의 연관성</h3><Status value={signature.relation} /><p>{analystText(signature.explanation_ko)}</p></div>}
       </section>
-      <section className="panel result-card evidence-card">
+      {assessmentView(result) ? <AnalystEvidence result={result} /> : <section className="panel result-card evidence-card">
         <h2>판정 근거</h2>
+        {!!evidence.length && <p className="muted">{legacyEvidenceNotice}</p>}
         <div className="evidence-list">
           {evidence.map((item, index) => <article key={index}>
             <div className="evidence-heading"><span>근거 {index + 1}</span><strong>{analystFieldLabel(item.field)}</strong>{typeof item.field === "string" && analystFieldLabel(item.field) !== item.field && <small className="evidence-field-path">{item.field}</small>}</div>
             <div className="evidence-section"><span>원문 발췌</span><code>{typeof item.excerpt === "string" ? item.excerpt : "발췌문 미기록"}</code></div>
             <div className="evidence-section evidence-interpretation"><span>분석 내용</span>{item.interpretations.map((interpretation, interpretationIndex) => <p key={interpretationIndex}>{analystText(interpretation, "저장된 설명은 기술정보에서 확인할 수 있습니다.")}</p>)}</div>
           </article>)}
-          {!evidence.length && <p>명시된 근거가 없습니다.</p>}
+          {!evidence.length && <p>{decisionExplanation(detail)?.code === "evidence_unverified" ? "원문 대조를 통과한 판정 근거가 남아 있지 않습니다. HTTP 원문에서 직접 확인해 주세요." : "저장된 판정 근거가 없습니다. 이것만으로 공격이 없다고 볼 수는 없습니다."}</p>}
         </div>
-      </section>
+      </section>}
       {!!circumstances.length && <TextList title="함께 고려할 정황" items={circumstances} />}
       {!!guidance.limitations.length && <TextList title="해석 시 주의할 점" items={guidance.limitations} />}
       {hasTuningContent(tuning) && <section className="panel result-card tuning-card">
@@ -556,14 +563,14 @@ export function Settings({ onProductionChange, onViewDataset, tab: controlledTab
   const setTab = onTabChange || setLocalTab;
   return <div className="page-stack"><div className="tabs" role="tablist" aria-label="설정 항목">
     <button type="button" role="tab" aria-selected={tab === "models"} onClick={() => setTab("models")}>LLM 프로필</button>
-    <button type="button" role="tab" aria-selected={tab === "prompts"} onClick={() => setTab("prompts")}>프롬프트</button>
+    <button type="button" role="tab" aria-selected={tab === "agents"} onClick={() => setTab("agents")}>Agent 설정</button>
     <button type="button" role="tab" aria-selected={tab === "schema"} onClick={() => setTab("schema")}>입력 스키마</button>
     <button type="button" role="tab" aria-selected={tab === "egress"} onClick={() => setTab("egress")}>내부 연결 허용</button>
     <button type="button" role="tab" aria-selected={tab === "keys"} onClick={() => setTab("keys")}>서비스 API Key</button>
-  </div>{tab === "models" ? <ModelSettings onProductionChange={onProductionChange} onInternalEgress={() => setTab("egress")} onViewDataset={onViewDataset} /> : tab === "prompts" ? <PromptSettings /> : tab === "schema" ? <InputSchemaSettings /> : tab === "egress" ? <InternalEgressSettings /> : <ServiceApiKeys />}</div>;
+  </div>{tab === "models" ? <ModelSettings onProductionChange={onProductionChange} onConfigureAgents={() => setTab("agents")} onInternalEgress={() => setTab("egress")} onViewDataset={onViewDataset} /> : ["agents", "prompts"].includes(tab) ? <AgentSettings onProductionChange={onProductionChange} onModels={() => setTab("models")} /> : tab === "schema" ? <InputSchemaSettings /> : tab === "egress" ? <InternalEgressSettings /> : <ServiceApiKeys />}</div>;
 }
 
-export function ModelSettings({ onProductionChange, onInternalEgress, onViewDataset }) {
+export function ModelSettings({ onProductionChange, onInternalEgress, onViewDataset, onConfigureAgents }) {
   const [formOpen, setFormOpen] = useState(false);
   const [managedId, setManagedId] = useState(null);
   const [profiles, setProfiles] = useState([]);
@@ -647,7 +654,7 @@ export function ModelSettings({ onProductionChange, onInternalEgress, onViewData
   }, [loadProfiles]);
 
   function edit(profile) {
-    if (roleAssigned(profile)) { setMessage("Production 또는 Test로 지정된 프로필은 수정할 수 없습니다. 지정을 해제하거나 비활성화하세요."); return; }
+    if (roleAssigned(profile)) { setMessage("Agent에 배정된 프로필은 수정할 수 없습니다. Agent 설정에서 배정을 변경하세요."); return; }
     setEditingProfile({ id: profile.id, provider: providerOf(profile), has_api_key: profile.has_api_key });
     setManagedId(null); setFormOpen(true);
     setForm(editProfileForm(profile));
@@ -696,7 +703,7 @@ export function ModelSettings({ onProductionChange, onInternalEgress, onViewData
       <FullValidationDialog state={fullValidation} controller={fullValidationController.current} />
       <QuickValidationDialog key={`${quickValidation.profile?.id}-${quickValidation.profile?.profile_fingerprint}`} profile={quickValidation.profile} open={quickValidation.open} onClose={() => setQuickValidation(value => ({ ...value, open: false }))} onSubmitted={() => { setQuickValidation(value => ({ ...value, open: false })); setMessage("빠른 테스트를 접수했습니다. 모델 지정은 변경하지 않았습니다."); void loadProfiles(); }} />
       <ModelAssignmentDialog state={assignment} controller={assignmentController.current} />
-      <ModelAssignmentCards profiles={profiles} loading={profilesLoading} error={profilesError} busy={Boolean(busy)} onUnassignTest={profile => openAssignment(profile, "unassign_test")} />
+      <section className="panel"><div className="panel-head"><div><h2>LLM 프로필</h2><p className="ux-muted">모델을 등록하고 연결·출력을 검증합니다. 역할별 모델 배정은 Agent 설정에서 관리합니다.</p></div><button className="secondary" disabled={Boolean(busy)} onClick={onConfigureAgents}>Agent 설정</button></div></section>
       {message && <p className="notice" role="status">{message}</p>}
       <section className="panel profile-section">
         <div className="panel-head"><div><h2>모델 목록</h2><p className="ux-muted">현재 설정으로 전체 검증을 통과해야 운영·테스트에 지정할 수 있습니다.</p></div><div className="ux-toolbar"><button type="button" className="primary" disabled={Boolean(busy)} onClick={() => { if (editingProfile) resetForm(); setFormOpen(true); }}>모델 추가</button><button type="button" className="secondary" disabled={Boolean(busy)} onClick={loadProfiles}>새로고침</button></div></div>
@@ -714,17 +721,16 @@ export function ModelSettings({ onProductionChange, onInternalEgress, onViewData
                   <td><strong>{profile.name}</strong><span className={`provider-badge provider-${providerOf(profile)}`}>{providerLabel(profile)}</span>{internalTargetIssue && <small className="error">연결 허용 확인 필요</small>}{providerOf(profile) === "openai" && !profile.external_data_approved && <small className="error">외부 전송 미승인</small>}</td>
                   <td><span>{profile.model_name}</span></td>
                   <td>{latest ? <><Status value={latest.status} /><small>{latest.mode} · {latest.completed_at ? new Date(latest.completed_at).toLocaleString("ko-KR") : "진행 중"}</small></> : <span>-</span>}</td>
-                  <td><div className="profile-role-badges">{profile.status === "production" && <span className="status status-production">Production 지정</span>}{profile.is_test && <span className="status purpose-test">Test 지정</span>}</div>{profile.status !== "production" && <Status value={profile.status} />}</td>
+                  <td><div className="profile-role-badges">{profile.status === "production" && <span className="status status-production">Production Primary</span>}{profile.is_test && <span className="status purpose-test">Test Primary</span>}{profile.agent_roles?.map(role => <span className="status" key={role}>{role.startsWith("test") ? "Test" : "Production"} Verifier</span>)}</div>{profile.status !== "production" && <Status value={profile.status} />}</td>
                   <td><button type="button" className="secondary" onClick={() => setManagedId(profile.id)}>관리</button><Dialog open={managedId === profile.id} title={`${profile.name} · 모델 관리`} onClose={() => { if (!busy) setManagedId(null); }}><section className="detail-summary"><div><span>연결 주소</span><strong>{profile.base_url}</strong></div><div><span>입력 한도 / 최대 출력</span><strong>{profile.context_window.toLocaleString()} / {profile.max_output_tokens} 토큰</strong></div><div><span>제한 시간 / 검증 동시 요청</span><strong>{profile.timeout_seconds}초 / {profile.test_concurrency}건</strong></div><div><span>API Key</span><strong>{profile.has_api_key ? "저장됨" : "없음"}</strong></div></section><div className="profile-actions">
                     <button className="secondary small" disabled={Boolean(busy) || active || profile.status === "disabled" || Boolean(internalTargetIssue) || (providerOf(profile) === "openai" && !profile.external_data_approved)} onClick={() => runTest(profile, "quick")}>{busy === `q-${profile.id}` ? "등록 중" : "빠른 테스트"}</button>
                     <button className="secondary small" disabled={Boolean(busy) || active || profile.status === "disabled" || Boolean(internalTargetIssue) || (providerOf(profile) === "openai" && !profile.external_data_approved)} onClick={() => runTest(profile, "full")}>{busy === `f-${profile.id}` ? "등록 중" : "전체 검증"}</button>
-                    <button className="secondary small" disabled={Boolean(busy) || roleAssigned(profile) || Boolean(profilesError)} title={roleAssigned(profile) ? "Production·Test 지정 중에는 수정할 수 없습니다." : undefined} onClick={() => edit(profile)}>편집</button>
-                    {profile.status !== "production" && <button className="primary small" disabled={Boolean(busy) || Boolean(assignmentIssue)} onClick={() => openAssignment(profile, "production")}>Production 지정</button>}
-                    {profile.is_test ? <button className="secondary small" disabled={Boolean(busy) || Boolean(profilesError)} onClick={() => openAssignment(profile, "unassign_test")}>Test 지정 해제</button> : <button className="secondary small" disabled={Boolean(busy) || Boolean(assignmentIssue)} onClick={() => openAssignment(profile, "test")}>Test 지정</button>}
+                    <button className="secondary small" disabled={Boolean(busy) || roleAssigned(profile) || Boolean(profilesError)} title={roleAssigned(profile) ? "Agent 배정 중에는 수정할 수 없습니다." : undefined} onClick={() => edit(profile)}>편집</button>
+                    <button className="secondary small" disabled={Boolean(busy)} onClick={onConfigureAgents}>Agent 모델 배정</button>
                     {profile.status === "disabled"
                       ? <button className="secondary small" disabled={Boolean(busy) || Boolean(internalTargetIssue)} onClick={() => act(`e-${profile.id}`, () => api.enableModelProfile(profile.id))}>활성화</button>
-                      : <button className="secondary small" disabled={Boolean(busy) || Boolean(profilesError)} onClick={() => openAssignment(profile, "disable")}>비활성화</button>}
-                  </div>{assignmentIssue && <p className="profile-assignment-reason">지정 불가: {assignmentIssue}</p>}{roleAssigned(profile) && <p className="profile-assignment-reason">지정 중에는 편집할 수 없습니다. 비활성화하면 이 모델의 모든 용도 지정을 해제합니다.</p>}{message && <p className="notice" role="status">{message}</p>}{managedId === profile.id && latest && <TestResult profile={profile} test={latest} onViewDataset={onViewDataset} />}</Dialog></td>
+                      : <button className="secondary small" disabled={Boolean(busy) || Boolean(profilesError) || Boolean(profile.agent_roles?.length)} onClick={() => openAssignment(profile, "disable")}>비활성화</button>}
+                  </div>{assignmentIssue && <p className="profile-assignment-reason">지정 불가: {assignmentIssue}</p>}{roleAssigned(profile) && <p className="profile-assignment-reason">편집하려면 Agent 설정에서 배정을 해제하세요. 별도 Verifier로 배정된 모델은 해제 후 비활성화할 수 있습니다.</p>}{message && <p className="notice" role="status">{message}</p>}{managedId === profile.id && latest && <TestResult profile={profile} test={latest} onViewDataset={onViewDataset} />}</Dialog></td>
                 </tr>;
               })}
               {!profiles.length && <tr><td colSpan="5" className="empty">{profilesLoading ? "모델을 불러오는 중…" : profilesError ? "모델 목록을 확인할 수 없습니다." : "등록된 모델이 없습니다."}</td></tr>}
@@ -905,7 +911,7 @@ export default function App() {
           {summaryError && page !== "dashboard" && <div className="error" role="alert">실행 설정을 확인하지 못했습니다. {summaryError}</div>}
           {page === "dashboard" && <DashboardView onOpen={openDetail} onUnauthorized={onUnauthorized} days={days} onDaysChange={setDays} serviceApiKeyId={serviceApiKeyId} onKeyChange={value => navigation.remember(current => ({ ...current, serviceApiKeyId: value }))} onFilter={filterProduction} Table={AnalysisTable} />}
           {page === "analyses" && <AnalysisResultsPage purpose={resultsPurpose} onScopeChange={changeResultsScope} state={listState} setState={setListState} testState={testResults} setTestState={setTestResults} onSelectRun={openTestRun} onOpenRunItem={openRunItem} onOpen={openDetail} onUnauthorized={onUnauthorized} onShowTestRuns={backToTests} onShowAllTestItems={showAllTestItems} />}
-          {page === "test" && <TestAnalysisPage onViewTests={viewTests} onOpen={openTest} selectedRunId={null} onSelectRun={openTestRun} agentMode={mode} onConfigureModels={() => move(current => ({ ...current, page: "settings", settingsTab: "models" }))} />}
+          {page === "test" && <TestAnalysisPage onViewTests={viewTests} onOpen={openTest} selectedRunId={null} onSelectRun={openTestRun} agentMode={mode} onConfigureModels={() => move(current => ({ ...current, page: "settings", settingsTab: "agents" }))} />}
           {page === "apiDocs" && <ProductionApi />}
           {page === "settings" && <Settings onProductionChange={setProductionName} onViewDataset={viewDataset} tab={settingsTab} onTabChange={tab => move(current => ({ ...current, settingsTab: tab }))} />}
           {page === "detail" && <Detail key={selectedId} id={selectedId} onBack={backFromDetail} onOpen={id => move(current => ({ ...current, selectedId: id, detailTab: "result" }))} tab={detailTab} onTabChange={tab => navigation.navigate(current => ({ ...current, detailTab: tab }))} backLabel={detailReturnPage === "testRun" ? "테스트 실행 결과" : detailReturnPage === "test" ? "테스트 분석" : detailReturnPage === "dashboard" ? "대시보드" : "분석 결과"} />}

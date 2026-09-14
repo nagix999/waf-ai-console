@@ -128,16 +128,18 @@ def create_policy_version(
 def activate_policy_version(
     db: Session, crypto: CryptoService, version_id: str, expected_revision: int,
 ) -> PromptPolicyState:
-    from ..agent.input_builder import ESTIMATED_CHARS_PER_TOKEN, MIN_INPUT_CHARS
-    from ..agent.prompts import policy_reserved_tokens
+    from .agent_configuration import has_input_budget
+    from ..models import AgentConfiguration
 
     _sqlite_write_transaction(db)
     get_policy_state(db, crypto)
     policy_text = read_policy_text(get_policy_version(db, version_id), crypto)
-    profile = db.scalar(select(VLLMProfile).where(VLLMProfile.status == ModelProfileStatus.production.value))
-    if profile is not None:
-        input_tokens = profile.context_window - profile.max_output_tokens - policy_reserved_tokens(policy_text)
-        if profile.max_output_tokens < 0 or input_tokens * ESTIMATED_CHARS_PER_TOKEN < MIN_INPUT_CHARS:
+    config = db.get(AgentConfiguration, 1)
+    verifier_ids = [config.production_verifier_profile_id, config.test_verifier_profile_id] if config else []
+    profiles = db.scalars(select(VLLMProfile).where((VLLMProfile.status == ModelProfileStatus.production.value)
+        | VLLMProfile.is_test.is_(True) | VLLMProfile.id.in_([identifier for identifier in verifier_ids if identifier])))
+    for profile in profiles:
+        if not has_input_budget(profile, policy_text):
             raise PromptPolicyError("prompt_policy_context_budget_too_small", 422)
     changed = db.execute(
         update(PromptPolicyState)

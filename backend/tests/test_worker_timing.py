@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import moduagent
 import pytest
+from agent_selection_helpers import model_output
 from sqlalchemy import select
 
 from app import worker
@@ -134,7 +135,9 @@ def test_primary_duration_includes_real_corrective_retry_and_grounding(
                 assert step.status == "running"
                 assert step.completed_at is None
             if len(calls) == 2 and repair_succeeds:
-                return fake_result(output=valid_output(), run_id="repaired")
+                return fake_result(output=model_output(valid_output(), {
+                    "output_model": self.codec.output_model, "user_input": _input,
+                }), run_id="repaired")
             self.codec.validation_issues = [{"field": "threat_analysis.severity", "type": "missing"}]
             return fake_result(
                 output=None, run_id=f"failed-{len(calls)}", failure_id="synthetic-failure",
@@ -145,9 +148,9 @@ def test_primary_duration_includes_real_corrective_retry_and_grounding(
     monkeypatch.setattr(moduagent.Agent, "create", staticmethod(lambda **kwargs: FakeAgent(kwargs)))
     original_grounding = worker._ground_agent_call
 
-    def grounding(*args):
+    def grounding(*args, **kwargs):
         fake_clock.advance(250)
-        return original_grounding(*args)
+        return original_grounding(*args, **kwargs)
 
     monkeypatch.setattr(worker, "_ground_agent_call", grounding)
     with client.app.state.session_factory() as db:

@@ -1,7 +1,7 @@
 // Only screen names, tab enums and server-generated UUIDs belong in URLs.
 // Search terms, form drafts, API responses and secrets stay out of this module.
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const settingsTabs = new Set(["models", "prompts", "schema", "egress", "keys"]);
+const settingsTabs = new Set(["models", "agents", "schema", "egress", "keys"]);
 const detailTabs = new Set(["result", "raw", "report"]);
 
 export function readAppHash(hash) {
@@ -13,6 +13,7 @@ export function readAppHash(hash) {
   if (hash === "#analyses/test") return { page: "analyses", purpose: "test", view: "runs" };
   if (hash === "#analyses/test/items") return { page: "analyses", purpose: "test", view: "items" };
   if (hash === "#settings") return { page: "settings", tab: "models" };
+  if (hash === "#settings/prompts") return { page: "settings", tab: "agents" };
   const parts = typeof hash === "string" ? hash.slice(1).split("/") : [];
   if (parts[0] === "settings" && parts.length === 2 && settingsTabs.has(parts[1])) return { page: "settings", tab: parts[1] };
   if (parts[0] === "test-runs" && parts.length === 2 && uuid.test(parts[1])) return { page: "analyses", purpose: "test", view: "runs", runId: parts[1].toLowerCase() };

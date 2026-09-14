@@ -8,7 +8,7 @@ const initial = () => ({ page: "dashboard", resultsPurpose: "", listState: initi
 
 test("safe screen, settings, result and run routes round trip", () => {
   for (const hash of ["#dashboard", "#production-api", "#test", "#analyses", "#analyses/production", "#analyses/test", "#analyses/test/items",
-    ...["models", "prompts", "schema", "egress", "keys"].map(tab => `#settings/${tab}`),
+    ...["models", "agents", "schema", "egress", "keys"].map(tab => `#settings/${tab}`),
     `#test-runs/${id}`, `#analyses/${id}`, `#analyses/${id}/raw`, `#analyses/${id}/report`]) {
     const route = readAppHash(hash);
     assert.ok(route, hash);

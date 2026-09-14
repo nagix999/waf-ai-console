@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
+from agent_selection_helpers import model_output
 from sqlalchemy import select
 
 from app import worker
@@ -134,7 +135,7 @@ def test_inference_records_encrypted_field_history_without_sending_definitions(c
         assert marker not in kwargs["user_input"] and marker not in kwargs["instructions"]
         assert "field_metadata_usage" not in kwargs["user_input"]
         assert "synthetic-zone" in kwargs["user_input"]
-        return AgentCallResult(output=fake_output(), framework_run_id="synthetic", agent_fingerprint="synthetic",
+        return AgentCallResult(output=model_output(fake_output(), kwargs), framework_run_id="synthetic", agent_fingerprint="synthetic",
             finish_reason="completed", failure_id=None, error=None, telemetry={"framework_version": "0.6.2"})
     monkeypatch.setattr(worker, "execute_structured_agent", execute)
     with client.app.state.session_factory() as db:

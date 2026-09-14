@@ -14,11 +14,12 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.orm import Session
 
-from .agent.contracts import AgentVerdict, ThreatSeverity, WAFAnalysisOutput
+from .agent.contracts import AgentVerdict, EvidenceCorrectionOutput, ThreatSeverity, WAFAnalysisOutput
 from .agent.analyst_guidance import build_analyst_guidance
 from .agent.evidence import EvidenceSourceResolver
 from .agent.executor import AgentCallResult, execute_structured_agent
 from .agent.input_builder import build_agent_input
+from .agent.input_integrity import affected_normal_findings, apply_integrity_guard
 from .agent.policy import (
     VerifierPolicyContext,
     finalize_with_verifier,
@@ -43,6 +44,10 @@ from .models import (
 from .services.crypto import CryptoService
 from .services.internal_egress import allowed_targets_from_db, lock_egress_mutation
 from .services.http_parser import HTTP_PARSER_VERSION, parse_http_payload
+from .services.request_integrity import (
+    INTEGRITY_VERSION, LEGACY_INTEGRITY_VERSION, INTEGRITY_RULES_VERSIONS,
+    INTEGRITY_V2_RULES_VERSIONS, assess_request_integrity,
+)
 from .services.payload_decoding import DECODER_VERSION, decode_payload
 from .services.prompt_snapshots import pin_analysis_prompt
 from .services.input_schemas import pin_schema, schema_metadata
@@ -437,6 +442,7 @@ def _stub_result() -> dict:
 
 def _agent_step_output(call: AgentCallResult) -> dict:
     return {
+        "grounding_history": call.grounding_history,
         "validated_output": call.output.model_dump(mode="json") if call.output else None,
         "finish_reason": call.finish_reason,
         "failure_id": call.failure_id,
@@ -491,24 +497,28 @@ def _ground_output_evidence(
     output: WAFAnalysisOutput,
     analysis: Analysis,
     raw_payload: str,
+    parsed: dict | None = None,
+    *, sources: EvidenceSourceResolver | None = None, force_inconclusive: bool = False,
 ) -> tuple[WAFAnalysisOutput, dict[str, object]]:
-    sources = EvidenceSourceResolver(raw_payload, _event_document(analysis))
+    sources = sources or EvidenceSourceResolver(raw_payload, _event_document(analysis), parsed)
     grounded = [item for item in output.evidence if sources.matches(item.field, item.excerpt)]
     rejected_count = len(output.evidence) - len(grounded)
-    downgraded = output.verdict != AgentVerdict.inconclusive and not grounded
+    downgraded = output.verdict != AgentVerdict.inconclusive and (not grounded or force_inconclusive)
 
-    if rejected_count == 0:
-        validated = output
-    elif downgraded:
+    if downgraded or force_inconclusive:
         validated = output.model_copy(
             update={
                 "verdict": AgentVerdict.inconclusive,
                 "confidence_score": min(output.confidence_score, 0.49),
-                "summary_ko": "LLM이 제시한 판정 근거를 지정된 입력 필드의 원문에서 확인할 수 없어 최종 판정을 보류합니다.",
+                "summary_ko": (
+                    "인용 교정만으로 기존 판정을 뒷받침하기 어려워 보류합니다. 남은 원문 근거와 요청 맥락을 확인하세요."
+                    if force_inconclusive else
+                    "LLM이 제시한 판정 근거를 지정된 입력 필드의 원문에서 확인할 수 없어 최종 판정을 보류합니다."
+                ),
                 "threat_analysis": output.threat_analysis.model_copy(
                     update={"severity": ThreatSeverity.UNKNOWN}
                 ),
-                "evidence": [],
+                "evidence": grounded,
                 "recommended_checks": _dedupe_checks(
                     output.recommended_checks,
                     "원본 HTTP 요청과 이벤트 필드에서 판정 근거를 다시 확인하세요.",
@@ -524,7 +534,7 @@ def _ground_output_evidence(
                 ),
             }
         )
-    else:
+    elif rejected_count:
         validated = output.model_copy(
             update={
                 "evidence": grounded,
@@ -534,6 +544,8 @@ def _ground_output_evidence(
                 ),
             }
         )
+    else:
+        validated = output
 
     validated = WAFAnalysisOutput.model_validate(validated.model_dump(mode="json"))
     return validated, {
@@ -542,6 +554,7 @@ def _ground_output_evidence(
         "accepted_count": len(grounded),
         "rejected_count": rejected_count,
         "downgraded_to_inconclusive": downgraded,
+        "correction_requires_review": force_inconclusive,
         "raw_values_stored": False,
     }
 
@@ -550,15 +563,139 @@ def _ground_agent_call(
     call: AgentCallResult,
     analysis: Analysis,
     raw_payload: str,
+    parsed: dict | None = None,
+    *, sources: EvidenceSourceResolver | None = None, force_inconclusive: bool = False,
 ) -> AgentCallResult:
     if call.output is None:
         return call
-    output, grounding = _ground_output_evidence(call.output, analysis, raw_payload)
+    output, grounding = _ground_output_evidence(
+        call.output, analysis, raw_payload, parsed, sources=sources, force_inconclusive=force_inconclusive,
+    )
     return replace(
         call,
         output=output,
         telemetry={**call.telemetry, "evidence_grounding": grounding},
     )
+
+
+def _execute_grounded_agent(*, analysis, raw_payload, parsed, input_truncated,
+                            submitted_payload_spans=None, assessment_enabled=False, **kwargs):
+    from .agent.contracts import EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput
+    from .agent.evidence_candidates import (
+        VERSION as SELECTION_VERSION, REPAIR_INSTRUCTIONS as SELECTION_REPAIR_INSTRUCTIONS,
+        resolve_selection, apply_selection_corrections,
+    )
+    from .agent.grounding_repair import (
+        REPAIR_INSTRUCTIONS, REPAIR_VERSION, apply_corrections, correction_input,
+        evidence_issues, failure_category, has_content_evidence, resolve_evidence,
+    )
+    document = json.loads(kwargs["user_input"])
+    catalog = document.get("evidence_candidates")
+    selecting = isinstance(catalog, dict) and catalog.get("version") == SELECTION_VERSION
+    selection_model = EvidenceAssessmentOutput if assessment_enabled else EvidenceSelectionOutput
+    repair_instructions = SELECTION_REPAIR_INSTRUCTIONS if selecting else REPAIR_INSTRUCTIONS
+    if selecting:
+        kwargs["output_model"] = selection_model
+    if submitted_payload_spans is None:
+        submitted_payload_spans = ((0, len(raw_payload)),) if document["event"].get("payload") == raw_payload else ()
+    sources = EvidenceSourceResolver(
+        raw_payload, _event_document(analysis), parsed,
+        submitted_payload_spans=submitted_payload_spans, submitted_event=document["event"],
+        decoding_hints=document.get("decoded_payload_hints"),
+    )
+    history, attempts = [], []
+    original_kwargs = dict(kwargs)
+    original_output, requested_indexes = None, set()
+    original_selection = None
+    requires_review, resolution_count = False, 0
+    skipped_reason, context_only = None, False
+    for attempt in range(2):
+        try:
+            call = asyncio.run(execute_structured_agent(**kwargs))
+        except Exception as exc:
+            call = _failed_agent_call(exc)
+        expected_model = ((EvidenceSelectionCorrectionOutput if attempt else selection_model) if selecting
+                          else (EvidenceCorrectionOutput if attempt else WAFAnalysisOutput))
+        if call.succeeded and type(call.output) is not expected_model:
+            call = replace(call, output=None, finish_reason="error", error="unexpected_agent_output_contract",
+                           telemetry={**call.telemetry, "error_summary": {"code": "output_validation_failed"}})
+        raw_output = call.output
+        issues, resolutions = [], []
+        if call.succeeded:
+            if selecting:
+                if not attempt:
+                    original_selection = raw_output
+                    selection = raw_output
+                else:
+                    selection, patch_issues = apply_selection_corrections(original_selection, raw_output, requested_indexes)
+                    issues.extend(patch_issues)
+                    requires_review = raw_output.requires_reanalysis or bool(patch_issues)
+                merged, selection_issues, resolutions = resolve_selection(selection, catalog, sources)
+                issues.extend(selection_issues)
+                merged = merged.model_copy(update={"input_truncated": input_truncated})
+            elif not attempt:
+                original_output, resolutions = resolve_evidence(raw_output, sources)
+                merged = original_output.model_copy(update={"input_truncated": input_truncated})
+            else:
+                merged, patch_issues, resolutions = apply_corrections(original_output, raw_output, requested_indexes, sources)
+                issues.extend(patch_issues)
+                requires_review = raw_output.requires_reanalysis or bool(patch_issues)
+                merged = merged.model_copy(update={"input_truncated": input_truncated})
+            issues.extend(evidence_issues(merged, sources))
+            if attempt and issues:
+                requires_review = True
+            if (attempt or selecting) and merged.verdict != AgentVerdict.inconclusive and not has_content_evidence(merged, sources):
+                requires_review, context_only = True, True
+            call = replace(call, output=merged)
+        resolution_count += len(resolutions)
+        # Arbitrary field paths/excerpts occur only inside the encrypted history.
+        history.append({"attempt": attempt + 1,
+                        "output": raw_output.model_dump(mode="json") if raw_output else None,
+                        "resolved_output": call.output.model_dump(mode="json") if call.output else None,
+                        "source_resolutions": resolutions,
+                        "rejected_evidence": issues,
+                        **({"assessment": selection.model_dump(mode="json", include={"evidence", "decision_issue"})}
+                           if selecting and assessment_enabled and call.succeeded else {}),
+                        **({"correction_user_input": kwargs["user_input"],
+                            "correction_instructions": repair_instructions} if attempt else {})})
+        attempts.append({"attempt": attempt + 1, "framework_run_id": call.framework_run_id,
+                         "finish_reason": call.finish_reason, "issues": issues,
+                         "usage": call.telemetry.get("usage"),
+                         "output_validation_retry": call.telemetry.get("output_validation_retry")})
+        if attempt or not call.succeeded or not issues:
+            break
+        corrected_input = correction_input(original_kwargs["user_input"], original_selection if selecting else original_output, issues)
+        requested_indexes = {item["index"] for item in json.loads(corrected_input)["evidence_correction"]["items"]}
+        if not requested_indexes:
+            requires_review, skipped_reason = True, "feedback_budget_exceeded"
+            break
+        kwargs = {**original_kwargs,
+                  # A citation-only task has its own versioned instructions;
+                  # the pinned judgment policy/output contract is not rewritten.
+                  "instructions": repair_instructions,
+                  "user_input": corrected_input,
+                  "agent_name": original_kwargs["agent_name"] + "-evidence-repair",
+                  "session_id": original_kwargs["session_id"] + ":evidence-repair",
+                  # No nested schema-repair loop on this one extra model call.
+                  "output_validation_max_attempts": 1,
+                  "output_model": EvidenceSelectionCorrectionOutput if selecting else EvidenceCorrectionOutput}
+    if call.succeeded:
+        call = _ground_agent_call(call, analysis, raw_payload, parsed, sources=sources, force_inconclusive=requires_review)
+        if selecting:
+            grounding = {**call.telemetry["evidence_grounding"], "mode": "selected_raw_source",
+                         "checked_count": len(original_selection.evidence), "rejected_count": len(issues)}
+            call = replace(call, telemetry={**call.telemetry, "evidence_grounding": grounding})
+    retry = {"version": SELECTION_VERSION if selecting else REPAIR_VERSION,
+             "mode": "source_selection" if selecting else "citations_only",
+             "attempted": len(attempts) > 1, "attempt_count": len(attempts), "max_attempts": 2,
+             "recovered": len(attempts) > 1 and call.succeeded and not attempts[-1]["issues"] and not requires_review,
+             "requires_review": requires_review, "resolved_source_count": resolution_count,
+             "context_only_evidence": context_only,
+             "skipped_reason": skipped_reason,
+             "attempts": attempts}
+    return replace(call, grounding_history=history,
+                   telemetry={**call.telemetry, "evidence_grounding_retry": retry,
+                              "failure_category": failure_category(call)})
 
 
 def process_moduagent(
@@ -586,9 +723,13 @@ def _process_moduagent_steps(
     with measured_step(db, crypto, run, 1, "input", "이벤트 입력 검증") as step:
         from .services.analysis_retries import (check_profile, execution_request_check, load_execution_snapshot,
                                                make_execution_snapshot)
+        from .services.agent_configuration import (profile_metadata as role_metadata, select_verifier,
+                                                  role_request_check, validate_role_profile)
+        from .agent.grounding_repair import REPAIR_RESERVED_TOKENS, decision_diagnostics
         # Check retries BEFORE either legacy pin function could reconstruct a
         # missing snapshot using a current/default policy or field definition.
-        pinned_execution = load_execution_snapshot(analysis, crypto) if analysis.retry_of_analysis_id else None
+        pinned_execution = load_execution_snapshot(analysis, crypto) if (analysis.retry_of_analysis_id or
+            (analysis.execution_snapshot_ciphertext and not analysis.model_test_run_id)) else None
         # History only: definitions never enter system/user messages. An old
         # unversioned queued event uses the original default, not today's rules.
         schema_snapshot = pin_schema(db, crypto, analysis, selection_origin="legacy_default")
@@ -610,9 +751,8 @@ def _process_moduagent_steps(
             request_check = combined_check
             verifier_confidence_threshold = named_run.profile_metadata["verifier_confidence_threshold"]
         prompt = pin_analysis_prompt(db, crypto, analysis, origin="legacy_execution")
-        # Explicit retries alone override role selection. Ordinary queue lease
-        # recovery and candidate-validation claim/qualification guards retain
-        # their original paths. The current attempt is captured below.
+        # Retry and lease recovery reuse pinned roles. Candidate qualification
+        # retains its dedicated claim checks and always evaluates its own model.
         if pinned_execution is not None:
             profile = check_profile(db, pinned_execution)
             verifier_confidence_threshold = pinned_execution.verifier_confidence_threshold
@@ -652,6 +792,18 @@ def _process_moduagent_steps(
             )
         if profile is None:
             raise WorkerExecutionError("test_model_profile_required" if analysis.analysis_purpose == "test" else "production_model_profile_required")
+        if pinned_execution is not None:
+            verifier_profile = check_profile(db, pinned_execution, role="verifier")
+        elif analysis.model_test_run_id:
+            verifier_profile = profile
+        elif named_run is not None:
+            saved = named_run.profile_metadata.get("verifier_profile")
+            # Older named runs were explicitly single-profile; never apply a
+            # new Verifier assignment retroactively to their queued items.
+            verifier_profile = validate_role_profile(db, db.get(VLLMProfile, saved["model_profile_id"]),
+                saved["profile_fingerprint"]) if saved else profile
+        else:
+            verifier_profile = select_verifier(db, analysis.analysis_purpose, profile)
         # Recheck the egress boundary in the worker, including profiles that
         # were changed outside the administrator API. No event is sent yet.
         try:
@@ -663,7 +815,11 @@ def _process_moduagent_steps(
         if normalized_url != profile.base_url:
             raise WorkerExecutionError("production_model_profile_url_not_normalized")
         provider = profile.provider
-        egress_check = request_check or (vllm_egress_check(db, profile) if provider == "vllm" else None)
+        egress_check = role_request_check(db.get_bind(), profile, request_check, require_verified=False)
+        verifier_check = role_request_check(db.get_bind(), verifier_profile, request_check,
+            require_verified=verifier_profile.id != profile.id and not analysis.model_test_run_id)
+        verifier_key = crypto.decrypt_text(verifier_profile.api_key_ciphertext) if verifier_profile.api_key_ciphertext else None
+        verifier_metadata = role_metadata(verifier_profile)
         profile_metadata = {
             "llm_provider": provider,
             "model_profile": profile.name,
@@ -675,7 +831,7 @@ def _process_moduagent_steps(
         # Capture the selected profile even when a later model call fails.
         analysis.model_profile = profile.name
         if pinned_execution is None:
-            execution = make_execution_snapshot(analysis, profile, prompt, verifier_confidence_threshold)
+            execution = make_execution_snapshot(analysis, profile, prompt, verifier_confidence_threshold, verifier_profile)
             analysis.execution_snapshot_ciphertext = crypto.encrypt_text(execution.model_dump_json())
             # Persist before parsing/context/Primary failures can lose provenance.
             # The measured-step commit also persists this; the early commit is
@@ -683,7 +839,7 @@ def _process_moduagent_steps(
             db.commit()
         raw_payload = crypto.decrypt_text(analysis.payload_ciphertext)
         input_fingerprint = hashlib.sha256(
-            f"{prompt.instructions_hash}:{profile_fingerprint(profile)}:{analysis.source_system}:{analysis.event_id}:{raw_payload}".encode(
+            f"{prompt.instructions_hash}:{profile_fingerprint(profile)}:{profile_fingerprint(verifier_profile)}:{analysis.source_system}:{analysis.event_id}:{raw_payload}".encode(
                 "utf-8"
             )
         ).hexdigest()
@@ -694,56 +850,70 @@ def _process_moduagent_steps(
             "prompt": prompt.metadata(),
             "verifier_confidence_threshold": verifier_confidence_threshold,
             **profile_metadata,
+            "verifier_profile": verifier_metadata,
         })
 
+    integrity = None
     with measured_step(
         db, crypto, run, 2, "parser", "범용 HTTP 파싱", {"payload": raw_payload}
     ) as step:
         parsed = parse_http_payload(raw_payload)
-        step_output(crypto, step, parsed, {
+        if prompt.fixed_rules_version in INTEGRITY_RULES_VERSIONS:
+            integrity = assess_request_integrity(raw_payload, parsed, version=(
+                INTEGRITY_VERSION if prompt.fixed_rules_version in INTEGRITY_V2_RULES_VERSIONS else LEGACY_INTEGRITY_VERSION))
+        step_output(crypto, step, {**parsed, **({"request_integrity": integrity} if integrity is not None else {})}, {
             "parser_version": HTTP_PARSER_VERSION,
             "parse_status": parsed["parse_status"],
             "fallback_llm_used": False,
+            **({"request_integrity": {"version": integrity["version"], "status": integrity["status"],
+                "issue_codes": [item["code"] for item in integrity["issues"]],
+                "limitation_codes": integrity["limitations"]}} if integrity is not None else {}),
         })
 
     decoding = _decode_payload_step(db, crypto, run, raw_payload)
     with measured_step(db, crypto, run, 4, "agent_input", "분석 입력 구성") as step:
+        from .agent.evidence_candidates import SELECTION_RULES_VERSIONS
         try:
             agent_input = build_agent_input(
-                _event_document(analysis), raw_payload, parsed, profile.context_window, profile.max_output_tokens,
+                _event_document(analysis), raw_payload, parsed,
+                min(profile.context_window - profile.max_output_tokens,
+                    verifier_profile.context_window - verifier_profile.max_output_tokens), 0,
                 decoding=decoding,
-                prompt_reserved_tokens=prompt.reserved_tokens,
+                prompt_reserved_tokens=prompt.reserved_tokens + REPAIR_RESERVED_TOKENS,
+                evidence_selection=prompt.fixed_rules_version in SELECTION_RULES_VERSIONS,
+                request_integrity=integrity,
             )
         except ValueError as exc:
             if exc.args == ("agent_context_budget_too_small",):
                 raise WorkerExecutionError("agent_context_budget_too_small") from None
             raise
         analysis.input_truncated = agent_input.input_truncated
-        step_output(crypto, step, {"user_input": agent_input.text}, {
+        step_output(crypto, step, {"user_input": agent_input.text,
+                                   "retained_payload_spans": agent_input.retained_payload_spans}, {
             "input_schema": schema_metadata(schema_snapshot),
             "decoder_version": DECODER_VERSION,
             "input_truncated": agent_input.input_truncated,
             "submitted_payload_chars": agent_input.submitted_payload_chars,
             "prompt_reserved_tokens": prompt.reserved_tokens,
+            "evidence_repair_reserved_tokens": REPAIR_RESERVED_TOKENS,
+            "shared_role_input": True,
+            "evidence_source_scope": "submitted_raw_spans",
         })
 
     with measured_step(
         db, crypto, run, 5, "llm_primary", "Primary LLM 판정",
         {"system_instructions": prompt.primary_instructions, "user_input": agent_input.text},
     ) as step:
-        try:
-            primary = asyncio.run(execute_structured_agent(
+        from .agent.analyst_assessment import RULES_VERSIONS as ASSESSMENT_RULES_VERSIONS, build_analyst_assessment
+        assessment_enabled = prompt.fixed_rules_version in ASSESSMENT_RULES_VERSIONS
+        primary = _execute_grounded_agent(
+                analysis=analysis, raw_payload=raw_payload, parsed=parsed, input_truncated=agent_input.input_truncated,
+                submitted_payload_spans=agent_input.retained_payload_spans,
+                assessment_enabled=assessment_enabled,
                 profile=profile, api_key=api_key, instructions=prompt.primary_instructions,
                 user_input=agent_input.text, session_id=f"{analysis.id}:primary", agent_name="waf-primary",
                 egress_check=egress_check,
-            ))
-        except Exception as exc:
-            primary = _failed_agent_call(exc)
-        if primary.output is not None:
-            primary = replace(
-                primary, output=primary.output.model_copy(update={"input_truncated": agent_input.input_truncated}),
             )
-            primary = _ground_agent_call(primary, analysis, raw_payload)
         run.framework_run_id = primary.framework_run_id
         run.fingerprint = primary.agent_fingerprint or input_fingerprint
         run.failure_id = primary.failure_id
@@ -768,6 +938,8 @@ def _process_moduagent_steps(
             evidence_grounding_failed=bool(primary.telemetry.get("evidence_grounding", {}).get("rejected_count")),
         )
         reasons = verifier_reasons(primary.output, policy_context)
+        if affected_normal_findings(primary.output, agent_input.request_integrity, raw_payload, parsed):
+            reasons.append("input_integrity_requires_review")
         step.input_ciphertext = encrypted_json(crypto, {
             "primary_verdict": primary.output.verdict.value,
             "primary_confidence": primary.output.confidence_score,
@@ -785,21 +957,16 @@ def _process_moduagent_steps(
             db, crypto, run, 7, "llm_verifier", "독립 Verifier LLM 판정",
             {"system_instructions": prompt.verifier_instructions, "user_input": agent_input.text},
         ) as step:
-            try:
-                verifier = asyncio.run(execute_structured_agent(
-                    profile=profile, api_key=api_key, instructions=prompt.verifier_instructions,
+            verifier = _execute_grounded_agent(
+                    analysis=analysis, raw_payload=raw_payload, parsed=parsed, input_truncated=agent_input.input_truncated,
+                    submitted_payload_spans=agent_input.retained_payload_spans,
+                    assessment_enabled=assessment_enabled,
+                    profile=verifier_profile, api_key=verifier_key, instructions=prompt.verifier_instructions,
                     user_input=agent_input.text, session_id=f"{analysis.id}:verifier", agent_name="waf-verifier",
-                    egress_check=egress_check,
-                ))
-            except Exception as exc:
-                verifier = _failed_agent_call(exc)
-            if verifier.output is not None:
-                verifier = replace(
-                    verifier, output=verifier.output.model_copy(update={"input_truncated": agent_input.input_truncated}),
+                    egress_check=verifier_check,
                 )
-                verifier = _ground_agent_call(verifier, analysis, raw_payload)
             step_output(crypto, step, _agent_step_output(verifier), {
-                **verifier.telemetry, **profile_metadata, "independent_of_primary": True,
+                **verifier.telemetry, **verifier_metadata, "independent_of_primary": True,
             })
             step.status = "completed" if verifier.succeeded else "failed"
             if verifier.failure_id:
@@ -825,9 +992,24 @@ def _process_moduagent_steps(
                 reasons,
                 verifier_failure=(verifier.failure_id or verifier.error) if verifier else "verifier_not_executed",
             )
+        integrity_metadata = None
+        if agent_input.request_integrity is not None:
+            output, integrity_metadata = apply_integrity_guard(
+                finalization.output, agent_input.request_integrity, raw_payload, parsed)
+            finalization = replace(finalization, output=output)
         final_output = finalization.output
+        diagnostics = decision_diagnostics(primary, verifier, finalization, parsed, agent_input.input_truncated)
+        if integrity_metadata is not None:
+            diagnostics["request_integrity"] = integrity_metadata
+            if integrity_metadata["issue_codes"]:
+                diagnostics["input_signals"].append("input_integrity_observed")
+            if integrity_metadata["downgraded_to_inconclusive"]:
+                diagnostics["inconclusive_reasons"].append("input_integrity_limited")
         result = final_output.model_dump(mode="json")
+        if assessment_enabled:
+            result["analyst_assessment"] = build_analyst_assessment(primary, verifier)
         result.update({
+            "diagnostics": diagnostics,
             "schema_version": "waf-analysis-v2",
             "analyst_guidance": build_analyst_guidance(
                 final_output, incomplete_execution=bool(reasons and (verifier is None or not verifier.succeeded)),
@@ -848,12 +1030,13 @@ def _process_moduagent_steps(
                 "disagreement_or_failure_becomes_inconclusive": True,
             },
             "agent": {
+                "role_profiles": {"primary": profile_metadata, "verifier": verifier_metadata},
                 "framework": "moduagent",
                 "input_schema": schema_metadata(schema_snapshot),
                 "framework_version": primary.telemetry.get("framework_version"),
                 "execution": "standard",
                 "tools": [],
-                "preprocessors": [DECODER_VERSION],
+                "preprocessors": [DECODER_VERSION] + ([integrity["version"]] if integrity is not None else []),
                 "llm_provider": provider,
                 "model_name": profile.model_name,
                 "model_profile_id": profile.id,

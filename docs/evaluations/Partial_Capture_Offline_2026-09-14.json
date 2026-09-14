@@ -1,0 +1,92 @@
+{
+  "llm_calls": 0,
+  "verdicts_evaluated": false,
+  "files": [
+    {
+      "file": "samples/waf-parser-stress-v1/parser_stress_50.json",
+      "count": 50,
+      "sha256": "147ab601d5ec69ed8ba371ba3e92b2280c9a8b447d3c8a718ea1595d80ac7f8f",
+      "parser_status": {
+        "partial": 15,
+        "failed": 25,
+        "success": 10
+      },
+      "v1_issue_counts": {
+        "content_length_conflict": 1
+      },
+      "v2_issue_counts": {
+        "declared_body_not_captured": 1,
+        "content_length_conflict": 1
+      },
+      "changed_observations": [
+        {
+          "event_id": "waf-parser-v1-004",
+          "before": "not_checked",
+          "after": "no_issue_observed",
+          "before_codes": [],
+          "after_codes": []
+        },
+        {
+          "event_id": "waf-parser-v1-005",
+          "before": "not_checked",
+          "after": "issues_observed",
+          "before_codes": [],
+          "after_codes": [
+            "declared_body_not_captured"
+          ]
+        }
+      ]
+    },
+    {
+      "file": "samples/waf-dummy-v1/hard_50.json",
+      "count": 50,
+      "sha256": "0bd259c02732fdf559588c1116e1a597657ac7b6d9aa73d09b5690c804c27aa2",
+      "parser_status": {
+        "success": 50
+      },
+      "v1_issue_counts": {
+        "declared_body_not_captured": 1,
+        "transfer_encoding_content_length": 1,
+        "data_after_chunked_body": 1,
+        "json_duplicate_keys": 2,
+        "json_container_unclosed": 1,
+        "content_length_conflict": 1
+      },
+      "v2_issue_counts": {
+        "declared_body_not_captured": 1,
+        "transfer_encoding_content_length": 1,
+        "data_after_chunked_body": 1,
+        "json_duplicate_keys": 2,
+        "json_container_unclosed": 1,
+        "content_length_conflict": 1
+      },
+      "changed_observations": []
+    },
+    {
+      "file": "samples/waf-dummy-v1/medium_50.json",
+      "count": 50,
+      "sha256": "e5b0f1dc37014e2ea7c04d40d05d7820d728ec574c26048e2f380ecc506b0c22",
+      "parser_status": {
+        "success": 50
+      },
+      "v1_issue_counts": {
+        "json_container_unclosed": 1
+      },
+      "v2_issue_counts": {
+        "json_container_unclosed": 1
+      },
+      "changed_observations": []
+    },
+    {
+      "file": "samples/waf-context-review-v1/context_review_18.json",
+      "count": 18,
+      "sha256": "03edbbda90fbecd0eb5b40f5f64d8888df81804d374ad28bf82d46303e5393ff",
+      "parser_status": {
+        "success": 18
+      },
+      "v1_issue_counts": {},
+      "v2_issue_counts": {},
+      "changed_observations": []
+    }
+  ]
+}

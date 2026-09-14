@@ -11,6 +11,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from .api.analyses import router as analyses_router
 from .api.analysis_exports import router as analysis_exports_router
 from .api.auth import router as auth_router
+from .api.agent_settings import router as agent_settings_router
 from .api.dashboard import router as dashboard_router
 from .api.model_profiles import router as model_profiles_router
 from .api.evaluation_labels import router as evaluation_labels_router
@@ -88,6 +89,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         session_cookie="__Host-waf_session" if settings.session_https_only else "session",
     )
     app.include_router(auth_router, prefix="/api/v1")
+    app.include_router(agent_settings_router, prefix="/api/v1")
     app.include_router(analyses_router, prefix="/api/v1", responses=ANALYSIS_ERROR_RESPONSES)
     app.include_router(analysis_exports_router, prefix="/api/v1")
     app.include_router(dashboard_router, prefix="/api/v1", responses=ANALYSIS_ERROR_RESPONSES)

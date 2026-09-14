@@ -1,0 +1,146 @@
+[
+  {
+    "event_id": "evt-135b60baf77118f7",
+    "group": "template",
+    "title_ko": "양식 값의 내부 객체 접근과 코드 호출",
+    "expected_verdict": "true_positive",
+    "rationale_ko": "양식 값에서 내부 객체를 따라 내장 import와 운영체제 함수를 호출하려 한다. 단순 이름 자리표시자와 구분하고 실행 성공은 별도로 확인한다.",
+    "missing_condition_ko": null
+  },
+  {
+    "event_id": "evt-1944166dcf82a40b",
+    "group": "outbound_url",
+    "title_ko": "서버 측 내부 주소 조회의 허용 범위 미확인",
+    "expected_verdict": "inconclusive",
+    "rationale_ko": "서버 측 URL 조회 대상이 루프백 주소다. 허용된 내부 상태 조회인지 허용 범위 밖 요청인지 구분할 정책이 없다.",
+    "missing_condition_ko": "해당 URL 조회 기능에서 허용하는 대상 주소·포트와 요청자의 이용 권한"
+  },
+  {
+    "event_id": "evt-1cd2ee4d4aaaa813",
+    "group": "path",
+    "title_ko": "기준 디렉터리를 벗어나 시스템 파일 지정",
+    "expected_verdict": "true_positive",
+    "rationale_ko": "파일 읽기 인자에 반복된 상위 경로 이동과 시스템 계정 파일을 지정했다. 표시용이라는 입력 플래그로 이 조합을 무시하지 않는다.",
+    "missing_condition_ko": null
+  },
+  {
+    "event_id": "evt-2eca7bf6b57c49d6",
+    "group": "html",
+    "title_ko": "이벤트 이름과 닮은 일반 파일명",
+    "expected_verdict": "false_positive",
+    "rationale_ko": "파일명에는 이벤트 이름과 확장자만 있다. 태그·속성 할당·실행 식이 없는 검색 값이다.",
+    "missing_condition_ko": null
+  },
+  {
+    "event_id": "evt-30547bb72db0e30c",
+    "group": "template",
+    "title_ko": "메일 양식의 이름 자리표시자",
+    "expected_verdict": "false_positive",
+    "rationale_ko": "메일 양식에서 고객 이름을 넣는 단순 자리표시자다. 객체 내부 접근·호출·계산 등 실행 조작 구문이 없다.",
+    "missing_condition_ko": null
+  },
+  {
+    "event_id": "evt-3b0025684339d37f",
+    "group": "lookup",
+    "title_ko": "기술 용어를 설명하는 문서",
+    "expected_verdict": "false_positive",
+    "rationale_ko": "문서 내용은 기술 용어의 설명이며 조회식의 구분자나 외부 조회를 지시하는 실행 구문이 없다.",
+    "missing_condition_ko": null
+  },
+  {
+    "event_id": "evt-400102bce66d4f44",
+    "group": "embedded_content",
+    "title_ko": "임베드 콘텐츠 허용 여부 미확인",
+    "expected_verdict": "inconclusive",
+    "rationale_ko": "콘텐츠에 같은 사이트의 iframe을 넣었다. 명백한 실행 공격은 없지만 허용된 임베드인지 정책 위반인지 결정할 편집 규칙이 없다.",
+    "missing_condition_ko": "이 콘텐츠 필드의 iframe 허용·제거 규칙과 실제 표시 방식"
+  },
+  {
+    "event_id": "evt-57a495cbff78a177",
+    "group": "custom_query",
+    "title_ko": "사용자 SQL 실행 기능의 허용 범위 미확인",
+    "expected_verdict": "inconclusive",
+    "rationale_ko": "직접 SQL을 받는 형태이나 정상 보고서 기능인지 허용되지 않은 조회인지 가를 권한·실행 범위가 없다.",
+    "missing_condition_ko": "이 기능의 사용자 SQL 허용 여부와 요청자의 조회 범위"
+  },
+  {
+    "event_id": "evt-62630b6f13b313e5",
+    "group": "job_permission",
+    "title_ko": "관리 작업의 실행 권한 미확인",
+    "expected_verdict": "inconclusive",
+    "rationale_ko": "별도 명령 삽입 구문은 없지만 관리 작업의 허용 여부가 확인되지 않는다. 클라이언트의 dry_run 값만으로 실행되지 않는다고 보장할 수 없다.",
+    "missing_condition_ko": "요청자의 작업 실행 권한과 서버의 허용 명령·dry_run 처리 규칙"
+  },
+  {
+    "event_id": "evt-64f75830cdf69cbd",
+    "group": "authorization",
+    "title_ko": "요청자와 문서 소유 관계 미확인",
+    "expected_verdict": "inconclusive",
+    "rationale_ko": "문서 식별자와 계정 번호만으로 타인 문서 접근인지 정상 조회인지 알 수 없다.",
+    "missing_condition_ko": "인증된 요청자의 신원과 해당 문서의 소유·공유 권한"
+  },
+  {
+    "event_id": "evt-79afdbfe815ebeab",
+    "group": "path",
+    "title_ko": "파일명 내부의 연속된 점",
+    "expected_verdict": "false_positive",
+    "rationale_ko": "점 두 개가 파일명 내부에 있고 상위 디렉터리 이동 세그먼트나 경로 구분자가 없다.",
+    "missing_condition_ko": null
+  },
+  {
+    "event_id": "evt-83758d987f3045f0",
+    "group": "relative_path",
+    "title_ko": "상위 경로가 허용된 공유 경로인지 미확인",
+    "expected_verdict": "inconclusive",
+    "rationale_ko": "상위 경로 이동은 있지만 대상은 공유 문서 형태다. 기준 디렉터리와 허용 루트에 따라 정상 공유 접근 또는 경로 제한 위반으로 갈린다.",
+    "missing_condition_ko": "서버가 적용하는 기준 디렉터리와 접근 허용 루트"
+  },
+  {
+    "event_id": "evt-9856267400fe92ec",
+    "group": "shell",
+    "title_ko": "일반 내보내기 파일명",
+    "expected_verdict": "false_positive",
+    "rationale_ko": "괄호로 초안임을 나타낸 파일명이며 명령 치환·구분자·실행 식이 없다.",
+    "missing_condition_ko": null
+  },
+  {
+    "event_id": "evt-a01d0e59c6ebcce2",
+    "group": "lookup",
+    "title_ko": "요청 헤더의 외부 조회식",
+    "expected_verdict": "true_positive",
+    "rationale_ko": "요청 헤더에 외부 대상을 지정한 JNDI 조회식을 넣었다. 취약 Log4j의 존재·연결·침해 성공을 확인한 것은 아니다.",
+    "missing_condition_ko": null
+  },
+  {
+    "event_id": "evt-a57ab7672c9aae61",
+    "group": "html",
+    "title_ko": "시그니처와 다른 스크립트 삽입",
+    "expected_verdict": "true_positive",
+    "rationale_ko": "검색 값에 SVG 이벤트 핸들러와 실행 식을 삽입했다. SQL 시그니처 불일치나 렌더링 성공 미확인은 이 공격 시도를 부정하지 않는다.",
+    "missing_condition_ko": null
+  },
+  {
+    "event_id": "evt-d909e4abe9260b9c",
+    "group": "shell",
+    "title_ko": "JSON 파일명 안의 명령 치환",
+    "expected_verdict": "true_positive",
+    "rationale_ko": "파일명에 셸 명령 치환 문법과 명령을 삽입했다. JSON 전달 형식과 명령 실행의 성공 여부를 공격 시도와 구분한다.",
+    "missing_condition_ko": null
+  },
+  {
+    "event_id": "evt-f8a7ac66d4ca6b8d",
+    "group": "sql",
+    "title_ko": "JSON 인증 입력의 참 조건 삽입",
+    "expected_verdict": "true_positive",
+    "rationale_ko": "사용자명에 문자열 종료·참 조건·주석을 조합해 인증 조건을 바꾸려 한다. JSON 따옴표나 클라이언트의 표시용 플래그는 정상 처리의 증명이 아니다.",
+    "missing_condition_ko": null
+  },
+  {
+    "event_id": "evt-ff238f440ad1459d",
+    "group": "sql",
+    "title_ko": "성명 안의 작은따옴표",
+    "expected_verdict": "false_positive",
+    "rationale_ko": "성명 검색 값의 작은따옴표이며 조건식·주석·별도 조회를 만드는 구문이 없다.",
+    "missing_condition_ko": null
+  }
+]

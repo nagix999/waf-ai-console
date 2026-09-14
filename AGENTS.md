@@ -24,7 +24,7 @@
 - Deployment: Docker Compose 우선, 향후 Kubernetes/PostgreSQL 전환
 - Agent framework: moduagent==0.6.2
 - LLM Provider: 내부 vLLM / OpenAI 공식 API. vLLM 기본 모델은 google/gemma-4-26B-A4B-it, 32K context이며 OpenAI 모델 ID는 프로필에서 지정
-- LLM 프로필은 여러 개 등록할 수 있지만 provider 전체에서 Production은 하나만 허용
+- LLM 프로필은 여러 개 등록할 수 있지만 provider 전체에서 Production/Test 각각 Primary는 하나만 허용. 각 용도의 Verifier는 Primary와 동일 또는 별도 전체 검증 프로필을 지정하며 자동 장애 우회하지 않음
 - vLLM은 enable_thinking=false. OpenAI에는 vLLM 전용 옵션을 보내지 않으며 추론 비활성화를 보장한 것으로 표시하지 않음
 - Agent는 비동기 worker에서 실행
 - Primary 판정 후 정책 조건에 따라 독립 Verifier 실행

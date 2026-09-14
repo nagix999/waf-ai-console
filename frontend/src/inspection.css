@@ -8,11 +8,45 @@
 .text-inspector .inspector-content code { white-space: inherit; overflow-wrap: inherit; font-size: 13px; }
 .text-inspector .inspector-wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
 .inspector-content mark { background: #ffe293; color: #272317; border-radius: 2px; }
+.text-inspector { --json-key: #245b9b; --json-string: #16704d; --json-number: #965010; --json-boolean: #7d3eb1; --json-null: #697487; }
+:root[data-theme="dark"] .text-inspector { --json-key: #8cbeff; --json-string: #8bd6a6; --json-number: #f5bf79; --json-boolean: #d0a5fa; --json-null: #adb9ca; }
+.json-key { color: var(--json-key); }
+.json-string { color: var(--json-string); }
+.json-number { color: var(--json-number); }
+.json-boolean { color: var(--json-boolean); }
+.json-null { color: var(--json-null); font-style: italic; }
+.json-punctuation, .json-index { color: var(--muted); }
+.inspector-json-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.inspector-modes { display: inline-flex; padding: 3px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); gap: 3px; }
+.inspector-modes button { padding: 5px 16px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); font-size: 12px; }
+.inspector-modes button[aria-pressed="true"] { background: var(--panel); color: var(--text); box-shadow: var(--shadow); font-weight: 650; }
+.inspector-modes button:disabled { opacity: .5; cursor: default; }
+.json-legend { display: flex; gap: 12px; font-size: 11px; }
+.json-legend span::before { content: ""; display: inline-block; width: 5px; height: 5px; margin-right: 5px; border-radius: 50%; background: currentColor; vertical-align: middle; }
+.text-inspector .json-tree { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; padding: 14px 12px; }
+.json-tree ul { list-style: none; margin: 0; padding: 0; }
+.json-tree .json-children { margin-left: 11px; padding-left: 18px; border-left: 1px solid var(--line); }
+.json-node { min-width: 0; }
+.json-row { display: flex; align-items: flex-start; min-height: 28px; border-radius: 5px; }
+.json-row:hover { background: var(--panel); }
+.json-node-content { min-width: 0; flex: 1; padding: 2px 0; unicode-bidi: plaintext; }
+.json-toggle, .json-toggle-space { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 24px; width: 24px; height: 28px; }
+.json-tree .json-toggle { border: 0; border-radius: 4px; padding: 0; color: var(--muted); background: transparent; }
+.json-toggle:hover { color: var(--accent); background: var(--accent-soft); }
+.json-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+.json-count { color: var(--muted); font-family: Inter, Pretendard, system-ui, sans-serif; font-size: 11px; margin-left: 10px; }
+.json-tree .json-more { color: var(--accent); border: 0; border-radius: 4px; background: transparent; padding: 2px 6px; font: 12px Inter, Pretendard, system-ui, sans-serif; }
+.json-more:hover { text-decoration: underline; }
+.json-closing { padding-left: 24px; }
+.json-page { padding: 5px 0 5px 20px; }
+.json-leaf-value { white-space: inherit; overflow-wrap: inherit; }
+.json-embedded { margin: 8px 0; padding: 8px; border: 1px solid var(--line); border-radius: 8px; }
 .inspector-compact .inspector-tools { justify-content: flex-end; }
 .inspector-compact .inspector-tools button { padding: 4px 9px; font-size: 12px; }
 .inspector-compact .inspector-content { min-height: 64px; max-height: 220px; padding: 12px; }
 .decision-card > .decision-summary-line { align-items: flex-start; flex-wrap: nowrap; }
 .decision-summary-line > strong { min-width: 0; font-size: 17px; line-height: 1.6; overflow-wrap: anywhere; }
+.decision-card > .decision-reason-label { margin: 0; color: var(--text); font-size: 14px; font-weight: 700; }
 .inspection-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
 .inspection-stats > div { display: grid; gap: 8px; padding: 14px; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
 .inspection-stats span { font-size: 12px; color: var(--muted); }

@@ -1,11 +1,13 @@
 import copy
 import json
+from agent_selection_helpers import model_output
 
 import pytest
 from sqlalchemy import select
 
 from app import worker
 from app.agent.executor import AgentCallResult
+from app.agent.contracts import EvidenceCorrectionOutput
 from app.agent.input_builder import build_agent_input
 from app.models import AccessAudit, AgentStep, Analysis, VLLMProfile
 from app.services.crypto import CryptoService
@@ -103,8 +105,12 @@ def test_worker_uses_identical_tool_hints_in_independent_calls_and_keeps_artifac
         calls.append(kwargs)
         excerpt = decoded_excerpt if forged_decoded_evidence else original_excerpt
         field = "payload.query" if raw == RAW else "payload.headers.X-Synthetic"
+        output = (EvidenceCorrectionOutput(corrections=[{"index": 0, "field": field, "excerpt": excerpt}],
+                                           requires_reanalysis=False)
+                  if "-evidence-repair" in kwargs["agent_name"]
+                  else primary_output(excerpt=excerpt, field=field))
         return AgentCallResult(
-            output=primary_output(excerpt=excerpt, field=field), framework_run_id=f"synthetic-{len(calls)}",
+            output=model_output(output, kwargs), framework_run_id=f"synthetic-{len(calls)}",
             agent_fingerprint="synthetic-fingerprint", finish_reason="completed", failure_id=None, error=None,
             telemetry={"framework": "moduagent", "framework_version": "0.6.2", "tool_trace": []},
         )
@@ -117,8 +123,13 @@ def test_worker_uses_identical_tool_hints_in_independent_calls_and_keeps_artifac
         row = db.get(Analysis, analysis_id)
         before = (row.payload_ciphertext, row.event_fingerprint)
         worker.process_moduagent(db, crypto, row, "10.0.0.10:8000", 0.75)
-        assert len(calls) == 2
-        assert calls[0]["user_input"] == calls[1]["user_input"]
+        assert len(calls) == (4 if forged_decoded_evidence else 2)
+        initial_calls = [call for call in calls if not call["agent_name"].endswith("-evidence-repair")]
+        assert [call["agent_name"] for call in initial_calls] == ["waf-primary", "waf-verifier"]
+        assert initial_calls[0]["user_input"] == initial_calls[1]["user_input"]
+        assert "evidence_correction" not in initial_calls[1]["user_input"]
+        if forged_decoded_evidence:
+            assert all(call["output_validation_max_attempts"] == 1 for call in (calls[1], calls[3]))
         doc = json.loads(calls[0]["user_input"])
         assert doc["decoded_payload_hints"]["items"]
         assert "primary" not in doc
@@ -132,7 +143,7 @@ def test_worker_uses_identical_tool_hints_in_independent_calls_and_keeps_artifac
         assert "decoded_payload_hints" not in json.dumps(row.result_json)
         assert "decoding" not in row.result_json
         assert row.result_json["agent"]["tools"] == []
-        assert row.result_json["agent"]["preprocessors"] == [DECODER_VERSION]
+        assert row.result_json["agent"]["preprocessors"] == [DECODER_VERSION, "request-integrity-v2"]
         assert row.result_json["analyst_guidance"]["checks"]
         assert row.verdict == ("inconclusive" if forged_decoded_evidence else "true_positive")
         if forged_decoded_evidence:
@@ -152,7 +163,7 @@ def test_unchanged_jndi_warning_is_a_whole_bounded_model_hint():
 def test_agent_instructions_keep_lookup_candidates_distinct_from_observed_execution():
     from app.agent.prompts import BASE_INSTRUCTIONS, PROMPT_VERSION
 
-    assert PROMPT_VERSION == "waf-judgment-v2.6"
+    assert PROMPT_VERSION == "waf-judgment-v2.12"
     for marker in ["log4j_lookup_static", "unresolved_lookup", "default_lookup_candidate", "base64_padding_inferred"]:
         assert marker in BASE_INSTRUCTIONS
     assert "연결 기록 부재로 공격 시도를 부정하지 않는다" in BASE_INSTRUCTIONS

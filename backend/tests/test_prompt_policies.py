@@ -294,19 +294,31 @@ def test_impossible_policy_can_be_saved_but_not_activated_for_current_profile(cl
 
 
 @pytest.mark.parametrize("remaining_tokens,accepted", [(341, False), (342, True)])
-def test_activation_uses_worker_minimum_input_budget_boundary(client, remaining_tokens, accepted):
+@pytest.mark.parametrize("role", ["production_primary", "test_primary", "production_verifier", "test_verifier"])
+def test_activation_uses_worker_minimum_input_budget_boundary(client, remaining_tokens, accepted, role):
     from app.agent.prompts import policy_reserved_tokens
+    from app.agent.grounding_repair import REPAIR_RESERVED_TOKENS
+    from app.models import AgentConfiguration
 
     login(client)
     client.get(ROOT)
     saved = client.post(ROOT, json=policy_payload(policy_text="합성 지침")).json()
     output_tokens = 1024
-    context_window = policy_reserved_tokens(saved["policy_text"]) + output_tokens + remaining_tokens
+    context_window = policy_reserved_tokens(saved["policy_text"]) + REPAIR_RESERVED_TOKENS + output_tokens + remaining_tokens
     with client.app.state.session_factory() as db:
-        db.add(VLLMProfile(
+        profile = VLLMProfile(
             name="synthetic-boundary", base_url="http://vllm.internal:8000/v1", model_name="synthetic",
-            context_window=context_window, max_output_tokens=output_tokens, status="production",
-        ))
+            context_window=context_window, max_output_tokens=output_tokens,
+            status="production" if role == "production_primary" else "verified", is_test=role == "test_primary",
+        )
+        db.add(profile)
+        db.flush()
+        if role.endswith("verifier"):
+            purpose = role.split("_")[0]
+            db.add(VLLMProfile(name="synthetic-larger-primary", base_url="http://vllm.internal:8000/v1",
+                              model_name="synthetic", status="production" if purpose == "production" else "verified",
+                              is_test=purpose == "test"))
+            db.add(AgentConfiguration(id=1, revision=1, **{purpose + "_verifier_profile_id": profile.id}))
         db.commit()
     response = client.post(f"{ROOT}/{saved['id']}/activate", json={"expected_revision": 1, "acknowledge_unverified": True})
     assert response.status_code == (200 if accepted else 422)

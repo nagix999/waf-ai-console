@@ -2,6 +2,7 @@
 import json
 
 import pytest
+from agent_selection_helpers import model_output
 
 from app.agent.contracts import WAFAnalysisOutput
 from app.agent.executor import AgentCallResult
@@ -58,7 +59,7 @@ def test_openai_worker_preserves_independent_verifier_and_provider_snapshot(
             data["threat_analysis"]["severity"] = "NONE"
             output = WAFAnalysisOutput.model_validate(data)
         return AgentCallResult(
-            output=output, framework_run_id=f"synthetic-run-{len(calls)}",
+            output=model_output(output, kwargs), framework_run_id=f"synthetic-run-{len(calls)}",
             agent_fingerprint="synthetic-fingerprint", finish_reason="completed" if output else "error",
             failure_id=None if output else "synthetic-failure", error=None if output else "safe failure",
             telemetry={"framework": "moduagent", "framework_version": "0.6.2", "thinking_enabled": None},

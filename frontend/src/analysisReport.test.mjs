@@ -87,7 +87,7 @@ test("decisive results without checks hide the section while inconclusive result
   detail.result.analyst_guidance = { checks: [] };
   const report = parsed(detail, { includeAppendix: true });
   assert.equal(report.sections.at(-1).title, "추가 확인 사항");
-  assert.match(text(report), /판정 보류를 해소하려면 아래 자료/);
+  assert.match(text(report), /원문과 기록된 확인 항목/);
   assert.match(text(report), /구체적인 확인 자료는 기록되지 않았습니다/);
   for (const status of ["pending", "processing", "failed"]) {
     detail.status = status;
@@ -374,13 +374,13 @@ test("analyst guidance replaces internal diagnostics without changing the saved 
   const before = JSON.stringify(detail);
   const document = parsed(detail);
   assert.equal(cell(document, "판정"), "판단 보류 (inconclusive)");
-  assert.equal(cell(document, "위협 심각도"), "UNKNOWN");
+  assert.equal(cell(document, "위협 심각도"), "미확정");
   assert.equal(cell(document, "확인 위치"), detail.result.analyst_guidance.checks[0].source_ko);
   assert.equal(cell(document, "확인할 내용"), detail.result.analyst_guidance.checks[0].check_ko);
   assert.equal(cell(document, "확인 목적"), detail.result.analyst_guidance.checks[0].why_ko);
-  assert.match(text(document), /확정된 공격이나 피해를 뜻하지 않습니다/);
+  assert.match(text(document), /확정된 결론으로 사용하지 마세요/);
   assert.match(text(document), /세부 분석/);
-  assert.match(text(document), /확정된 공격이나 피해를 뜻하지 않습니다/);
+  assert.match(text(document), /확정된 결론으로 사용하지 마세요/);
   assert.match(text(document), /실제 요청 처리 결과는 제공되지 않았습니다/);
   assert.doesNotMatch(text(document), /Primary|Verifier|독립\s*검증|판정\s*불일치|분석 결과가 서로 다/);
   assert.equal(JSON.stringify(detail), before);

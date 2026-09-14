@@ -33,7 +33,7 @@ export function TestComparisonPerformance({ performance }) {
       <tr><th>문항 처리 시간 측정 / 미기록</th>{sides.map((side, index) => <td key={index}>{countText(side?.processing_ms?.count)} / {countText(side?.processing_ms?.missing_count)}건</td>)}</tr>
       <tr><th>기록된 LLM 단계 시간 합계</th>{sides.map((side, index) => <td key={index}>{side?.llm_step_ms?.count > 0 ? formatDuration(side.llm_step_ms.sum_ms, "미측정") : "미측정"}<small>측정 {countText(side?.llm_step_ms?.count)} · 미기록 {countText(side?.llm_step_ms?.missing_count)}단계</small></td>)}</tr>
       {[["input_tokens", "입력 토큰"], ["output_tokens", "출력 토큰"], ["total_tokens", "전체 토큰"]].map(([key, label]) => <tr key={key}><th>{label} · 완전 측정 단계 합계</th>{sides.map((side, index) => <td key={index}>{tokenCountText(side?.tokens?.[key], side?.missing_agent_histories)}<small>완전 측정 {countText(side?.tokens?.[key]?.measured_steps)} · 미측정 {countText(side?.tokens?.[key]?.missing_steps)}단계</small></td>)}</tr>)}
-      <tr><th>출력 교정이 발생한 단계</th>{sides.map((side, index) => <td key={index}>{countText(side?.output_repair_steps)}단계</td>)}</tr>
+      <tr><th>출력·근거 교정이 발생한 단계</th>{sides.map((side, index) => <td key={index}>{countText(side?.output_repair_steps)}단계</td>)}</tr>
       <tr><th>실행 이력 미기록 문항</th>{sides.map((side, index) => <td key={index}>{countText(side?.missing_agent_histories)}건</td>)}</tr>
     </tbody></table></div>
   </section>;
@@ -49,7 +49,7 @@ export function TestComparisonItems({ items, onOpen }) {
 
 export function TestComparisonResult({ data, state, onChange, onOpen, onRefresh, loading }) {
   return <div className="test-comparison-result">
-    <div className="test-comparison-runs"><div><span>기준</span><strong>{runLabel(data.baseline)}</strong><small>{data.baseline?.profile_metadata?.model_name || "모델 미기록"}</small></div><div><span>후보 · 현재 실행</span><strong>{runLabel(data.candidate)}</strong><small>{data.candidate?.profile_metadata?.model_name || "모델 미기록"}</small></div></div>
+    <div className="test-comparison-runs">{[["baseline", "기준"], ["candidate", "후보 · 현재 실행"]].map(([key, label]) => <div key={key}><span>{label}</span><strong>{runLabel(data[key])}</strong><small>Primary: {data[key]?.profile_metadata?.model_name || "모델 미기록"}</small>{data[key]?.profile_metadata?.verifier_profile?.model_name && <small>Verifier: {data[key].profile_metadata.verifier_profile.model_name}</small>}</div>)}</div>
     <p className="notice">공통 접수 {countText(data.counts?.accepted_pairs)}쌍 중 같은 이벤트 내용·같은 접수 당시 답안으로 평가 가능한 {countText(data.counts?.comparable_pairs)}쌍을 비교합니다. 위 실행 상세의 난이도·유형 필터는 이 비교에 적용되지 않습니다.</p>
     <p>판정 변경 {countText(data.counts?.changed)}건 · 답안 일치로 변경 {countText(data.counts?.improved)}건 · 답안 불일치로 변경 {countText(data.counts?.regressed)}건</p>
     <p className="evaluation-footnote">답안과 일치하도록 바뀐 문항과 불일치하도록 바뀐 문항을 구분합니다. 보류 전환을 곧바로 미탐·과탐으로 취급하지 않습니다. 기대 답안과의 일치는 독립적인 운영 정확도가 아닙니다.</p>
