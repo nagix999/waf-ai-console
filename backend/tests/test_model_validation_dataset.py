@@ -30,7 +30,8 @@ def enqueue(client, *, include=True):
 
 def install_calls(monkeypatch, *, checks_pass=True, fail_case=False):
     calls = []
-    async def technical(profile, crypto, mode, *, egress_check):
+    async def technical(profile, crypto, mode, *, egress_check, concurrency_engine):
+        assert concurrency_engine is not None
         egress_check()
         assert mode == "full"
         return VLLMTestResult(checks_pass, [], {"provider": profile.provider}, None if checks_pass else "synthetic_check_failed", None)
@@ -175,7 +176,9 @@ def test_all_150_use_candidate_not_production_and_report_reference_comparison(cl
         other = VLLMProfile(name="different-production", model_name="other-model", base_url="http://10.0.0.99:8000/v1", status="production")
         db.add(other)
         db.flush()
-        db.add(AgentConfiguration(id=1, revision=1, production_verifier_profile_id=other.id, test_verifier_profile_id=other.id))
+        db.add(AgentConfiguration(id=1, revision=1, production_verifier_profile_id=other.id, test_verifier_profile_id=other.id,
+            production_evidence_editor_enabled=True, test_evidence_editor_enabled=True,
+            production_evidence_editor_profile_id=other.id, test_evidence_editor_profile_id=other.id))
         db.commit()
     calls = install_calls(monkeypatch)
     run_claimed(client)

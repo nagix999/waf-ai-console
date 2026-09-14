@@ -29,6 +29,7 @@ services:
     restart: unless-stopped
 
   worker:
+    stop_grace_period: 120s
     build: ./backend
     command: ["python", "-m", "app.worker"]
     environment:
@@ -42,6 +43,7 @@ services:
     restart: unless-stopped
 
   model-tester:
+    stop_grace_period: 120s
     build: ./backend
     command: ["python", "-m", "app.worker"]
     environment:

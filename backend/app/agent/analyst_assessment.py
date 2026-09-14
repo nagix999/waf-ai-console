@@ -35,6 +35,10 @@ def build_analyst_assessment(primary, verifier=None):
                 seen[identity] = {**item, "supports": support, "evidence_id": f"e{len(evidence) + 1}", "origins": []}
                 evidence.append(seen[identity])
             entry = seen[identity]
+            if type(source.get("start")) is int and type(source.get("end")) is int:
+                span = {"start": source["start"], "end": source["end"]}
+                if span not in entry.setdefault("source_spans", []):
+                    entry["source_spans"].append(span)
             if origin not in entry["origins"]:
                 entry["origins"].append(origin)
             references[index] = entry["evidence_id"]

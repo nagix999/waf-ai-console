@@ -64,9 +64,9 @@ test("main and extra metric cards render server values without deriving scores f
   const unavailable = render(MetricCards, { metrics: {} }); assert.equal((unavailable.match(/계산 불가/g) || []).length, 6); assert.doesNotMatch(unavailable, /0.0%/);
 });
 
-test("confusion matrix includes six cells, separate abstentions and precise drilldown predicates", () => {
+test("confusion matrix includes nine cells, separate abstentions and precise drilldown predicates", () => {
   const matrix = summaryFixture().confusion_matrix; const html = render(ConfusionMatrix, { matrix, onCell() {}, selectedCell: "fn" });
-  assert.equal((html.match(/<td /g) || []).length, 6); assert.equal((html.match(/aria-pressed="true"/g) || []).length, 1);
+  assert.equal((html.match(/<td /g) || []).length, 9); assert.equal((html.match(/aria-pressed="true"/g) || []).length, 1);
   assert.match(html, /FN · 미탐 방향 1건 문항 보기/); assert.match(html, /참고 정탐 · AI 보류 1건 문항 보기/); assert.match(html, /분모는 유지/);
   assert.deepEqual(matrixDrilldown("tp"), { reference_verdict: "true_positive", verdict: "true_positive", evaluation_outcome: "match" });
   assert.deepEqual(matrixDrilldown("tn"), { reference_verdict: "false_positive", verdict: "false_positive", evaluation_outcome: "match" });

@@ -74,12 +74,20 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
-def claim_next(db: Session, worker_id: str, lease_seconds: int) -> Analysis | None:
+def claim_next(db: Session, worker_id: str, lease_seconds: int, *, purpose=None, enforce_limits=False) -> Analysis | None:
+    from .services.concurrency import active_analyses, lock_configuration, purpose_filter
+    config = lock_configuration(db) if enforce_limits else None
+    available = [value for value in ("production", "test") if (purpose is None or purpose == value)
+                 and (config is None or active_analyses(db, value) < getattr(config, value))]
+    if not available:
+        db.rollback()
+        return None
     now = utcnow()
     candidates = db.scalars(
         select(Analysis)
         .where(
             Analysis.model_test_run_id.is_(None),
+            or_(*(purpose_filter(value) for value in available)),
             or_(
                 Analysis.status == AnalysisStatus.pending.value,
                 and_(
@@ -194,6 +202,14 @@ def _abandon_running_runs(db: Session, analysis_id: str) -> None:
 
 
 def _ensure_benchmark_owner(db: Session) -> None:
+    ordinary_claim = db.info.get("analysis_claim")
+    if ordinary_claim:
+        from .services.worker_concurrency import owned_conditions
+        claimed = db.execute(update(Analysis).where(*owned_conditions(*ordinary_claim))
+            .values(lease_owner=Analysis.lease_owner, updated_at=Analysis.updated_at)
+            .execution_options(synchronize_session=False))
+        if claimed.rowcount != 1:
+            raise WorkerExecutionError("analysis_lease_lost")
     claim = db.info.get("model_validation_claim")
     if claim:
         from .services.model_validation_worker import require_owned_test
@@ -830,8 +846,18 @@ def _process_moduagent_steps(
         }
         # Capture the selected profile even when a later model call fails.
         analysis.model_profile = profile.name
+        from .services.evidence_editor import EditorSnapshot, capture_editor
+        if pinned_execution is not None:
+            editor_snapshot = pinned_execution.evidence_editor
+        elif analysis.model_test_run_id:
+            editor_snapshot = None  # Candidate qualification uses no other model.
+        elif named_run is not None:
+            editor_snapshot = EditorSnapshot.model_validate_json(crypto.decrypt_text(
+                named_run.evidence_editor_snapshot_ciphertext)) if named_run.evidence_editor_snapshot_ciphertext else None
+        else:
+            editor_snapshot = capture_editor(db, analysis.analysis_purpose, profile)
         if pinned_execution is None:
-            execution = make_execution_snapshot(analysis, profile, prompt, verifier_confidence_threshold, verifier_profile)
+            execution = make_execution_snapshot(analysis, profile, prompt, verifier_confidence_threshold, verifier_profile, editor_snapshot)
             analysis.execution_snapshot_ciphertext = crypto.encrypt_text(execution.model_dump_json())
             # Persist before parsing/context/Primary failures can lose provenance.
             # The measured-step commit also persists this; the early commit is
@@ -913,6 +939,7 @@ def _process_moduagent_steps(
                 profile=profile, api_key=api_key, instructions=prompt.primary_instructions,
                 user_input=agent_input.text, session_id=f"{analysis.id}:primary", agent_name="waf-primary",
                 egress_check=egress_check,
+                concurrency_engine=db.get_bind(),
             )
         run.framework_run_id = primary.framework_run_id
         run.fingerprint = primary.agent_fingerprint or input_fingerprint
@@ -964,6 +991,7 @@ def _process_moduagent_steps(
                     profile=verifier_profile, api_key=verifier_key, instructions=prompt.verifier_instructions,
                     user_input=agent_input.text, session_id=f"{analysis.id}:verifier", agent_name="waf-verifier",
                     egress_check=verifier_check,
+                    concurrency_engine=db.get_bind(),
                 )
             step_output(crypto, step, _agent_step_output(verifier), {
                 **verifier.telemetry, **verifier_metadata, "independent_of_primary": True,
@@ -1057,9 +1085,77 @@ def _process_moduagent_steps(
         analysis.prompt_version = prompt.prompt_version
         analysis.model_profile = profile.name
 
+    if editor_snapshot is not None:
+        _organize_evidence(db, crypto, analysis, run, final_sequence + 1, editor_snapshot, request_check)
+
+
+def _organize_evidence(db, crypto, analysis, run, sequence, snapshot, request_check):
+    from .agent.evidence_editor import VERSION, EvidenceEditorOutput, editor_input, input_fits, serialized_input, validate_groups
+    from .services.evidence_editor import editor_profile
+    from .services.agent_configuration import profile_metadata, role_request_check
+    result = dict(analysis.result_json)
+    assessment = result.get("analyst_assessment")
+    document = editor_input(assessment)
+    metadata = {"editor_version": snapshot.version, "instructions_hash": snapshot.instructions_hash,
+                "model_profile_id": snapshot.profile_id, "profile_fingerprint": snapshot.profile_fingerprint,
+                "verdict_changed": False, "llm_called": False}
+    presentation = {"version": VERSION, "status": "skipped", "reason": "no_duplicate_candidates"}
+    with measured_step(db, crypto, run, sequence, "llm_evidence_editor", "근거 정리",
+                       {"instructions": snapshot.instructions, "input": document}, metadata) as step:
+        call = None
+        if document is not None:
+            try:
+                if snapshot.version != VERSION:
+                    raise ValueError("editor_version_unavailable")
+                profile = editor_profile(db, snapshot)
+                metadata.update(profile_metadata(profile))
+                text = serialized_input(document)
+                if not input_fits(profile, snapshot.instructions, text):
+                    presentation.update(status="fallback", reason="input_budget_exceeded")
+                else:
+                    key = crypto.decrypt_text(profile.api_key_ciphertext) if profile.api_key_ciphertext else None
+                    check = role_request_check(db.get_bind(), profile, request_check)
+                    metadata["llm_called"] = True
+                    # Includes at most 90 s of queue + execution. The executor
+                    # separately limits model response time to at most 30 s.
+                    call = asyncio.run(asyncio.wait_for(execute_structured_agent(
+                        profile=profile, api_key=key, instructions=snapshot.instructions, user_input=text,
+                        session_id=f"{run.id}:evidence-editor", agent_name="waf-evidence-editor",
+                        egress_check=check, concurrency_engine=db.get_bind(),
+                        output_model=EvidenceEditorOutput, output_validation_max_attempts=1), timeout=90))
+                    _ensure_benchmark_owner(db)
+                    if call.succeeded:
+                        groups = validate_groups(assessment, call.output)
+                        presentation.update(status="completed", reason=None, groups=groups)
+                    else:
+                        presentation.update(status="fallback", reason="editor_call_failed")
+            except Exception as exc:
+                # Never hide lost ownership or write a stale analysis result.
+                if getattr(exc, "code", None) in {"analysis_lease_lost", "model_validation_lease_lost"}:
+                    raise
+                _ensure_benchmark_owner(db)
+                presentation.update(status="fallback", reason="editor_unavailable_or_invalid")
+        metadata.update(presentation_status=presentation["status"], reason=presentation["reason"])
+        if call:
+            metadata.update(call.telemetry)
+            metadata.update(framework_run_id=call.framework_run_id, agent_fingerprint=call.agent_fingerprint,
+                            failure_id=call.failure_id)
+        step_output(crypto, step, {"presentation": presentation, "call": _agent_step_output(call) if call else None}, metadata)
+        if presentation["status"] == "fallback":
+            step.status = "failed"  # Optional stage failure, not analysis failure.
+        result["evidence_presentation"] = presentation
+        result["agent"] = {**result["agent"], "evidence_editor": {
+            key: metadata[key] for key in ("editor_version", "instructions_hash", "model_profile_id", "profile_fingerprint", "presentation_status")}}
+        analysis.result_json = result
+
 
 def mark_failed(db: Session, analysis: Analysis, exc: Exception) -> None:
     if getattr(exc, "code", None) == "analysis_lease_lost":
+        return
+    try:
+        _ensure_benchmark_owner(db)
+    except WorkerExecutionError:
+        db.rollback()
         return
     now = utcnow()
     run_id = db.info.get("worker_run_id")
@@ -1123,11 +1219,14 @@ def process_vllm_test(db: Session, crypto: CryptoService, test_run: VLLMTestRun,
             if normalized != profile.base_url:
                 raise TargetNotAllowedError("model_profile_url_not_normalized")
             validate_profile_provider_settings(profile, has_api_key=bool(profile.api_key_ciphertext))
-            kwargs = {"egress_check": vllm_egress_check(db, profile)} if profile.provider == "vllm" else {}
+            from .services.agent_configuration import role_request_check
+            kwargs = {"egress_check": role_request_check(db.get_bind(), profile,
+                      db.info.get("model_test_request_check"), require_verified=False), "concurrency_engine": db.get_bind()}
             result = asyncio.run(run_vllm_test(profile, crypto, test_run.mode, **kwargs))
             # A test may have been disabled/edited while network checks ran.
             # Complete under the same short mutation lock as the admin APIs;
             # never restore a stale draft as verified over a disabled profile.
+            _ensure_benchmark_owner(db)
             lock_egress_mutation(db)
             db.refresh(profile)
             if profile.status == ModelProfileStatus.disabled.value:
@@ -1145,9 +1244,11 @@ def process_vllm_test(db: Session, crypto: CryptoService, test_run: VLLMTestRun,
                 if profile.status == ModelProfileStatus.draft.value:
                     profile.status = ModelProfileStatus.verified.value
         except Exception as exc:
+            _ensure_benchmark_owner(db)
             test_run.status = ModelTestStatus.failed.value
             test_run.error_code = str(exc) if isinstance(exc, TargetNotAllowedError) else type(exc).__name__
             test_run.error_message = "LLM test execution failed without storing upstream response content"
+    _ensure_benchmark_owner(db)
     now = utcnow()
     test_run.completed_at = now
     test_run.lease_owner = None
@@ -1162,44 +1263,8 @@ def main() -> None:
     crypto = CryptoService(settings.data_encryption_key, settings.encryption_key_version)
     worker_id = f"{socket.gethostname()}:{os.getpid()}"
     logger.info("worker started id=%s role=%s mode=%s", worker_id, settings.worker_role, settings.agent_mode)
-    while True:
-        with session_factory() as db:
-            analysis = claim_next(db, worker_id, settings.job_lease_seconds) if settings.worker_role in {"analysis", "both"} else None
-            if analysis is not None:
-                try:
-                    if settings.agent_mode == "stub":
-                        if analysis.retry_of_analysis_id:
-                            raise WorkerExecutionError("retry_requires_moduagent_mode")
-                        process_stub(db, crypto, analysis)
-                    else:
-                        process_moduagent(
-                            db,
-                            crypto,
-                            analysis,
-                            "",
-                            settings.verifier_confidence_threshold,
-                        )
-                    logger.info("analysis completed id=%s", analysis.id)
-                except Exception as exc:
-                    logger.error("analysis failed id=%s error_type=%s", analysis.id, type(exc).__name__)
-                    db.rollback()
-                    current = db.get(Analysis, analysis.id)
-                    if current is not None:
-                        mark_failed(db, current, exc)
-                continue
-            test_run = (
-                claim_next_vllm_test(db, worker_id, settings.vllm_test_lease_seconds)
-                if settings.worker_role in {"model_test", "both"}
-                else None
-            )
-            if test_run is not None:
-                db.info["verifier_confidence_threshold"] = settings.verifier_confidence_threshold
-                db.info["model_test_lease_seconds"] = settings.vllm_test_lease_seconds
-                logger.info("model test started id=%s mode=%s", test_run.id, test_run.mode)
-                process_vllm_test(db, crypto, test_run, "")
-                logger.info("model test completed id=%s status=%s", test_run.id, test_run.status)
-                continue
-            time.sleep(settings.worker_poll_seconds)
+    from .services.worker_concurrency import serve
+    serve(session_factory, crypto, settings, worker_id)
 
 
 if __name__ == "__main__":

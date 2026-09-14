@@ -15,9 +15,15 @@ export const extraMetrics = [
   ["macro_f1", "Macro F1", "정탐·오탐별 F1의 평균 · 클래스별 동일 비중"],
   ["mcc", "MCC", "두 클래스의 전체 혼동행렬을 반영한 상관계수 · −1~1"],
   ["overall_binary_correct_rate", "보류 포함 정답률", "이진 답안 평가 대상 전체에서 맞힌 비율 · 보류도 분모에 포함"],
+  ["hold_precision", "보류 Precision"],
+  ["hold_f1", "보류 F1"],
 ];
 
 export const metricHelp = {
+  expected_hold_match_rate: "보류 답안 일치율 = 참고 답안이 보류이고 AI도 보류한 수 / 참고 답안이 보류인 평가 대상 수. 보류 클래스의 Recall입니다. 높을수록 보류해야 하는 문항을 잘 구분합니다. 낮으면 정보가 부족한 문항을 확정했을 가능성이 있습니다. 답안이 실제로 보류가 필요한 사례인지도 확인하세요. 보류 답안이 없으면 계산 불가입니다.",
+  expected_hold_decided_rate: "보류 답안 확정률 = 참고 답안은 보류인데 AI가 정탐·오탐으로 확정한 수 / 참고 답안이 보류인 평가 대상 수. 낮을수록 참고 답안에 어긋난 확정이 적습니다. 높으면 과도한 확정 또는 답안 품질을 점검해야 합니다. 실제 공격 여부가 확정된 답안이 아니므로 미탐·과탐률과 다릅니다. 보류 답안이 없으면 계산 불가입니다.",
+  hold_precision: "보류 Precision = 참고 답안도 보류인 AI 보류 수 / 전체 AI 보류 수. 높을수록 AI의 보류가 참고 답안과 일치하고 낮으면 정탐·오탐 답안까지 많이 보류했다는 뜻입니다. AI 보류가 없으면 계산 불가입니다. 참고 답안의 타당성이 전제입니다.",
+  hold_f1: "보류 F1은 보류 Precision과 보류 답안 일치율(Recall)의 조화평균입니다. 높을수록 필요한 보류를 찾으면서 불필요한 보류를 줄였습니다. 낮으면 보류 답안을 놓치거나 다른 답안도 많이 보류한 것입니다. 보류 답안과 AI 보류가 모두 없으면 계산 불가입니다.",
   accuracy: "Accuracy = (TP + TN) / 확정 판정 수. 높을수록 확정한 문항을 많이 맞혔고 낮으면 확정 판정의 오답 비중이 크다는 뜻입니다. 클래스가 한쪽으로 치우치거나 어려운 문항을 보류하면 높아질 수 있으므로 클래스별 지표와 커버리지를 함께 확인하세요.",
   precision: "Precision = TP / (TP + FP). 높을수록 AI가 정탐이라고 한 판정의 과탐이 적습니다. 낮으면 정상 요청을 공격으로 판단하는 경우가 많습니다. 정탐을 적게 선택해도 높아질 수 있어 미탐과 Recall을 함께 봐야 합니다. 정탐 예측이 없으면 계산 불가입니다.",
   recall: "Recall = TP / (TP + FN). 참고 답안이 정탐이고 AI가 확정한 문항에서 공격을 찾아낸 비율입니다. 높을수록 이 범위의 미탐이 적고 낮을수록 공격을 오탐으로 잘못 판단합니다. 보류한 공격 문항은 분모에서 빠지므로 전체 공격 탐지율이 아닙니다. 확정한 참고 정탐이 없으면 계산 불가입니다.",
@@ -48,6 +54,9 @@ export const matrixCells = [
   ["fp", "FP · 과탐 방향", "false_positive", "true_positive", "false_positive"],
   ["tn", "TN · 오탐 일치", "false_positive", "false_positive", "match"],
   ["abstained_negative", "참고 오탐 · AI 보류", "false_positive", "inconclusive", "abstained"],
+  ["expected_hold_positive", "보류 답안 · 정탐 확정", "inconclusive", "true_positive", "expected_abstention_mismatch"],
+  ["expected_hold_negative", "보류 답안 · 오탐 확정", "inconclusive", "false_positive", "expected_abstention_mismatch"],
+  ["expected_hold_match", "보류 일치", "inconclusive", "inconclusive", "expected_abstention_match"],
 ];
 
 export function matrixDrilldown(key) {

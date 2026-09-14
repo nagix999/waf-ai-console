@@ -38,6 +38,7 @@ export default function RetryAnalysis({ detail, onOpen }) {
         {!info.allowed && <p className="notice">{retryError(info.blocked_reason)}</p>}
         {info.existing_retry_id && <button className="primary" type="button" onClick={() => { setOpen(false); onOpen(info.existing_retry_id); }}>재실행 결과 보기</button>}
         {info.verifier_model_name && <p>Verifier: {info.verifier_model_profile} · {info.verifier_model_name}</p>}
+        {info.evidence_editor_enabled && <p>근거 정리: {info.evidence_editor_model_profile || "당시 모델"}{info.evidence_editor_model_name && ` · ${info.evidence_editor_model_name}`} · 필요 시 최대 1회 추가 호출합니다. 사용할 수 없으면 원래 근거를 표시합니다.</p>}
         {info.allowed && <><p className="notice">모델을 다시 호출하므로 처리 자원과 비용이 발생할 수 있습니다.{(info.provider === "openai" || info.verifier_provider === "openai") && " HTTP 원문과 Cookie가 마스킹 없이 OpenAI로 다시 전송됩니다."}</p><label className="checkbox-row"><input type="checkbox" checked={approved} disabled={busy} onChange={event => setApproved(event.target.checked)} />당시 모델·지침과 호출 비용을 확인했습니다.</label><button type="button" className="primary" disabled={!approved || busy} onClick={submit}>{busy ? "접수 중…" : "재실행 시작"}</button></>}
       </>}
       {error && <p className="error" role="alert">{error}</p>}

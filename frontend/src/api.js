@@ -24,6 +24,8 @@ async function request(path, options = {}) {
 
 export const api = {
   agentSettings: (options = {}) => request("/api/v1/admin/agent-settings", { ...options, cache: "no-store" }),
+  concurrencySettings: (options = {}) => request("/api/v1/admin/agent-settings/concurrency", { ...options, cache: "no-store" }),
+  updateConcurrencySettings: payload => request("/api/v1/admin/agent-settings/concurrency", { method: "PUT", body: JSON.stringify(payload), cache: "no-store" }),
   updateAgentSettings: payload => request("/api/v1/admin/agent-settings", { method: "PUT", body: JSON.stringify(payload), cache: "no-store" }),
   agentDiagnostics: (query, options = {}) => request(`/api/v1/admin/agent-settings/diagnostics?${new URLSearchParams(query)}`, { ...options, cache: "no-store" }),
   login: (username, password) => request("/api/v1/auth/login", {

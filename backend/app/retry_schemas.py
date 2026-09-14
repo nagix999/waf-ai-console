@@ -21,6 +21,9 @@ class RetryEligibility(BaseModel):
     verifier_model_profile: str | None = None
     verifier_model_name: str | None = None
     verifier_provider: str | None = None
+    evidence_editor_enabled: bool = False
+    evidence_editor_model_profile: str | None = None
+    evidence_editor_model_name: str | None = None
     prompt_version: str | None = None
     costs_may_apply: bool = True
 

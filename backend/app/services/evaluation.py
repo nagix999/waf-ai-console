@@ -45,6 +45,8 @@ def calculate_binary_metrics(matrix: EvaluationConfusionMatrix) -> EvaluationMet
     both_classes = positive > 0 and negative > 0
     mcc_denominator = sqrt((tp + fp) * positive * negative * (tn + fn))
     mcc = _ratio(tp * tn - fp * fn, mcc_denominator)
+    hold_match = matrix.expected_hold_match
+    hold_decided = matrix.expected_hold_positive + matrix.expected_hold_negative
     return EvaluationMetrics(
         accuracy=_ratio(tp + tn, decided), precision=_ratio(tp, tp + fp),
         recall=recall, f1=f1, specificity=specificity,
@@ -54,16 +56,24 @@ def calculate_binary_metrics(matrix: EvaluationConfusionMatrix) -> EvaluationMet
         mcc=max(-1.0, min(1.0, mcc)) if mcc is not None else None,
         coverage=_ratio(decided, evaluable), abstention_rate=_ratio(abstained, evaluable),
         overall_binary_correct_rate=_ratio(tp + tn, evaluable),
+        expected_hold_match_rate=_ratio(hold_match, hold_match + hold_decided),
+        expected_hold_decided_rate=_ratio(hold_decided, hold_match + hold_decided),
+        hold_precision=_ratio(hold_match, hold_match + abstained),
+        hold_f1=_ratio(2 * hold_match, 2 * hold_match + hold_decided + abstained),
     )
 
 
-def _add_binary_outcome(summary: EvaluationBinarySummary, reference: str, outcome: str, count: int) -> None:
+def _add_binary_outcome(summary: EvaluationBinarySummary, reference: str, outcome: str, count: int, prediction=None) -> None:
     cell = {
         ("true_positive", "match"): "tp", ("false_positive", "match"): "tn",
         ("true_positive", "false_negative"): "fn", ("false_positive", "false_positive"): "fp",
         ("true_positive", "abstained"): "abstained_positive",
         ("false_positive", "abstained"): "abstained_negative",
     }.get((reference, outcome))
+    if reference == "inconclusive":
+        cell = "expected_hold_match" if outcome == "expected_abstention_match" else {
+            "true_positive": "expected_hold_positive", "false_positive": "expected_hold_negative",
+        }.get(prediction)
     if cell is not None:
         setattr(summary.confusion_matrix, cell, getattr(summary.confusion_matrix, cell) + count)
 
@@ -129,7 +139,7 @@ def evaluation_relation(labels=None):
         else_="false_positive",
     )
     return select(
-        Analysis.id.label("analysis_id"), outcome.label("outcome"),
+        Analysis.id.label("analysis_id"), Analysis.verdict.label("prediction_verdict"), outcome.label("outcome"),
         labels.c.id.label("label_id"), labels.c.revision, labels.c.verdict.label("reference_verdict"),
         labels.c.source_kind, labels.c.source_ref, labels.c.ai_visible, labels.c.created_at,
     ).select_from(Analysis).outerjoin(labels, labels.c.analysis_id == Analysis.id).subquery()
@@ -160,10 +170,10 @@ def attach_evaluations(db: Session, analyses: list[Analysis]) -> None:
 def summarize_evaluations(db: Session, relation, conditions) -> EvaluationSummary:
     # Group counts only, not a page of ORM results or raw result/payload content.
     rows = db.execute(select(
-        relation.c.outcome, relation.c.source_kind, relation.c.ai_visible, relation.c.reference_verdict,
+        relation.c.outcome, relation.c.source_kind, relation.c.ai_visible, relation.c.reference_verdict, relation.c.prediction_verdict,
         func.count().label("count"),
     ).select_from(Analysis).join(relation, relation.c.analysis_id == Analysis.id).where(*conditions)
-        .group_by(relation.c.outcome, relation.c.source_kind, relation.c.ai_visible, relation.c.reference_verdict)).mappings()
+        .group_by(relation.c.outcome, relation.c.source_kind, relation.c.ai_visible, relation.c.reference_verdict, relation.c.prediction_verdict)).mappings()
     return summarize_evaluation_rows(rows)
 
 
@@ -188,8 +198,8 @@ def summarize_evaluation_rows(rows) -> EvaluationSummary:
         if outcome in MATCHES:
             group.matches += count
             summary.matches += count
-        _add_binary_outcome(group, row["reference_verdict"], outcome, count)
-        _add_binary_outcome(summary, row["reference_verdict"], outcome, count)
+        _add_binary_outcome(group, row["reference_verdict"], outcome, count, row.get("prediction_verdict"))
+        _add_binary_outcome(summary, row["reference_verdict"], outcome, count, row.get("prediction_verdict"))
         counter = {
             "false_negative": "false_negatives", "false_positive": "false_positives", "abstained": "abstained",
             "expected_abstention_match": "expected_abstention_matches",

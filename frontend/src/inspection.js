@@ -16,7 +16,7 @@ export function textMatches(text, query, limit = 200) {
 const steps = {
   input: "이벤트 접수", parser: "HTTP 구조 확인", decoder: "문자열 변환 확인",
   agent_input: "분석 입력 준비", primary: "위협 분석", verifier: "추가 검증",
-  llm_primary: "위협 분석", llm_verifier: "추가 검증", finalize: "최종 판정 정리",
+  llm_primary: "위협 분석", llm_verifier: "추가 검증", llm_evidence_editor: "근거 정리", finalize: "최종 판정 정리",
   final: "최종 판정 정리", policy: "추가 검증 조건 확인", result: "결과 저장",
 };
 export const stepLabel = name => steps[name] || name || "이름 없는 단계";

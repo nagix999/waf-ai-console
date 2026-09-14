@@ -34,8 +34,12 @@ def test_full_three_way_matrix_uses_final_not_primary(client, event_payload, ser
         ("false_positive", "true_positive"): "fp", ("false_positive", "false_positive"): "tn",
         ("true_positive", "inconclusive"): "abstained_positive",
         ("false_positive", "inconclusive"): "abstained_negative",
+        ("inconclusive", "true_positive"): "expected_hold_positive",
+        ("inconclusive", "false_positive"): "expected_hold_negative",
+        ("inconclusive", "inconclusive"): "expected_hold_match",
     }.get((reference, actual))
-    expected_matrix = dict.fromkeys(("tp", "fn", "fp", "tn", "abstained_positive", "abstained_negative"), 0)
+    expected_matrix = dict.fromkeys(("tp", "fn", "fp", "tn", "abstained_positive", "abstained_negative",
+                                   "expected_hold_positive", "expected_hold_negative", "expected_hold_match"), 0)
     if cell:
         expected_matrix[cell] = 1
     assert summary["confusion_matrix"] == expected_matrix
@@ -134,7 +138,8 @@ def test_aggregate_uses_full_filtered_scope_and_separates_reference_sources(clie
     assert sum(row["binary_evaluable"] for row in summary["source_groups"]) == 4
     assert sum(row["binary_decided"] for row in summary["source_groups"]) == 3
     assert sum(row["binary_correct"] for row in summary["source_groups"]) == 1
-    assert summary["confusion_matrix"] == {"tp": 1, "fn": 1, "fp": 1, "tn": 0, "abstained_positive": 1, "abstained_negative": 0}
+    assert summary["confusion_matrix"] == {"tp": 1, "fn": 1, "fp": 1, "tn": 0, "abstained_positive": 1, "abstained_negative": 0,
+        "expected_hold_positive": 1, "expected_hold_negative": 0, "expected_hold_match": 1}
     assert (summary["binary_evaluable"], summary["binary_decided"], summary["binary_correct"]) == (4, 3, 1)
     assert (summary["support_positive"], summary["support_negative"]) == (3, 1)
     assert (summary["decided_support_positive"], summary["decided_support_negative"]) == (2, 1)
@@ -156,7 +161,7 @@ def test_aggregate_uses_full_filtered_scope_and_separates_reference_sources(clie
         filtered = client.get("/api/v1/analyses", params={**params, "limit": 1}, headers=service_headers).json()
         assert filtered["total"] == filtered["evaluation_summary"]["total"] == total
         filtered_summary = filtered["evaluation_summary"]
-        assert sum(filtered_summary["confusion_matrix"].values()) == filtered_summary["binary_evaluable"]
+        assert sum(filtered_summary["confusion_matrix"].values()) == filtered_summary["evaluable"]
     assert client.get(f"/api/v1/analyses/{other_id}", headers=service_headers).status_code == 404
 
 

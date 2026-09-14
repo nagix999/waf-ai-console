@@ -138,7 +138,7 @@ def process_dataset_test(db, crypto, test_run, *, verifier_confidence_threshold=
             if len(cases) != DATASET_SIZE or any(row.analysis_purpose != "test" or row.source_system != dataset_source(run_id) for row in cases):
                 raise TargetNotAllowedError("model_validation_dataset_invalid")
             if not (run.metrics_json or {}).get("technical_checks_passed"):
-                result = asyncio.run(run_vllm_test(profile, crypto, "full", egress_check=check))
+                result = asyncio.run(run_vllm_test(profile, crypto, "full", egress_check=check, concurrency_engine=engine))
                 check()
                 require_owned_test(db, run_id, owner)
                 run.checks_json = result.checks

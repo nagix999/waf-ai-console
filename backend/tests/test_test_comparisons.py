@@ -77,7 +77,8 @@ def test_paired_metrics_expected_hold_and_pagination(comparison_client, event_pa
     assert len(result["items"]) == 1 and result["total_items"] == 4
     assert result["baseline_evaluation"]["binary_evaluable"] == 3
     assert result["candidate_evaluation"]["confusion_matrix"] == {
-        "tp": 1, "fn": 0, "fp": 1, "tn": 0, "abstained_positive": 1, "abstained_negative": 0}
+        "tp": 1, "fn": 0, "fp": 1, "tn": 0, "abstained_positive": 1, "abstained_negative": 0,
+        "expected_hold_positive": 0, "expected_hold_negative": 0, "expected_hold_match": 1}
     assert result["candidate_evaluation"]["outcomes"]["expected_abstention_match"] == 1
     assert result["performance"]["scope"] == "comparable_pairs_all_recorded_attempts"
 
@@ -176,6 +177,25 @@ def test_retry_usage_has_no_double_count_and_includes_recorded_prior_runs(compar
     assert performance["llm_step_ms"]["sum_ms"] == 2000
     assert result["performance"]["baseline"]["missing_agent_histories"] == 1
     assert "token_usage_incomplete" in result["warnings"]
+
+
+def test_optional_editor_usage_included_but_skipped_editor_not_counted(comparison_client, event_payload):
+    baseline = submit(comparison_client, event_payload, ["true_positive"])
+    candidate = submit(comparison_client, event_payload, ["true_positive"])
+    finish(comparison_client, baseline, ["true_positive"])
+    finish(comparison_client, candidate, ["true_positive"])
+    with comparison_client.app.state.session_factory() as db:
+        run = AgentRun(analysis_id=candidate["items"][0]["analysis_id"], status="completed")
+        db.add(run)
+        db.flush()
+        for index, called in enumerate((True, False), 1):
+            db.add(AgentStep(run_id=run.id, sequence=index, step_type="llm_evidence_editor", name="근거 정리",
+                status="completed", metadata_json={"llm_called": called, "timing_measured": True, "duration_ms": 100,
+                    "usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}}, completed_at=utcnow()))
+        db.commit()
+    performance = compare(comparison_client, baseline, candidate)["performance"]["candidate"]
+    assert performance["llm_steps"] == 1
+    assert performance["tokens"]["total_tokens"]["known_sum"] == 15
 
 
 @pytest.mark.parametrize("metadata", [

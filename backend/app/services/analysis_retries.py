@@ -19,6 +19,7 @@ from .prompt_snapshots import PromptSnapshotError, load_analysis_prompt
 from .label_fields import LABEL_FIELDS
 from .vllm_profiles import (TargetNotAllowedError, assignment_block_reason, normalize_and_validate_profile_url,
                            profile_fingerprint, validate_profile_provider_settings)
+from .evidence_editor import EditorSnapshot
 
 
 class RetryError(ValueError):
@@ -35,6 +36,7 @@ class ExecutionSnapshot(BaseModel):
     profile_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
     verifier_profile_id: str | None = Field(default=None, min_length=1, max_length=36)
     verifier_profile_fingerprint: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    evidence_editor: EditorSnapshot | None = None
     verifier_confidence_threshold: float = Field(ge=0, le=1, allow_inf_nan=False)
     instructions_hash: str
     input_schema_version_id: str
@@ -44,19 +46,21 @@ class ExecutionSnapshot(BaseModel):
 
     @model_validator(mode="after")
     def validate_roles(self):
-        if self.schema_version not in {1, 2}:
+        if self.schema_version not in {1, 2, 3}:
             raise ValueError("execution_snapshot_version_invalid")
-        if self.schema_version == 2 and (not self.verifier_profile_id or not self.verifier_profile_fingerprint):
+        if self.schema_version >= 2 and (not self.verifier_profile_id or not self.verifier_profile_fingerprint):
             raise ValueError("execution_snapshot_verifier_missing")
         if self.schema_version == 1 and (self.verifier_profile_id or self.verifier_profile_fingerprint):
             raise ValueError("execution_snapshot_roles_invalid")
+        if self.schema_version < 3 and self.evidence_editor is not None:
+            raise ValueError("execution_snapshot_editor_invalid")
         return self
 
 
-def make_execution_snapshot(analysis, profile, prompt, threshold, verifier_profile=None) -> ExecutionSnapshot:
+def make_execution_snapshot(analysis, profile, prompt, threshold, verifier_profile=None, evidence_editor=None) -> ExecutionSnapshot:
     verifier_profile = verifier_profile or profile
     return ExecutionSnapshot(
-        schema_version=2, verifier_profile_id=verifier_profile.id,
+        schema_version=3, verifier_profile_id=verifier_profile.id, evidence_editor=evidence_editor,
         verifier_profile_fingerprint=profile_fingerprint(verifier_profile),
         execution_mode="moduagent", profile_id=profile.id, profile_fingerprint=profile_fingerprint(profile),
         verifier_confidence_threshold=threshold, instructions_hash=prompt.instructions_hash,
@@ -108,8 +112,8 @@ def load_execution_snapshot(analysis, crypto) -> ExecutionSnapshot:
 
 
 def check_profile(db, snapshot, *, role="primary") -> VLLMProfile:
-    identifier = snapshot.verifier_profile_id if role == "verifier" and snapshot.schema_version == 2 else snapshot.profile_id
-    fingerprint = snapshot.verifier_profile_fingerprint if role == "verifier" and snapshot.schema_version == 2 else snapshot.profile_fingerprint
+    identifier = snapshot.verifier_profile_id if role == "verifier" and snapshot.schema_version >= 2 else snapshot.profile_id
+    fingerprint = snapshot.verifier_profile_fingerprint if role == "verifier" and snapshot.schema_version >= 2 else snapshot.profile_fingerprint
     profile = db.get(VLLMProfile, identifier, populate_existing=True)
     if profile is None:
         raise RetryError("retry_original_profile_missing")
@@ -211,10 +215,16 @@ def eligibility(db, crypto, analysis_id, agent_mode):
         response.blocked_reason = exc.code
         return response
     verifier = check_profile(db, _snapshot, role="verifier")
+    editor = db.get(VLLMProfile, _snapshot.evidence_editor.profile_id) if _snapshot.evidence_editor else None
+    if editor is not None and profile_fingerprint(editor) != _snapshot.evidence_editor.profile_fingerprint:
+        editor = None  # Do not label today's edited profile as the original.
     return response.model_copy(update={"allowed": True, "provider": profile.provider, "model_profile_id": profile.id,
                                        "model_profile": profile.name, "model_name": profile.model_name,
                                        "verifier_model_profile": verifier.name, "verifier_model_name": verifier.model_name,
-                                       "verifier_provider": verifier.provider})
+                                       "verifier_provider": verifier.provider,
+                                       "evidence_editor_enabled": _snapshot.evidence_editor is not None,
+                                       "evidence_editor_model_profile": editor.name if editor else None,
+                                       "evidence_editor_model_name": editor.model_name if editor else None})
 
 
 def enqueue_retry(db, crypto, settings, analysis_id, request, actor):

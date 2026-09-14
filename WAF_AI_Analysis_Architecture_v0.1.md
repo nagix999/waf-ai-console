@@ -474,6 +474,8 @@ OpenAI는 Chat Completions와 JSON Schema 구조화 출력을 지원하는 모�
 
 ## 12. 비동기 작업과 성능
 
+2026-09-14 구현 보강: 일반 분석은 worker 프로세스 내부의 제한된 작업 풀에서 실행한다. 운영·테스트별 동시 분석 상한(각 1~32, 기본 1)과 서버 주소·포트별 호출 상한(1~64, 기본 1)을 Agent 설정에서 관리한다. 같은 DB의 worker 전체에 적용하며 lease 갱신·쓰기 소유권 검사·대기 중 요청 권한 검사를 유지한다. `test_concurrency` 연결 검증과 일반 분석 동시성은 별개이며 기존 150건 후보 검증의 문항 처리 순서는 유지한다. Alembic `0015_concurrency`, 실제 제어 범위·복구 한계는 [동시 처리 계약](docs/Concurrency_2026-09-14.md)을 따른다.
+
 ### 12.1 목표 부하
 
 - 평균: 약 1,000건/일
@@ -903,3 +905,6 @@ SQLAlchemy와 Alembic을 사용하고 database URL 및 queue 구현을 추상화
 - vLLM Gemma 4 사용 가이드: <https://docs.vllm.ai/projects/recipes/en/stable/Google/Gemma4.html>
 - OpenAI 구조화 출력: <https://developers.openai.com/api/docs/guides/structured-outputs>
 - OpenAI 데이터 관리: <https://developers.openai.com/api/docs/guides/your-data>
+# 현재 구현 추가 사항 — 2026-09-14
+
+기존 Primary → 조건부 독립 Verifier → 서버 최종 판정 구조는 유지한다. 최종 판정 이후 선택적 근거 정리 LLM을 두되 번호 기반의 묶음/대표 선택만 허용하고 실패 시 원래 근거로 돌아간다. Agent 설정에서 용도별 프로필을 배정하며 기본은 꺼짐이다. 두 용도의 지침은 동일하고 모델·지침 스냅샷은 암호화해 보존한다. 입력 필드 정의의 이력 전용 정책·원문 보존·동시 처리 제한은 그대로 적용한다. 평가 상세는 참고 답안 보류를 포함한 3×3 행렬을 제공하며 기존 이진 지표와 별도의 보류 지표를 구분한다. Alembic `0016_evidence_editor`가 필요하며 아래 원래 v0.1 설계와의 추가 차이는 [현행 정의서](docs/Evidence_Editor_and_Three_Way_Evaluation_2026-09-14.md)를 따른다. 이 추가분은 코드·오프라인 검증 범위이고 배포/실제 LLM 품질은 별도 검증한다.

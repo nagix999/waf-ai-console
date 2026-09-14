@@ -376,6 +376,30 @@ class AgentConfiguration(Base):
     revision: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     production_verifier_profile_id: Mapped[str | None] = mapped_column(ForeignKey("vllm_profiles.id", ondelete="RESTRICT"))
     test_verifier_profile_id: Mapped[str | None] = mapped_column(ForeignKey("vllm_profiles.id", ondelete="RESTRICT"))
+    production_evidence_editor_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
+    test_evidence_editor_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
+    production_evidence_editor_profile_id: Mapped[str | None] = mapped_column(ForeignKey("vllm_profiles.id", ondelete="RESTRICT"))
+    test_evidence_editor_profile_id: Mapped[str | None] = mapped_column(ForeignKey("vllm_profiles.id", ondelete="RESTRICT"))
+
+
+class ConcurrencyConfiguration(Base):
+    __tablename__ = "concurrency_configuration"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_concurrency_singleton"),
+                     CheckConstraint("production >= 1 AND production <= 32 AND test >= 1 AND test <= 32", name="ck_concurrency_range"))
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    revision: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    production: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    test: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    server_limits: Mapped[dict[str, int]] = mapped_column(JSON, default=dict, nullable=False)
+
+
+class LLMCallSlot(Base):
+    """Temporary, content-free reservations shared by every worker."""
+    __tablename__ = "llm_call_slots"
+    __table_args__ = (Index("ix_llm_slots_server_expires", "server_key", "expires_at"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    server_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class VLLMTestRun(Base):
@@ -427,6 +451,7 @@ class TestRun(Base):
     profile_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     execution_mode: Mapped[str] = mapped_column(String(32), nullable=False)
     prompt_snapshot_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    evidence_editor_snapshot_ciphertext: Mapped[str | None] = mapped_column(Text)
     prompt_policy_version_id: Mapped[str] = mapped_column(ForeignKey("prompt_policy_versions.id", ondelete="RESTRICT"), nullable=False)
     prompt_version: Mapped[str] = mapped_column(String(120), nullable=False)
     input_schema_version_id: Mapped[str | None] = mapped_column(ForeignKey("input_schema_versions.id", ondelete="RESTRICT"))

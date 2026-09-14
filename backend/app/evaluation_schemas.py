@@ -39,11 +39,11 @@ class EvaluationMetadata(BaseModel):
 
 
 class EvaluationConfusionMatrix(BaseModel):
-    """Reference rows: attack/normal; prediction columns: attack/normal/hold.
+    """Reference rows and prediction columns: attack/normal/hold.
 
     Positive means the reference verdict is ``true_positive`` (an attack).
     The application's ``false_positive`` verdict means normal, not this matrix's FP.
-    Only comparable, binary-reference cases enter these six cells.
+    Binary metrics use only the original six cells; hold references are separate.
     """
 
     tp: int = Field(default=0, ge=0)
@@ -52,14 +52,18 @@ class EvaluationConfusionMatrix(BaseModel):
     tn: int = Field(default=0, ge=0)
     abstained_positive: int = Field(default=0, ge=0)
     abstained_negative: int = Field(default=0, ge=0)
+    expected_hold_positive: int = Field(default=0, ge=0)
+    expected_hold_negative: int = Field(default=0, ge=0)
+    expected_hold_match: int = Field(default=0, ge=0)
 
 
 class EvaluationMetrics(BaseModel):
-    """Scores use decided binary cases, except the three explicit coverage rates.
+    """Original scores use decided binary cases, except explicit coverage rates.
 
     Fractions are 0..1 (MCC is -1..1), not percentages. Undefined denominators
     are null. Balanced accuracy and macro F1 require decided reference support
     for both classes; expected-hold references never enter binary metrics.
+    expected_hold_* and hold_* use the separate hold-class denominators.
     """
 
     basis: Literal["decided_binary"] = "decided_binary"
@@ -76,6 +80,10 @@ class EvaluationMetrics(BaseModel):
     coverage: float | None = Field(default=None, ge=0, le=1)
     abstention_rate: float | None = Field(default=None, ge=0, le=1)
     overall_binary_correct_rate: float | None = Field(default=None, ge=0, le=1)
+    expected_hold_match_rate: float | None = Field(default=None, ge=0, le=1)
+    expected_hold_decided_rate: float | None = Field(default=None, ge=0, le=1)
+    hold_precision: float | None = Field(default=None, ge=0, le=1)
+    hold_f1: float | None = Field(default=None, ge=0, le=1)
 
 
 class EvaluationBinarySummary(BaseModel):

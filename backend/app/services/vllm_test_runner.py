@@ -90,6 +90,7 @@ def chat_payload(
 async def run_vllm_test(
     profile: VLLMProfile, crypto: CryptoService, mode: str,
     *, egress_check: Callable[[], None] | None = None,
+    concurrency_engine=None,
 ) -> VLLMTestResult:
     checks: list[dict[str, Any]] = []
     provider = provider_name(profile)
@@ -126,10 +127,11 @@ async def run_vllm_test(
         trust_env=False,
     ) as client:
         async def request_json(method: str, path: str, body: dict[str, Any] | None = None) -> tuple[dict[str, Any], float]:
-            if egress_check is not None:
-                egress_check()
+            from .concurrency import call_slot
             started = time.perf_counter()
-            response = await client.request(method, f"{base_url}{path}", json=body)
+            async with call_slot(concurrency_engine, profile, egress_check,
+                                 timeout_seconds=profile.timeout_seconds + 5):
+                response = await client.request(method, f"{base_url}{path}", json=body)
             elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
             response.raise_for_status()
             return response.json(), elapsed_ms
@@ -301,6 +303,9 @@ async def run_vllm_test(
                     }, {"near_context_latency_ms": latency, "near_context_prompt_tokens": prompt_tokens}
 
                 async def concurrency_check() -> tuple[dict[str, Any], dict[str, Any]]:
+                    from .concurrency import configured_server_limit
+                    if concurrency_engine is not None and configured_server_limit(concurrency_engine, profile) < profile.test_concurrency:
+                        raise CheckFailed("concurrency_limit_below_test", "Agent server limit is below the requested verification concurrency; adjust the limit or test setting explicitly")
                     async def one(index: int) -> float:
                         body, latency = await request_json(
                             "POST",

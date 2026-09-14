@@ -1,4 +1,6 @@
-.agent-settings-panel { padding: 20px; }
+.agent-settings-panel { padding: 20px; min-width: 0; }
+.agent-settings > div { min-width: 0; }
+.agent-settings-panel input[type="number"] { min-width: 0; max-width: 100%; }
 .agent-settings-panel > .panel-head { padding: 0 0 18px; margin-bottom: 20px; flex-wrap: wrap; }
 .agent-settings-panel > .panel-head > .ux-toolbar { flex-shrink: 0; }
 .agent-settings-panel button { white-space: nowrap; }
@@ -7,7 +9,10 @@
 .agent-role-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .agent-role-grid fieldset { border: 1px solid var(--line); border-radius: 12px; padding: 20px; min-width: 0; margin: 0; }
 .agent-role-grid legend { padding: 0 8px; font-weight: 700; }
+.agent-role-grid legend, .agent-role-grid p { overflow-wrap: anywhere; }
 .agent-role-grid label { display: grid; gap: 8px; margin-bottom: 20px; }
+.agent-role-grid label.checkbox-row { display: flex; align-items: center; gap: 8px; }
+.agent-role-grid label.checkbox-row input { width: auto; margin: 0; }
 .agent-role-grid label:last-child { margin-bottom: 0; }
 .agent-role-grid small { overflow-wrap: anywhere; }
 .agent-settings [hidden] { display: none; }

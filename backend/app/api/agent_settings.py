@@ -2,7 +2,7 @@ from typing import Annotated, Literal
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
@@ -25,6 +25,8 @@ class RoleSelection(BaseModel):
     primary_profile_id: str | None = Field(max_length=36)
     # null is the explicit "same as Primary" selection, not a failure fallback.
     verifier_profile_id: str | None = Field(max_length=36)
+    evidence_editor_enabled: bool = Field(default=False, strict=True)
+    evidence_editor_profile_id: str | None = Field(default=None, max_length=36)
 
 
 class ConfigurationUpdate(BaseModel):
@@ -33,6 +35,55 @@ class ConfigurationUpdate(BaseModel):
     production: RoleSelection
     test: RoleSelection
     external_transfer_acknowledged: bool = False
+
+
+class ServerConcurrency(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    server_key: str = Field(min_length=1, max_length=255)
+    max_calls: int = Field(ge=1, le=64)
+
+
+class ConcurrencyUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    expected_state_token: str = Field(pattern=r"^[0-9a-f]{64}$")
+    production: int = Field(ge=1, le=32)
+    test: int = Field(ge=1, le=32)
+    servers: list[ServerConcurrency] = Field(max_length=1000)
+
+    @model_validator(mode="after")
+    def unique_servers(self):
+        if len({item.server_key for item in self.servers}) != len(self.servers):
+            raise ValueError("duplicate_llm_server")
+        return self
+
+
+@router.get("/concurrency")
+def get_concurrency(db: Db, _admin: Admin, response: Response):
+    from ..services.concurrency import configuration_document
+    response.headers["Cache-Control"] = "no-store"
+    begin_test_read_snapshot(db)
+    return configuration_document(db)
+
+
+@router.put("/concurrency")
+def set_concurrency(payload: ConcurrencyUpdate, db: Db, admin: Admin, response: Response):
+    from ..services.concurrency import configuration_document, lock_configuration
+    response.headers["Cache-Control"] = "no-store"
+    config = lock_configuration(db)
+    current = configuration_document(db)
+    if current["state_token"] != payload.expected_state_token:
+        raise HTTPException(409, "concurrency_configuration_changed")
+    if {item.server_key for item in payload.servers} != {item["server_key"] for item in current["servers"]}:
+        raise HTTPException(422, "concurrency_server_list_changed")
+    config.production, config.test = payload.production, payload.test
+    # Preserve limits for temporarily absent endpoints; never silently reset.
+    config.server_limits = {**config.server_limits, **{item.server_key: item.max_calls for item in payload.servers}}
+    config.revision += 1
+    db.add(AccessAudit(actor_kind=admin.kind, actor_id=admin.username or "admin",
+                      action="update_concurrency_configuration", resource_type="concurrency_configuration",
+                      resource_id=str(config.revision)))
+    db.commit()
+    return configuration_document(db)
 
 
 @router.get("")
@@ -89,7 +140,8 @@ def get_diagnostics(db: Db, _admin: Admin, response: Response,
 def set_configuration(payload: ConfigurationUpdate, db: Db, admin: Admin, request: Request, response: Response):
     response.headers["Cache-Control"] = "no-store"
     lock_egress_mutation(db)
-    if configuration_document(db)["state_token"] != payload.expected_state_token:
+    current = configuration_document(db)
+    if current["state_token"] != payload.expected_state_token:
         raise HTTPException(409, "agent_configuration_changed")
     selected = {}
     from ..services.prompt_policies import PromptPolicyError, get_active_policy, read_policy_text
@@ -99,9 +151,16 @@ def set_configuration(payload: ConfigurationUpdate, db: Db, admin: Admin, reques
         raise HTTPException(exc.status_code, exc.code) from None
     for purpose in ("production", "test"):
         roles = getattr(payload, purpose)
-        if roles.verifier_profile_id and not roles.primary_profile_id:
+        # Older clients save only Primary/Verifier. Preserve the optional role.
+        for field in ("evidence_editor_enabled", "evidence_editor_profile_id"):
+            if field not in roles.model_fields_set:
+                setattr(roles, field, current["assignments"][purpose][field])
+        if not roles.evidence_editor_enabled:
+            roles.evidence_editor_profile_id = None
+        if (roles.verifier_profile_id or roles.evidence_editor_enabled) and not roles.primary_profile_id:
             raise HTTPException(422, "agent_primary_required")
-        for role, identifier in roles.model_dump().items():
+        for role in ("primary_profile_id", "verifier_profile_id", "evidence_editor_profile_id"):
+            identifier = getattr(roles, role)
             if identifier:
                 profile = db.get(VLLMProfile, identifier)
                 try:
@@ -109,7 +168,7 @@ def set_configuration(payload: ConfigurationUpdate, db: Db, admin: Admin, reques
                 except TargetNotAllowedError as exc:
                     raise HTTPException(409, str(exc)) from None
                 validate_profile_for_request(profile, request, db)
-                if not has_input_budget(profile, policy_text):
+                if role != "evidence_editor_profile_id" and not has_input_budget(profile, policy_text):
                     raise HTTPException(422, "agent_context_budget_too_small")
                 if profile.provider == "openai" and not payload.external_transfer_acknowledged:
                     raise HTTPException(422, "agent_external_transfer_acknowledgement_required")
@@ -131,6 +190,8 @@ def set_configuration(payload: ConfigurationUpdate, db: Db, admin: Admin, reques
             else:
                 primary.is_test = True
         setattr(config, purpose + "_verifier_profile_id", getattr(payload, purpose).verifier_profile_id)
+        setattr(config, purpose + "_evidence_editor_enabled", getattr(payload, purpose).evidence_editor_enabled)
+        setattr(config, purpose + "_evidence_editor_profile_id", getattr(payload, purpose).evidence_editor_profile_id)
     config.revision += 1
     db.add(AccessAudit(actor_kind=admin.kind, actor_id=admin.username or "admin",
                        action="update_agent_configuration", resource_type="agent_configuration",

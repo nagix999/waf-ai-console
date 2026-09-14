@@ -25,9 +25,23 @@ def test_all_formulas_use_binary_decisions_and_keep_abstentions_in_coverage():
         "mcc": (18 * 27 - 3 * 2) / math.sqrt(21 * 20 * 30 * 29),
         "coverage": 50 / 60, "abstention_rate": 10 / 60,
         "overall_binary_correct_rate": 45 / 60,
+        "expected_hold_match_rate": None, "expected_hold_decided_rate": None,
+        "hold_precision": 0, "hold_f1": 0,
     }
     assert result.pop("basis") == "decided_binary"
     assert result == pytest.approx(expected)
+
+
+def test_hold_reference_metrics_are_separate_and_do_not_change_binary_scores():
+    original = metrics(tp=7, fn=1, fp=2, tn=5, abstained_positive=1, abstained_negative=2)
+    result = metrics(tp=7, fn=1, fp=2, tn=5, abstained_positive=1, abstained_negative=2,
+                     expected_hold_match=6, expected_hold_positive=3, expected_hold_negative=1)
+    assert result["expected_hold_match_rate"] == .6
+    assert result["expected_hold_decided_rate"] == .4
+    assert result["hold_precision"] == pytest.approx(6 / 9)
+    assert result["hold_f1"] == pytest.approx(12 / 19)
+    for name in ("accuracy", "precision", "recall", "f1", "macro_f1", "mcc", "coverage", "overall_binary_correct_rate"):
+        assert result[name] == original[name]
 
 
 @pytest.mark.parametrize("counts,expected", [
@@ -72,6 +86,8 @@ def test_all_abstained_has_no_decision_scores_but_reports_zero_coverage():
     assert result.pop("coverage") == 0
     assert result.pop("abstention_rate") == 1
     assert result.pop("overall_binary_correct_rate") == 0
+    assert result.pop("hold_precision") == 0
+    assert result.pop("hold_f1") == 0
     assert all(value is None for value in result.values())
 
 
@@ -95,7 +111,8 @@ def test_aggregate_pools_counts_not_source_percentages_and_keeps_ai_visibility(c
     summary = client.get("/api/v1/analyses", params={"limit": 1}).json()["evaluation_summary"]
     assert summary["total"] == summary["labeled"] == summary["evaluable"] == 7
     assert summary["binary_evaluable"] == 6 and summary["binary_decided"] == 5
-    assert summary["confusion_matrix"] == {"tp": 2, "fn": 1, "fp": 1, "tn": 1, "abstained_positive": 0, "abstained_negative": 1}
+    assert summary["confusion_matrix"] == {"tp": 2, "fn": 1, "fp": 1, "tn": 1, "abstained_positive": 0, "abstained_negative": 1,
+        "expected_hold_positive": 0, "expected_hold_negative": 0, "expected_hold_match": 1}
     assert summary["metrics"]["accuracy"] == .6
     assert summary["metrics"]["coverage"] == pytest.approx(5 / 6)
     assert summary["metrics"]["overall_binary_correct_rate"] == .5

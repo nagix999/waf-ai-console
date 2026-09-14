@@ -1,5 +1,5 @@
 from contextlib import AsyncExitStack
-from dataclasses import dataclass, field, is_dataclass
+from dataclasses import dataclass, field, is_dataclass, replace
 from enum import Enum
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any, Callable, Mapping, get_args
@@ -19,6 +19,7 @@ from ..services.provider_options import (
 )
 from .contracts import (CONTRACT_ERRORS, EvidenceCorrectionOutput, WAFAnalysisOutput,
                         EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput)
+from .evidence_editor import EvidenceEditorOutput, MAX_SECONDS as EDITOR_SECONDS, MAX_OUTPUT_TOKENS as EDITOR_TOKENS
 
 
 OUTPUT_VALIDATION_FAILURE_CODE = "output_validation_failed"
@@ -116,7 +117,7 @@ class _VLLMEgressTransport:
 
 @dataclass(frozen=True)
 class AgentCallResult:
-    output: WAFAnalysisOutput | EvidenceCorrectionOutput | None
+    output: BaseModel | None
     framework_run_id: str | None
     agent_fingerprint: str | None
     finish_reason: str
@@ -283,7 +284,22 @@ def _attempt_telemetry(
     }
 
 
-async def execute_structured_agent(
+async def execute_structured_agent(*, concurrency_engine=None, **kwargs) -> AgentCallResult:
+    if concurrency_engine is None:
+        return await _execute_structured_agent(**kwargs)
+    from ..services.concurrency import call_slot
+    profile = kwargs["profile"]
+    attempts = kwargs.get("output_validation_max_attempts", OUTPUT_VALIDATION_MAX_ATTEMPTS)
+    if attempts not in {1, 2}:
+        raise ValueError("invalid_output_validation_attempt_limit")
+    # Queue waiting must not consume the model's response/repair deadline.
+    deadline = min(profile.timeout_seconds, EDITOR_SECONDS) if kwargs.get("output_model") is EvidenceEditorOutput else profile.timeout_seconds * 2 * attempts + 5
+    async with call_slot(concurrency_engine, profile, kwargs.get("egress_check"), timeout_seconds=deadline) as admission:
+        result = await _execute_structured_agent(**kwargs)
+    return replace(result, telemetry={**result.telemetry, "concurrency": admission})
+
+
+async def _execute_structured_agent(
     *,
     profile: VLLMProfile,
     api_key: str | None,
@@ -297,10 +313,14 @@ async def execute_structured_agent(
 ) -> AgentCallResult:
     if output_validation_max_attempts not in {1, 2}:
         raise ValueError("invalid_output_validation_attempt_limit")
-    if output_model not in {WAFAnalysisOutput, EvidenceCorrectionOutput, EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput}:
+    if output_model not in {WAFAnalysisOutput, EvidenceCorrectionOutput, EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput, EvidenceEditorOutput}:
         raise ValueError("unsupported_agent_output_contract")
     if issubclass(output_model, EvidenceCorrectionOutput) and output_validation_max_attempts != 1:
         raise ValueError("evidence_correction_requires_single_attempt")
+    editor = output_model is EvidenceEditorOutput
+    if editor and output_validation_max_attempts != 1:
+        raise ValueError("evidence_editor_requires_single_attempt")
+    timeout = min(profile.timeout_seconds, EDITOR_SECONDS) if editor else profile.timeout_seconds
     provider = provider_name(profile)
     base_url = profile.base_url
     if provider == "vllm":
@@ -334,8 +354,8 @@ async def execute_structured_agent(
             "base_url": base_url,
             "model": profile.model_name,
             "api_key": api_key,
-            "timeout": profile.timeout_seconds,
-            "default_options": generation_options(profile),
+            "timeout": timeout,
+            "default_options": generation_options(profile, max_output_tokens=min(profile.max_output_tokens, EDITOR_TOKENS)) if editor else generation_options(profile),
         }
         client_type = VLLMClient
         if provider == "openai":
@@ -372,11 +392,11 @@ async def execute_structured_agent(
                 model=model,
                 instructions=run_instructions,
                 output=output_codec,
-                retry=RetryConfig(max_attempts=2),
+                retry=RetryConfig(max_attempts=1 if editor else 2),
                 limits=RunLimits(
-                    max_model_turns=2,
+                    max_model_turns=1 if editor else 2,
                     no_progress_model_turn_threshold=2,
-                    timeout_seconds=profile.timeout_seconds * 2,
+                    timeout_seconds=timeout if editor else timeout * 2,
                 ),
             )
             spec = agent.inspect()

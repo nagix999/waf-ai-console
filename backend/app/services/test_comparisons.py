@@ -152,7 +152,9 @@ def _performance(db, rows, warnings):
     if identifiers:
         query = select(AgentRun.analysis_id, AgentStep.id, AgentStep.step_type, AgentStep.status, AgentStep.metadata_json).join(
             AgentStep, AgentStep.run_id == AgentRun.id).where(
-            AgentRun.analysis_id.in_(identifiers), AgentStep.step_type.in_(("llm_primary", "llm_verifier")))
+            AgentRun.analysis_id.in_(identifiers),
+            (AgentStep.step_type.in_(("llm_primary", "llm_verifier"))
+             | ((AgentStep.step_type == "llm_evidence_editor") & (func.json_extract(AgentStep.metadata_json, "$.llm_called") == 1))))
         for row in db.execute(query).mappings():
             seen.add((row["analysis_id"], row["step_type"]))
             metadata = _object(row["metadata_json"])

@@ -7,6 +7,7 @@ import { Icon } from "./Icon.jsx";
 import ProductionApi from "./ProductionApi.jsx";
 import AnalysisReport from "./AnalysisReport.jsx";
 import HelpTooltip from "./HelpTooltip.jsx";
+import SummaryPreview from "./SummaryPreview.jsx";
 import Dialog from "./Dialog.jsx";
 import EvaluationOverview from "./EvaluationOverview.jsx";
 import DashboardView from "./DashboardView.jsx";
@@ -147,7 +148,7 @@ export function AnalysisTable({ items, onOpen, title = "분석 결과", subtitle
               const receivedAt = analysisReceivedAt(item.created_at);
               return <tr key={item.id} className={state.className}>
                 <td className="table-meta unified-decision">{item.status === "completed" ? <><Status value={finalValue(item, "verdict")} /><Severity value={item.severity} /><span className="sr-only">{state.label}</span></> : <span className="analysis-row-state"><Icon name={item.status === "failed" ? "alert" : "clock"} size={14} />{state.label}</span>}{isMockAnalysis(item) && <small className="label-revision">모의 판정 · LLM 아님</small>}{item.input_truncated === true && <small>입력 일부 생략</small>}</td>
-                <td className="table-meta analyst-event unified-event"><button className="text-button unified-event-title" onClick={() => onOpen(item.id)}>{item.signature || item.event_name || "분석 상세 보기"}</button><p className="analysis-summary-preview">{analystSummary(item)}</p>{showPurpose && <Purpose value={item.analysis_purpose} />}</td>
+                <td className="table-meta analyst-event unified-event"><button className="text-button unified-event-title" onClick={() => onOpen(item.id)}>{item.signature || item.event_name || "분석 상세 보기"}</button><SummaryPreview text={analystSummary(item)} />{showPurpose && <Purpose value={item.analysis_purpose} />}</td>
                 <td className="table-meta unified-company"><strong title={item.company_name || ""}>{item.company_name}</strong><small title={`${item.src_ip || "-"}${item.src_port != null ? ` : ${item.src_port}` : ""}`}>{item.src_ip || "-"}{item.src_port != null ? ` : ${item.src_port}` : ""}</small><small title={`${item.dest_ip || "-"}${item.dest_port != null ? ` : ${item.dest_port}` : ""}`}>→ {item.dest_ip || "-"}{item.dest_port != null ? ` : ${item.dest_port}` : ""}</small></td>
                 <td className="unified-reference"><CompactReferenceComparison evaluation={item.evaluation} detail={item} /></td>
                 <td>{analysisElapsedTime(item)}</td>
@@ -721,7 +722,7 @@ export function ModelSettings({ onProductionChange, onInternalEgress, onViewData
                   <td><strong>{profile.name}</strong><span className={`provider-badge provider-${providerOf(profile)}`}>{providerLabel(profile)}</span>{internalTargetIssue && <small className="error">연결 허용 확인 필요</small>}{providerOf(profile) === "openai" && !profile.external_data_approved && <small className="error">외부 전송 미승인</small>}</td>
                   <td><span>{profile.model_name}</span></td>
                   <td>{latest ? <><Status value={latest.status} /><small>{latest.mode} · {latest.completed_at ? new Date(latest.completed_at).toLocaleString("ko-KR") : "진행 중"}</small></> : <span>-</span>}</td>
-                  <td><div className="profile-role-badges">{profile.status === "production" && <span className="status status-production">Production Primary</span>}{profile.is_test && <span className="status purpose-test">Test Primary</span>}{profile.agent_roles?.map(role => <span className="status" key={role}>{role.startsWith("test") ? "Test" : "Production"} Verifier</span>)}</div>{profile.status !== "production" && <Status value={profile.status} />}</td>
+                  <td><div className="profile-role-badges">{profile.status === "production" && <span className="status status-production">Production Primary</span>}{profile.is_test && <span className="status purpose-test">Test Primary</span>}{profile.agent_roles?.map(role => <span className="status" key={role}>{role.startsWith("test") ? "Test" : "Production"} {role.endsWith(".evidence_editor") ? "근거 정리" : "Verifier"}</span>)}</div>{profile.status !== "production" && <Status value={profile.status} />}</td>
                   <td><button type="button" className="secondary" onClick={() => setManagedId(profile.id)}>관리</button><Dialog open={managedId === profile.id} title={`${profile.name} · 모델 관리`} onClose={() => { if (!busy) setManagedId(null); }}><section className="detail-summary"><div><span>연결 주소</span><strong>{profile.base_url}</strong></div><div><span>입력 한도 / 최대 출력</span><strong>{profile.context_window.toLocaleString()} / {profile.max_output_tokens} 토큰</strong></div><div><span>제한 시간 / 검증 동시 요청</span><strong>{profile.timeout_seconds}초 / {profile.test_concurrency}건</strong></div><div><span>API Key</span><strong>{profile.has_api_key ? "저장됨" : "없음"}</strong></div></section><div className="profile-actions">
                     <button className="secondary small" disabled={Boolean(busy) || active || profile.status === "disabled" || Boolean(internalTargetIssue) || (providerOf(profile) === "openai" && !profile.external_data_approved)} onClick={() => runTest(profile, "quick")}>{busy === `q-${profile.id}` ? "등록 중" : "빠른 테스트"}</button>
                     <button className="secondary small" disabled={Boolean(busy) || active || profile.status === "disabled" || Boolean(internalTargetIssue) || (providerOf(profile) === "openai" && !profile.external_data_approved)} onClick={() => runTest(profile, "full")}>{busy === `f-${profile.id}` ? "등록 중" : "전체 검증"}</button>
@@ -754,7 +755,7 @@ export function ModelSettings({ onProductionChange, onInternalEgress, onViewData
           <label>제한 시간 (초)<input type="number" min="5" max="600" value={form.timeout_seconds} onChange={update("timeout_seconds")} /></label>
           <label htmlFor="model-context-window"><span>입력·출력 토큰 한도<HelpTooltip label="토큰 한도">모델이 한 번에 처리할 수 있는 전체 길이입니다. 실제 서버 설정과 모델 지원 범위에 맞게 입력하세요.</HelpTooltip></span><input id="model-context-window" type="number" min="4096" max="131072" value={form.context_window} onChange={update("context_window")} /></label>
           <label>최대 출력 토큰<input type="number" min="256" max="16384" value={form.max_output_tokens} onChange={update("max_output_tokens")} /></label>
-          <label>검증 동시 요청<input type="number" min="1" max="10" value={form.test_concurrency} onChange={update("test_concurrency")} /></label>
+          <label>검증 동시 요청<input type="number" min="1" max="10" value={form.test_concurrency} onChange={update("test_concurrency")} /><small className="ux-muted">전체 검증에서 시험할 요청 수입니다. Agent 설정의 서버별 호출 상한 이하여야 합니다.</small></label>
         </div>
         <p className="form-note" id="profile-provider-note">{openai ? "OpenAI 공식 주소로만 연결하며 TLS 인증서를 검증합니다. 모델 ID와 Context window·출력 토큰은 사용할 모델의 지원 범위에 맞게 입력하세요. 모델 가용성은 검증 전까지 확인되지 않습니다." : "vLLM은 내부 연결 허용에 등록한 내부 IP와 포트만 사용할 수 있습니다. 기존 vllm.internal 같은 hostname은 실제 내부 IP로 변경하세요. Gemma thinking은 비활성화합니다."}</p>
         {!openai && <div className="profile-egress">
@@ -782,7 +783,7 @@ export function TestResult({ profile, test, onViewDataset }) {
   const checks = test.checks || [];
   return <section className="panel test-result">
     <div className="panel-head"><div><h2>{test.name || profile.name} · {test.mode === "full" ? "전체 검증" : "빠른 테스트"}</h2><p className="ux-muted">저장 당시의 연결·기능 검증 결과입니다. 현재 설정이나 탐지 정확도는 별도 확인이 필요합니다.</p></div><Status value={test.status} /></div>
-    {test.error_message && <div className="error">검증을 완료하지 못했습니다. {test.error_message.length <= 160 ? test.error_message : "오류 상세는 검증 기술정보에서 확인하세요."}</div>}
+    {test.error_message && <div className="error">검증을 완료하지 못했습니다. {test.error_code === "concurrency_limit_below_test" ? "Agent 설정 → 동시 처리의 서버 상한이 검증 요청 수보다 작습니다. 서버 상한 또는 프로필의 검증 동시 요청 수를 조정한 뒤 다시 실행하세요." : test.error_message.length <= 160 ? test.error_message : "오류 상세는 검증 기술정보에서 확인하세요."}</div>}
     <div className="check-grid">
       {checks.map((check, index) => <article key={check.name}><div><strong>{names[check.name] || "기타 확인"}</strong><Status value={check.status} /></div><span>{formatDuration(check.latency_ms)}</span><button type="button" className="text-button" onClick={() => setSelected(index)}>확인 내용</button></article>)}
       {!checks.length && <div className="empty">{["pending", "running"].includes(test.status) ? "검증 시작을 기다리고 있습니다." : "기록된 검증 항목이 없습니다."}</div>}

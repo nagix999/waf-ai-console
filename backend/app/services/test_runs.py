@@ -88,6 +88,8 @@ def create_run_record(db, crypto, settings, *, name, idempotency_key, request_ha
         metadata.update(model_profile="stub", llm_called=False)
     temporary = Analysis()
     pin_analysis_prompt(db, crypto, temporary)
+    from .evidence_editor import capture_editor
+    editor = capture_editor(db, "test", profile) if mode == "moduagent" and not model_test else None
     identifier = str(uuid.uuid4())
     run = TestRun(
         id=identifier, name=values.name, idempotency_key=values.idempotency_key,
@@ -99,6 +101,7 @@ def create_run_record(db, crypto, settings, *, name, idempotency_key, request_ha
         profile_fingerprint=profile_fingerprint(profile) if profile else None,
         profile_metadata=metadata, execution_mode=mode,
         prompt_snapshot_ciphertext=temporary.prompt_snapshot_ciphertext,
+        evidence_editor_snapshot_ciphertext=crypto.encrypt_text(editor.model_dump_json()) if editor else None,
         prompt_policy_version_id=temporary.prompt_policy_version_id,
         prompt_version=temporary.prompt_version, encryption_key_version=crypto.key_version,
         created_by=actor,

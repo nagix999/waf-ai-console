@@ -13,9 +13,13 @@
 .quality-matrix table { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 3px; }
 .quality-matrix caption { text-align: left; color: var(--muted); font-size: 11px; padding: 0 0 8px; }
 .quality-matrix td { text-align: center; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; }
+.quality-matrix tbody tr:last-child td { border-bottom-width: 1px; border-bottom-style: solid; }
+.quality-matrix tbody tr:last-child td.matrix-expected_hold_positive,.quality-matrix tbody tr:last-child td.matrix-expected_hold_negative { border-bottom-style: dashed; }
 .quality-matrix td strong { font-size: 22px; display: block; }
 .quality-matrix td small { font-size: 11px; color: var(--muted); display: block; margin-top: 5px; }
 .quality-matrix td.matrix-fn,.quality-matrix td.matrix-fp { border-color: var(--danger); }
+.quality-matrix td.matrix-expected_hold_positive,.quality-matrix td.matrix-expected_hold_negative { border-style: dashed; border-color: var(--muted); }
+.quality-matrix > .quality-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); max-width: 520px; }
 .quality-matrix td button { width: 100%; border: 0; background: transparent; color: var(--text); cursor: pointer; border-radius: 3px; padding: 8px 0; }
 .quality-matrix td button[aria-pressed=true] { outline: 2px solid var(--accent); outline-offset: 2px; }
 .quality-additional { padding: 13px 0; border-top: 1px solid var(--line); }

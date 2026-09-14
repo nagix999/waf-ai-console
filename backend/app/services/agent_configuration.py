@@ -19,8 +19,8 @@ def profile_metadata(profile):
 
 def verifier_roles(db, profile_id):
     config = db.get(AgentConfiguration, 1)
-    return [purpose + ".verifier" for purpose in ("production", "test")
-            if config and getattr(config, purpose + "_verifier_profile_id") == profile_id]
+    return [purpose + "." + role for purpose in ("production", "test") for role in ("verifier", "evidence_editor")
+            if config and getattr(config, purpose + "_" + role + "_profile_id") == profile_id]
 
 
 def configuration_document(db):
@@ -30,7 +30,9 @@ def configuration_document(db):
     for purpose in ("production", "test"):
         primary = next((p for p in profiles if (p.status == "production" if purpose == "production" else p.is_test)), None)
         assignments[purpose] = {"primary_profile_id": primary.id if primary else None,
-                                "verifier_profile_id": getattr(config, purpose + "_verifier_profile_id") if config else None}
+                                "verifier_profile_id": getattr(config, purpose + "_verifier_profile_id") if config else None,
+                                "evidence_editor_enabled": bool(getattr(config, purpose + "_evidence_editor_enabled", False)),
+                                "evidence_editor_profile_id": getattr(config, purpose + "_evidence_editor_profile_id", None)}
     revision = config.revision if config else 0
     policy = db.get(PromptPolicyState, 1)
     # Includes legacy assignment API changes and profile edits, not just this row.

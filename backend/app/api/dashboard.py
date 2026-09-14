@@ -76,10 +76,10 @@ def dashboard_summary(
     date_column = func.date(Analysis.created_at)
     grouped = list(db.execute(select(
         date_column.label("date"), relation.c.outcome, relation.c.source_kind,
-        relation.c.ai_visible, relation.c.reference_verdict, func.count().label("count"),
+        relation.c.ai_visible, relation.c.reference_verdict, relation.c.prediction_verdict, func.count().label("count"),
     ).select_from(Analysis).join(relation, relation.c.analysis_id == Analysis.id).where(*scope)
         .group_by(date_column, relation.c.outcome, relation.c.source_kind,
-                  relation.c.ai_visible, relation.c.reference_verdict)).mappings())
+                  relation.c.ai_visible, relation.c.reference_verdict, relation.c.prediction_verdict)).mappings())
     evaluation_summary = summarize_evaluation_rows(grouped)
     by_day = {}
     for row in grouped:

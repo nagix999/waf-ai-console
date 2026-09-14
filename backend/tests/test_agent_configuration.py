@@ -34,7 +34,8 @@ def test_admin_only_and_no_implicit_model_calls(client, service_headers):
     login_admin(client)
     result = client.get(URL)
     assert result.headers["cache-control"] == "no-store"
-    assert result.json()["assignments"] == {purpose: {"primary_profile_id": None, "verifier_profile_id": None}
+    assert result.json()["assignments"] == {purpose: {"primary_profile_id": None, "verifier_profile_id": None,
+        "evidence_editor_enabled": False, "evidence_editor_profile_id": None}
                                             for purpose in ("production", "test")}
     with client.app.state.session_factory() as db:
         assert list(db.scalars(select(VLLMTestRun))) == []
@@ -46,7 +47,8 @@ def test_legacy_roles_preserved_until_explicit_atomic_assignment(client):
     role(client, first, "promote")
     role(client, first, "assign-test")
     before = client.get(URL).json()
-    assert before["assignments"]["production"] == {"primary_profile_id": first["id"], "verifier_profile_id": None}
+    assert before["assignments"]["production"] == {"primary_profile_id": first["id"], "verifier_profile_id": None,
+        "evidence_editor_enabled": False, "evidence_editor_profile_id": None}
     result = assign(client, second["id"], first["id"], test_primary=first["id"], test_verifier=second["id"])
     assert result.status_code == 200, result.text
     profiles = {item["id"]: item for item in result.json()["profiles"]}
@@ -128,7 +130,7 @@ def test_distinct_roles_same_input_bounded_repair_encrypted_history(client, even
         worker.process_moduagent(db, client.app.state.crypto, analysis, "", .75)
         snapshot = load_execution_snapshot(analysis, client.app.state.crypto)
         assert snapshot.verifier_profile_id == verifier["id"]
-        assert snapshot.schema_version == 2
+        assert snapshot.schema_version == 3
         assert analysis.result_json["diagnostics"]["roles"]["primary"]["repair_recovered"]
         assert analysis.result_json["agent"]["role_profiles"]["verifier"]["model_profile_id"] == verifier["id"]
     assert [call["agent_name"] for call in calls] == ["waf-primary", "waf-primary-evidence-repair", "waf-verifier"]

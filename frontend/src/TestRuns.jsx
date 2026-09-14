@@ -11,6 +11,7 @@ import { initialTestComparisonState } from "./testComparison.js";
 import "./testRuns.css";
 import Dialog from "./Dialog.jsx";
 import EvaluationOverview from "./EvaluationOverview.jsx";
+import SummaryPreview from "./SummaryPreview.jsx";
 
 export const initialTestRunHistoryState = () => ({ queryText: "", query: { q: "", limit: 10, offset: 0 } });
 export const initialTestRunFilters = () => ({ difficulty: "", test_category: "", difficulty_missing: false, test_category_missing: false, status: "", evaluation_outcome: "", cell: "", limit: 25, offset: 0, comparison: initialTestComparisonState() });
@@ -101,7 +102,7 @@ export function TestRunItemError({ item }) {
 }
 
 export function TestRunItemRows({ items, onOpen }) {
-  return <div className="table-wrap"><table className="test-run-items"><thead><tr><th>문항 / 분류</th><th>판정 / 분석 요약</th><th>참고 답안 비교</th><th>처리 상태</th></tr></thead><tbody>{items.map(item => <tr key={item.id} className={analysisRowState(item.status).className}><td>{item.analysis_id ? <button type="button" className="text-button" onClick={() => onOpen(item.analysis_id)}>{item.case_name || item.event_id || `${item.row_number}행`}</button> : <strong>{item.case_name || item.event_id || `${item.row_number}행`}</strong>}<small>{item.row_number}행 · {item.difficulty || "난이도 미분류"} · {item.test_category || "유형 미분류"}</small></td><td><strong>{item.status === "completed" ? referenceVerdicts[item.verdict] || "판정 정보 없음" : "—"}</strong><small>{item.summary_ko || ""}</small></td><td>{item.ingest_status === "rejected" ? "접수 거부 · 평가 제외" : <CompactReferenceComparison evaluation={item.evaluation} />}</td><td>{item.ingest_status === "rejected" ? "접수 거부" : runStatuses[item.status] || "상태 미확인"}{item.error_code && <TestRunItemError item={item} />}</td></tr>)}</tbody></table></div>;
+  return <div className="table-wrap"><table className="test-run-items"><thead><tr><th>문항 / 분류</th><th>판정 / 분석 요약</th><th>참고 답안 비교</th><th>처리 상태</th></tr></thead><tbody>{items.map(item => <tr key={item.id} className={analysisRowState(item.status).className}><td>{item.analysis_id ? <button type="button" className="text-button" onClick={() => onOpen(item.analysis_id)}>{item.case_name || item.event_id || `${item.row_number}행`}</button> : <strong>{item.case_name || item.event_id || `${item.row_number}행`}</strong>}<small>{item.row_number}행 · {item.difficulty || "난이도 미분류"} · {item.test_category || "유형 미분류"}</small></td><td><strong>{item.status === "completed" ? referenceVerdicts[item.verdict] || "판정 정보 없음" : "—"}</strong><SummaryPreview text={item.summary_ko} /></td><td>{item.ingest_status === "rejected" ? "접수 거부 · 평가 제외" : <CompactReferenceComparison evaluation={item.evaluation} />}</td><td>{item.ingest_status === "rejected" ? "접수 거부" : runStatuses[item.status] || "상태 미확인"}{item.error_code && <TestRunItemError item={item} />}</td></tr>)}</tbody></table></div>;
 }
 
 export function TestRunDetail({ id, onBack, onOpen, filters: controlledFilters, onFiltersChange, backLabel = "테스트 목록", onUnauthorized }) {

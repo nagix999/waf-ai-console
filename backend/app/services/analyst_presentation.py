@@ -32,8 +32,18 @@ def assessment_view(result):
     assessment = result.get("analyst_assessment")
     if not isinstance(assessment, dict) or assessment.get("version") != "analyst-assessment-v1":
         return None
+    items = assessment.get("evidence", []) if isinstance(assessment.get("evidence"), list) else []
+    presentation = result.get("evidence_presentation")
+    if isinstance(presentation, dict) and presentation.get("version") == "evidence-editor-v1" and presentation.get("status") == "completed":
+        from ..agent.evidence_editor import validate_groups
+        try:
+            groups = validate_groups(assessment, {"groups": presentation.get("groups")})
+            indexed = {item["evidence_id"]: item for item in items}
+            items = [{**indexed[group["representative_id"]], "_evidence_ids": group["member_ids"]} for group in groups]
+        except (ValueError, TypeError, KeyError):
+            pass  # Corrupt/legacy grouping must not hide original evidence.
     evidence, seen, references = [], {}, {}
-    for item in assessment.get("evidence", []) if isinstance(assessment.get("evidence"), list) else []:
+    for item in items:
         if not isinstance(item, dict) or not all(isinstance(item.get(key), str) and item[key].strip() for key in ("field", "excerpt", "interpretation_ko")):
             continue
         support = item.get("supports")
@@ -43,10 +53,10 @@ def assessment_view(result):
             seen[key] = {"number": len(evidence) + 1, "field": item["field"], "excerpt": item["excerpt"],
                          "interpretation_ko": analyst_text(item["interpretation_ko"]), "supports": support}
             evidence.append(seen[key])
-        reference = item.get("evidence_id")
-        if isinstance(reference, str) and reference:
-            # Ambiguous IDs cannot anchor a decision issue.
-            references[reference] = seen[key]["number"] if reference not in references else None
+        for reference in item.get("_evidence_ids", [item.get("evidence_id")]):
+            if isinstance(reference, str) and reference:
+                # Ambiguous IDs cannot anchor a decision issue.
+                references[reference] = seen[key]["number"] if reference not in references else None
     for item in evidence:
         item["related_numbers"] = [other["number"] for other in evidence
             if other["supports"] != item["supports"] and (other["field"], other["excerpt"]) == (item["field"], item["excerpt"])]

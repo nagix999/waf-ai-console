@@ -9,15 +9,15 @@ export function selectionIssue(catalog, draft) {
   if (!validAgentCatalog(catalog) || !draft) return "설정을 먼저 조회하세요.";
   for (const purpose of ["production", "test"]) {
     const roles = draft[purpose];
-    if (roles.verifier_profile_id && !roles.primary_profile_id) return "Primary 모델을 먼저 지정하세요.";
-    for (const id of Object.values(roles)) {
+    if ((roles.verifier_profile_id || roles.evidence_editor_enabled) && !roles.primary_profile_id) return "Primary 모델을 먼저 지정하세요.";
+    for (const id of [roles.primary_profile_id, roles.verifier_profile_id, roles.evidence_editor_profile_id]) {
       if (id && !catalog.profiles.some(profile => profile.id === id && profile.can_assign === true)) return "현재 설정으로 전체 검증을 통과한 모델만 지정할 수 있습니다.";
     }
   }
   return "";
 }
 export function hasExternalRole(catalog, draft) {
-  return Object.values(draft || {}).some(roles => Object.values(roles).some(id => catalog?.profiles.some(p => p.id === id && p.provider === "openai")));
+  return Object.values(draft || {}).some(roles => [roles.primary_profile_id, roles.verifier_profile_id, roles.evidence_editor_enabled ? roles.evidence_editor_profile_id : null].some(id => catalog?.profiles.some(p => p.id === id && p.provider === "openai")));
 }
 export function createAgentSettingsController({ api, onChange, onCommitted }) {
   let state = emptyAgentSettingsState(); let disposed = false; let sequence = 0;
@@ -55,8 +55,9 @@ export function createAgentSettingsController({ api, onChange, onCommitted }) {
   return { refresh, save, getState: () => state, dispose() { disposed = true; sequence++; },
     change(purpose, role, id) {
       if (state.busy || state.loading || state.needsRefresh || !state.draft
-        || !["production", "test"].includes(purpose) || !["primary_profile_id", "verifier_profile_id"].includes(role)) return;
-      publish({ draft: { ...state.draft, [purpose]: { ...state.draft[purpose], [role]: id || null } }, notice: "", error: "" });
+        || !["production", "test"].includes(purpose) || !["primary_profile_id", "verifier_profile_id", "evidence_editor_profile_id", "evidence_editor_enabled"].includes(role)) return;
+      publish({ draft: { ...state.draft, [purpose]: { ...state.draft[purpose], [role]: role === "evidence_editor_enabled" ? id === true : id || null,
+        ...(role === "evidence_editor_enabled" && id !== true ? { evidence_editor_profile_id: null } : {}) } }, notice: "", error: "" });
     } };
 }
 
