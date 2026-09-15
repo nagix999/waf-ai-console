@@ -46,6 +46,16 @@ test("binary response validation rejects JSON, empty data, oversize and stale co
   } }), { name: "AbortError" });
 });
 
+test("PDF sends only selected report display options; Excel retains its contract", async () => {
+  for (const format of ["pdf", "xlsx"]) {
+    let path;
+    await fetchReportFile(id, format, { pdfOptions: { includeAppendix: true, includeDecoding: true, theme: "dark", payload: "must-not-send" }, fetchImpl: async value => {
+      path = value; return new Response(format === "pdf" ? "%PDF-fixture" : "PK-fixture", { headers: { "Content-Type": reportTypes[format] } });
+    } });
+    assert.equal(path, reportPath(id, format) + (format === "pdf" ? "?include_appendix=true&include_decoding=true&theme=dark" : ""));
+  }
+});
+
 test("untrusted server errors never become analyst-facing HTML or raw diagnostic text", async () => {
   for (const [status, detail] of [[401, "private"], [403, "private"], [409, "report_not_final"], [413, "report_too_large"], [503, "<script>PRIVATE-SERVER-TEXT</script>"]]) {
     try {

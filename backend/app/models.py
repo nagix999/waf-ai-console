@@ -554,6 +554,7 @@ class ValidationDatasetItem(Base):
     case_name: Mapped[str | None] = mapped_column(String(240))
     internal_only: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     original_analysis_id: Mapped[str | None] = mapped_column(ForeignKey("analyses.id", ondelete="RESTRICT"))
+    original_analysis_deleted: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"), nullable=False)
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 

@@ -77,8 +77,8 @@ def test_key_attribution_first_admission_only_including_upload_and_deletion(clie
         assert body["counts"]["total"] == body["evaluation_summary"]["total"] == 1
         assert sum(day["total"] for day in body["trend"]) == 1
         assert client.get("/api/v1/analyses", params={"service_api_key_id": identifier}).json()["total"] == 1
-    assert client.delete(f"/api/v1/admin/service-api-keys/{first_id}").status_code == 204
-    assert client.delete(f"/api/v1/admin/service-api-keys/{first_id}").status_code == 204
+    assert client.request("DELETE", f"/api/v1/admin/service-api-keys/{first_id}", json={"confirm_name": "first"}).status_code == 204
+    assert client.request("DELETE", f"/api/v1/admin/service-api-keys/{first_id}", json={"confirm_name": "first"}).status_code == 204
     assert first_id not in {item["id"] for item in client.get("/api/v1/admin/service-api-keys").json()["items"]}
     assert client.get("/api/v1/dashboard/summary", params={"service_api_key_id": first_id}).status_code == 404
     assert client.get(f"/api/v1/analyses/{original['id']}").status_code == 200

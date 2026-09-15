@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api.js";
+import Pagination from "./Pagination.jsx";
 import { newTestRequestKey } from "./testRuns.js";
 import { validationDataError } from "./validationData.js";
 
@@ -18,7 +19,7 @@ export default function DatasetAnalysis({ onCreated, disabledReason }) {
   }
   return <section className="panel"><div className="panel-head"><h2>검증 데이터셋 분석</h2><button type="button" className="secondary" disabled={busy} onClick={() => { key.current = null; setReload(value => value + 1); }}>목록 새로고침</button></div><form className="data-form" onSubmit={run}>
     <label>데이터셋<select aria-label="데이터셋" required disabled={busy || !catalog} value={selected} onChange={event => { key.current = null; setSelected(event.target.value); }}><option value="">선택하세요</option>{catalog?.items.map(item => <option key={item.id} value={item.id}>{item.name} · {item.total}문항</option>)}</select></label>
-    {catalog && (offset > 0 || catalog.total > 200) && <div className="pagination"><span>데이터셋 {catalog.total}개</span><button type="button" disabled={busy || !offset} onClick={() => { setSelected(""); key.current = null; setOffset(value => Math.max(0, value - 200)); }}>이전 목록</button><button type="button" disabled={busy || offset + 200 >= catalog.total} onClick={() => { setSelected(""); key.current = null; setOffset(value => value + 200); }}>다음 목록</button></div>}
+    {catalog && (offset > 0 || catalog.total > 200) && <Pagination label="분석할 데이터셋 페이지" total={catalog.total} limit={200} offset={offset} disabled={busy} unit="개" onOffsetChange={value => { setSelected(""); key.current = null; setOffset(value); }} />}
     {dataset && <p className="ux-muted">버전 {dataset.revision} · {dataset.total}문항 · 참고 답안 {dataset.labeled}건 · 답안 없는 문항도 분석하며 평가에서만 제외합니다.</p>}
     {dataset?.internal_only && <p className="notice">운영에서 가져온 문항이 있습니다. Primary·Verifier·근거 정리 모델을 모두 내부 vLLM으로 설정해야 합니다.</p>}
     <label>테스트명<input value={name} disabled={busy} onChange={event => { key.current = null; setName(event.target.value); }} maxLength={120} placeholder="비워두면 자동 생성" /></label>

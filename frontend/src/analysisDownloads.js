@@ -1,4 +1,4 @@
-// A download is one authenticated GET, never a model call or a raw-event read.
+// One authenticated GET, never a model call. Decoding requires explicit opt-in.
 export const reportTypes = Object.freeze({
   pdf: "application/pdf",
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -17,18 +17,25 @@ export function reportDownloadError(error) {
   if (error?.status === 404) return "해당 분석을 찾을 수 없습니다.";
   if (error?.message === "report_not_final") return "실제 분석이 완료된 최종 결과만 내려받을 수 있습니다. 진행 중·실패·모의 분석은 제외합니다.";
   if (error?.message === "report_too_large") return "보고서가 출력 한도를 초과했습니다. 부분 파일은 생성하지 않았습니다. 화면에서 내용을 확인해 주세요.";
+  if (error?.message === "report_export_busy") return "다른 PDF를 작성 중입니다. 잠시 후 다시 내려받아 주세요.";
+  if (error?.message === "report_export_timeout") return "PDF 작성 시간이 초과됐습니다. 잠시 후 다시 시도해 주세요.";
   return "보고서를 내려받지 못했습니다. 잠시 후 다시 시도해 주세요.";
 }
 
-export async function fetchReportFile(id, format, { signal, fetchImpl = globalThis.fetch } = {}) {
-  const response = await fetchImpl(reportPath(id, format), {
+export async function fetchReportFile(id, format, { signal, pdfOptions, fetchImpl = globalThis.fetch } = {}) {
+  let path = reportPath(id, format);
+  if (format === "pdf" && pdfOptions) {
+    path += "?" + new URLSearchParams({ include_appendix: pdfOptions.includeAppendix === true,
+      include_decoding: pdfOptions.includeDecoding === true, theme: pdfOptions.theme === "dark" ? "dark" : "light" });
+  }
+  const response = await fetchImpl(path, {
     method: "GET", credentials: "include", cache: "no-store", signal,
     headers: { Accept: reportTypes[format] },
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     // Never surface arbitrary server text or response bodies in the UI.
-    const code = ["report_not_final", "report_too_large"].includes(body?.detail) ? body.detail : "report_export_unavailable";
+    const code = ["report_not_final", "report_too_large", "report_export_busy", "report_export_timeout"].includes(body?.detail) ? body.detail : "report_export_unavailable";
     const error = new Error(code); error.status = response.status; throw error;
   }
   if (response.headers.get("content-type")?.split(";")[0] !== reportTypes[format]) throw new Error("invalid_report_response");

@@ -124,9 +124,6 @@ tbody tr:hover { background: var(--raised); }
 .filter-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-top: 14px; }
 .filter-meta { display: flex; justify-content: space-between; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; color: var(--muted); font-size: 12px; }
 .advanced-filters { padding-top: 15px; border-top: 1px solid var(--line); }
-.pagination { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; color: var(--muted); font-size: 13px; }
-.pagination label { display: flex; align-items: center; margin-right: auto; white-space: nowrap; }
-.pagination select { width: auto; }
 .form-note { margin: 16px 0 0; color: var(--muted); font-size: 13px; }
 .timing-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; padding: 16px; }
 .timing-summary > div { display: grid; gap: 8px; }
@@ -136,7 +133,7 @@ tbody tr:hover { background: var(--raised); }
 .step-timing strong { font-variant-numeric: tabular-nums; font-size: 13px; }
 .step-timing small { width: 100%; color: var(--muted); }
 .severity { display: inline-flex; align-items: center; min-height: 24px; padding: 3px 9px; border: 1px solid transparent; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .035em; }
-.severity-critical { border-color: var(--danger); background: var(--danger); color: var(--primary-text); }
+.severity-critical { border-color: #b4233b; background: #b4233b; color: #fff; }
 .severity-high { background: var(--danger-soft); color: var(--danger); }
 .severity-medium { background: var(--warn-soft); color: var(--warn); }
 .severity-low { background: var(--accent-soft); color: var(--accent); }
@@ -193,7 +190,7 @@ pre { max-width: 100%; overflow: auto; padding: 13px; border-radius: 8px; backgr
 .decision-true_positive { border-left-color: var(--danger); }
 .decision-inconclusive { border-left-color: var(--warn); }
 .decision-card > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.decision-card > div > span:not(.status), .decision-card > small { color: var(--muted); font-size: 12px; }
+.decision-card > div > span:not(.status):not(.severity), .decision-card > small { color: var(--muted); font-size: 12px; }
 .decision-card > strong { min-width: 0; font-size: 17px; line-height: 1.6; overflow-wrap: anywhere; }
 .result-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .result-card { min-width: 0; padding: 22px; }

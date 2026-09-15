@@ -21,4 +21,5 @@ __pycache__/
 .pytest_cache/
 node_modules/
 dist/
+backend/app/data/report-ui/
 .DS_Store

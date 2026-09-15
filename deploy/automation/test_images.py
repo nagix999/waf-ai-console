@@ -115,7 +115,7 @@ class ImageTests(unittest.TestCase):
         self.assertEqual(result, {"backend": DERIVED_ID, "frontend": FRONTEND_ID})
         builds = [call for call in self.runner.calls if call[:2] == ["docker", "build"]]
         self.assertEqual(len(builds), 2)
-        self.assertEqual(builds[0][-1], str(self.root / "backend"))
+        self.assertEqual(builds[0][-1], str(self.root))
         self.assertEqual(builds[1][-1], str(self.root))
         for call in builds:
             self.assertIn(OWNER_LABEL + "=" + OWNER, call)

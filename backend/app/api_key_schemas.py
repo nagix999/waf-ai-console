@@ -74,3 +74,20 @@ class ServiceApiKeyList(BaseModel):
 class ServiceApiKeyIssued(BaseModel):
     item: ServiceApiKeyItem
     api_key: str
+
+
+class ServiceApiKeyDelete(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    confirm_name: str = Field(min_length=1, max_length=120)
+    delete_analyses: bool = False
+    expected_scope: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+
+
+class ServiceApiKeyDeletionPreview(BaseModel):
+    name: str
+    purpose: Literal["production", "test"]
+    analyses: int
+    active_analyses: int
+    dataset_copies: int
+    blocked_references: bool
+    scope: str

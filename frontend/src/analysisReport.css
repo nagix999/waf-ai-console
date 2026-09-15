@@ -1,4 +1,7 @@
+@font-face { font-family: "Waf Report"; src: url("../../backend/app/assets/fonts/WafReport-Regular.woff2") format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Waf Report"; src: url("../../backend/app/assets/fonts/WafReport-Bold.woff2") format("woff2"); font-weight: 700; font-display: swap; }
 .analysis-report { display: grid; gap: 14px; min-width: 0; }
+.report-paper { font-family: "Waf Report", sans-serif; }
 .report-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 18px; padding: 18px 20px; }
 .report-toolbar-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .report-icon { display: grid; place-items: center; width: 42px; height: 44px; flex-shrink: 0; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }

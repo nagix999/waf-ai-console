@@ -5,11 +5,13 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from ..api_key_schemas import ServiceApiKeyCreate, ServiceApiKeyIssued, ServiceApiKeyItem, ServiceApiKeyList, ServiceApiKeyRename
+from ..api_key_schemas import ServiceApiKeyCreate, ServiceApiKeyIssued, ServiceApiKeyItem, ServiceApiKeyList, ServiceApiKeyRename, ServiceApiKeyDelete, ServiceApiKeyDeletionPreview
 from ..database import get_db
 from ..models import AccessAudit, ServiceApiKey
 from ..security import Principal, require_scope
 from ..services.service_api_keys import ServiceApiKeyError, delete_key, issue_key, rename_key, revoke_key, to_key_item
+from ..services.key_analysis_deletion import preview, purge
+from ..services.test_runs import read_snapshot, write_lock
 
 
 router = APIRouter(prefix="/admin/service-api-keys", tags=["service-api-keys"])
@@ -87,11 +89,35 @@ def revoke_service_key(key_id: str, response: Response, db: DbSession, principal
 
 
 @router.delete("/{key_id}", status_code=204)
-def delete_service_key(key_id: str, db: DbSession, principal: AdminPrincipal) -> Response:
+def delete_service_key(key_id: str, db: DbSession, principal: AdminPrincipal, payload: ServiceApiKeyDelete | None = None) -> Response:
     try:
+        write_lock(db)
+        key = db.get(ServiceApiKey, key_id, populate_existing=True)
+        if key is None:
+            raise ServiceApiKeyError("service_api_key_not_found", 404)
+        if key.purpose == "production" and (payload is None or payload.confirm_name != key.name):
+            raise ServiceApiKeyError("service_api_key_name_confirmation_required", 422)
+        if payload and payload.confirm_name != key.name:
+            raise ServiceApiKeyError("service_api_key_name_confirmation_required", 422)
+        # A repeated delete never gains authority to purge data after the key
+        # has already been deleted with the preserve option.
+        if payload and payload.delete_analyses and key.deleted_at is not None:
+            raise ServiceApiKeyError("service_api_key_not_found", 404)
+        if payload and payload.delete_analyses:
+            purge(db, key_id, payload, principal.username or "unknown")
         if delete_key(db, key_id, principal.username or "unknown"):
             audit(db, principal, "delete_service_api_key", key_id)
         db.commit()
         return Response(status_code=204, headers=NO_STORE_HEADERS)
+    except (ServiceApiKeyError, SQLAlchemyError) as exc:
+        raise api_error(db, exc) from None
+
+
+@router.get("/{key_id}/deletion-preview", response_model=ServiceApiKeyDeletionPreview)
+def deletion_preview(key_id: str, response: Response, db: DbSession, _principal: AdminPrincipal):
+    no_store(response)
+    try:
+        read_snapshot(db)
+        return preview(db, key_id)
     except (ServiceApiKeyError, SQLAlchemyError) as exc:
         raise api_error(db, exc) from None

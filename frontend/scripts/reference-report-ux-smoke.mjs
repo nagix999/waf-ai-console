@@ -43,6 +43,7 @@ async function scenario(name, check, { mobile = false, invalid = false } = {}) {
     if (request.method() === "POST" && path === "/api/v1/evaluation-labels/preview") return json({ source_system: "fixture-source", source_kind: "synthetic_expected", source_ref: "보안팀_검토1", ai_visible: false, total_rows: 1, matched_count: 1, change_count: 1, unchanged_count: 0, can_confirm: !invalid, preview_token: "fixture-preview", expires_at: new Date(Date.now() + 600000).toISOString(), rows: [{ row_number: 1, event_id: "hidden-event-uuid", analysis_id: "hidden-analysis-uuid", current_label: "false_positive", proposed_label: "true_positive", current_revision: 2, change: true }], errors: invalid ? [{ row_number: 1, field: "event_id", code: "analysis_not_found_in_source" }] : [] });
     if (request.method() === "POST" && path === "/api/v1/evaluation-labels/confirm") { await new Promise(resolve => setTimeout(resolve, 120)); return json({ applied_count: 1, unchanged_count: 0, duplicate: false }); }
     if (request.method() === "GET" && path === "/api/v1/test-runs/fixture-run") return json(testRun);
+    if (request.method() === "GET" && path === "/api/v1/test-runs/fixture-run/evaluations") return json({ items: [] });
     if (request.method() === "GET" && path === "/api/v1/test-runs") return json({ items: [], total: 0, limit: 10, offset: 0 });
     violations.push("unmocked " + path); return route.abort();
   });
@@ -126,7 +127,7 @@ try {
     assert.equal(await report.getByRole("button", { name: "문서 포함 범위 설명" }).count(), 0);
     assert.equal(await report.getByRole("button", { name: "보고서 부록 설명" }).count(), 0);
     assert.equal(await report.locator(".metric-help-trigger").count(), 0);
-    assert.match(await report.locator(".report-appendix-option").innerText(), /부록·조회한 디코딩은 화면과 Markdown에만 포함 · PDF·Excel 제외/);
+    assert.match(await report.locator(".report-appendix-option").innerText(), /화면·Markdown·PDF에 동일하게 적용/);
     await report.getByLabel("보고서 목차").selectOption({ label: "판정 근거" });
     assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("class")), "report-section");
     assert.equal(await report.locator(".report-excerpt code").textContent(), detail.result.evidence[0].excerpt);
@@ -146,7 +147,7 @@ try {
     assert.match(await run.locator(".test-run-scope").innerText(), /접수 당시 난이도·유형으로 지표와 문항 목록을 함께 좁힙니다/);
     assert.match(await run.locator(".test-run-cases").innerText(), /상태·답안 비교·행렬 선택은 문항 목록만 좁힙니다.*위 지표는 유지됩니다/);
     await run.getByRole("button", { name: "실행 정보", exact: true }).click(); const metadata = dialog(page, "테스트 실행 정보"); await metadata.waitFor();
-    assert.match(await metadata.innerText(), /접수 당시 답안·모델·지침/); assert.match(await metadata.innerText(), /사후 답안 연결과 실패 재실행은 이 테스트의 기존 지표를 바꾸지 않습니다/); assert.match(await metadata.innerText(), /fixture-source/);
+    assert.match(await metadata.innerText(), /모델·지침은 실행 당시 설정을 유지/); assert.match(await metadata.innerText(), /접수 당시 답안과 저장한 평가는 별도로 보존/); assert.match(await metadata.innerText(), /fixture-source/);
     await page.keyboard.press("Escape"); await metadata.waitFor({ state: "hidden" });
     await run.getByRole("button", { name: "다른 테스트와 비교", exact: true }).click(); const comparison = dialog(page, "테스트 비교"); await comparison.waitFor();
     assert.equal(await comparison.getByRole("button", { name: "비교 실행 설명" }).count(), 0);

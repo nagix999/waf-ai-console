@@ -4,6 +4,7 @@ COPY frontend/package*.json ./
 RUN npm install --no-audit --no-fund
 COPY frontend/index.html frontend/vite.config.js ./
 COPY frontend/src ./src
+COPY backend/app/assets/fonts /backend/app/assets/fonts
 COPY docs/Production_API_v0.1.md /docs/Production_API_v0.1.md
 RUN npm run build
 

@@ -34,8 +34,17 @@ function ReportBlocks({ blocks, section }) {
   });
 }
 
-export default function AnalysisReport({ detail, decoding = null, mode, onModeChange }) {
-  const [includeAppendix, setIncludeAppendix] = useState(false);
+export function ReportDocument({ report, reportId = "pdf-report", sections, jumpTo }) {
+  return <article className="panel report-paper" aria-label="분석 보고서">
+    <header className="report-cover"><span className="eyebrow">WAF AI · 분석 보고서</span><h2>{decodeReportText(report.title)}</h2><ReportBlocks blocks={report.intro} section="보고서 안내" /></header>
+    {report.sections.map((section, index) => <section className="report-section" ref={sections ? node => { sections.current[index] = node; } : undefined} tabIndex={-1} key={section.id} aria-labelledby={reportId + "-section-" + index}><div className="report-section-heading"><span aria-hidden="true">{String(index + 1).padStart(2, "0")}</span><h3 id={reportId + "-section-" + index}>{decodeReportText(section.title)}</h3></div><ReportBlocks blocks={section.blocks} section={section.title} />{jumpTo && <button type="button" className="text-button report-back-top" onClick={() => jumpTo("top")}>목차로</button>}</section>)}
+  </article>;
+}
+
+export default function AnalysisReport({ detail, decoding = null, mode, onModeChange, includeAppendix: controlledAppendix, onAppendixChange }) {
+  const [localAppendix, setLocalAppendix] = useState(false);
+  const includeAppendix = controlledAppendix ?? localAppendix;
+  const setIncludeAppendix = onAppendixChange ?? setLocalAppendix;
   const reportId = useId();
   const top = useRef(null);
   const sections = useRef([]);
@@ -49,14 +58,11 @@ export default function AnalysisReport({ detail, decoding = null, mode, onModeCh
         <button type="button" aria-pressed={mode === "preview"} aria-controls={reportId + "-content"} onClick={() => onModeChange("preview")}><Icon name="file" size={15} />보고서 보기</button>
         <button type="button" aria-pressed={mode === "source"} aria-controls={reportId + "-content"} onClick={() => onModeChange("source")}><span aria-hidden="true">MD</span>Markdown 원본</button>
       </div>
-      <div className="report-appendix-option"><label><input type="checkbox" checked={includeAppendix} onChange={(event) => setIncludeAppendix(event.target.checked)} />평가·실행 부록 포함</label><small className="ux-muted">부록·조회한 디코딩은 화면과 Markdown에만 포함 · PDF·Excel 제외</small></div>
+      <div className="report-appendix-option"><label><input type="checkbox" checked={includeAppendix} onChange={(event) => setIncludeAppendix(event.target.checked)} />평가·실행 부록 포함</label><small className="ux-muted">화면·Markdown·PDF에 동일하게 적용 · Excel은 기본 항목으로 출력</small></div>
     </div>
     <div className="report-reading-tools"><span className="report-scope-note">근거 발췌 포함</span>{mode !== "source" && <label className="report-jump">목차<select aria-label="보고서 목차" value="" onChange={(event) => { if (event.target.value) jumpTo(event.target.value); }}><option value="">항목으로 이동</option>{report.sections.map((section, index) => <option key={section.id} value={String(index)}>{decodeReportText(section.title)}</option>)}</select></label>}</div>
     <div id={reportId + "-content"}>
-      {mode === "source" ? <div className="panel report-source"><div className="report-source-head"><span>Markdown 원본</span><small>읽기 전용 · 보고서 보기와 동일한 내용</small></div><pre tabIndex={0} aria-label="보고서 Markdown 원본"><code>{markdown}</code></pre></div> : <article className="panel report-paper" aria-label="분석 보고서">
-        <header className="report-cover"><span className="eyebrow">WAF AI · 분석 보고서</span><h2>{decodeReportText(report.title)}</h2><ReportBlocks blocks={report.intro} section="보고서 안내" /></header>
-        {report.sections.map((section, index) => <section className="report-section" ref={(node) => { sections.current[index] = node; }} tabIndex={-1} key={section.id} aria-labelledby={reportId + "-section-" + index}><div className="report-section-heading"><span aria-hidden="true">{String(index + 1).padStart(2, "0")}</span><h3 id={reportId + "-section-" + index}>{decodeReportText(section.title)}</h3></div><ReportBlocks blocks={section.blocks} section={section.title} /><button type="button" className="text-button report-back-top" onClick={() => jumpTo("top")}>목차로</button></section>)}
-      </article>}
+      {mode === "source" ? <div className="panel report-source"><div className="report-source-head"><span>Markdown 원본</span><small>읽기 전용 · 보고서 보기와 동일한 내용</small></div><pre tabIndex={0} aria-label="보고서 Markdown 원본"><code>{markdown}</code></pre></div> : <ReportDocument report={report} reportId={reportId} sections={sections} jumpTo={jumpTo} />}
     </div>
   </section>;
 }

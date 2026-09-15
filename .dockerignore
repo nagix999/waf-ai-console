@@ -1,5 +1,4 @@
-# The frontend uses the repository root only to import the canonical API guide.
-# Deny everything except its build inputs and that one document.
+# Both images build the shared report component. Allow only build inputs.
 **
 !.dockerignore
 !frontend/
@@ -12,9 +11,22 @@ frontend/*
 !frontend/nginx.conf
 !frontend/src/
 !frontend/src/**
+!frontend/scripts/
+frontend/scripts/*
+!frontend/scripts/build-report.mjs
 !docs/
 docs/*
 !docs/Production_API_v0.1.md
+!backend/
+backend/*
+!backend/Dockerfile
+!backend/pyproject.toml
+!backend/alembic.ini
+!backend/alembic/
+!backend/alembic/**
+!backend/app/
+!backend/app/**
+backend/app/data/report-ui/
 
 # Keep secrets and generated/dependency directories excluded even under src/.
 **/.env*
@@ -31,4 +43,8 @@ docs/*
 **/node_modules
 **/dist
 **/dist-*
-backend
+**/__pycache__
+**/*.pyc
+**/*.db
+**/*.sqlite*
+**/*.bak

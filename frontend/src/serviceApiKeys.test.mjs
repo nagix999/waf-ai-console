@@ -133,7 +133,7 @@ test("delete removes only key metadata after one explicit request and preserves 
   let deleted = false; const calls = [];
   const { controller } = harness({ serviceApiKeys: async () => catalog(deleted ? [item({ id: "retained" })] : [item(), item({ id: "retained" })]), deleteServiceApiKey: async id => { calls.push(id); deleted = true; } });
   await controller.refresh(); assert.deepEqual(calls, []);
-  assert.equal(await controller.remove(item()), true); assert.deepEqual(calls, ["synthetic-key-id"]);
+  assert.equal(await controller.remove(item(), { confirm_name: item().name }), true); assert.deepEqual(calls, ["synthetic-key-id"]);
   assert.deepEqual(controller.getState().catalog.items.map(value => value.id), ["retained"]);
   assert.match(controller.getState().notice, /분석 결과와 감사 이력은 보존/); controller.dispose();
 });
@@ -142,7 +142,7 @@ test("delete is deduplicated, may remove an already revoked key, and clears a di
   const pending = deferred(); let deletes = 0;
   const { controller, fill } = harness({ deleteServiceApiKey: async () => { deletes += 1; return pending.promise; }, serviceApiKeys: async () => catalog(deletes ? [] : [item()]) });
   await controller.refresh(); fill(); await controller.issue();
-  const deleting = controller.remove(item({ revoked_at: "synthetic-revoked" }));
+  const deleting = controller.remove(item({ revoked_at: "synthetic-revoked" }), { confirm_name: item().name });
   assert.equal(await controller.remove(item()), false); assert.equal(deletes, 1);
   pending.resolve(); assert.equal(await deleting, true); assert.equal(controller.getState().issued, null); assert.deepEqual(controller.getState().catalog.items, []); controller.dispose();
 });
@@ -150,7 +150,7 @@ test("delete is deduplicated, may remove an already revoked key, and clears a di
 test("an uncertain delete never automatically repeats the mutation and refreshes metadata", async () => {
   let deletes = 0; let reads = 0;
   const { controller } = harness({ serviceApiKeys: async () => { reads += 1; return catalog(); }, deleteServiceApiKey: async () => { deletes += 1; throw new Error("SYNTHETIC_NETWORK_FAILURE"); } });
-  await controller.refresh(); assert.equal(await controller.remove(item()), false); assert.equal(deletes, 1); assert.equal(reads, 2);
+  await controller.refresh(); assert.equal(await controller.remove(item(), { confirm_name: item().name }), false); assert.equal(deletes, 1); assert.equal(reads, 2);
   assert.equal(controller.getState().catalog.items.length, 1); assert.doesNotMatch(controller.getState().error, /SYNTHETIC_NETWORK_FAILURE/); controller.dispose();
 });
 

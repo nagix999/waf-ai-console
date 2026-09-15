@@ -6,6 +6,7 @@ import { assessmentView, legacyEvidenceNotice } from "./analystAssessment.js";
 import { Icon } from "./Icon.jsx";
 import ProductionApi from "./ProductionApi.jsx";
 import AnalysisReport from "./AnalysisReport.jsx";
+import Pagination from "./Pagination.jsx";
 import HelpTooltip from "./HelpTooltip.jsx";
 import SummaryPreview from "./SummaryPreview.jsx";
 import Dialog from "./Dialog.jsx";
@@ -241,8 +242,6 @@ export function AnalysisList({ state, setState, onOpen, onUnauthorized, onScopeC
   const fieldLengths = { source_system: 120, src_ip: 64, dest_ip: 64, signature: 500, event_name: 500, threat_category: 120, waf_vendor: 120, model_profile: 120, label_source_ref: 120 };
   const textField = (name, label) => <label key={name}>{label}<input name={name} value={state.draft[name]} onChange={update} maxLength={fieldLengths[name] || 255} /></label>;
   const dateTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const currentPage = Math.floor(state.offset / state.limit) + 1;
-  const pageCount = Math.max(1, Math.ceil(data.total / state.limit));
   const activeTags = appliedFilterTags(state.applied, {
     status: labels, verdict: labels, review_state: labels, analysis_purpose: purposeLabels, ingest_channel: channelLabels,
     label_presence: { labeled: "있음", unlabeled: "없음" }, evaluation_outcome: evaluationOutcomes,
@@ -299,12 +298,7 @@ export function AnalysisList({ state, setState, onOpen, onUnauthorized, onScopeC
     <EvaluationOverview summary={data.evaluation_summary} loading={loading} error={error} />
     <AnalysisSelectionActions ids={selection.ids} onClear={selection.clear} onSaved={() => setLabelRefresh(value => value + 1)} />
     <AnalysisTable items={data.items} total={data.total} loading={loading} onOpen={onOpen} purpose={state.applied.analysis_purpose} selection={selection} sorting={serverSorting(query.sort_by, query.sort_order)} onSortingChange={update => setState(current => ({ ...current, ...changedSort(update, serverSorting(query.sort_by, query.sort_order)) }))} />
-    <div className="pagination">
-      <label>페이지당<select value={state.limit} onChange={(event) => { const limit = Number(event.target.value); setState((current) => ({ ...current, limit, offset: 0 })); }}>{[25, 50, 100].map((limit) => <option key={limit} value={limit}>{limit}건</option>)}</select></label>
-      <span aria-live="polite">{data.total ? `${state.offset + 1}–${Math.min(state.offset + state.limit, data.total)} / ${data.total.toLocaleString()}건` : "0건"} · {currentPage} / {pageCount}페이지</span>
-      <button type="button" className="secondary" disabled={loading || state.offset === 0} onClick={() => setState((current) => ({ ...current, offset: Math.max(0, current.offset - current.limit) }))}>이전</button>
-      <button type="button" className="secondary" disabled={loading || state.offset + state.limit >= data.total} onClick={() => setState((current) => ({ ...current, offset: current.offset + current.limit }))}>다음</button>
-    </div>
+    <Pagination label="분석 결과 페이지" total={data.total} limit={state.limit} offset={state.offset} disabled={loading} onOffsetChange={offset => setState(current => ({ ...current, offset }))} onLimitChange={limit => setState(current => ({ ...current, limit, offset: 0 }))} />
   </div>;
 }
 
@@ -452,8 +446,10 @@ function Detail({ id, onBack, onOpen, backLabel = "분석 결과", tab: controll
     api.rawEvent(id, { signal: controller.signal }).then((value) => { if (active) setRaw(value); }).catch((err) => { if (active) setRawError(err.message); });
     return () => { active = false; controller.abort(); };
   }, [id, raw, tab, decodingOpen, rawAttempt]);
+  const [reportAppendix, setReportAppendix] = useState(false);
+  useEffect(() => setReportAppendix(false), [id]);
   const referenceActions = <AnalysisSelectionActions ids={[id]} single onSaved={() => loader.current?.refresh()} />;
-  const navigation = <div className="panel-head-inline"><button className="back" onClick={onBack}>← {backLabel}</button><div className="ux-toolbar">{detail && <RetryAnalysis key={id} detail={detail} onOpen={onOpen} />}{detail && <AnalysisDownloads id={id} status={detail.status} />}<button type="button" className="secondary" disabled={loading || labelsLoading || runsLoading} onClick={() => loader.current?.refresh()}>새로고침</button></div></div>;
+  const navigation = <div className="panel-head-inline"><button className="back" onClick={onBack}>← {backLabel}</button><div className="ux-toolbar">{detail && <RetryAnalysis key={id} detail={detail} onOpen={onOpen} />}{detail && <AnalysisDownloads id={id} status={detail.status} includeAppendix={reportAppendix} includeDecoding={Boolean(raw?.decoding)} />}<button type="button" className="secondary" disabled={loading || labelsLoading || runsLoading} onClick={() => loader.current?.refresh()}>새로고침</button></div></div>;
   if (!detail || view.id !== id) return <div className="page-stack">{navigation}{error ? <div className="error" role="alert">{error}</div> : <div className="loading">불러오는 중…</div>}</div>;
   const durationFallback = ["pending", "processing"].includes(detail.status) ? "진행 중" : "측정 전 데이터";
   const notices = analysisNotices(detail);
@@ -483,7 +479,7 @@ function Detail({ id, onBack, onOpen, backLabel = "분석 결과", tab: controll
       </div>
       {tab === "result" && <><ResultView detail={detail} /><section className="panel inspection-section-head"><div><h2>인코딩·난독화 문자열</h2><p className="ux-muted">원본과 변환 결과 비교</p></div><button type="button" className="secondary" onClick={() => setDecodingOpen(true)}>문자열 비교</button></section><Dialog open={decodingOpen} title="인코딩·난독화 문자열" className="inspection-dialog" onClose={() => setDecodingOpen(false)}>{decodingOpen && (rawFailure || (raw ? <DecodingView decoding={raw.decoding} /> : <p className="loading" role="status">원문과 변환 결과를 불러오는 중…</p>))}</Dialog></>}
       {tab === "raw" && (rawFailure || (raw ? <RawEventView event={raw} /> : <p className="panel loading" role="status">원문을 불러오는 중…</p>))}
-      {tab === "report" && <AnalysisReport detail={detail} decoding={raw?.decoding ?? null} mode={reportMode} onModeChange={setReportMode} />}
+      {tab === "report" && <AnalysisReport detail={detail} decoding={raw?.decoding ?? null} mode={reportMode} onModeChange={setReportMode} includeAppendix={reportAppendix} onAppendixChange={setReportAppendix} />}
       <div className="ux-toolbar"><button type="button" className="secondary" onClick={() => setTechnicalOpen(true)}>이벤트·실행 정보</button></div><Dialog open={technicalOpen} title="이벤트·실행 정보" className="inspection-dialog" onClose={() => setTechnicalOpen(false)}>{technicalOpen && <div className="analyst-disclosure-body">
         <div className="tabs" role="tablist" aria-label="기술정보"><button type="button" role="tab" aria-selected={technicalTab === "meta"} onClick={() => setTechnicalTab("meta")}>실행 개요</button><button type="button" role="tab" aria-selected={technicalTab === "agent"} onClick={() => setTechnicalTab("agent")}>Agent 실행 이력</button><button type="button" role="tab" aria-selected={technicalTab === "json"} onClick={() => setTechnicalTab("json")}>결과 JSON</button></div>
         {technicalTab === "meta" && <>

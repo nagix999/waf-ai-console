@@ -1,0 +1,14 @@
+.pagination { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 18px 0 4px; width: 100%; color: var(--muted); font-size: 12px; }
+.pagination-meta, .pagination-controls { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; }
+.pagination-meta { gap: 12px 20px; }
+.pagination .pagination-meta label { display: inline-flex; align-items: center; gap: 7px; margin: 0; font-size: 12px; white-space: nowrap; }
+.pagination select { width: auto; padding: 5px 8px; min-height: 32px; }
+.pagination-controls button { min-width: 34px; min-height: 34px; margin: 0; padding: 6px 10px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.pagination-controls .pagination-number[aria-current="page"] { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 750; }
+.pagination-gap { min-width: 12px; text-align: center; }
+.pagination-note { text-align: center; color: var(--muted); }
+@media (max-width: 520px) {
+  .pagination-controls { gap: 4px; }
+  .pagination-controls button { min-width: 28px; padding: 6px; }
+  .pagination-gap { min-width: 8px; }
+}

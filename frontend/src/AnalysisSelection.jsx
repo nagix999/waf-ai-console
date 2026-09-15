@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api } from "./api.js";
 import Dialog from "./Dialog.jsx";
+import Pagination from "./Pagination.jsx";
 import { newTestRequestKey } from "./testRuns.js";
 import { answerNames, datasetImportMessage, selectedPageIds, validationDataError } from "./validationData.js";
 import "./validationData.css";
@@ -70,7 +71,7 @@ export default function AnalysisSelectionActions({ ids, onSaved, single = false,
       {dialog && <form onSubmit={save} className="data-form"><p>{dialog.selected.length}건 선택</p>
         {dialog.kind === "reference" ? <><p className="ux-muted">기존 답안이 있는 {dialog.targets.filter(item => item.expected_revision).length}건도 새 답안으로 저장합니다. 이전 답안·메모와 AI 판정은 보존됩니다.</p><label>참고 답안<select aria-label="참고 답안" required value={dialog.verdict} onChange={change("verdict")} disabled={busy}><option value="">선택하세요</option>{Object.entries(answerNames).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>메모<textarea value={dialog.comment} maxLength={4000} rows={4} onChange={change("comment")} disabled={busy} placeholder="답안 판단 이유 또는 확인 내용" /></label><p className="ux-muted">AI 결과를 본 뒤 작성한 답안으로 기록합니다. 답안·메모는 모델에 전달하지 않습니다.</p></> : <>
           <label>데이터셋<select aria-label="데이터셋" required value={dialog.datasetId} onChange={change("datasetId")} disabled={busy || Boolean(dialog.result)}><option value="">선택하세요</option>{dialog.catalog.items.map(item => <option key={item.id} value={item.id}>{item.name} · {item.total}건</option>)}</select></label>{!dialog.catalog.items.length && <p>데이터 관리에서 데이터셋을 먼저 만드세요.</p>}<p className="ux-muted">동일 입력은 제외합니다. 답안이나 내부 모델 제한이 다르면 충돌로 알립니다. 운영에서 가져온 문항은 내부 vLLM으로만 테스트할 수 있습니다.</p>
-          {!dialog.result && (dialog.offset > 0 || dialog.catalog.total > 200) && <div className="pagination"><span>데이터셋 {dialog.catalog.total}개</span><button type="button" disabled={busy || !dialog.offset} onClick={() => datasetPage(Math.max(0, dialog.offset - 200))}>이전 목록</button><button type="button" disabled={busy || dialog.offset + 200 >= dialog.catalog.total} onClick={() => datasetPage(dialog.offset + 200)}>다음 목록</button></div>}
+          {!dialog.result && (dialog.offset > 0 || dialog.catalog.total > 200) && <Pagination label="추가할 데이터셋 페이지" total={dialog.catalog.total} limit={200} offset={dialog.offset} disabled={busy} unit="개" onOffsetChange={datasetPage} />}
           {dialog.result && <div role="status"><p>{dialog.message}</p><p>충돌 문항은 추가하지 않았습니다. 기존 문항의 답안·내부 모델 제한을 확인하세요. 입력 오류 문항은 현재 입력 스키마를 확인하세요.</p><ul>{dialog.result.conflicts.map((id, index) => <li key={id}>충돌 {index + 1} · <a href={`#analyses/${encodeURIComponent(id)}`}>분석 확인</a></li>)}{dialog.result.rejected.map((item, index) => <li key={item.analysis_id}>입력 오류 {index + 1} · <a href={`#analyses/${encodeURIComponent(item.analysis_id)}`}>분석 확인</a> · {validationDataError({ message: item.code, status: 422 })}</li>)}</ul></div>}
         </>}
         {error && <p className="error" role="alert">{error}</p>}

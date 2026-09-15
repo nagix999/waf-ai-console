@@ -105,6 +105,13 @@ def enqueue_analysis(
     service_api_key_id: str | None = None,
 ) -> tuple[Analysis, bool]:
     """Enqueue an event; commit=False leaves the entire transaction to its caller."""
+    if service_api_key_id is not None:
+        # Check again inside the admission transaction: an earlier successful
+        # authentication must not recreate data after key deletion committed.
+        from ..models import ServiceApiKey
+        key = db.get(ServiceApiKey, service_api_key_id, populate_existing=True)
+        if key is None or key.deleted_at is not None or key.revoked_at is not None:
+            raise AnalysisIngestError("service_api_key_unavailable", 403)
     try:
         payload_bytes = len(payload.payload.encode("utf-8"))
     except UnicodeError as exc:

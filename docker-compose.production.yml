@@ -7,7 +7,9 @@
 services:
   api:
     image: ${WAF_BACKEND_IMAGE:?Set WAF_BACKEND_IMAGE to an explicit deployment tag}
-    build: ./backend
+    build: &backend-build
+      context: .
+      dockerfile: backend/Dockerfile
     command: ["sh", "-c", "alembic upgrade head && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --no-access-log"]
     environment: &backend-env
       WAF_ENVIRONMENT: production
@@ -47,7 +49,7 @@ services:
 
   worker:
     image: ${WAF_BACKEND_IMAGE:?Set WAF_BACKEND_IMAGE to an explicit deployment tag}
-    build: ./backend
+    build: *backend-build
     command: ["python", "-m", "app.worker"]
     environment:
       <<: *backend-env
@@ -66,7 +68,7 @@ services:
 
   model-tester:
     image: ${WAF_BACKEND_IMAGE:?Set WAF_BACKEND_IMAGE to an explicit deployment tag}
-    build: ./backend
+    build: *backend-build
     command: ["python", "-m", "app.worker"]
     environment:
       <<: *backend-env

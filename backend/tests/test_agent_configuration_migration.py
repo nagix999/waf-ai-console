@@ -29,7 +29,7 @@ def test_migration_preserves_roles_and_verification_and_requires_safe_rollback(t
     command.upgrade(config, "head")
     command.upgrade(config, "head")
     with engine.begin() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0017_validation_data"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0018_dataset_source_deleted"
         assert "agent_configurations" in inspect(connection).get_table_names()
         assert connection.scalar(text("SELECT COUNT(*) FROM agent_configurations")) == 0
         assert connection.execute(text("SELECT id, status, is_test FROM vllm_profiles")).one() == (identifier, "production", 1)

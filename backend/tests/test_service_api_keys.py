@@ -153,7 +153,7 @@ def test_rename_conflicts_and_idempotent_revocation_preserve_history(client, eve
     assert issued["api_key"] not in repeated.text and original_hash not in repeated.text
     denied_rename = client.patch(f"{BASE}/{key_id}", json={"name": "Resurrect"})
     assert denied_rename.status_code == 409 and denied_rename.json()["detail"] == "service_api_key_revoked"
-    assert client.delete(f"{BASE}/{key_id}").status_code == 204
+    assert client.request("DELETE", f"{BASE}/{key_id}", json={"confirm_name": "After"}).status_code == 204
     assert [entry["name"] for entry in client.get(BASE).json()["items"]] == ["Taken"]
     with client.app.state.session_factory() as db:
         persisted = db.get(ServiceApiKey, key_id)

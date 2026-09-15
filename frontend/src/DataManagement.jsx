@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import DataTable from "./DataTable.jsx";
+import Pagination from "./Pagination.jsx";
 import { api } from "./api.js";
 import Dialog from "./Dialog.jsx";
 import { formatDate } from "./analysisView.js";
@@ -46,6 +47,7 @@ function ItemEditor({ initial, dataset, onSaved, onBusy }) {
   return <form className="data-form" onSubmit={save}>
     {initial?.history?.length > 0 && <label>문항 버전<select value={data.id} onChange={event => version(event.target.value)} disabled={busy}>{initial.history.map(item => <option key={item.id} value={item.id}>버전 {item.revision} · {formatDate(item.created_at)}</option>)}</select></label>}
     {readonly && <p className="notice">이전 버전 · 읽기 전용</p>}{data?.internal_only && <p className="notice">운영에서 가져온 문항 · 수정해도 내부 모델 전용으로 유지됩니다.</p>}
+    {data?.original_analysis_deleted && <p className="notice">원본 연결: 삭제된 분석 · 이 데이터셋 사본과 답안은 보존됐습니다.</p>}
     <fieldset disabled={busy || readonly} className="data-form">
       <label>문항명<input value={form.case_name} onChange={change("case_name")} maxLength={240} placeholder="분석 목적이나 공격 유형" /></label>
       <div className="event-fields">{Object.entries(eventFields).map(([key, label]) => <label key={key}>{label}{key === "waf_action" ? <select value={form.event[key]} onChange={event => setForm(current => ({ ...current, event: { ...current.event, [key]: event.target.value } }))} required><option value="">선택하세요</option><option value="D">차단 (D)</option><option value="A">허용 (A)</option></select> : <input value={form.event[key]} type={key.endsWith("_port") ? "number" : "text"} min={key.endsWith("_port") ? 0 : undefined} max={key.endsWith("_port") ? 65535 : undefined} onChange={event => setForm(current => ({ ...current, event: { ...current.event, [key]: event.target.value } }))} placeholder={label} />}</label>)}</div>
@@ -94,7 +96,7 @@ export default function DataManagement({ id, onSelect }) {
         { id: "scope", header: "전송 범위", render: item => item.internal_only ? "내부 모델 전용" : "설정한 Test 모델" },
         { id: "actions", header: <span className="sr-only">작업</span>, width: 70, render: item => <button type="button" className="text-button" disabled={historical || busy} onClick={() => setModal({ kind: "remove", item })}>삭제</button> },
       ]} empty="등록된 문항이 없습니다." />{!data.total && <p className="empty">등록된 문항이 없습니다.</p>}</section></>}
-    {data && <div className="pagination"><span>{data.total}건</span><button type="button" className="secondary" disabled={!query.offset} onClick={() => setQuery(current => ({ ...current, offset: Math.max(0, current.offset - 50) }))}>이전</button><button type="button" className="secondary" disabled={query.offset + 50 >= data.total} onClick={() => setQuery(current => ({ ...current, offset: current.offset + 50 }))}>다음</button></div>}
+    {data && <Pagination label={id ? "데이터셋 문항 페이지" : "데이터셋 목록 페이지"} total={data.total} limit={50} offset={query.offset} disabled={busy} onOffsetChange={offset => setQuery(current => ({ ...current, offset }))} />}
     <Dialog open={Boolean(modal)} title={modal?.kind === "item" ? "검증 문항" : ["delete", "remove"].includes(modal?.kind) ? "삭제 확인" : "데이터셋 정보"} onClose={() => { if (!busy) setModal(null); }}>
       {modal?.kind === "item" && <ItemEditor key={modal.item?.id || "new"} initial={modal.item} dataset={data} onSaved={refreshed} onBusy={setBusy} />}
       {["create", "rename"].includes(modal?.kind) && <form className="data-form" onSubmit={saveDataset}><label>데이터셋명<input value={name} onChange={event => setName(event.target.value)} maxLength={120} required placeholder="예: 운영 오탐 재검증" /></label><label>설명<textarea value={description} onChange={event => setDescription(event.target.value)} rows={3} maxLength={1000} placeholder="문항을 모으는 목적" /></label><button type="submit" className="primary" disabled={busy || !name.trim()}>저장</button></form>}

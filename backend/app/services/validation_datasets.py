@@ -74,7 +74,7 @@ def create_dataset(db, payload, actor):
 
 def item_summary(item):
     return {**{key: getattr(item, key) for key in ("id", "item_id", "revision", "reference_verdict", "difficulty",
-        "test_category", "case_name", "internal_only", "original_analysis_id")}, "created_at": utc_datetime(item.created_at)}
+        "test_category", "case_name", "internal_only", "original_analysis_id", "original_analysis_deleted")}, "created_at": utc_datetime(item.created_at)}
 
 
 def read_item(db, crypto, dataset_id, item_id, actor, version_id=None):
@@ -127,7 +127,8 @@ def new_item(db, crypto, row, event, schema, *, actor, old=None, original=None, 
         difficulty=metadata.get("difficulty"), test_category=metadata.get("test_category"), case_name=metadata.get("case_name"),
         internal_only=bool((old and old.internal_only) or (original and (
             original.internal_only or original.analysis_purpose != "test"))),
-        original_analysis_id=old.original_analysis_id if old else original.id if original else None, created_by=actor)
+        original_analysis_id=old.original_analysis_id if old else original.id if original else None,
+        original_analysis_deleted=bool(old and old.original_analysis_deleted), created_by=actor)
     db.add(item)
     db.flush()
     return item

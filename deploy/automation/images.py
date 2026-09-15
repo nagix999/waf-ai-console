@@ -113,7 +113,7 @@ def build_waf(runner, settings, mode, fingerprint, owner):
     if source_fingerprint(root) != fingerprint:
         raise DeployError("source_changed_before_build")
     references = {}
-    for role, context, dockerfile in (("backend", root / "backend", root / "backend/Dockerfile"),
+    for role, context, dockerfile in (("backend", root, root / "backend/Dockerfile"),
                                       ("frontend", root, root / "frontend/Dockerfile")):
         regular_file(dockerfile)
         reference = "waf-ai-console-" + role + ":build-" + digest(owner)[:12] + "-" + fingerprint[:24]

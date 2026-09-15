@@ -29,6 +29,11 @@ export function serviceKeyError(error, { issuing = false } = {}) {
     service_api_key_name_exists: "같은 이름의 API Key가 이미 있습니다. 목록을 확인하고 다른 이름을 사용하세요.",
     service_api_key_not_found: "이 API Key를 찾을 수 없습니다. 목록을 새로고침해 주세요.",
     service_api_key_revoked: "이미 폐기된 API Key는 이름을 변경하거나 다시 활성화할 수 없습니다.",
+    service_api_key_name_confirmation_required: "키 이름을 정확히 입력하세요. 이름이 변경됐다면 삭제 창을 다시 열어 주세요.",
+    service_api_key_deletion_changed: "삭제 대상이 변경됐습니다. 대상 새로고침 후 건수와 키 이름을 다시 확인하세요.",
+    service_api_key_analyses_active: "대기·처리 중인 분석이 있습니다. 완료 후 삭제하거나 분석을 보존해 주세요.",
+    service_api_key_analyses_referenced: "기존 테스트 또는 다른 분석에서 참조 중인 결과가 있어 함께 삭제할 수 없습니다. 분석 보존을 선택하세요.",
+    analysis_deletion_production_only: "분석 함께 삭제는 Production 키에서만 사용할 수 있습니다.",
   };
   if (Object.hasOwn(messages, error?.message)) return messages[error.message];
   if (error?.status === 401) return "로그인 세션을 확인하고 다시 시도하세요.";
@@ -108,13 +113,16 @@ export function createServiceKeysController({ api, onChange }) {
     } catch (error) { if (!disposed) publish({ error: serviceKeyError(error) }); return false; }
     finally { publish({ busy: "" }); }
   }
-  async function remove(item) {
+  async function remove(item, options = {}) {
     if (blocked() || !item?.id) return false;
+    if (item.purpose !== "test" && options.confirm_name !== item.name) {
+      publish({ error: serviceKeyError(new Error("service_api_key_name_confirmation_required")) }); return false;
+    }
     publish({ busy: `delete-${item.id}`, error: "", notice: "" });
     try {
-      await api.deleteServiceApiKey(item.id);
+      await api.deleteServiceApiKey(item.id, item.purpose === "test" ? undefined : options);
       if (disposed) return false;
-      publish({ catalog: { items: state.catalog.items.filter(value => value.id !== item.id) }, notice: "API 키를 삭제했습니다. 분석 결과와 감사 이력은 보존됩니다.", ...(state.issued?.item.id === item.id ? { issued: null } : {}), ...(state.editing?.id === item.id ? { editing: null, editName: "" } : {}) });
+      publish({ catalog: { items: state.catalog.items.filter(value => value.id !== item.id) }, notice: options.delete_analyses ? "API 키와 해당 키로 접수한 분석을 삭제했습니다. 감사 이력과 검증 데이터셋 사본은 보존됩니다." : "API 키를 삭제했습니다. 분석 결과와 감사 이력은 보존됩니다.", ...(state.issued?.item.id === item.id ? { issued: null } : {}), ...(state.editing?.id === item.id ? { editing: null, editName: "" } : {}) });
       await refresh(); return true;
     } catch (error) {
       if (!disposed) { publish({ error: serviceKeyError(error), needsRefresh: true }); await refresh({ preserveError: true }); }

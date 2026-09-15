@@ -1,6 +1,8 @@
 """Bounded, local exports of one saved final result; no raw/Agent decryption.
 
-PDF and XLSX use the same allowlisted sections. XLSX is a deliberately small
+The analysis PDF endpoint uses web_report_pdf and the shared web component;
+render_pdf remains the legacy deterministic writer for existing callers/tests.
+XLSX is a deliberately small
 OOXML writer: text cells only, no formulas, links, macros or external resources.
 """
 from dataclasses import dataclass

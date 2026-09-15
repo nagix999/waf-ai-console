@@ -18,7 +18,7 @@ test("report explains appendix scope as plain text and keeps its full evidence b
   const html = renderToStaticMarkup(createElement(Report, { detail, mode: "preview", onModeChange() {} }));
   assert.doesNotMatch(html, /aria-label="문서 포함 범위 설명"|aria-label="보고서 설명"/);
   assert.doesNotMatch(html, /metric-help-trigger/);
-  assert.match(html, /화면과 Markdown에만 포함 · PDF·Excel 제외/);
+  assert.match(html, /화면·Markdown·PDF에 동일하게 적용/);
   assert.match(html, /aria-label="보고서 목차"/);
   assert.match(html, /파일 탐색 구문과 판정을 연결한 근거입니다/);
   assert.match(html, /&lt;img src=https:\/\/never.invalid&gt;/);

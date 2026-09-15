@@ -4,6 +4,8 @@ export function testComparisonChange(state, action) {
   if (action.type === "open") return { ...state, open: action.value };
   if (action.type === "draft") return { ...state, queryText: action.value };
   if (action.type === "search") return { ...state, query: { ...state.query, q: state.queryText.trim(), offset: 0 } };
+  if (action.type === "search_offset") return { ...state, query: { ...state.query, offset: action.value } };
+  if (action.type === "offset") return { ...state, offset: action.value };
   if (action.type === "search_page") return { ...state, query: { ...state.query, offset: Math.max(0, state.query.offset + action.direction * state.query.limit) } };
   if (action.type === "baseline") return { ...state, baselineId: action.id, offset: 0 };
   if (action.type === "changes") return { ...state, changes_only: action.value, offset: 0 };

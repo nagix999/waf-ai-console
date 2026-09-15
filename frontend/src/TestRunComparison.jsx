@@ -1,4 +1,5 @@
 import DataTable, { Table } from "./DataTable.jsx";
+import Pagination from "./Pagination.jsx";
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api.js";
 import { formatDate, formatDuration } from "./analysisView.js";
@@ -63,7 +64,7 @@ export function TestComparisonResult({ data, state, onChange, onOpen, onRefresh,
     <section><div className="panel-head"><h3>문항별 판정 변화</h3><button type="button" className="secondary" disabled={loading} onClick={onRefresh}>비교 결과 새로고침</button></div>
       <label className="comparison-checkbox"><input type="checkbox" checked={state.changes_only} disabled={loading} onChange={event => onChange({ type: "changes", value: event.target.checked })} />판정이 변경된 비교 가능 문항만 보기</label><p className="muted">이 필터와 페이지 변경은 위 지표·소요 시간의 전체 비교 분모를 바꾸지 않습니다.</p>
       {data.items.length ? <TestComparisonItems items={data.items} onOpen={onOpen} /> : <p className="muted">이 조건에 해당하는 비교 문항이 없습니다.</p>}
-      <div className="pagination"><span>{countText(data.total_items)}건 · {Math.floor(state.offset / state.limit) + 1}페이지</span><label>페이지당<select value={state.limit} disabled={loading} onChange={event => onChange({ type: "limit", value: Number(event.target.value) })}>{[25, 50, 100].map(value => <option key={value} value={value}>{value}건</option>)}</select></label><button type="button" className="secondary" disabled={loading || !state.offset} onClick={() => onChange({ type: "page", direction: -1 })}>이전</button><button type="button" className="secondary" disabled={loading || state.offset + state.limit >= data.total_items} onClick={() => onChange({ type: "page", direction: 1 })}>다음</button></div>
+      <Pagination label="비교 문항 페이지" total={data.total_items} limit={state.limit} offset={state.offset} disabled={loading} onOffsetChange={value => onChange({ type: "offset", value })} onLimitChange={value => onChange({ type: "limit", value })} />
     </section>
   </div>;
 }
@@ -95,7 +96,7 @@ export default function TestRunComparison({ candidateId, state: controlledState,
       <form className="test-run-search" onSubmit={event => { event.preventDefault(); change({ type: "search" }); }}><label>비교 기준 테스트명 검색<input value={state.queryText} placeholder="테스트명으로 찾기" maxLength={120} onChange={event => change({ type: "draft", value: event.target.value })} /></label><button type="submit" className="secondary" disabled={catalog.loading}>검색</button><button type="button" className="secondary" disabled={catalog.loading || (state.baselineId && result.loading)} onClick={() => setReload(value => value + 1)}>새로고침</button></form>
       {catalog.loading && <p role="status">비교 기준 목록을 조회하는 중…</p>}{catalog.error && <p className="error" role="alert">{catalog.error}</p>}
       {catalog.data && <><div className="comparison-baselines" aria-label="비교 기준 선택">{catalog.data.items.filter(run => run.id !== candidateId).map(run => <button type="button" className="secondary" key={run.id} aria-pressed={state.baselineId === run.id} onClick={() => change({ type: "baseline", id: run.id })}><strong>{run.name}</strong><small>{run.prompt_version || "프롬프트 미기록"} · {formatDate(run.created_at)}</small><span>{state.baselineId === run.id ? "선택된 비교 기준" : "이 실행을 기준으로 비교"}</span></button>)}</div>{!catalog.data.items.some(run => run.id !== candidateId) && <p className="muted">이 페이지에 비교할 다른 테스트가 없습니다. 다른 이름으로 검색하거나 페이지를 이동하세요.</p>}
-        <div className="pagination"><span>목록 {countText(catalog.data.total)}개 · 현재 실행은 선택 제외</span><button type="button" className="secondary" disabled={catalog.loading || !state.query.offset} onClick={() => change({ type: "search_page", direction: -1 })}>기준 목록 이전</button><button type="button" className="secondary" disabled={catalog.loading || state.query.offset + state.query.limit >= catalog.data.total} onClick={() => change({ type: "search_page", direction: 1 })}>기준 목록 다음</button></div></>}
+        <Pagination label="기준 테스트 목록 페이지" total={catalog.data.total} limit={state.query.limit} offset={state.query.offset} disabled={catalog.loading} unit="개" note="현재 실행은 선택 제외" onOffsetChange={value => change({ type: "search_offset", value })} /></>}
       {!state.baselineId ? <p className="muted">비교 기준을 선택하면 동일 문항의 지표와 판정 변화를 조회합니다.</p> : state.baselineId === candidateId ? <p className="error">다른 실행을 비교 기준으로 선택하세요.</p> : <>{result.loading && <p role="status">두 실행의 동일 문항을 비교하는 중…</p>}{result.error && <p className="error" role="alert">{result.error}</p>}{result.data && <TestComparisonResult data={result.data} state={state} onChange={change} onOpen={onOpen} onRefresh={() => setReload(value => value + 1)} loading={result.loading} />}</>}
     </>}
   </section>;
