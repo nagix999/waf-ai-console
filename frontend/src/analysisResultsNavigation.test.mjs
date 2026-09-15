@@ -16,7 +16,7 @@ const bundled = buildSync({
 }).outputFiles[0].text;
 const module = { exports: {} };
 runInNewContext(bundled, { module, exports: module.exports, require: createRequire(import.meta.url), process, URL, Date });
-const { AnalysisResultsPage, initialTestResultsState } = module.exports;
+const { AnalysisResultsPage, initialTestResultsState, TestResult } = module.exports;
 const noop = () => {};
 const props = (purpose = "test") => ({
   purpose, state: initialListState(purpose === "test" ? "production" : purpose),
@@ -24,6 +24,17 @@ const props = (purpose = "test") => ({
   onScopeChange: noop, onSelectRun: noop, onOpenRunItem: noop, onOpen: noop, onUnauthorized: noop,
 });
 const render = options => renderToStaticMarkup(createElement(AnalysisResultsPage, options));
+
+test("model validation result explains failed check codes even in old generic error records", () => {
+  const html = renderToStaticMarkup(createElement(TestResult, { profile: { name: "synthetic-model" }, test: {
+    status: "failed", mode: "full", error_code: "model_test_failed", error_message: "vllm did not return a completed non-refused response",
+    checks: [{ name: "concurrency", status: "failed", latency_ms: 12, error_code: "vllm_output_incomplete" }],
+  } }));
+  assert.match(html, /동시 요청 실패/); assert.match(html, /토큰 한도/); assert.match(html, /동시 요청 수가 1이어도/);
+  assert.match(html, /확인 내용/); assert.doesNotMatch(html, /non-refused|GPU 메모리/);
+  const failed = renderToStaticMarkup(createElement(TestResult, { profile: { name: "synthetic-model" }, test: { status: "failed", checks: [], error_code: "vllm_timeout" } }));
+  assert.match(failed, /제한 시간 안에/);
+});
 
 test("analysis results Test tab starts with named runs, not individual result/evaluation panes", () => {
   const html = render(props());

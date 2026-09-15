@@ -1,0 +1,11 @@
+.model-check-detail { display: grid; gap: 1rem; min-width: 0; }
+.model-check-detail h3, .model-check-detail p { margin: 0; }
+.model-check-detail > button { justify-self: start; }
+.model-check-table { max-width: 100%; overflow-x: auto; }
+.model-check-table table { width: 100%; border-collapse: collapse; }
+.model-check-table th, .model-check-table td { padding: .65rem .75rem; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--line, #e2e8f0); font-variant-numeric: tabular-nums; }
+@media (max-width: 520px) {
+  .model-check-table table { table-layout: fixed; }
+  .model-check-table th, .model-check-table td { padding: .65rem .35rem; white-space: normal; overflow-wrap: anywhere; }
+  .model-check-table th:first-child { width: 2.25rem; }
+}

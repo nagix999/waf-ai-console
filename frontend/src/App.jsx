@@ -33,6 +33,8 @@ import InputSchemaSettings, { InputSchemaMetadata } from "./InputSchemaSettings.
 import InternalEgressSettings from "./InternalEgressSettings.jsx";
 import ServiceApiKeys from "./ServiceApiKeys.jsx";
 import FullValidationDialog, { DatasetEvaluation } from "./FullValidationDialog.jsx";
+import ModelCheckDetail from "./ModelCheckDetail.jsx";
+import { modelCheckNames, modelValidationError } from "./modelCheckDiagnostics.js";
 import { createFullValidationController, datasetListState, emptyFullValidationState, expectedVerdictUploadError, uploadLabelNotice } from "./modelValidation.js";
 import { allowedInternalTarget, internalEgressError, internalTargetAddress, internalTargetURL, vllmTargetError } from "./internalEgress.js";
 import "./unifiedAnalysis.css";
@@ -788,17 +790,17 @@ export function ModelSettings({ onProductionChange, onInternalEgress, onViewData
 export function TestResult({ profile, test, onViewDataset }) {
   const [selected, setSelected] = useState(null);
   const [technical, setTechnical] = useState(false);
-  const names = { models: "모델 연결", basic_chat: "기본 응답", nested_json_schema: "출력 형식", waf_analysis_schema: "WAF 판정 형식", system_role: "지침 적용", near_configured_context: "긴 입력 처리", near_32k_context: "긴 입력 처리", concurrency: "동시 요청" };
   const checks = test.checks || [];
+  const failedCheck = checks.find(check => check.status === "failed");
   return <section className="panel test-result">
     <div className="panel-head"><div><h2>{test.name || profile.name} · {test.mode === "full" ? "전체 검증" : "빠른 테스트"}</h2><p className="ux-muted">저장 당시의 연결·기능 검증 결과입니다. 현재 설정이나 탐지 정확도는 별도 확인이 필요합니다.</p></div><Status value={test.status} /></div>
-    {test.error_message && <div className="error">검증을 완료하지 못했습니다. {test.error_code === "concurrency_limit_below_test" ? "Agent 설정 → 동시 처리의 서버 상한이 검증 요청 수보다 작습니다. 서버 상한 또는 프로필의 검증 동시 요청 수를 조정한 뒤 다시 실행하세요." : test.error_message.length <= 160 ? test.error_message : "오류 상세는 검증 기술정보에서 확인하세요."}</div>}
+    {(test.error_message || test.error_code || failedCheck) && <div className="error">{failedCheck && `${modelCheckNames[failedCheck.name] || "검증"} 실패 · `}{modelValidationError(failedCheck?.error_code || test.error_code)}</div>}
     <div className="check-grid">
-      {checks.map((check, index) => <article key={check.name}><div><strong>{names[check.name] || "기타 확인"}</strong><Status value={check.status} /></div><span>{formatDuration(check.latency_ms)}</span><button type="button" className="text-button" onClick={() => setSelected(index)}>확인 내용</button></article>)}
+      {checks.map((check, index) => <article key={check.name}><div><strong>{modelCheckNames[check.name] || "기타 확인"}</strong><Status value={check.status} /></div><span>{formatDuration(check.latency_ms)}</span><button type="button" className="text-button" onClick={() => setSelected(index)}>확인 내용</button></article>)}
       {!checks.length && <div className="empty">{["pending", "running"].includes(test.status) ? "검증 시작을 기다리고 있습니다." : "기록된 검증 항목이 없습니다."}</div>}
     </div>
     <button type="button" className="secondary" onClick={() => setTechnical(true)}>검증 기술정보</button>
-    <Dialog open={selected !== null} title="검증 항목 상세" onClose={() => setSelected(null)}>{selected !== null && <TextInspector label="검증 항목 기록" value={checks[selected]} />}</Dialog>
+    <Dialog open={selected !== null} title="검증 항목 상세" onClose={() => setSelected(null)}>{selected !== null && <ModelCheckDetail key={selected} check={checks[selected]} />}</Dialog>
     <Dialog open={technical} title="검증 기술정보" onClose={() => setTechnical(false)}><TextInspector label="검증 식별정보" value={{ test_id: test.id, profile_fingerprint: test.profile_fingerprint, error_code: test.error_code, error_message: test.error_message, created_at: test.created_at, completed_at: test.completed_at }} /></Dialog>
     <DatasetEvaluation test={test} onViewDataset={onViewDataset} />
   </section>;

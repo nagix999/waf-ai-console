@@ -21,6 +21,32 @@ from .provider_options import (
 )
 
 
+# Short technical probes need enough room for Gemma's response formatting.
+# This cap does not change the profile or the WAF Agent's output allowance.
+VLLM_PROBE_OUTPUT_TOKENS = 256
+_FINISH_REASONS = {"stop", "length", "content_filter", "tool_calls", "function_call", "abort", "error"}
+
+
+def _token_count(value: Any) -> int | None:
+    return value if type(value) is int and 0 <= value <= 2**53 - 1 else None
+
+
+def _response_diagnostics(body: Any) -> dict[str, Any]:
+    """Allowlisted metadata only: never retain content, refusal text or errors."""
+    body = body if isinstance(body, dict) else {}
+    usage = body.get("usage")
+    usage = usage if isinstance(usage, dict) else {}
+    choices = body.get("choices")
+    choice = choices[0] if isinstance(choices, list) and len(choices) == 1 and isinstance(choices[0], dict) else {}
+    reason = choice.get("finish_reason")
+    message = choice.get("message")
+    return {
+        "finish_reason": None if reason is None else reason if isinstance(reason, str) and reason in _FINISH_REASONS else "unknown",
+        "refused": message.get("refusal") not in (None, "") if isinstance(message, dict) else None,
+        **{name: _token_count(usage.get(name)) for name in ("prompt_tokens", "completion_tokens", "total_tokens")},
+    }
+
+
 @dataclass
 class VLLMTestResult:
     passed: bool
@@ -55,7 +81,13 @@ def safe_http_error(exc: Exception, provider: str = "vllm") -> CheckFailed:
             code = "vllm_target_not_allowed"
         return CheckFailed(code, "vLLM request blocked by the current Internal Egress policy")
     if isinstance(exc, CompletionRejected):
-        return CheckFailed(exc.code, f"{label} did not return a completed non-refused response")
+        messages = {
+            f"{provider}_output_incomplete": "출력이 토큰 한도에 도달해 중단되었습니다. 검증 항목 상세의 출력 한도·사용량과 서버의 문맥 길이 설정을 확인하세요.",
+            f"{provider}_refusal": "모델이 응답을 거절했습니다. 출력 길이 부족과는 다른 사유입니다. 서버의 거절 처리 설정을 확인하세요.",
+            f"{provider}_completion_not_finished": "모델이 정상 종료 상태로 응답하지 않았습니다. 검증 항목 상세의 종료 사유를 확인하세요.",
+            f"{provider}_invalid_response": "모델 응답이 비어 있거나 응답 형식이 올바르지 않습니다. 서버의 응답 형식 설정을 확인하세요.",
+        }
+        return CheckFailed(exc.code, messages.get(exc.code, f"{label} 응답을 검증하지 못했습니다."))
     if isinstance(exc, httpx.TimeoutException):
         return CheckFailed(f"{provider}_timeout", f"{label} request timed out")
     if isinstance(exc, httpx.ConnectError):
@@ -75,9 +107,9 @@ def chat_payload(
     **overrides: Any,
 ) -> dict[str, Any]:
     # Reasoning models may spend the completion allowance before visible text.
-    # OpenAI checks use the configured allowance rather than an artificial 8/64.
+    # OpenAI checks continue to use the configured allowance.
     if max_output_tokens is None:
-        max_output_tokens = profile.max_output_tokens if provider_name(profile) == "openai" else min(64, profile.max_output_tokens)
+        max_output_tokens = profile.max_output_tokens if provider_name(profile) == "openai" else min(VLLM_PROBE_OUTPUT_TOKENS, profile.max_output_tokens)
     payload: dict[str, Any] = {
         "model": profile.model_name,
         "messages": messages,
@@ -126,25 +158,54 @@ async def run_vllm_test(
         follow_redirects=False,
         trust_env=False,
     ) as client:
-        async def request_json(method: str, path: str, body: dict[str, Any] | None = None) -> tuple[dict[str, Any], float]:
+        request_records: list[dict[str, Any]] = []
+
+        async def request_json(
+            method: str, path: str, body: dict[str, Any] | None = None, *, request_index: int = 1,
+        ) -> tuple[dict[str, Any], float]:
             from .concurrency import call_slot
+            record = None
+            if method == "POST" and path == "/chat/completions":
+                record = {
+                    "request_index": request_index,
+                    "requested_max_output_tokens": _token_count((body or {}).get("max_completion_tokens" if provider == "openai" else "max_tokens")),
+                    "http_status": None,
+                    "error_code": None,
+                    **_response_diagnostics(None),
+                }
+                request_records.append(record)
             started = time.perf_counter()
-            async with call_slot(concurrency_engine, profile, egress_check,
-                                 timeout_seconds=profile.timeout_seconds + 5):
-                response = await client.request(method, f"{base_url}{path}", json=body)
-            elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
-            response.raise_for_status()
-            return response.json(), elapsed_ms
+            try:
+                async with call_slot(concurrency_engine, profile, egress_check,
+                                     timeout_seconds=profile.timeout_seconds + 5):
+                    response = await client.request(method, f"{base_url}{path}", json=body)
+                elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
+                if record is not None:
+                    record["http_status"] = response.status_code
+                response.raise_for_status()
+                result = response.json()
+                if record is not None:
+                    record.update(_response_diagnostics(result))
+                    # Record completion failures on the individual request,
+                    # including when other concurrent probes succeed or fail.
+                    completion_content(result, provider)
+                return result, elapsed_ms
+            except Exception as exc:
+                if record is not None:
+                    record["error_code"] = safe_http_error(exc, provider).code
+                raise
 
         async def check(
             name: str,
             operation: Callable[[], Awaitable[tuple[dict[str, Any], dict[str, Any]]]],
         ) -> bool:
+            request_records.clear()
             started = time.perf_counter()
             try:
                 detail, extra_metrics = await operation()
                 latency_ms = round((time.perf_counter() - started) * 1000, 2)
-                checks.append({"name": name, "status": "passed", "latency_ms": latency_ms, "detail": detail})
+                checks.append({"name": name, "status": "passed", "latency_ms": latency_ms, "detail": detail,
+                               "response_diagnostics": list(request_records)})
                 metrics.update(extra_metrics)
                 return True
             except Exception as exc:
@@ -157,6 +218,7 @@ async def run_vllm_test(
                         "latency_ms": latency_ms,
                         "error_code": safe.code,
                         "message": safe.safe_message,
+                        "response_diagnostics": list(request_records),
                     }
                 )
                 metrics["failed_check"] = name
@@ -286,12 +348,11 @@ async def run_vllm_test(
                         chat_payload(
                             profile,
                             [{"role": "user", "content": f"Synthetic context follows.\n{synthetic}\nReply OK."}],
-                            max_output_tokens=profile.max_output_tokens if provider == "openai" else 8,
                         ),
                     )
                     completion_content(body, provider)
-                    prompt_tokens = body.get("usage", {}).get("prompt_tokens")
-                    if type(prompt_tokens) is not int or prompt_tokens < 0:
+                    prompt_tokens = _response_diagnostics(body)["prompt_tokens"]
+                    if prompt_tokens is None:
                         raise CheckFailed("usage_missing", "Near-context response did not include prompt token usage")
                     utilization = round(prompt_tokens / profile.context_window, 4)
                     if utilization < 0.8:
@@ -310,12 +371,19 @@ async def run_vllm_test(
                         body, latency = await request_json(
                             "POST",
                             "/chat/completions",
-                            chat_payload(profile, [{"role": "user", "content": f"Concurrency test {index}. Reply OK."}], max_output_tokens=profile.max_output_tokens if provider == "openai" else 8),
+                            chat_payload(profile, [{"role": "user", "content": f"Concurrency test {index}. Reply OK."}]),
+                            request_index=index + 1,
                         )
                         completion_content(body, provider)
                         return latency
 
-                    durations = await asyncio.gather(*(one(index) for index in range(profile.test_concurrency)))
+                    # Settle every submitted probe before saving diagnostics and
+                    # closing the client. A failed probe still fails the check;
+                    # it is never retried or replaced with another response.
+                    durations = await asyncio.gather(*(one(index) for index in range(profile.test_concurrency)), return_exceptions=True)
+                    for duration in durations:
+                        if isinstance(duration, BaseException):
+                            raise duration
                     return {
                         "requests": len(durations),
                         "all_succeeded": True,

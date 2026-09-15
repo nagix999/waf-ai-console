@@ -84,7 +84,7 @@ def test_provider_checks_use_matching_options_and_store_no_response_text(monkeyp
         else:
             assert body["temperature"] == 0
             assert body["chat_template_kwargs"] == {"enable_thinking": False}
-            assert body["max_tokens"] in {8, 64}
+            assert body["max_tokens"] == 256
             assert "max_completion_tokens" not in body and "store" not in body
     stored = json.dumps(result.__dict__)
     for excluded in ["synthetic-content-must-not-be-stored", "synthetic-key", "synthetic-encrypted-key", "provider-metadata-must-not-be-stored"]:
