@@ -1,4 +1,4 @@
-"""Isolated, bounded PDF rendering from the shared React report template."""
+"""Isolated, bounded PDF rendering from the shared report text template."""
 import json
 import os
 import signal
@@ -14,8 +14,8 @@ MAX_PDF_INPUT_BYTES = 2 * 1024 * 1024
 
 
 def pdf_document(detail, *, decoding=None, include_appendix=False, theme="light"):
-    # Keep existing final/non-stub eligibility and bounds. The browser itself
-    # checks the shared Markdown/body limits including optional sections.
+    # Keep existing final/non-stub eligibility and bounds. The child also
+    # checks shared document/body limits including optional sections.
     build_report(detail)
     # Raw, extension values and intermediate role output must never be handed
     # to the rendering process, including when an older DB contains extras.
@@ -40,7 +40,7 @@ def pdf_document(detail, *, decoding=None, include_appendix=False, theme="light"
     return {"detail": clean, "decoding": decoding, "includeAppendix": include_appendix, "theme": theme}
 
 
-def render_web_pdf(document):
+def render_report_pdf(document):
     try:
         raw = json.dumps(document, ensure_ascii=False, allow_nan=False).encode()
     except (ValueError, UnicodeError, RecursionError):
@@ -50,11 +50,11 @@ def render_web_pdf(document):
     if not _SLOTS.acquire(blocking=False):
         raise ReportExportError("report_export_busy", 503)
     try:
-        # Do not give Chromium DB/key/provider credentials from the API env.
+        # Do not give the renderer DB/key/provider credentials from the API env.
         environment = {key: value for key, value in os.environ.items()
-            if key in {"PATH", "LANG", "LC_ALL", "PLAYWRIGHT_BROWSERS_PATH", "PYTHONPATH"}}
+            if key in {"PATH", "LANG", "LC_ALL", "PYTHONPATH"}}
         environment["PYTHONDONTWRITEBYTECODE"] = "1"
-        with subprocess.Popen([sys.executable, "-m", "app.services.web_report_renderer"],
+        with subprocess.Popen([sys.executable, "-m", "app.services.report_renderer"],
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                 env=environment, start_new_session=True) as process:
             try:

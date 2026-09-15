@@ -1,6 +1,6 @@
 """Bounded, local exports of one saved final result; no raw/Agent decryption.
 
-The analysis PDF endpoint uses web_report_pdf and the shared web component;
+The analysis PDF endpoint uses report_pdf and the shared report formatter;
 render_pdf remains the legacy deterministic writer for existing callers/tests.
 XLSX is a deliberately small
 OOXML writer: text cells only, no formulas, links, macros or external resources.

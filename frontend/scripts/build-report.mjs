@@ -1,10 +1,9 @@
-// Build the very same report component/CSS for the offline server renderer.
+// Bundle the shared text formatter for a one-shot Node process (no browser).
 import { build } from "esbuild";
 import { fileURLToPath } from "node:url";
 await build({
-  entryPoints: [fileURLToPath(new URL("../src/reportPdf.jsx", import.meta.url))],
-  outdir: fileURLToPath(new URL("../../backend/app/data/report-ui/", import.meta.url)),
-  bundle: true, minify: true, format: "iife", platform: "browser", jsx: "automatic",
-  define: { "process.env.NODE_ENV": '"production"' }, loader: { ".woff2": "dataurl" },
+  entryPoints: [fileURLToPath(new URL("../src/reportDocumentCli.js", import.meta.url))],
+  outfile: fileURLToPath(new URL("../../backend/app/data/report-document.cjs", import.meta.url)),
+  bundle: true, minify: true, format: "cjs", platform: "node", target: "node22",
   logLevel: "info",
 });

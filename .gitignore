@@ -22,4 +22,5 @@ __pycache__/
 node_modules/
 dist/
 backend/app/data/report-ui/
+backend/app/data/report-document.cjs
 .DS_Store

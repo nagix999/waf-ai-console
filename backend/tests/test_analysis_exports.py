@@ -203,8 +203,8 @@ def test_export_endpoints_require_admin(client, service_headers, format):
 @pytest.mark.parametrize("format", ["pdf", "xlsx"])
 def test_download_is_audited_no_store_and_does_not_decrypt_or_run_models(client, event_payload, monkeypatch, format):
     if format == "pdf":
-        # Renderer is exercised with real Chromium in test_web_report_pdf.
-        monkeypatch.setattr("app.api.analysis_exports.render_web_pdf", lambda document: b"%PDF-fixture")
+        # Renderer is exercised with ReportLab and the local formatter in test_report_pdf.
+        monkeypatch.setattr("app.api.analysis_exports.render_report_pdf", lambda document: b"%PDF-fixture")
     id = stored_analysis(client, event_payload)
     with client.app.state.session_factory() as db:
         row = db.get(Analysis, id)

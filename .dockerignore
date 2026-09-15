@@ -27,6 +27,7 @@ backend/*
 !backend/app/
 !backend/app/**
 backend/app/data/report-ui/
+backend/app/data/report-document.cjs
 
 # Keep secrets and generated/dependency directories excluded even under src/.
 **/.env*

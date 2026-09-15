@@ -56,11 +56,17 @@
 .report-back-top { margin-top: 20px; font-size: 11px; }
 .report-paper { width: 100%; min-width: 0; }
 .report-paper p, .report-paper li { max-width: 100%; }
-.report-evidence-group { margin: 20px 0; padding: 18px; border: 1px solid var(--line, #dce3eb); border-left: 4px solid #64748b; border-radius: 10px; background: var(--surface-alt, transparent); }
-.report-evidence-group.attack { border-left-color: #c34739; }
-.report-evidence-group.normal { border-left-color: #25826b; }
-.report-evidence-group h4 { margin-top: 0; font-size: 16px; }
+.report-evidence-group { --group-ink: #56667b; --group-tint: #f1f4f8; margin: 20px 0; padding: 0 18px 18px; border: 1px solid var(--line, #dce3eb); border-left: 4px solid var(--group-ink); border-radius: 10px; background: transparent; }
+.report-evidence-group.attack { --group-ink: #b94235; --group-tint: #fcf2ef; }
+.report-evidence-group.normal { --group-ink: #16775e; --group-tint: #eef8f3; }
+.report-evidence-group > h4 { margin: 0 -18px 18px; padding: 14px 18px; border-radius: 0 9px 0 0; background: var(--group-tint); color: var(--group-ink); font-size: 16px; }
 .report-evidence-group h5 { font-size: 14px; margin-bottom: 8px; }
+.report-evidence-group h5 ~ h5 { border-top: 1px solid var(--line); padding-top: 18px; }
+.report-evidence-group .report-excerpt { background: #f4f8f6; }
+[data-theme="dark"] .report-evidence-group { --group-ink: #bfcde1; --group-tint: #2d3d4c; }
+[data-theme="dark"] .report-evidence-group.attack { --group-ink: #ffa899; --group-tint: #49332e; }
+[data-theme="dark"] .report-evidence-group.normal { --group-ink: #8edbc2; --group-tint: #254339; }
+[data-theme="dark"] .report-evidence-group .report-excerpt { background: #243b33; }
 
 @media (max-width: 700px) {
   .report-toolbar { padding: 15px; gap: 14px; }

@@ -9,7 +9,7 @@ from ..security import Principal, require_scope
 from ..database import get_db
 from ..services.analysis import fetch_analysis, to_detail
 from ..services.analysis_exports import ReportExportError, build_report, render_xlsx
-from ..services.web_report_pdf import pdf_document, render_web_pdf
+from ..services.report_pdf import pdf_document, render_report_pdf
 from ..services.payload_decoding import decode_payload
 from .analyses import begin_analysis_read_snapshot, record_access
 
@@ -47,7 +47,7 @@ def _download(analysis_id, request, db, principal, format, *, include_appendix=F
     if format == "pdf" and include_decoding:
         record_access(db, principal, "export_analysis_pdf_decoding", "analysis", str(analysis_id))
     try:
-        body = render_web_pdf(report) if format == "pdf" else render_xlsx(report)
+        body = render_report_pdf(report) if format == "pdf" else render_xlsx(report)
     except ReportExportError as exc:
         raise HTTPException(exc.status_code, exc.code, headers=headers) from None
     except Exception:
