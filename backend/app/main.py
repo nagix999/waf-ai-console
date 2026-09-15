@@ -19,6 +19,8 @@ from .api.prompt_policies import router as prompt_policies_router
 from .api.internal_egress import router as internal_egress_router
 from .api.service_api_keys import router as service_api_keys_router
 from .api.test_runs import router as test_runs_router
+from .api.validation_datasets import router as validation_datasets_router
+from .api.test_sessions import router as test_sessions_router
 from .api.test_comparisons import router as test_comparisons_router
 from .api.input_schemas import router as input_schemas_router
 from .api.production_api import router as production_api_router
@@ -67,8 +69,8 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         version="0.2.0",
         description=(
             "WAF analysis ingestion and polling API. Service clients use X-API-Key. "
-            "POST /api/v1/analyses creates production analyses; administrator-only "
-            "test endpoints create test analyses. Use the returned id for polling and "
+            "POST /api/v1/analyses uses the service key's Production/Test purpose. "
+            "Test keys may group submissions with /api/v1/test-sessions. Use the returned id for polling and "
             "check status (pending/processing/completed/failed), not only HTTP status. "
             "Detailed integration contract: docs/Production_API_v0.1.md in the project."
         ),
@@ -99,6 +101,8 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
     app.include_router(internal_egress_router, prefix="/api/v1")
     app.include_router(service_api_keys_router, prefix="/api/v1")
     app.include_router(test_runs_router, prefix="/api/v1", responses=ANALYSIS_ERROR_RESPONSES)
+    app.include_router(validation_datasets_router, prefix="/api/v1")
+    app.include_router(test_sessions_router, prefix="/api/v1")
     app.include_router(test_comparisons_router, prefix="/api/v1", responses=ANALYSIS_ERROR_RESPONSES)
     app.include_router(input_schemas_router, prefix="/api/v1")
     app.include_router(production_api_router, prefix="/api/v1")
@@ -127,7 +131,8 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
     @app.middleware("http")
     async def no_stale_openapi(request: Request, call_next):
         response = await call_next(request)
-        if request.url.path == app.openapi_url:
+        if (request.url.path == app.openapi_url or request.url.path.startswith("/api/v1/validation-datasets")
+                or request.url.path.startswith("/api/v1/test-sessions") or request.url.path.endswith("/evaluation-labels")):
             response.headers["Cache-Control"] = "no-store"
         return response
 

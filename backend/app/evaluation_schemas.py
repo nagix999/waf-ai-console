@@ -167,6 +167,7 @@ class LabelConfirmResponse(BaseModel):
 
 class LabelHistoryItem(ReferenceLabel):
     created_by: str
+    comment: str = ""
 
 
 class LabelHistoryResponse(BaseModel):

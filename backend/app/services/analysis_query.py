@@ -97,7 +97,8 @@ def analysis_conditions(filters: AnalysisFilters, source_system: str | None, eva
                 members = members.where(getattr(TestRunItem, name) == value)
         conditions.append(Analysis.id.in_(members))
     if source_system is not None:
-        conditions.append(Analysis.source_system == source_system)
+        from .analysis_access import source_condition
+        conditions.append(source_condition(source_system))
     for field in TEXT_FIELDS:
         value = getattr(filters, field)
         if value is not None:

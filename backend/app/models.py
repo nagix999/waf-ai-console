@@ -133,6 +133,7 @@ class Analysis(Base):
     retry_of_analysis_id: Mapped[str | None] = mapped_column(ForeignKey("analyses.id", ondelete="RESTRICT"), unique=True)
     retry_idempotency_key: Mapped[str | None] = mapped_column(String(120), unique=True)
     execution_snapshot_ciphertext: Mapped[str | None] = mapped_column(Text)
+    internal_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
@@ -210,7 +211,6 @@ class AnalysisLabel(Base):
         CheckConstraint("revision > 0", name="ck_analysis_label_revision"),
         CheckConstraint("verdict IN ('true_positive', 'false_positive', 'inconclusive')", name="ck_analysis_label_verdict"),
         CheckConstraint("source_kind IN ('synthetic_expected', 'reference')", name="ck_analysis_label_source"),
-        CheckConstraint("verdict != 'inconclusive' OR source_kind = 'synthetic_expected'", name="ck_analysis_label_abstention"),
     )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     analysis_id: Mapped[str] = mapped_column(ForeignKey("analyses.id", ondelete="CASCADE"), nullable=False)
@@ -223,6 +223,8 @@ class AnalysisLabel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     attachment_id: Mapped[str] = mapped_column(String(36), nullable=False)
     token_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    comment_ciphertext: Mapped[str | None] = mapped_column(Text)
+    encryption_key_version: Mapped[str | None] = mapped_column(String(64))
 
 
 class AccessAudit(Base):
@@ -445,6 +447,9 @@ class TestRun(Base):
     source_system: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
     filename: Mapped[str | None] = mapped_column(String(255))
     dataset_hash: Mapped[str | None] = mapped_column(String(64))
+    dataset_version_id: Mapped[str | None] = mapped_column(ForeignKey("validation_dataset_versions.id", ondelete="RESTRICT"))
+    api_source_system: Mapped[str | None] = mapped_column(String(120), index=True)
+    accepting_items: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
     model_test_run_id: Mapped[str | None] = mapped_column(ForeignKey("vllm_test_runs.id", ondelete="RESTRICT"), unique=True)
     profile_id: Mapped[str | None] = mapped_column(ForeignKey("vllm_profiles.id", ondelete="RESTRICT"))
     profile_fingerprint: Mapped[str | None] = mapped_column(String(64))
@@ -494,6 +499,7 @@ class ServiceApiKey(Base):
     key_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     source_system: Mapped[str] = mapped_column(String(120), nullable=False)
     scopes_json: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    purpose: Mapped[str] = mapped_column(String(16), default="production", server_default="production", nullable=False)
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -501,3 +507,64 @@ class ServiceApiKey(Base):
     revoked_by: Mapped[str | None] = mapped_column(String(255))
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     deleted_by: Mapped[str | None] = mapped_column(String(255))
+
+
+class ValidationDataset(Base):
+    __tablename__ = "validation_datasets"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str] = mapped_column(String(1000), default="", nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ValidationDatasetVersion(Base):
+    __tablename__ = "validation_dataset_versions"
+    __table_args__ = (UniqueConstraint("dataset_id", "revision", name="uq_validation_dataset_revision"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    dataset_id: Mapped[str] = mapped_column(ForeignKey("validation_datasets.id", ondelete="RESTRICT"), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str] = mapped_column(String(1000), nullable=False)
+    item_version_ids: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class ValidationDatasetItem(Base):
+    """Immutable item revisions. A dataset version freezes membership by IDs."""
+    __tablename__ = "validation_dataset_items"
+    __table_args__ = (UniqueConstraint("item_id", "revision", name="uq_validation_item_revision"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    dataset_id: Mapped[str] = mapped_column(ForeignKey("validation_datasets.id", ondelete="RESTRICT"), nullable=False)
+    item_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    event_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    schema_snapshot_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    encryption_key_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    reference_verdict: Mapped[str | None] = mapped_column(String(32))
+    source_kind: Mapped[str] = mapped_column(String(32), default="reference", nullable=False)
+    ai_visible: Mapped[bool | None] = mapped_column(Boolean)
+    comment_ciphertext: Mapped[str | None] = mapped_column(Text)
+    difficulty: Mapped[str | None] = mapped_column(String(80))
+    test_category: Mapped[str | None] = mapped_column(String(120))
+    case_name: Mapped[str | None] = mapped_column(String(240))
+    internal_only: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    original_analysis_id: Mapped[str | None] = mapped_column(ForeignKey("analyses.id", ondelete="RESTRICT"))
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class TestEvaluation(Base):
+    __tablename__ = "test_evaluations"
+    __table_args__ = (UniqueConstraint("test_run_id", "revision", name="uq_test_evaluation_revision"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    test_run_id: Mapped[str] = mapped_column(ForeignKey("test_runs.id", ondelete="RESTRICT"), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    label_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    idempotency_key: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)

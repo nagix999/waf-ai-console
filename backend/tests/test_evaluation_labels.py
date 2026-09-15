@@ -164,12 +164,12 @@ def test_preview_errors_disable_confirmation_without_echoing_rows(client, event_
     assert counts(client)[0] == 0
 
 
-def test_reference_kind_cannot_treat_abstention_as_binary_ground_truth(client, event_payload, service_headers):
+def test_reference_kind_accepts_explicit_hold_for_three_way_evaluation(client, event_payload, service_headers):
     seed(client, event_payload, service_headers)
     login_admin(client)
     response = preview(client, [{"event_id": "label-event", "expected_verdict": "inconclusive"}], source_kind="reference")
-    assert response.json()["errors"][0]["code"] == "inconclusive_requires_synthetic_expected"
-    assert response.json()["preview_token"] is None
+    assert response.json()["errors"] == []
+    assert response.json()["preview_token"] is not None
 
 
 def test_scope_must_match_exact_source_and_service_key_cannot_attach(client, event_payload, service_headers):

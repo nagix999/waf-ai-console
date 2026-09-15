@@ -15,6 +15,7 @@ class Principal:
     username: str | None = None
     source_system: str | None = None
     service_api_key_id: str | None = None
+    purpose: str = "production"
 
 
 service_api_key = APIKeyHeader(name="X-API-Key", auto_error=False, scheme_name="ServiceAPIKey")
@@ -38,7 +39,7 @@ def get_principal(request: Request, supplied: Annotated[str | None, Depends(serv
         with request.app.state.session_factory() as db:
             key = authenticate_key(db, supplied)
             if key is not None:
-                principal = Principal(kind="service_api_key", source_system=key.source_system, scopes=frozenset(key.scopes_json), service_api_key_id=key.id)
+                principal = Principal(kind="service_api_key", source_system=key.source_system, scopes=frozenset(key.scopes_json), service_api_key_id=key.id, purpose=key.purpose)
                 db.commit()
                 return principal
     except SQLAlchemyError:

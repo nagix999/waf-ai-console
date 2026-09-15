@@ -8,6 +8,7 @@ export function readAppHash(hash) {
   if (["", "#", "#dashboard"].includes(hash)) return { page: "dashboard" };
   if (hash === "#production-api") return { page: "apiDocs" };
   if (hash === "#test") return { page: "test" };
+  if (hash === "#datasets") return { page: "datasets", datasetId: null };
   if (hash === "#analyses") return { page: "analyses", purpose: "" };
   if (hash === "#analyses/production") return { page: "analyses", purpose: "production" };
   if (hash === "#analyses/test") return { page: "analyses", purpose: "test", view: "runs" };
@@ -15,6 +16,7 @@ export function readAppHash(hash) {
   if (hash === "#settings") return { page: "settings", tab: "models" };
   if (hash === "#settings/prompts") return { page: "settings", tab: "agents" };
   const parts = typeof hash === "string" ? hash.slice(1).split("/") : [];
+  if (parts[0] === "datasets" && parts.length === 2 && uuid.test(parts[1])) return { page: "datasets", datasetId: parts[1].toLowerCase() };
   if (parts[0] === "settings" && parts.length === 2 && settingsTabs.has(parts[1])) return { page: "settings", tab: parts[1] };
   if (parts[0] === "test-runs" && parts.length === 2 && uuid.test(parts[1])) return { page: "analyses", purpose: "test", view: "runs", runId: parts[1].toLowerCase() };
   if (parts[0] === "analyses" && [2, 3].includes(parts.length) && uuid.test(parts[1]) && (parts.length === 2 || detailTabs.has(parts[2]))) {
@@ -27,6 +29,7 @@ export function readAppHash(hash) {
 export function writeAppHash(state) {
   if (state.page === "apiDocs") return "#production-api";
   if (state.page === "test") return "#test";
+  if (state.page === "datasets") return uuid.test(state.datasetId || "") ? `#datasets/${state.datasetId.toLowerCase()}` : "#datasets";
   if (state.page === "settings") return `#settings/${settingsTabs.has(state.settingsTab) ? state.settingsTab : "models"}`;
   if (state.page === "detail") {
     if (!uuid.test(state.selectedId || "")) return "#analyses";
@@ -46,6 +49,7 @@ export function writeAppHash(state) {
 export function applyAppRoute(state, route) {
   if (!route) return state;
   const next = { ...state, page: route.page };
+  if (route.page === "datasets") next.datasetId = route.datasetId;
   if (route.page === "settings") next.settingsTab = route.tab;
   if (route.page === "detail") {
     next.selectedId = route.id;

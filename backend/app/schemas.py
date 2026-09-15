@@ -184,6 +184,7 @@ class PrincipalResponse(BaseModel):
     username: str | None = None
     source_system: str | None = None
     scopes: list[str]
+    purpose: Literal["production", "test"] | None = None
 
 
 class UploadResponse(BaseModel):

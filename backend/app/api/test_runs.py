@@ -6,7 +6,9 @@ from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..models import TestRun
+from ..models import TestRun, TestEvaluation
+from ..validation_data_schemas import EvaluationCreate
+from ..services.manual_references import create_evaluation, evaluation_record
 from ..security import Principal, require_scope
 from ..test_run_schemas import TestRunCreate, TestRunDetail, TestRunList
 from ..services.analysis import AnalysisIngestError
@@ -86,6 +88,7 @@ def list_test_runs(db: DbSession, _principal: Admin, limit: int = Query(20, ge=1
 
 @router.get("/{run_id}", response_model=TestRunDetail)
 def get_test_run(run_id: str, db: DbSession, _principal: Admin,
+                 evaluation_id: str | None = Query(None, max_length=36),
                  limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0),
                  difficulty: str | None = Query(None, max_length=80),
                  test_category: str | None = Query(None, max_length=120),
@@ -100,7 +103,28 @@ def get_test_run(run_id: str, db: DbSession, _principal: Admin,
     run = db.get(TestRun, run_id)
     if run is None:
         raise HTTPException(404, "test_run_not_found")
+    if evaluation_id:
+        evaluation = db.get(TestEvaluation, evaluation_id)
+        if evaluation is None or evaluation.test_run_id != run.id:
+            raise HTTPException(404, "test_evaluation_not_found")
     return describe_run(db, run, limit=limit, offset=offset, difficulty=difficulty,
         test_category=test_category, status=status, evaluation_outcome=evaluation_outcome,
         reference_verdict=reference_verdict, verdict=verdict,
-        difficulty_missing=difficulty_missing, test_category_missing=test_category_missing)
+        difficulty_missing=difficulty_missing, test_category_missing=test_category_missing, evaluation_id=evaluation_id)
+
+
+@router.get("/{run_id}/evaluations")
+def evaluations(run_id: str, db: DbSession, _principal: Admin):
+    if db.get(TestRun, run_id) is None:
+        raise HTTPException(404, "test_run_not_found")
+    return {"items": [evaluation_record(row) for row in db.scalars(select(TestEvaluation)
+        .where(TestEvaluation.test_run_id == run_id).order_by(TestEvaluation.revision.desc()))]}
+
+
+@router.post("/{run_id}/evaluations", status_code=201)
+def rescore(run_id: str, payload: EvaluationCreate, db: DbSession, principal: Admin):
+    try:
+        return create_evaluation(db, run_id, payload, principal.username or "admin")
+    except AnalysisIngestError as exc:
+        db.rollback()
+        raise HTTPException(exc.status_code, exc.code) from None

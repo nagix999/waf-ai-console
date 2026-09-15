@@ -28,7 +28,7 @@ class ServiceApiKeyError(ValueError):
 def to_key_item(key: ServiceApiKey) -> ServiceApiKeyItem:
     return ServiceApiKeyItem(
         id=key.id, name=key.name, key_prefix=key.key_prefix, source_system=key.source_system,
-        scopes=sorted(key.scopes_json), created_at=key.created_at,
+        scopes=sorted(key.scopes_json), created_at=key.created_at, purpose=key.purpose,
         last_used_at=key.last_used_at, revoked_at=key.revoked_at,
     )
 
@@ -41,7 +41,7 @@ def issue_key(db: Session, payload: ServiceApiKeyCreate, actor: str) -> tuple[Se
     key = ServiceApiKey(
         id=str(identity), name=payload.name, key_prefix=prefix,
         key_hash=hashlib.sha256(raw.encode("ascii")).hexdigest(),
-        source_system=payload.source_system, scopes_json=sorted(payload.scopes), created_by=actor,
+        source_system=payload.source_system, scopes_json=sorted(payload.scopes), created_by=actor, purpose=payload.purpose,
     )
     db.add(key)
     db.flush()
@@ -88,6 +88,8 @@ def authenticate_key(db: Session, supplied: str) -> ServiceApiKey | None:
         return None
     # Directly modified database rows cannot grant admin or internal namespaces.
     scopes = key.scopes_json
+    if key.purpose not in {"production", "test"}:
+        return None
     if not valid_service_source(key.source_system) or not isinstance(scopes, list) or not scopes or any(type(scope) is not str or scope not in {"ingest", "review"} for scope in scopes) or len(scopes) != len(set(scopes)):
         return None
     now = utcnow()

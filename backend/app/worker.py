@@ -831,9 +831,11 @@ def _process_moduagent_steps(
         if normalized_url != profile.base_url:
             raise WorkerExecutionError("production_model_profile_url_not_normalized")
         provider = profile.provider
-        egress_check = role_request_check(db.get_bind(), profile, request_check, require_verified=False)
+        egress_check = role_request_check(db.get_bind(), profile, request_check, require_verified=False,
+                                          internal_only=analysis.internal_only)
         verifier_check = role_request_check(db.get_bind(), verifier_profile, request_check,
-            require_verified=verifier_profile.id != profile.id and not analysis.model_test_run_id)
+            require_verified=verifier_profile.id != profile.id and not analysis.model_test_run_id,
+            internal_only=analysis.internal_only)
         verifier_key = crypto.decrypt_text(verifier_profile.api_key_ciphertext) if verifier_profile.api_key_ciphertext else None
         verifier_metadata = role_metadata(verifier_profile)
         profile_metadata = {
@@ -1114,7 +1116,7 @@ def _organize_evidence(db, crypto, analysis, run, sequence, snapshot, request_ch
                     presentation.update(status="fallback", reason="input_budget_exceeded")
                 else:
                     key = crypto.decrypt_text(profile.api_key_ciphertext) if profile.api_key_ciphertext else None
-                    check = role_request_check(db.get_bind(), profile, request_check)
+                    check = role_request_check(db.get_bind(), profile, request_check, internal_only=analysis.internal_only)
                     metadata["llm_called"] = True
                     # Includes at most 90 s of queue + execution. The executor
                     # separately limits model response time to at most 30 s.

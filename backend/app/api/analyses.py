@@ -45,7 +45,8 @@ def require_source(principal: Principal) -> str:
 
 
 def visible_source(principal: Principal) -> str | None:
-    return None if "admin" in principal.scopes else require_source(principal)
+    from ..services.analysis_access import ServiceAnalysisScope
+    return None if "admin" in principal.scopes else ServiceAnalysisScope(require_source(principal), principal.purpose)
 
 
 def begin_analysis_read_snapshot(db: Session) -> None:
@@ -93,7 +94,29 @@ async def create_analysis(
     db: DbSession,
     principal: Annotated[Principal, Depends(require_scope("ingest"))],
     wait_seconds: int = Query(default=0, ge=0, le=60),
+    test_run_id: str | None = Query(default=None, max_length=36),
 ) -> AnalysisDetail:
+    if principal.purpose == "test":
+        if set(request.query_params) - {"wait_seconds", "test_run_id"}:
+            raise HTTPException(422, "unsupported_query_parameter")
+        from ..services.test_api import ingest
+        from .validation_datasets import errors
+        with errors(db):
+            run, items = ingest(db, request.app.state.crypto, request.app.state.settings, principal,
+                                [payload.model_dump(mode="json")], run_id=test_run_id)
+        item = items[0][0]
+        if not item.analysis_id:
+            raise HTTPException(413 if item.error_code == "payload_too_large" else 422, item.error_code or "invalid_test_event")
+        row = fetch_analysis(db, item.analysis_id, visible_source(principal))
+        deadline = asyncio.get_running_loop().time() + wait_seconds
+        while wait_seconds and row.status in {"pending", "processing"} and asyncio.get_running_loop().time() < deadline:
+            await asyncio.sleep(0.25)
+            db.expire_all()
+            row = fetch_analysis(db, item.analysis_id, visible_source(principal))
+        row._test_run_id = run.id
+        if row.status in {"pending", "processing"}:
+            response.status_code = 202
+        return to_detail(row, request.app.state.crypto)
     return await submit_analysis(payload, request, response, db, principal, wait_seconds, "production", "service_api")
 
 
@@ -256,7 +279,7 @@ def create_review(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="analysis_not_found")
     if analysis.event_id != payload.event_id:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="event_id_mismatch")
-    source_system = require_source(principal)
+    source_system = analysis.source_system if principal.purpose == "test" else require_source(principal)
     existing = db.scalar(
         select(Review).where(
             Review.source_system == source_system,
@@ -368,7 +391,30 @@ async def upload_events(
     db: DbSession,
     principal: Annotated[Principal, Depends(require_scope("ingest"))],
     file: UploadFile = File(...),
+    test_run_id: str | None = Query(default=None, max_length=36),
 ) -> UploadResponse:
+    if principal.purpose == "test":
+        if set(request.query_params) - {"test_run_id"}:
+            raise HTTPException(422, "unsupported_query_parameter")
+        content = await file.read(request.app.state.settings.upload_max_bytes + 1)
+        await file.close()
+        if len(content) > request.app.state.settings.upload_max_bytes:
+            raise HTTPException(413, "upload_too_large")
+        try:
+            rows = parse_upload(file.filename or "", content)
+        except (UploadFormatError, ValueError, RecursionError, UnicodeError):
+            raise HTTPException(422, "invalid_test_document") from None
+        from ..services.test_api import ingest
+        from .validation_datasets import errors
+        with errors(db):
+            run, items = ingest(db, request.app.state.crypto, request.app.state.settings, principal,
+                                rows, run_id=test_run_id, upload=True)
+        return UploadResponse(accepted=sum(item.ingest_status == "accepted" and not duplicate for item, duplicate in items),
+            duplicates=sum(duplicate for _, duplicate in items), rejected=sum(item.ingest_status == "rejected" for item, _ in items),
+            analysis_ids=[item.analysis_id for item, _ in items if item.analysis_id],
+            errors=[{"row": item.row_number, "message": item.error_code} for item, _ in items if item.error_code][:100],
+            label_attached=sum(bool(item.label_id) and not duplicate for item, duplicate in items),
+            label_unchanged=sum(bool(item.label_id) and duplicate for item, duplicate in items), test_run_id=run.id)
     return await submit_upload(request, db, principal, file, "production", "file_upload")
 
 

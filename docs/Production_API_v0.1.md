@@ -33,12 +33,14 @@ X-API-Key: <SERVICE_API_KEY>
 
 ## 목적과 유입 경로
 
-클라이언트가 목적을 정하는 입력 필드는 없다. 서버가 접수 경로로 결정한다.
+클라이언트가 목적을 정하는 입력 필드는 없다. 서버가 API 키 용도와 접수 경로로 결정한다. 기존 키는 Production이며, 설정 → API 키에서 Test 키도 발급할 수 있다. 같은 용도·연동 시스템의 키만 데이터 범위를 공유한다.
 
 | 접수 경로 | 권한 | `analysis_purpose` | `ingest_channel` |
 | --- | --- | --- | --- |
-| `POST /analyses` | ingest | `production` | `service_api` |
-| `POST /uploads` | ingest | `production` | `file_upload` |
+| `POST /analyses` | Production 키 · ingest | `production` | `service_api` |
+| `POST /analyses` | Test 키 · ingest | `test` | `service_api` |
+| `POST /uploads` | Production 키 · ingest | `production` | `file_upload` |
+| `POST /uploads` | Test 키 · ingest | `test` | `file_upload` |
 | `POST /test-analyses` | admin | `test` | `test_lab` |
 | `POST /test-uploads` | admin | `test` | `file_upload` |
 | `POST /test-runs` | admin | `test` | `test_lab` |
@@ -49,6 +51,16 @@ X-API-Key: <SERVICE_API_KEY>
 웹의 **테스트 분석**은 사용자 테스트명을 받는 `/test-runs`와 `/test-runs/uploads`를 사용한다. 접수 당시 **Test 용도로 지정한 프로필**·프롬프트를 고정하고 일반 분석 worker를 사용한다. 실제 모델 모드에서 Test가 미지정이면 409이며 Production으로 대체하지 않는다. Production과 Test는 각각 전체 검증을 통과한 프로필만 지정할 수 있다. 기존 `/test-analyses`·`/test-uploads`도 이제 필수 query `name`, `idempotency_key`를 받아 이름 있는 실행에 연결하며 기존 응답에 `test_run_id`를 추가한다. 이름·키 없는 관리자 테스트 접수는 422다. Production 접수 계약은 그대로다. 설정의 테스트 데이터 150건 검증은 후보 프로필·model-test worker를 유지한다. 상세 계약은 [테스트 실행 및 평가 정의서](Test_Runs_and_Evaluation_v0.1.md)를 따른다.
 
 기존 데이터는 이벤트명이나 ID 접두사로 추정하지 않는다. `전체` 조회에 포함되지만 운영·테스트 필터에는 포함되지 않는다. 분류와 유입 경로는 LLM 판정 입력에 추가하지 않는다.
+
+### Test API 키 사용
+
+Test 키로 같은 `/analyses`, `/uploads`를 호출하면 Test 모델·동시 처리 설정을 사용한다. 모델이 없거나 검증되지 않았으면 접수를 거부하며 Production으로 대체하지 않는다. 응답의 `test_run_id`로 테스트 결과를 확인한다. 단건 JSON에는 답안을 넣지 않으며, Test 파일의 최상위 `expected_verdict`는 이벤트와 분리해 저장한다.
+
+여러 요청을 묶으려면 먼저 `POST /api/v1/test-sessions`에 `{ "name": "테스트명", "idempotency_key": "클라이언트-고유-요청키" }`를 보낸다. name은 생략하면 자동 생성한다. 받은 id를 `POST /analyses?test_run_id=<id>` 또는 `POST /uploads?test_run_id=<id>`에 전달하고, 접수가 끝나면 `POST /test-sessions/<id>/close`로 닫는다. `GET /test-sessions/<id>`에서 결과·지표를 확인한다. 이는 Test 키 전용이며 동일 용도·연동 시스템의 키만 접근한다.
+
+실행 ID 없이 보내면 단건 또는 파일별 테스트를 자동 생성한다. 단건은 같은 연동 시스템과 event_id의 동일 요청을 재전송해도 중복 실행하지 않는다. 같은 ID의 입력 변경은 409다. 같은 이벤트를 새로 평가하려면 새 test-session을 생성한다. 파일은 전체 내용이 같으면 같은 테스트를 반환한다. 명시한 session은 닫기 전까지 최대 5,000행을 받으며 닫은 뒤에는 이미 접수된 동일 요청만 확인할 수 있다. 응답 source_system은 서버가 만든 테스트 영역이며 키의 연동 시스템과 다를 수 있다.
+
+테스트 모델·지침·입력 스키마·최초 답안은 접수 시 고정한다. 참고 답안 수정과 별도 재평가는 관리자 화면에서 수행한다. API 테스트가 열려 있거나 문항 처리 중이면 재평가할 수 없다. Production 키에 test_run_id를 전달하면 422이며 목적을 바꾸지 않는다.
 
 ## 단건 분석 접수
 
@@ -422,7 +434,7 @@ Content-Type: multipart/form-data
 ]
 ```
 
-`samples/waf-dummy-v1/reference/*_answers.json`도 사용 가능하며 source_kind는 synthetic_expected를 선택한다. 난이도·심각도·해설·원문 발췌는 이번 평가에 사용하지 않는다. reference는 정탐/오탐의 이진 기준이며 inconclusive 기대값은 synthetic_expected에만 허용한다. WAF Action D/A는 Label이 아니다.
+`samples/waf-dummy-v1/reference/*_answers.json`도 사용 가능하며 source_kind는 synthetic_expected를 선택한다. 난이도·심각도·해설·원문 발췌는 이번 평가에 사용하지 않는다. reference와 synthetic_expected 모두 정탐·오탐·보류 답안을 허용한다. 보류 답안은 3×3 행렬과 보류 관련 지표에 집계하며 기존 이진 지표에는 넣지 않는다. WAF Action D/A는 Label이 아니다.
 
 서버는 정확한 `(source_system, event_id)`로 기존 분석만 찾고 신규 연결·기존 값·변경·미연결·파일 내 중복을 미리 보여 준다. 현재 웹 목록의 검색 필터는 연결 범위를 제한하지 않는다. 파일의 source나 ID가 맞지 않으면 분석을 새로 만들거나 다른 source로 자동 매칭하지 않는다.
 

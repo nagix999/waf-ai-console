@@ -100,9 +100,6 @@ def preview_labels(db: Session, *, answers: list, source_system: str, source_kin
         if not isinstance(verdict, str) or verdict not in {"true_positive", "false_positive", "inconclusive"}:
             errors.append(LabelPreviewIssue(row_number=number, code="invalid_reference_verdict", field="expected_verdict"))
             continue
-        if verdict == "inconclusive" and source_kind != "synthetic_expected":
-            errors.append(LabelPreviewIssue(row_number=number, code="inconclusive_requires_synthetic_expected", field="expected_verdict"))
-            continue
         if event_id in seen:
             errors.append(LabelPreviewIssue(row_number=number, code="duplicate_answer_event_id", field="event_id"))
             continue

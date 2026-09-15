@@ -61,6 +61,10 @@ class TestRunSummary(UTCResponse):
     prompt_policy_version_id: str | None = None
     model_test_run_id: str | None
     evaluation_summary: EvaluationSummary
+    evaluation_id: str | None = None
+    evaluation_revision: int = 0
+    dataset_version_id: str | None = None
+    accepting_items: bool = False
     started_at: datetime | None
     completed_at: datetime | None
     total_elapsed_ms: int

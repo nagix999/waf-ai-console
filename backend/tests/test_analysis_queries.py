@@ -66,6 +66,9 @@ def query_rows(client, event_payload):
     ({"created_from": "2026-09-01T09:00:00+09:00", "created_to": "2026-09-02T00:00:00Z"}, 0),
 ])
 def test_filters_and_count_share_predicates(client, service_headers, query_rows, params, index):
+    # Cross-purpose filtering is an administrator operation. Production keys
+    # now deliberately cannot see Test results, even with the same source.
+    client.post("/api/v1/auth/login", json={"username": "admin", "password": "test-password"})
     response = client.get("/api/v1/analyses", headers=service_headers, params=params)
     assert response.status_code == 200, response.text
     body = response.json()
@@ -76,6 +79,7 @@ def test_filters_and_count_share_predicates(client, service_headers, query_rows,
 
 
 def test_combined_filters_pagination_and_timing(client, service_headers, query_rows):
+    client.post("/api/v1/auth/login", json={"username": "admin", "password": "test-password"})
     all_rows = client.get("/api/v1/analyses?limit=2", headers=service_headers).json()
     assert all_rows["total"] == 3
     assert [row["id"] for row in all_rows["items"]] == [query_rows[2], query_rows[1]]

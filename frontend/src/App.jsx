@@ -16,6 +16,9 @@ import AnalysisDownloads from "./AnalysisDownloads.jsx";
 import { analysisElapsedTime, analysisQuery, analysisReceivedAt, analysisRowState, appliedFilterTags, dashboardListState, executionDuration, formatDate, formatDuration, initialListState, removeAppliedFilter, searchFields, uploadErrorText, validateFilters } from "./analysisView.js";
 import { EXTERNAL_DATA_APPROVAL, changeProfileProvider, editProfileForm, modelProfileError, newProfileForm, profilePayload, profileRequiresKey, providerLabel, providerOf, validateProfileForm } from "./llmProfiles.js";
 import { CompactEvaluationDetail, CompactReferenceComparison, EvaluationSummary, LabelAttachment } from "./ReferenceLabels.jsx";
+import AnalysisSelectionActions, { useAnalysisSelection } from "./AnalysisSelection.jsx";
+import DataManagement from "./DataManagement.jsx";
+import DatasetAnalysis from "./DatasetAnalysis.jsx";
 import { evaluationOutcomes, isMockAnalysis, labelSources, referenceVerdicts } from "./labelEvaluation.js";
 import { createDetailLoader, emptyDetailState } from "./detailLoader.js";
 import { analysisNotices, analystFieldLabel, analystFollowUp, analystGuidance, analystItems, analystSummary, analystText, finalValue, groupedEvidence, hasTuningContent, isTechnicalText } from "./analystView.js";
@@ -134,19 +137,20 @@ export function Login({ onLogin }) {
 }
 
 
-export function AnalysisTable({ items, onOpen, title = "분석 결과", subtitle, total = items.length, loading = false, purpose = "" }) {
+export function AnalysisTable({ items, onOpen, title = "분석 결과", subtitle, total = items.length, loading = false, purpose = "", selection }) {
   const showPurpose = !["test", "production", "legacy_unknown"].includes(purpose);
   return (
     <section className="panel">
       <div className="panel-head"><div><h2>{title}</h2>{subtitle && <small>{subtitle}</small>}</div><span className="count-label" aria-live="polite">{loading ? "조회 중…" : `${total.toLocaleString()}건`}</span></div>
       <div className="table-wrap">
-        <table className="analyst-table unified-analysis-table">
-          <thead><tr><th scope="col">판정 / 심각도</th><th scope="col">이벤트 / 요약</th><th scope="col">회사 / 연결</th><th scope="col">참고 답안 비교</th><th scope="col">전체 소요 시간</th><th scope="col">접수 시각</th></tr></thead>
+        <table className={`analyst-table unified-analysis-table${selection ? " with-selection" : ""}`}>
+          <thead><tr>{selection && <th className="selection-cell" scope="col">{selection.header}</th>}<th scope="col">판정 / 심각도</th><th scope="col">이벤트 / 요약</th><th scope="col">회사 / 연결</th><th scope="col">참고 답안 비교</th><th scope="col">전체 소요 시간</th><th scope="col">접수 시각</th></tr></thead>
           <tbody>
             {items.map((item) => {
               const state = analysisRowState(item.status);
               const receivedAt = analysisReceivedAt(item.created_at);
               return <tr key={item.id} className={state.className}>
+                {selection && <td className="selection-cell">{selection.cell(item.id, item.signature || item.event_name || "분석")}</td>}
                 <td className="table-meta unified-decision">{item.status === "completed" ? <><Status value={finalValue(item, "verdict")} /><Severity value={item.severity} /><span className="sr-only">{state.label}</span></> : <span className="analysis-row-state"><Icon name={item.status === "failed" ? "alert" : "clock"} size={14} />{state.label}</span>}{isMockAnalysis(item) && <small className="label-revision">모의 판정 · LLM 아님</small>}{item.input_truncated === true && <small>입력 일부 생략</small>}</td>
                 <td className="table-meta analyst-event unified-event"><button className="text-button unified-event-title" onClick={() => onOpen(item.id)}>{item.signature || item.event_name || "분석 상세 보기"}</button><SummaryPreview text={analystSummary(item)} />{showPurpose && <Purpose value={item.analysis_purpose} />}</td>
                 <td className="table-meta unified-company"><strong title={item.company_name || ""}>{item.company_name}</strong><small title={`${item.src_ip || "-"}${item.src_port != null ? ` : ${item.src_port}` : ""}`}>{item.src_ip || "-"}{item.src_port != null ? ` : ${item.src_port}` : ""}</small><small title={`${item.dest_ip || "-"}${item.dest_port != null ? ` : ${item.dest_port}` : ""}`}>→ {item.dest_ip || "-"}{item.dest_port != null ? ` : ${item.dest_port}` : ""}</small></td>
@@ -155,7 +159,7 @@ export function AnalysisTable({ items, onOpen, title = "분석 결과", subtitle
                 <td><time className="analysis-received-at" dateTime={receivedAt.dateTime}><span>{receivedAt.date}</span><small>{receivedAt.time}</small></time></td>
               </tr>;
             })}
-            {!items.length && <tr><td colSpan="6" className="empty"><Icon name="search" size={28} /><strong>{loading ? "분석을 불러오는 중…" : "조건에 맞는 분석이 없습니다."}</strong>{!loading && <small>검색 조건을 조정하거나 테스트 데이터를 접수해 보세요.</small>}</td></tr>}
+            {!items.length && <tr><td colSpan={selection ? 7 : 6} className="empty"><Icon name="search" size={28} /><strong>{loading ? "분석을 불러오는 중…" : "조건에 맞는 분석이 없습니다."}</strong>{!loading && <small>검색 조건을 조정하거나 테스트 데이터를 접수해 보세요.</small>}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -201,6 +205,7 @@ export function AnalysisList({ state, setState, onOpen, onUnauthorized, onScopeC
   const [labelRefresh, setLabelRefresh] = useState(0);
   const [attachmentOpen, setAttachmentOpen] = useState(false);
   const query = useMemo(() => analysisQuery(state.applied, state.limit, state.offset), [state.applied, state.limit, state.offset]);
+  const selection = useAnalysisSelection(data.items, JSON.stringify(query));
   useEffect(() => {
     let active = true;
     let timer;
@@ -298,7 +303,8 @@ export function AnalysisList({ state, setState, onOpen, onUnauthorized, onScopeC
     </form>
     {error && <div className="error" role="alert">{error}</div>}
     <EvaluationOverview summary={data.evaluation_summary} loading={loading} error={error} />
-    <AnalysisTable items={data.items} total={data.total} loading={loading} onOpen={onOpen} purpose={state.applied.analysis_purpose} />
+    <AnalysisSelectionActions ids={selection.ids} onClear={selection.clear} onSaved={() => setLabelRefresh(value => value + 1)} />
+    <AnalysisTable items={data.items} total={data.total} loading={loading} onOpen={onOpen} purpose={state.applied.analysis_purpose} selection={selection} />
     <div className="pagination">
       <label>페이지당<select value={state.limit} onChange={(event) => { const limit = Number(event.target.value); setState((current) => ({ ...current, limit, offset: 0 })); }}>{[25, 50, 100].map((limit) => <option key={limit} value={limit}>{limit}건</option>)}</select></label>
       <span aria-live="polite">{data.total ? `${state.offset + 1}–${Math.min(state.offset + state.limit, data.total)} / ${data.total.toLocaleString()}건` : "0건"} · {currentPage} / {pageCount}페이지</span>
@@ -328,11 +334,12 @@ export function TestAnalysisPage({ onViewTests, onOpen, selectedRunId, onSelectR
     <div className="ux-toolbar"><span className="ux-grow ux-muted">새 테스트</span><button type="button" className="secondary" onClick={onViewTests}>테스트 결과 보기</button></div>
     <TestModelNotice state={testModels} agentMode={agentMode} onRefresh={loadTestModel} onConfigure={onConfigureModels} />
     <div className="tabs" role="tablist" aria-label="테스트 입력 방식">
-      {[["direct", "단건 분석"], ["file", "배치 파일 분석"]].map(([value, label]) => <button key={value} id={`test-input-${value}`} type="button" role="tab" aria-controls={`test-panel-${value}`} aria-selected={inputMode === value} onClick={() => setInputMode(value)}>{label}</button>)}
+      {[["direct", "단건 분석"], ["file", "배치 파일 분석"], ["dataset", "검증 데이터셋 분석"]].map(([value, label]) => <button key={value} id={`test-input-${value}`} type="button" role="tab" aria-controls={`test-panel-${value}`} aria-selected={inputMode === value} onClick={() => setInputMode(value)}>{label}</button>)}
     </div>
     {/* Keep both forms mounted so switching input methods retains drafts and upload results. */}
     <div id="test-panel-direct" role="tabpanel" aria-labelledby="test-input-direct" hidden={inputMode !== "direct"}><SingleTest onCreated={createdRun} disabledReason={testBlocked} /></div>
     <div id="test-panel-file" role="tabpanel" aria-labelledby="test-input-file" hidden={inputMode !== "file"}><UploadPage onViewTests={onViewTests} onOpen={onOpen} onCreated={createdRun} disabledReason={testBlocked} /></div>
+    <div id="test-panel-dataset" role="tabpanel" aria-labelledby="test-input-dataset" hidden={inputMode !== "dataset"}><DatasetAnalysis onCreated={createdRun} disabledReason={testBlocked} /></div>
   </div>;
 }
 
@@ -451,6 +458,7 @@ function Detail({ id, onBack, onOpen, backLabel = "분석 결과", tab: controll
     api.rawEvent(id, { signal: controller.signal }).then((value) => { if (active) setRaw(value); }).catch((err) => { if (active) setRawError(err.message); });
     return () => { active = false; controller.abort(); };
   }, [id, raw, tab, decodingOpen, rawAttempt]);
+  const referenceActions = <AnalysisSelectionActions ids={[id]} single onSaved={() => loader.current?.refresh()} />;
   const navigation = <div className="panel-head-inline"><button className="back" onClick={onBack}>← {backLabel}</button><div className="ux-toolbar">{detail && <RetryAnalysis key={id} detail={detail} onOpen={onOpen} />}{detail && <AnalysisDownloads id={id} status={detail.status} />}<button type="button" className="secondary" disabled={loading || labelsLoading || runsLoading} onClick={() => loader.current?.refresh()}>새로고침</button></div></div>;
   if (!detail || view.id !== id) return <div className="page-stack">{navigation}{error ? <div className="error" role="alert">{error}</div> : <div className="loading">불러오는 중…</div>}</div>;
   const durationFallback = ["pending", "processing"].includes(detail.status) ? "진행 중" : "측정 전 데이터";
@@ -469,6 +477,7 @@ function Detail({ id, onBack, onOpen, backLabel = "분석 결과", tab: controll
         {notices.map((notice) => <small className="analyst-notice" key={notice}>{notice}</small>)}
       </section>
       <CompactEvaluationDetail detail={detail} history={labelHistory} historyError={labelHistoryError} />
+      {referenceActions}
       <section className="detail-summary panel">
         <div><span>회사</span><strong>{detail.company_name || "미기록"}</strong></div>
         <div><span>출발지 IP / 포트</span><strong>{detail.src_ip || "미기록"}</strong><small>{detail.src_port ?? "포트 미기록"}</small></div>
@@ -876,15 +885,16 @@ export default function App() {
     move(current => ({ ...current, resultsPurpose: purpose, testResults: { ...current.testResults, view: "runs", runId: null }, listState: purpose === "test" ? current.listState : { ...current.listState, offset: 0, draft: { ...current.listState.draft, analysis_purpose: purpose }, applied: { ...current.listState.applied, analysis_purpose: purpose } } }));
   }
   function navigate(value) {
-    move(current => ({ ...current, page: value, ...(value === "analyses" ? { testResults: { ...current.testResults, view: "runs", runId: null } } : {}) }));
+    move(current => ({ ...current, page: value, ...(value === "datasets" ? { datasetId: null } : {}), ...(value === "analyses" ? { testResults: { ...current.testResults, view: "runs", runId: null } } : {}) }));
   }
   function backFromDetail() {
     const targetPage = detailReturnPage === "testRun" ? "analyses" : detailReturnPage;
     navigation.backTo(candidate => isDetailOrigin(screen, candidate), current => ({ ...current, page: targetPage }));
   }
-  const title = { dashboard: "대시보드", analyses: "분석 결과", test: "테스트 분석", apiDocs: "Production API", settings: "설정", detail: "분석 상세" }[page];
+  const title = { dashboard: "대시보드", analyses: "분석 결과", test: "테스트 분석", datasets: "데이터 관리", apiDocs: "Production API", settings: "설정", detail: "분석 상세" }[page];
   const description = {
     dashboard: "운영 분석 현황과 평가 추이를 확인합니다.",
+    datasets: "검증 문항과 참고 답안을 모아 반복 테스트에 사용합니다.",
     analyses: resultsPurpose === "test" ? "테스트별 판정 결과와 평가 지표를 확인합니다." : "분석을 검색하고 판정과 근거를 확인합니다.",
     test: "단건 요청이나 파일을 테스트합니다.",
     apiDocs: "운영 연동에 필요한 API 사용 방법입니다.",
@@ -899,7 +909,7 @@ export default function App() {
         <div className="brand"><span className="brand-mark"><Icon name="shield" size={23} /></span><div><strong>WAF AI<span>Console</span></strong><small>SECURITY OPERATIONS</small></div></div>
         <div className="nav-section-label">분석 공간</div>
         <nav aria-label="주 메뉴">
-          {[['dashboard','대시보드'],['analyses','분석 결과'],['test','테스트 분석'],['apiDocs','Production API'],['settings','설정']].map(([value,label]) => <button key={value} aria-current={page === value || (page === "detail" && value === (detailReturnPage === "testRun" ? "analyses" : detailReturnPage)) ? "page" : undefined} onClick={() => navigate(value)}><Icon name={value} size={19} /><span>{label}</span></button>)}
+          {[['dashboard','대시보드'],['analyses','분석 결과'],['test','테스트 분석'],['datasets','데이터 관리'],['apiDocs','Production API'],['settings','설정']].map(([value,label]) => <button key={value} aria-current={page === value || (page === "detail" && value === (detailReturnPage === "testRun" ? "analyses" : detailReturnPage)) ? "page" : undefined} onClick={() => navigate(value)}><Icon name={value === "datasets" ? "file" : value} size={19} /><span>{label}</span></button>)}
         </nav>
         <div className="model-note"><div className="model-note-heading"><Icon name="server" size={16} /><span>지정된 운영 모델</span></div><strong>{productionName}</strong><span className="sidebar-mode">{mode === "stub" ? "모의 분석" : mode === "moduagent" ? "모델 분석 설정" : "설정 확인 중"}</span></div>
         <div className="sidebar-footer"><span>INTERNAL WORKSPACE</span><span>v0.2.0</span></div>
@@ -914,6 +924,7 @@ export default function App() {
           {page === "analyses" && <AnalysisResultsPage purpose={resultsPurpose} onScopeChange={changeResultsScope} state={listState} setState={setListState} testState={testResults} setTestState={setTestResults} onSelectRun={openTestRun} onOpenRunItem={openRunItem} onOpen={openDetail} onUnauthorized={onUnauthorized} onShowTestRuns={backToTests} onShowAllTestItems={showAllTestItems} />}
           {page === "test" && <TestAnalysisPage onViewTests={viewTests} onOpen={openTest} selectedRunId={null} onSelectRun={openTestRun} agentMode={mode} onConfigureModels={() => move(current => ({ ...current, page: "settings", settingsTab: "agents" }))} />}
           {page === "apiDocs" && <ProductionApi />}
+          {page === "datasets" && <DataManagement key={screen.datasetId || "list"} id={screen.datasetId} onSelect={id => move(current => ({ ...current, page: "datasets", datasetId: id }))} />}
           {page === "settings" && <Settings onProductionChange={setProductionName} onViewDataset={viewDataset} tab={settingsTab} onTabChange={tab => move(current => ({ ...current, settingsTab: tab }))} />}
           {page === "detail" && <Detail key={selectedId} id={selectedId} onBack={backFromDetail} onOpen={id => move(current => ({ ...current, selectedId: id, detailTab: "result" }))} tab={detailTab} onTabChange={tab => navigation.navigate(current => ({ ...current, detailTab: tab }))} backLabel={detailReturnPage === "testRun" ? "테스트 실행 결과" : detailReturnPage === "test" ? "테스트 분석" : detailReturnPage === "dashboard" ? "대시보드" : "분석 결과"} />}
         </div>

@@ -1,6 +1,6 @@
 import { matrixDrilldown } from "./evaluationMetrics.js";
 
-export const runKinds = { direct: "단건 분석", upload: "배치 파일 분석", model_validation: "150건 모델 검증" };
+export const runKinds = { direct: "단건 분석", upload: "배치 파일 분석", dataset: "검증 데이터셋 분석", api: "API 테스트", model_validation: "150건 모델 검증" };
 export const runStatuses = { pending: "대기", processing: "진행 중", completed: "처리 완료", failed: "실행 실패" };
 
 export function newTestRequestKey() {
@@ -29,8 +29,8 @@ export function validateTestName(name) {
   return typeof name !== "string" || !name.trim() || name.trim().length > 120 ? "테스트명을 1~120자로 입력하세요." : "";
 }
 
-export function testRunQuery({ difficulty = "", test_category = "", difficulty_missing = false, test_category_missing = false, status = "", evaluation_outcome = "", cell = "", offset = 0, limit = 25 } = {}) {
-  return Object.fromEntries(Object.entries({ limit, offset, ...(difficulty_missing ? { difficulty_missing: true } : { difficulty }), ...(test_category_missing ? { test_category_missing: true } : { test_category }), status, evaluation_outcome, ...matrixDrilldown(cell) }).filter(([, value]) => value !== ""));
+export function testRunQuery({ difficulty = "", test_category = "", difficulty_missing = false, test_category_missing = false, status = "", evaluation_outcome = "", evaluation_id = "", cell = "", offset = 0, limit = 25 } = {}) {
+  return Object.fromEntries(Object.entries({ limit, offset, ...(difficulty_missing ? { difficulty_missing: true } : { difficulty }), ...(test_category_missing ? { test_category_missing: true } : { test_category }), status, evaluation_outcome, evaluation_id, ...matrixDrilldown(cell) }).filter(([, value]) => value !== ""));
 }
 
 export function testScopeSelection(name, value) {

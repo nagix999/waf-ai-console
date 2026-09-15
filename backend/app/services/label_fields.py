@@ -4,4 +4,5 @@ LABEL_FIELDS = frozenset({
     "expected_severity", "evaluation", "evaluation_label", "evaluation_result", "evaluation_outcome",
     "label_source_kind", "label_source_ref", "label_ai_visible", "is_correct", "answer", "answers",
     "difficulty", "case_name", "important_evidence", "verification_notes_ko", "rationale_ko",
+    "reference_verdict", "reference_comment",
 })

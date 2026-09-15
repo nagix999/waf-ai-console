@@ -39,7 +39,7 @@ def dashboard_summary(
     selected_key = None
     if service_api_key_id is not None:
         selected_key = db.get(ServiceApiKey, service_api_key_id)
-        if selected_key is None or selected_key.deleted_at is not None:
+        if selected_key is None or selected_key.deleted_at is not None or selected_key.purpose != "production":
             raise HTTPException(404, "service_api_key_not_found")
     scope = [Analysis.analysis_purpose == "production", Analysis.retry_of_analysis_id.is_(None),
              Analysis.created_at >= created_from, Analysis.created_at < created_to]

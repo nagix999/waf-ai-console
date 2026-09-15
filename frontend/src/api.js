@@ -23,6 +23,20 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  validationDatasets: (query = {}, options = {}) => request(`/api/v1/validation-datasets?${new URLSearchParams(query)}`, { ...options, cache: "no-store" }),
+  validationDataset: (id, query = {}, options = {}) => request(`/api/v1/validation-datasets/${encodeURIComponent(id)}?${new URLSearchParams(query)}`, { ...options, cache: "no-store" }),
+  createValidationDataset: payload => request("/api/v1/validation-datasets", { method: "POST", body: JSON.stringify(payload) }),
+  updateValidationDataset: (id, payload) => request(`/api/v1/validation-datasets/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteValidationDataset: (id, revision) => request(`/api/v1/validation-datasets/${encodeURIComponent(id)}`, { method: "DELETE", body: JSON.stringify({ expected_revision: revision }) }),
+  datasetItem: (id, item, version) => request(`/api/v1/validation-datasets/${encodeURIComponent(id)}/items/${encodeURIComponent(item)}${version ? `?version_id=${encodeURIComponent(version)}` : ""}`, { cache: "no-store" }),
+  saveDatasetItem: (id, item, payload) => request(`/api/v1/validation-datasets/${encodeURIComponent(id)}/items${item ? `/${encodeURIComponent(item)}` : ""}`, { method: item ? "PUT" : "POST", body: JSON.stringify(payload) }),
+  deleteDatasetItem: (id, item, revision) => request(`/api/v1/validation-datasets/${encodeURIComponent(id)}/items/${encodeURIComponent(item)}`, { method: "DELETE", body: JSON.stringify({ expected_revision: revision }) }),
+  importDatasetAnalyses: (id, payload) => request(`/api/v1/validation-datasets/${encodeURIComponent(id)}/imports`, { method: "POST", body: JSON.stringify(payload) }),
+  runValidationDataset: (id, payload) => request(`/api/v1/validation-datasets/${encodeURIComponent(id)}/runs`, { method: "POST", body: JSON.stringify(payload) }),
+  referenceSelection: ids => request("/api/v1/evaluation-labels/selection", { method: "POST", body: JSON.stringify({ analysis_ids: ids }) }),
+  saveReferences: payload => request("/api/v1/evaluation-labels/bulk", { method: "POST", body: JSON.stringify(payload) }),
+  testEvaluations: id => request(`/api/v1/test-runs/${encodeURIComponent(id)}/evaluations`, { cache: "no-store" }),
+  rescoreTest: (id, key) => request(`/api/v1/test-runs/${encodeURIComponent(id)}/evaluations`, { method: "POST", body: JSON.stringify({ idempotency_key: key }) }),
   agentSettings: (options = {}) => request("/api/v1/admin/agent-settings", { ...options, cache: "no-store" }),
   concurrencySettings: (options = {}) => request("/api/v1/admin/agent-settings/concurrency", { ...options, cache: "no-store" }),
   updateConcurrencySettings: payload => request("/api/v1/admin/agent-settings/concurrency", { method: "PUT", body: JSON.stringify(payload), cache: "no-store" }),

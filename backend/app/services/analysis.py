@@ -235,7 +235,8 @@ def check_duplicate(existing: Analysis, crypto: CryptoService, fingerprint: str,
 def fetch_analysis(db: Session, analysis_id: str, source_system: str | None = None) -> Analysis | None:
     query = select(Analysis).options(selectinload(Analysis.reviews)).where(Analysis.id == analysis_id)
     if source_system is not None:
-        query = query.where(Analysis.source_system == source_system)
+        from .analysis_access import source_condition
+        query = query.where(source_condition(source_system))
     row = db.scalar(query)
     if row is not None:
         attach_evaluations(db, [row])

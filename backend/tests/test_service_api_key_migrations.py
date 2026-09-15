@@ -7,7 +7,7 @@ from alembic import command
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
-from sqlalchemy import ForeignKeyConstraint, MetaData, inspect, text
+from sqlalchemy import ForeignKeyConstraint, MetaData, Table, inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from app.config import Settings
@@ -28,7 +28,7 @@ def synthetic_row(**overrides):
     return {
         "id": "synthetic-key-id", "name": "Synthetic key", "key_prefix": "synthetic-public-prefix",
         "key_hash": "0" * 64, "source_system": "synthetic", "scopes_json": ["ingest"],
-        "created_by": "synthetic-admin", **overrides,
+        "created_by": "synthetic-admin", "created_at": utcnow(), **overrides,
     }
 
 
@@ -102,11 +102,14 @@ def test_migration_enforces_unique_name_and_hash(tmp_path, duplicate):
             with Operations.context(MigrationContext.configure(connection)):
                 migration_module().downgrade()
                 migration_module().upgrade()
-            connection.execute(ServiceApiKey.__table__.insert().values(**synthetic_row()))
+            # Exercise the actual 0008 shape; current ORM defaults include
+            # purpose, which is intentionally only introduced by 0017.
+            table = Table("service_api_keys", MetaData(), autoload_with=connection)
+            connection.execute(table.insert().values(**synthetic_row()))
             row = synthetic_row(id="second-synthetic", name="Second synthetic", key_hash="1" * 64)
             row[duplicate] = synthetic_row()[duplicate]
             with pytest.raises(IntegrityError):
-                connection.execute(ServiceApiKey.__table__.insert().values(**row))
+                connection.execute(table.insert().values(**row))
     finally:
         engine.dispose()
 

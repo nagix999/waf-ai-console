@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..models import AccessAudit, Analysis, AnalysisLabel, TestRun, TestRunItem, VLLMProfile
+from ..models import AccessAudit, Analysis, AnalysisLabel, TestEvaluation, TestRun, TestRunItem, VLLMProfile
 from ..schemas import AnalysisInput
 from ..test_run_schemas import TestRunCreate, TestRunDetail, TestRunItemResponse, TestRunSummary
 from .analysis import AnalysisIngestError
@@ -126,7 +126,7 @@ def pin_item_prompt(analysis, run):
     analysis.prompt_version = run.prompt_version
 
 
-def add_run_items(db, crypto, settings, run, rows, *, ai_visible=None, source_ref="test-upload:expected_verdict"):
+def add_run_items(db, crypto, settings, run, rows, *, ai_visible=None, source_ref="test-upload:expected_verdict", trusted_items=None):
     if not rows or len(rows) > MAX_TEST_ITEMS:
         raise AnalysisIngestError("test_item_count_out_of_range", 422)
     try:
@@ -134,7 +134,12 @@ def add_run_items(db, crypto, settings, run, rows, *, ai_visible=None, source_re
     except InputSchemaError as exc:
         raise AnalysisIngestError(exc.code, exc.status_code) from None
     prompt = load_analysis_prompt(run, crypto)
-    for number, raw in enumerate(rows, 1):
+    start = db.scalar(select(func.max(TestRunItem.row_number)).where(TestRunItem.test_run_id == run.id)) or 0
+    if start + len(rows) > MAX_TEST_ITEMS:
+        raise AnalysisIngestError("test_item_count_out_of_range", 422)
+    for position, raw in enumerate(rows):
+        number = start + position + 1
+        trusted = trusted_items[position] if trusted_items else {}
         item = TestRunItem(test_run_id=run.id, row_number=number, ingest_status="rejected")
         try:
             event, expected, metadata = split_test_metadata(raw)
@@ -150,20 +155,24 @@ def add_run_items(db, crypto, settings, run, rows, *, ai_visible=None, source_re
             with db.begin_nested():
                 first = db.scalar(select(TestRunItem).where(TestRunItem.test_run_id == run.id,
                     TestRunItem.event_id == payload.event_id, TestRunItem.ingest_status == "accepted"))
+                if trusted.get("source_system"):
+                    first = None
                 if first is not None and expected is not None:
                     label = db.get(AnalysisLabel, first.label_id) if first.label_id else None
                     if label is None or label.verdict != expected:
                         raise AnalysisIngestError("expected_verdict_conflict", 409)
                 analysis, duplicate, _ = enqueue_test_upload_row(
-                    db, crypto, run.source_system, payload, expected_verdict=expected,
+                    db, crypto, trusted.get("source_system", run.source_system), payload, expected_verdict=expected,
                     actor=run.created_by, commit=False, payload_max_bytes=settings.payload_max_bytes,
-                    attachment_id=run.model_test_run_id or run.id, ai_visible=ai_visible, label_source_ref=source_ref,
+                    attachment_id=run.model_test_run_id or run.id, ai_visible=trusted.get("ai_visible", ai_visible), label_source_ref=source_ref,
+                    source_kind=trusted.get("source_kind", "synthetic_expected"), comment=trusted.get("comment", ""),
                     ingest_channel="model_validation" if run.model_test_run_id else "test_lab" if run.kind == "direct" else "file_upload",
                     schema_snapshot=snapshot,
                     prompt_snapshot=prompt,
                 )
                 if not duplicate:
                     pin_item_prompt(analysis, run)
+                    analysis.internal_only = bool(trusted.get("internal_only", False))
                 if run.model_test_run_id:
                     analysis.model_test_run_id = run.model_test_run_id
                 item.analysis_id = analysis.id
@@ -210,7 +219,9 @@ def enqueue_named_run(db, crypto, settings, *, name, idempotency_key, rows, kind
         raise
 
 
-def fixed_reference_relation(run_id):
+def fixed_reference_relation(run_id, evaluation=None):
+    if evaluation is not None:
+        return evaluation_relation(select(AnalysisLabel).where(AnalysisLabel.id.in_(evaluation.label_ids)).subquery())
     labels = select(AnalysisLabel).join(TestRunItem, TestRunItem.label_id == AnalysisLabel.id).where(
         TestRunItem.test_run_id == run_id, TestRunItem.ingest_status == "accepted").subquery()
     return evaluation_relation(labels)
@@ -231,11 +242,14 @@ def run_cohort(run_id, difficulty=None, test_category=None, difficulty_missing=F
 
 def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=None,
                  status=None, evaluation_outcome=None, reference_verdict=None, verdict=None, detail=True,
-                 difficulty_missing=False, test_category_missing=False):
+                 difficulty_missing=False, test_category_missing=False, evaluation_id=None):
     read_snapshot(db)
     cohort = run_cohort(run.id, difficulty, test_category, difficulty_missing, test_category_missing)
     accepted_ids = select(TestRunItem.analysis_id).where(*cohort, TestRunItem.ingest_status == "accepted")
-    relation = fixed_reference_relation(run.id)
+    evaluation = db.get(TestEvaluation, evaluation_id) if evaluation_id else None
+    if evaluation_id and (evaluation is None or evaluation.test_run_id != run.id):
+        raise AnalysisIngestError("test_evaluation_not_found", 404)
+    relation = fixed_reference_relation(run.id, evaluation)
     evaluation_summary = summarize_evaluations(db, relation, [Analysis.id.in_(accepted_ids)])
     counts = dict(db.execute(select(TestRunItem.ingest_status, func.count()).where(
         *cohort).group_by(TestRunItem.ingest_status)).all())
@@ -260,6 +274,9 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
         prompt_version=run.prompt_version, model_test_run_id=run.model_test_run_id,
         prompt_policy_version_id=run.prompt_policy_version_id,
         evaluation_summary=evaluation_summary,
+        evaluation_id=evaluation.id if evaluation else None,
+        evaluation_revision=evaluation.revision if evaluation else 0,
+        dataset_version_id=run.dataset_version_id, accepting_items=run.accepting_items,
         started_at=started, completed_at=finished, total_elapsed_ms=elapsed,
     )
     if not detail:

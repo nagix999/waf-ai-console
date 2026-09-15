@@ -29,6 +29,7 @@ class ServiceApiKeyRename(BaseModel):
 
 
 class ServiceApiKeyCreate(ServiceApiKeyRename):
+    purpose: Literal["production", "test"] = "production"
     source_system: str = Field(min_length=1, max_length=120)
     scopes: list[ServiceScope] = Field(min_length=1, max_length=2)
 
@@ -48,6 +49,7 @@ class ServiceApiKeyCreate(ServiceApiKeyRename):
 
 
 class ServiceApiKeyItem(BaseModel):
+    purpose: Literal["production", "test"] = "production"
     id: str
     name: str
     key_prefix: str

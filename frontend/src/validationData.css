@@ -1,0 +1,30 @@
+.data-form { display: grid; gap: 16px; }
+.panel > .data-form { padding: 0 20px 20px; }
+.data-form label { display: grid; gap: 7px; }
+.data-form textarea { width: 100%; resize: vertical; }
+.data-form .event-editor { font-family: ui-monospace, monospace; min-height: 260px; }
+.data-form .event-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.data-form .event-fields .full-width { grid-column: 1 / -1; }
+.dataset-list { display: grid; gap: 14px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.dataset-list article { display: grid; align-content: start; gap: 12px; padding: 20px; }
+.dataset-list article p { color: var(--muted); overflow-wrap: anywhere; }
+.selection-actions { margin: 12px 0; }
+.selection-cell { width: 40px !important; min-width: 40px !important; text-align: center; }
+.selection-cell input, .selection-actions input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--primary, #1767b2); }
+.unified-analysis-table.with-selection th:nth-child(2) { width: 118px; }
+.unified-analysis-table.with-selection th:nth-child(3) { width: auto; }
+.unified-analysis-table.with-selection th:nth-child(4) { width: 182px; }
+.unified-analysis-table.with-selection th:nth-child(5) { width: 162px; }
+.unified-analysis-table.with-selection th:nth-child(6) { width: 108px; }
+.unified-analysis-table.with-selection th:nth-child(7) { width: 143px; }
+.test-run-items.with-selection td:nth-child(2) { width: auto; }
+.test-run-items.with-selection td:nth-child(2) small { display: block; -webkit-line-clamp: unset; overflow: visible; }
+.test-run-items.with-selection td:nth-child(3) { width: 37%; }
+.dataset-restriction { color: var(--muted); font-size: 13px; }
+.dataset-version-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 16px 20px; }
+.dataset-version-bar label { display: flex; gap: 8px; align-items: center; min-width: 280px; white-space: nowrap; }
+.dataset-version-bar label select { width: auto; min-width: 0; flex: 1; }
+.reference-history { padding-left: 22px; }
+.reference-history li { padding: 10px 0; }
+.reference-history p { white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 700px) { .data-form .event-fields { grid-template-columns: 1fr; } .dataset-version-bar label { width: 100%; min-width: 0; } }

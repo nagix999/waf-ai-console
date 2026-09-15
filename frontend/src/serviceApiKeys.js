@@ -7,6 +7,7 @@ export function serviceKeyNameError(name) {
 }
 
 export function validateServiceKeyDraft(draft) {
+  if (draft.purpose && !["production", "test"].includes(draft.purpose)) return "키 용도를 선택하세요.";
   const nameError = serviceKeyNameError(draft.name);
   if (nameError) return nameError;
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$/.test(draft.source_system) || draft.source_system.toLowerCase() === "admin-ui" || draft.source_system.toLowerCase().startsWith("waf-internal-")) return "연동 시스템은 1~120자의 영문·숫자·._-로 입력하세요. admin-ui와 waf-internal-로 시작하는 값은 대소문자와 관계없이 예약되어 있습니다.";
@@ -19,6 +20,7 @@ export function serviceKeyMetadata(item) {
   const value = {};
   for (const field of ["id", "name", "key_prefix", "source_system", "created_at", "last_used_at", "revoked_at"]) value[field] = item[field] ?? null;
   value.scopes = Array.isArray(item.scopes) ? item.scopes.filter(scope => knownScopes.includes(scope)) : [];
+  value.purpose = item.purpose || "production";
   return value;
 }
 
@@ -36,7 +38,7 @@ export function serviceKeyError(error, { issuing = false } = {}) {
     : "서비스 API Key 요청을 처리하지 못했습니다. 연결 상태를 확인하고 다시 시도하세요.";
 }
 
-export const emptyServiceKeyDraft = () => ({ name: "", source_system: "", scopes: [] });
+export const emptyServiceKeyDraft = () => ({ name: "", source_system: "", scopes: [], purpose: "production" });
 export const emptyServiceKeysState = () => ({ catalog: null, loading: false, busy: "", needsRefresh: false, error: "", notice: "", issued: null, draft: emptyServiceKeyDraft(), editing: null, editName: "" });
 
 export function createServiceKeysController({ api, onChange }) {
@@ -58,12 +60,12 @@ export function createServiceKeysController({ api, onChange }) {
       return false;
     }
   }
-  function update(field, value) { if (!state.busy && ["name", "source_system", "scopes"].includes(field)) publish({ draft: { ...state.draft, [field]: value } }); }
+  function update(field, value) { if (!state.busy && ["name", "source_system", "scopes", "purpose"].includes(field)) publish({ draft: { ...state.draft, [field]: value } }); }
   async function issue() {
     if (blocked() || state.issued) return false;
     const error = validateServiceKeyDraft(state.draft);
     if (error) { publish({ error }); return false; }
-    const payload = { name: state.draft.name.trim(), source_system: state.draft.source_system, scopes: [...state.draft.scopes] };
+    const payload = { name: state.draft.name.trim(), source_system: state.draft.source_system, scopes: [...state.draft.scopes], purpose: state.draft.purpose };
     publish({ busy: "issue", error: "", notice: "" });
     try {
       const result = await api.createServiceApiKey(payload);

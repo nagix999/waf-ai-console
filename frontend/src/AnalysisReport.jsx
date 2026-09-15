@@ -8,6 +8,17 @@ import "./analysisReport.css";
 // escaped by the generator, decoded once, and rendered as React text. Never
 // interpret embedded HTML, links, images, or model-generated Markdown.
 function ReportBlocks({ blocks, section }) {
+  // Only fixed-template level-three headings form evidence groups. Untrusted
+  // model values remain escaped text, never Markdown structure or CSS names.
+  const firstGroup = blocks.findIndex(block => block.type === "heading" && block.level === 3 && ["정탐 근거", "오탐 근거", "참고 내용", "참고내용"].includes(block.text));
+  if (firstGroup >= 0) {
+    const groups = [];
+    for (const block of blocks.slice(firstGroup)) {
+      if (block.type === "heading" && block.level === 3) groups.push({ heading: block.text, blocks: [] });
+      else groups.at(-1).blocks.push(block);
+    }
+    return <><ReportBlocks blocks={blocks.slice(0, firstGroup)} section={section} />{groups.map((group, index) => <section key={index} className={`report-evidence-group ${group.heading === "정탐 근거" ? "attack" : group.heading === "오탐 근거" ? "normal" : "context"}`}><h4>{decodeReportText(group.heading)}</h4><ReportBlocks blocks={group.blocks} section={group.heading} /></section>)}</>;
+  }
   return blocks.map((block, index) => {
     // The generator appends exactly one LF to separate the excerpt from its
     // closing fence. Remove only that separator, preserving original CR/LF.
@@ -17,7 +28,7 @@ function ReportBlocks({ blocks, section }) {
       const Tag = block.ordered ? "ol" : "ul";
       return <Tag key={index} {...(block.ordered ? { start: block.start } : {})}>{block.items.map((item, i) => <li key={i}>{decodeReportText(item)}</li>)}</Tag>;
     }
-    if (block.type === "heading") return <h4 key={index}>{decodeReportText(block.text)}</h4>;
+    if (block.type === "heading") return block.level >= 4 ? <h5 key={index}>{decodeReportText(block.text)}</h5> : <h4 key={index}>{decodeReportText(block.text)}</h4>;
     return <p key={index}>{decodeReportText(block.text)}</p>;
   });
 }

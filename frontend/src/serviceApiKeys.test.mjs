@@ -44,7 +44,7 @@ test("metadata and error helpers never echo server secrets or inherited object p
 test("key creation has one explicit mutation, sanitizes metadata and keeps the raw key only until dismissed", async () => {
   const { controller, calls, fill } = harness(); await controller.refresh(); fill(); controller.update("api_key", "NOT_A_FIELD");
   assert.equal(await controller.issue(), true);
-  assert.deepEqual(calls, [["issue", { name: "합성 새 키", source_system: "synthetic-collector", scopes: ["ingest", "review"] }]]);
+  assert.deepEqual(calls, [["issue", { name: "합성 새 키", source_system: "synthetic-collector", scopes: ["ingest", "review"], purpose: "production" }]]);
   assert.equal(controller.getState().issued.api_key, "SYNTHETIC_ONE_TIME_SECRET");
   assert.ok(!JSON.stringify(controller.getState().catalog).includes("SYNTHETIC_ONE_TIME_SECRET"));
   assert.equal(await controller.issue(), false);
@@ -122,7 +122,7 @@ test("service key UI displays only DB-issued keys and one-time secrets with esca
   const source = readFileSync(new URL("./ServiceApiKeys.jsx", import.meta.url), "utf8");
   assert.match(html, /LLM 제공자 인증 키와는 별개/);
   assert.match(source, /<HelpTooltip label="연동 시스템"/); assert.doesNotMatch(source, /<HelpTooltip label="서비스 키 권한"/);
-  assert.match(source, /같은 값을 사용하는 키들은 동일한 데이터 범위를 공유/); assert.match(source, /선택한 연동 시스템만 접근 · 관리자 권한 제외/);
+  assert.match(source, /같은 용도와 연동 시스템을 사용하는 키들은 동일한 데이터 범위를 공유/); assert.match(source, /선택한 연동 시스템만 접근 · 관리자 권한 제외/);
   assert.match(source, /최대 60초 간격으로 갱신되며 분석 완료 시각과는 다릅니다/);
   assert.match(html, /&lt;script&gt;SYNTHETIC&lt;\/script&gt;/); assert.doesNotMatch(html, /<script>|발급된 API Key 원문|value="admin"/);
   const secret = renderToStaticMarkup(createElement(IssuedServiceKey, { issued: { item: item(), api_key: "SYNTHETIC_ONCE_UI" }, onClose() {} })); assert.match(secret, /SYNTHETIC_ONCE_UI/); assert.match(secret, /원문은 한 번만/); assert.match(secret, /키 복사/); assert.match(secret, /원문 닫기/); assert.match(secret, /<label for="issued-service-api-key">발급된 API Key 원문<\/label><textarea id="issued-service-api-key"/);

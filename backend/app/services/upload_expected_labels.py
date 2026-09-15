@@ -38,6 +38,8 @@ def enqueue_test_upload_row(
     ingest_channel: str = "file_upload",
     schema_snapshot: dict | None = None,
     prompt_snapshot: PromptSnapshot | None = None,
+    source_kind: str = "synthetic_expected",
+    comment: str = "",
 ) -> tuple[Analysis, bool, str | None]:
     """Return (analysis, duplicate, 'attached'/'unchanged'/None).
 
@@ -82,9 +84,11 @@ def enqueue_test_upload_row(
                 digest = hashlib.sha256(f"test-upload-reference-v1:{identifier}".encode("utf-8")).hexdigest()
                 db.add(AnalysisLabel(
                     analysis_id=analysis.id, revision=1, verdict=expected_verdict,
-                    source_kind="synthetic_expected", source_ref=label_source_ref,
+                    source_kind=source_kind, source_ref=label_source_ref,
                     ai_visible=ai_visible, created_by=actor,
                     attachment_id=identifier, token_digest=digest,
+                    comment_ciphertext=crypto.encrypt_text(comment) if comment else None,
+                    encryption_key_version=crypto.key_version if comment else None,
                 ))
                 db.add(AccessAudit(
                     actor_kind="admin_session", actor_id=actor,

@@ -248,7 +248,7 @@ def enqueue_retry(db, crypto, settings, analysis_id, request, actor):
         "src_ip", "dest_ip", "src_port", "dest_port", "signature", "event_name", "waf_vendor", "waf_action",
         "payload_ciphertext", "encryption_key_version", "extra_fields", "service_api_key_id",
         "prompt_version", "prompt_policy_version_id", "prompt_snapshot_ciphertext",
-        "input_schema_version_id", "input_schema_snapshot_ciphertext",
+        "input_schema_version_id", "input_schema_snapshot_ciphertext", "internal_only",
     )
     row = Analysis(id=str(uuid.uuid4()), **{name: getattr(original, name) for name in fields},
                    retry_of_analysis_id=original.id, retry_idempotency_key=request.idempotency_key,

@@ -10,6 +10,9 @@ from ..evaluation_schemas import (
     LabelPreviewResponse, LabelSourceKind,
 )
 from ..models import Analysis, AnalysisLabel
+from ..validation_data_schemas import AnalysisSelection, BulkReference
+from ..services.manual_references import reference_selection, save_references, audit
+from ..services.analysis import AnalysisIngestError
 from ..security import Principal, require_scope
 from ..services.evaluation_labels import (
     MAX_LABEL_FILE_BYTES, LabelAttachmentError, confirm_labels, parse_answer_file, preview_labels,
@@ -18,6 +21,23 @@ from ..services.evaluation_labels import (
 router = APIRouter(tags=["evaluation-labels"])
 DbSession = Annotated[Session, Depends(get_db)]
 Admin = Annotated[Principal, Depends(require_scope("admin"))]
+
+
+@router.post("/evaluation-labels/selection")
+def selection(payload: AnalysisSelection, db: DbSession, _principal: Admin):
+    try:
+        return {"items": reference_selection(db, payload.analysis_ids)}
+    except AnalysisIngestError as exc:
+        raise HTTPException(exc.status_code, exc.code) from None
+
+
+@router.post("/evaluation-labels/bulk")
+def bulk(payload: BulkReference, request: Request, db: DbSession, principal: Admin):
+    try:
+        return save_references(db, request.app.state.crypto, payload, principal.username or "admin")
+    except AnalysisIngestError as exc:
+        db.rollback()
+        raise HTTPException(exc.status_code, exc.code) from None
 
 
 @router.post("/evaluation-labels/preview", response_model=LabelPreviewResponse)
@@ -50,8 +70,12 @@ def confirm(payload: LabelConfirmRequest, request: Request, db: DbSession, princ
 
 
 @router.get("/analyses/{analysis_id}/evaluation-labels", response_model=LabelHistoryResponse)
-def history(analysis_id: str, db: DbSession, _principal: Admin) -> LabelHistoryResponse:
+def history(analysis_id: str, request: Request, db: DbSession, _principal: Admin) -> LabelHistoryResponse:
     if db.scalar(select(Analysis.id).where(Analysis.id == analysis_id)) is None:
         raise HTTPException(status_code=404, detail="analysis_not_found")
     rows = db.scalars(select(AnalysisLabel).where(AnalysisLabel.analysis_id == analysis_id).order_by(AnalysisLabel.revision.desc()))
-    return LabelHistoryResponse(items=[LabelHistoryItem.model_validate(row, from_attributes=True) for row in rows])
+    items = [LabelHistoryItem.model_validate(row, from_attributes=True).model_copy(update={
+        "comment": request.app.state.crypto.decrypt_text(row.comment_ciphertext) if row.comment_ciphertext else ""}) for row in rows]
+    audit(db, _principal.username or "admin", "view_reference_history", "analysis", analysis_id)
+    db.commit()
+    return LabelHistoryResponse(items=items)

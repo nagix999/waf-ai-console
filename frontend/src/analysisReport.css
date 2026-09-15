@@ -52,7 +52,12 @@
 .report-section, .analysis-report { scroll-margin-top: 90px; }
 .report-back-top { margin-top: 20px; font-size: 11px; }
 .report-paper { width: 100%; min-width: 0; }
-.report-paper p, .report-paper li { max-width: 72ch; }
+.report-paper p, .report-paper li { max-width: 100%; }
+.report-evidence-group { margin: 20px 0; padding: 18px; border: 1px solid var(--line, #dce3eb); border-left: 4px solid #64748b; border-radius: 10px; background: var(--surface-alt, transparent); }
+.report-evidence-group.attack { border-left-color: #c34739; }
+.report-evidence-group.normal { border-left-color: #25826b; }
+.report-evidence-group h4 { margin-top: 0; font-size: 16px; }
+.report-evidence-group h5 { font-size: 14px; margin-bottom: 8px; }
 
 @media (max-width: 700px) {
   .report-toolbar { padding: 15px; gap: 14px; }

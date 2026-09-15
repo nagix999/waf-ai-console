@@ -71,12 +71,15 @@ def select_verifier(db, purpose, primary):
     return validate_role_profile(db, db.get(VLLMProfile, identifier)) if identifier else primary
 
 
-def role_request_check(engine, profile, prior_check=None, *, require_verified=True):
+def role_request_check(engine, profile, prior_check=None, *, require_verified=True, internal_only=False):
     identifier, fingerprint = profile.id, profile_fingerprint(profile)
     def check():
         if prior_check:
             prior_check()
         with Session(engine) as latest:
-            validate_role_profile(latest, latest.get(VLLMProfile, identifier), fingerprint,
+            selected = latest.get(VLLMProfile, identifier)
+            if internal_only and (selected is None or selected.provider != "vllm"):
+                raise TargetNotAllowedError("dataset_internal_models_required")
+            validate_role_profile(latest, selected, fingerprint,
                                   require_verified=require_verified)
     return check

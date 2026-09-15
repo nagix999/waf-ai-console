@@ -1,0 +1,142 @@
+from contextlib import contextmanager
+from typing import Annotated
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
+from ..database import get_db
+from ..models import ValidationDataset, ValidationDatasetVersion, utcnow
+from ..security import Principal, require_scope
+from ..validation_data_schemas import DatasetCreate, DatasetUpdate, DatasetImport, DatasetItemWrite, DatasetRun, RevisionRequest
+from ..services import validation_datasets as service
+from ..services.analysis import AnalysisIngestError
+from ..services.input_schemas import InputSchemaError
+from ..services.manual_references import audit, utc_datetime
+from ..services.prompt_policies import PromptPolicyError
+from ..services.prompt_snapshots import PromptSnapshotError
+from ..services.test_runs import describe_run, read_snapshot, write_lock
+from ..services.vllm_profiles import TargetNotAllowedError
+
+router = APIRouter(prefix="/validation-datasets", tags=["validation-datasets"])
+DbSession = Annotated[Session, Depends(get_db)]
+Admin = Annotated[Principal, Depends(require_scope("admin"))]
+
+
+@contextmanager
+def errors(db):
+    try:
+        yield
+    except (AnalysisIngestError, InputSchemaError, PromptPolicyError) as exc:
+        db.rollback()
+        raise HTTPException(exc.status_code, {"code": exc.code, "issues": exc.issues} if getattr(exc, "issues", None) else exc.code) from None
+    except PromptSnapshotError as exc:
+        db.rollback()
+        raise HTTPException(503, exc.code) from None
+    except TargetNotAllowedError as exc:
+        db.rollback()
+        raise HTTPException(409, str(exc)) from None
+
+
+@router.get("")
+def listing(db: DbSession, _principal: Admin, limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0)):
+    read_snapshot(db)
+    query = select(ValidationDataset).where(ValidationDataset.deleted_at.is_(None))
+    total = db.scalar(select(func.count()).select_from(query.subquery()))
+    return {"items": [service.dataset_summary(db, row) for row in db.scalars(query
+        .order_by(ValidationDataset.created_at.desc(), ValidationDataset.id).limit(limit).offset(offset))], "total": total}
+
+
+@router.post("", status_code=201)
+def create(payload: DatasetCreate, db: DbSession, principal: Admin):
+    with errors(db):
+        return service.create_dataset(db, payload, principal.username or "admin")
+
+
+@router.get("/{identifier}")
+def detail(identifier: str, db: DbSession, _principal: Admin,
+           revision: int | None = Query(None, ge=1), limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0)):
+    with errors(db):
+        read_snapshot(db)
+        row, version = service.dataset(db, identifier)
+        if revision is not None:
+            version = db.scalar(select(ValidationDatasetVersion).where(ValidationDatasetVersion.dataset_id == row.id,
+                                                                      ValidationDatasetVersion.revision == revision))
+            if version is None:
+                raise HTTPException(404, "dataset_version_not_found")
+        items = service.version_items(db, version)
+        return {**service.dataset_summary(db, row, version), "current_revision": row.revision,
+            "items": [service.item_summary(item) for item in items[offset:offset + limit]], "limit": limit, "offset": offset,
+            "versions": [{"id": v.id, "revision": v.revision, "created_at": utc_datetime(v.created_at), "total": len(v.item_version_ids)}
+                for v in db.scalars(select(ValidationDatasetVersion).where(ValidationDatasetVersion.dataset_id == row.id)
+                    .order_by(ValidationDatasetVersion.revision.desc()))]}
+
+
+@router.patch("/{identifier}")
+def update(identifier: str, payload: DatasetUpdate, db: DbSession, principal: Admin):
+    with errors(db):
+        write_lock(db)
+        row, version = service.dataset(db, identifier, payload.expected_revision)
+        row.name, row.description = payload.name.strip(), payload.description
+        service.save_version(db, row, version.item_version_ids, principal.username or "admin")
+        db.commit()
+        return service.dataset_summary(db, row)
+
+
+@router.delete("/{identifier}")
+def delete(identifier: str, payload: RevisionRequest, db: DbSession, principal: Admin):
+    with errors(db):
+        write_lock(db)
+        row, _ = service.dataset(db, identifier, payload.expected_revision)
+        row.deleted_at = utcnow()
+        audit(db, principal.username or "admin", "delete_dataset", "validation_dataset", row.id)
+        db.commit()
+        return {"deleted": True}
+
+
+@router.post("/{identifier}/imports")
+def import_rows(identifier: str, payload: DatasetImport, request: Request, db: DbSession, principal: Admin):
+    with errors(db):
+        return service.import_analyses(db, request.app.state.crypto, request.app.state.settings,
+            identifier, payload, principal.username or "admin")
+
+
+@router.post("/{identifier}/items", status_code=201)
+def add_item(identifier: str, payload: DatasetItemWrite, request: Request, db: DbSession, principal: Admin):
+    with errors(db):
+        return service.write_item(db, request.app.state.crypto, request.app.state.settings,
+            identifier, payload, principal.username or "admin")
+
+
+@router.get("/{identifier}/items/{item_id}")
+def item_detail(identifier: str, item_id: str, request: Request, db: DbSession, principal: Admin,
+                version_id: str | None = Query(None, max_length=36)):
+    with errors(db):
+        return service.read_item(db, request.app.state.crypto, identifier, item_id, principal.username or "admin", version_id)
+
+
+@router.put("/{identifier}/items/{item_id}")
+def update_item(identifier: str, item_id: str, payload: DatasetItemWrite, request: Request, db: DbSession, principal: Admin):
+    with errors(db):
+        return service.write_item(db, request.app.state.crypto, request.app.state.settings,
+            identifier, payload, principal.username or "admin", item_id)
+
+
+@router.delete("/{identifier}/items/{item_id}")
+def remove_item(identifier: str, item_id: str, payload: RevisionRequest, db: DbSession, principal: Admin):
+    with errors(db):
+        write_lock(db)
+        row, version = service.dataset(db, identifier, payload.expected_revision)
+        items = service.version_items(db, version)
+        ids = [item.id for item in items if item.item_id != item_id]
+        if len(ids) == len(items):
+            raise HTTPException(404, "dataset_item_not_found")
+        service.save_version(db, row, ids, principal.username or "admin")
+        db.commit()
+        return {"revision": row.revision}
+
+
+@router.post("/{identifier}/runs", status_code=202)
+def execute(identifier: str, payload: DatasetRun, request: Request, db: DbSession, principal: Admin):
+    with errors(db):
+        run = service.execute_dataset(db, request.app.state.crypto, request.app.state.settings,
+            identifier, payload, principal.username or "admin")
+        return describe_run(db, run)

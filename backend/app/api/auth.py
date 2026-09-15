@@ -32,4 +32,5 @@ def me(principal: CurrentPrincipal) -> PrincipalResponse:
         username=principal.username,
         source_system=principal.source_system,
         scopes=sorted(principal.scopes),
+        purpose=principal.purpose if principal.kind == "service_api_key" else None,
     )

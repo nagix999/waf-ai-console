@@ -32,7 +32,7 @@ export default function DashboardView({ onOpen, onUnauthorized, days, onDaysChan
   useEffect(() => {
     let active = true; const controller = new AbortController(); let timer;
     async function loadKeys() {
-      try { const result = await api.serviceApiKeys({ signal: controller.signal }); if (!Array.isArray(result?.items)) throw new Error("invalid_keys"); if (active) { setKeys(result.items); setKeyError(""); } }
+      try { const result = await api.serviceApiKeys({ signal: controller.signal }); if (!Array.isArray(result?.items)) throw new Error("invalid_keys"); if (active) { setKeys(result.items.filter(item => (item.purpose || "production") === "production")); setKeyError(""); } }
       catch (err) { if (active) { setKeyError("키 목록을 불러오지 못했습니다."); if (err.status === 401) onUnauthorized(); } }
       finally { if (active) timer = setTimeout(loadKeys, 15000); }
     }
