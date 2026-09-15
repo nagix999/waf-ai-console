@@ -9,10 +9,10 @@
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
+    "@tanstack/react-table": "9.2.4",
     "@vitejs/plugin-react": "4.3.4",
-    "vite": "6.1.0",
     "react": "19.0.0",
-    "react-dom": "19.0.0"
-  },
-  "devDependencies": {}
+    "react-dom": "19.0.0",
+    "vite": "6.1.0"
+  }
 }

@@ -1,5 +1,6 @@
 """Live API documentation generated from the same definition used at ingestion."""
 from importlib.resources import files
+from copy import deepcopy
 import json
 
 from .input_schemas import get_active_schema, load_definition, to_json_schema
@@ -15,6 +16,16 @@ def active_contract(db, crypto):
         "field_metadata_sent_to_model": False,
     }
     return metadata, fields, to_json_schema(fields)
+
+
+def request_contract(event_schema):
+    """Admission-only reference metadata must not enter the versioned event schema."""
+    from ..schemas import AnalysisRequest
+    definition = deepcopy(event_schema)
+    definition["title"] = "AnalysisRequest"
+    definition["properties"]["expected_verdict"] = AnalysisRequest.model_json_schema()["properties"]["expected_verdict"]
+    definition["propertyNames"]["not"]["enum"].remove("expected_verdict")
+    return definition
 
 
 def markdown_contract(metadata, fields, json_schema, payload_max_bytes):
@@ -33,6 +44,7 @@ def markdown_contract(metadata, fields, json_schema, payload_max_bytes):
     for field in fields:
         lines.append(f"| `{field.name}` | {field.type} | {'O' if field.required else 'X'} | {'O' if field.nullable else 'X'} | {cell(field.description)} |")
     # Escaped fence markers prevent a field description from ending the block.
-    definition = json.dumps(json_schema, ensure_ascii=False, indent=2).replace("`", "\\u0060").replace("<", "\\u003c")
+    lines.extend(["", "`expected_verdict`는 선택 요청 항목이며 위 입력 스키마 필드가 아닙니다. Test·Production 모두 참고 답안으로 별도 저장하고 LLM에는 전달하지 않습니다."])
+    definition = json.dumps(request_contract(json_schema), ensure_ascii=False, indent=2).replace("`", "\\u0060").replace("<", "\\u003c")
     lines.extend(["", "필드별 길이·범위·허용값·하위 구조의 현재 제한:", "", "```json", definition, "```", ""])
     return before + "\n".join(lines) + after

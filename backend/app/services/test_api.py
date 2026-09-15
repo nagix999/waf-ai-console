@@ -44,10 +44,22 @@ def ingest(db, crypto, settings, principal, rows, *, run_id=None, upload=False):
     if run_id:
         run = owned_run(db, run_id, principal)
     else:
+        identity_rows = rows
+        if not upload:
+            # Older /analyses admission hashed the normalized event including
+            # default fields. Preserve retries across the request-model change,
+            # but keep the submitted field presence for schema validation below.
+            try:
+                event, expected, _ = split_test_metadata(rows[0])
+                identity_rows = [AnalysisInput.model_validate(event).model_dump(mode="json")]
+                if expected is not None:
+                    identity_rows[0]["expected_verdict"] = expected
+            except (ValidationError, UploadFormatError):
+                pass
         key = digest(["api-upload" if upload else "api-event", principal.source_system,
                       rows if upload else rows[0].get("event_id")])
         run, duplicate = create_run_record(db, crypto, settings, name=str(uuid.uuid4()), idempotency_key=key,
-            request_hash=digest(rows), kind="api", actor=principal.source_system)
+            request_hash=digest(identity_rows), kind="api", actor=principal.source_system)
         if duplicate:
             items = list(db.scalars(select(TestRunItem).where(TestRunItem.test_run_id == run.id).order_by(TestRunItem.row_number)))
             return run, [(item, item.ingest_status == "accepted") for item in items]
@@ -62,8 +74,9 @@ def ingest(db, crypto, settings, principal, rows, *, run_id=None, upload=False):
             if old:
                 analysis = db.get(Analysis, old.analysis_id)
                 check_duplicate(analysis, crypto, event_fingerprint(payload.model_dump(mode="json")), "test")
-                label = db.get(AnalysisLabel, old.label_id) if old.label_id else None
-                if (label.verdict if label else None) != expected:
+                label = db.scalar(select(AnalysisLabel).where(AnalysisLabel.analysis_id == analysis.id)
+                                  .order_by(AnalysisLabel.revision.desc()).limit(1))
+                if expected is not None and (label.verdict if label else None) != expected:
                     raise AnalysisIngestError("expected_verdict_conflict", 409)
                 result.append((old, True))
                 continue
@@ -71,7 +84,8 @@ def ingest(db, crypto, settings, principal, rows, *, run_id=None, upload=False):
             pass  # add_run_items records a sanitized rejected row.
         if run_id and not run.accepting_items:
             raise AnalysisIngestError("test_session_closed", 409)
-        add_run_items(db, crypto, settings, run, [raw])
+        add_run_items(db, crypto, settings, run, [raw], source_kind="reference",
+                      source_ref="analysis-request:expected_verdict", actor_kind=principal.kind)
         item = db.scalar(select(TestRunItem).where(TestRunItem.test_run_id == run.id)
                          .order_by(TestRunItem.row_number.desc()).limit(1))
         if item.analysis_id:

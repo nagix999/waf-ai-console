@@ -54,13 +54,68 @@ X-API-Key: <SERVICE_API_KEY>
 
 ### Test API 키 사용
 
-Test 키로 같은 `/analyses`, `/uploads`를 호출하면 Test 모델·동시 처리 설정을 사용한다. 모델이 없거나 검증되지 않았으면 접수를 거부하며 Production으로 대체하지 않는다. 응답의 `test_run_id`로 테스트 결과를 확인한다. 단건 JSON에는 답안을 넣지 않으며, Test 파일의 최상위 `expected_verdict`는 이벤트와 분리해 저장한다.
+Test 키로 같은 `/analyses`, `/uploads`를 호출하면 Test 모델·동시 처리 설정을 사용한다. 모델이 없거나 검증되지 않았으면 접수를 거부하며 Production으로 대체하지 않는다. 응답의 `test_run_id`로 테스트 결과를 확인한다. Test·Production 모두 단건 JSON과 파일 행의 최상위 `expected_verdict`를 참고 답안으로 받는다. 이벤트와 분리해 저장하며 LLM에는 전달하지 않는다.
 
 여러 요청을 묶으려면 먼저 `POST /api/v1/test-sessions`에 `{ "name": "테스트명", "idempotency_key": "클라이언트-고유-요청키" }`를 보낸다. name은 생략하면 자동 생성한다. 받은 id를 `POST /analyses?test_run_id=<id>` 또는 `POST /uploads?test_run_id=<id>`에 전달하고, 접수가 끝나면 `POST /test-sessions/<id>/close`로 닫는다. `GET /test-sessions/<id>`에서 결과·지표를 확인한다. 이는 Test 키 전용이며 동일 용도·연동 시스템의 키만 접근한다.
 
 실행 ID 없이 보내면 단건 또는 파일별 테스트를 자동 생성한다. 단건은 같은 연동 시스템과 event_id의 동일 요청을 재전송해도 중복 실행하지 않는다. 같은 ID의 입력 변경은 409다. 같은 이벤트를 새로 평가하려면 새 test-session을 생성한다. 파일은 전체 내용이 같으면 같은 테스트를 반환한다. 명시한 session은 닫기 전까지 최대 5,000행을 받으며 닫은 뒤에는 이미 접수된 동일 요청만 확인할 수 있다. 응답 source_system은 서버가 만든 테스트 영역이며 키의 연동 시스템과 다를 수 있다.
 
 테스트 모델·지침·입력 스키마·최초 답안은 접수 시 고정한다. 참고 답안 수정과 별도 재평가는 관리자 화면에서 수행한다. API 테스트가 열려 있거나 문항 처리 중이면 재평가할 수 없다. Production 키에 test_run_id를 전달하면 422이며 목적을 바꾸지 않는다.
+
+### 테스트명과 실행 ID 구분
+
+| 값 | 보내는 위치 | 의미 |
+| --- | --- | --- |
+| `name` | `POST /test-sessions`의 JSON 본문 | 화면에 표시할 테스트명. 생략하면 UUID 형태의 이름 자동 생성 |
+| `idempotency_key` | 같은 JSON 본문 | 테스트 생성 요청의 재전송 중복 방지 키. 새 테스트는 새 키 사용 |
+| `test_run_id` | `/analyses`·`/uploads`의 쿼리 | 서버가 이미 생성한 테스트의 `id`. 테스트명이나 임의의 ID를 넣는 곳이 아님 |
+| `wait_seconds` | `/analyses`의 쿼리 | 응답에서 분석 완료를 기다릴 시간(0~60초). 테스트명·실행 시간 제한과 무관 |
+
+호출 경로는 `/api/v1/analyses`다. `/api/v1.analyses`가 아니다. 아래 예제의 모든 요청에는 같은 연동 시스템의 **Test용 키**를 `X-API-Key` 헤더로 전달한다.
+
+1. 원하는 테스트명을 등록한다.
+
+```http
+POST /api/v1/test-sessions
+X-API-Key: <TEST_API_KEY>
+Content-Type: application/json
+
+{"name":"Gemma 검증 1차","idempotency_key":"gemma-check-20260915-01"}
+```
+
+응답의 `id`를 보관한다. 아래는 응답의 일부를 발췌한 예시이며 실제 반환된 값을 사용해야 한다.
+
+```json
+{"id":"11111111-1111-4111-8111-111111111111","name":"Gemma 검증 1차"}
+```
+
+2. 반환된 `id`로 분석을 접수한다. 요청 본문에는 아래 '단건 분석 접수'에서 정의한 이벤트 JSON을 넣는다. 여러 건을 같은 테스트로 묶으려면 동일한 `test_run_id`를 사용한다.
+
+```http
+POST /api/v1/analyses?wait_seconds=60&test_run_id=11111111-1111-4111-8111-111111111111
+X-API-Key: <TEST_API_KEY>
+Content-Type: application/json
+```
+
+분석 응답에서 `analysis_purpose: "test"`와 `test_run_id`를 확인한다. 분석 응답의 `id`는 **개별 분석 ID**이므로 테스트 ID와 구분한다. 화면은 쿼리 문자열을 테스트명으로 표시하지 않고 생성 단계에서 저장한 `name`을 표시한다.
+
+3. 모든 요청의 접수가 끝나면 닫고, 결과와 지표를 조회한다.
+
+```http
+POST /api/v1/test-sessions/11111111-1111-4111-8111-111111111111/close
+X-API-Key: <TEST_API_KEY>
+```
+
+```http
+GET /api/v1/test-sessions/11111111-1111-4111-8111-111111111111
+X-API-Key: <TEST_API_KEY>
+```
+
+접수 종료는 진행 중인 분석을 취소하거나 완료될 때까지 기다리는 동작이 아니다. 조회 응답의 `name`, 처리 상태와 결과를 확인한다.
+
+등록되지 않은 테스트명·임의 ID를 `test_run_id`로 보내면 현재 API는 404를 반환하며 테스트를 자동 생성하지 않는다. 36자를 넘으면 길이 검증에서 422다. 테스트 ID를 **생략한 경우에만** 자동 테스트를 생성하며, 자동 생성된 이름과 실행 ID도 서로 다른 값이다. Test 키로 접수했는데 이와 다르면 배포 버전, 실제 URL의 쿼리 문자열, 인증 방식을 확인한다.
+
+관리자 로그인 쿠키와 API 키를 함께 보내면 관리자 세션이 우선한다. Swagger 등 로그인된 브라우저에서는 Test 키를 입력해도 관리자 요청으로 처리될 수 있다. 쿠키 없는 API 클라이언트를 사용하거나 로그아웃 후 Test 키로 호출한다.
 
 ## 단건 분석 접수
 
@@ -98,7 +153,7 @@ Content-Type: application/json
 
 정의되지 않은 벤더 확장 필드는 `extra_fields`에 보존된다. `occurred_at`, `attributes`는 현재 별도 타입·검색 필드가 아닌 확장 데이터다. `source_system`, 목적, 내부 ID, 상태, 판정, 모델·프롬프트 설정 등 서버 제어용 예약 필드는 요청에서 지정할 수 없다.
 
-정답 혼입을 막기 위해 최상위의 `label`, `expected_verdict`, `reference_label`, `ground_truth` 등 평가 필드와 `difficulty`, `expected_severity`, `rationale_ko`, `important_evidence` 등 참고 답안 필드도 422 `evaluation_labels_require_separate_attachment`로 거부한다. Label은 아래 별도 연결 API로 제공한다. 이는 임의의 중첩 필드나 payload 본문에서 정답 문장을 찾아 제거하는 기능이 아니며, 기존 입력 내용을 조용히 삭제하거나 재해석하지 않는다.
+선택 요청 항목 `expected_verdict`는 `true_positive` / `false_positive` / `inconclusive` 또는 JSON null을 받는다. 누락·null이면 새 답안을 등록하지 않으며 기존 답안도 삭제하지 않는다. Test·Production 모두 분석 접수와 같은 트랜잭션에서 참고 답안으로 별도 저장하고 응답 `evaluation.reference_label`에서 확인한다. 입력 스키마의 사용자 필드가 아니며 이벤트 fingerprint·암호화 원문·LLM 입력에는 포함되지 않는다. 나머지 최상위 `label`, `reference_label`, `ground_truth`, `difficulty`, `expected_severity`, `rationale_ko`, `important_evidence` 등 평가 필드는 422 `evaluation_labels_require_separate_attachment`로 거부한다. 답안 정정은 아래 별도 연결 API 또는 웹의 참고 답안 입력을 사용한다. 이는 임의의 중첩 필드나 payload 본문에서 정답 문장을 찾아 제거하는 기능이 아니며, 기존 입력 내용을 조용히 삭제하거나 재해석하지 않는다.
 
 아래 요청은 기본 스키마의 예시 입력다. 운영 스키마에서 추가한 필수 필드·허용값·제한에 맞게 수정한 뒤 전송해야 한다.
 
@@ -381,9 +436,9 @@ Content-Type: multipart/form-data
 
 응답의 `label_attached`는 새 연결 수, `label_unchanged`는 기존 최신 답안과 같아 유지된 수다. 기존 답안과 다르면 해당 행을 `expected_verdict_conflict`로 거부하며 이벤트·답안에 부분 저장을 남기지 않는다. 정정은 별도 참고 Label 미리보기·확정을 사용한다. 답안은 이벤트 및 Primary/Verifier 입력에 포함되지 않고, 완료된 최종 판정과 목록·상세·보고서에서 비교한다. 진행 중·실패·stub는 오답으로 세지 않는다.
 
-이름 있는 실행은 새 접수 키마다 별도 분석을 생성하고 같은 키의 재전송은 원래 접수 결과를 반환한다. 재전송 응답의 접수·답안 연결 건수는 최초 접수 내역이며 다시 저장한 수가 아니다. 실행별 평가는 초기 답안을 고정하고 일반 분석 목록은 최신 답안을 비교한다.
+이름 있는 실행은 새 접수 키마다 별도 분석을 생성하고 같은 키의 재전송은 원래 접수 결과를 반환한다. 재전송 응답의 접수·답안 연결 건수는 최초 접수 내역이며 다시 저장한 수가 아니다. 웹의 테스트 목록·문항·지표는 최신 답안을 기본으로 비교한다. 접수 당시 답안과 저장한 평가 기록은 선택해서 조회한다. 답안 수정은 AI 판정을 다시 실행하지 않는다.
 
-Production `/uploads`, 단건 `/analyses`, 기존 직접 입력 이벤트 `/test-analyses`는 `expected_verdict`를 계속 거부한다. 새 `/test-runs`는 `event`와 분리된 답안·평가 필드를 받는다. Production에는 평가 정보를 넣지 않으며 임의 중첩 데이터·payload 본문의 답안 문장까지 찾아 지우지는 않는다. JSON 중복 키와 CSV 중복 헤더는 거부한다. 샘플 150건·난이도별 파일은 평가 정보가 포함되므로 Production에 그대로 보내지 않는다.
+Test·Production 키로 호출하는 `/analyses`·`/uploads`와 관리자 `/test-analyses`도 `expected_verdict`를 받는다. 서비스 키로 접수한 답안의 출처는 `source_kind=reference`, `source_ref=analysis-request:expected_verdict`, `ai_visible=null`이다. API에 답안을 제공했다고 독립 검수 답안으로 간주하지 않는다. 같은 이벤트의 동일 답안은 중복 등록하지 않으며 기존 최신 답안과 다른 값은 `expected_verdict_conflict`로 거부한다. 자동 생성 Test 실행은 요청 전체의 멱등성 검사가 먼저 적용되어 변경된 재전송에 `test_run_idempotency_conflict`가 반환될 수 있다. 새 `/test-runs`는 `event`와 분리된 답안·평가 필드를 받는다. CSV의 빈 답안 칸은 답안 없음이다. 임의 중첩 데이터·payload 본문의 답안 문장을 찾아 지우지는 않는다. JSON 파일 중복 키와 CSV 중복 헤더는 거부한다. 샘플의 난이도·문항명 등 Test 전용 메타데이터는 Production에 그대로 보내지 않는다.
 
 ## 분석가 리뷰
 

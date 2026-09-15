@@ -126,7 +126,7 @@ def pin_item_prompt(analysis, run):
     analysis.prompt_version = run.prompt_version
 
 
-def add_run_items(db, crypto, settings, run, rows, *, ai_visible=None, source_ref="test-upload:expected_verdict", trusted_items=None):
+def add_run_items(db, crypto, settings, run, rows, *, ai_visible=None, source_ref="test-upload:expected_verdict", trusted_items=None, source_kind="synthetic_expected", actor_kind="admin_session"):
     if not rows or len(rows) > MAX_TEST_ITEMS:
         raise AnalysisIngestError("test_item_count_out_of_range", 422)
     try:
@@ -165,7 +165,7 @@ def add_run_items(db, crypto, settings, run, rows, *, ai_visible=None, source_re
                     db, crypto, trusted.get("source_system", run.source_system), payload, expected_verdict=expected,
                     actor=run.created_by, commit=False, payload_max_bytes=settings.payload_max_bytes,
                     attachment_id=run.model_test_run_id or run.id, ai_visible=trusted.get("ai_visible", ai_visible), label_source_ref=source_ref,
-                    source_kind=trusted.get("source_kind", "synthetic_expected"), comment=trusted.get("comment", ""),
+                    source_kind=trusted.get("source_kind", source_kind), comment=trusted.get("comment", ""), actor_kind=actor_kind,
                     ingest_channel="model_validation" if run.model_test_run_id else "test_lab" if run.kind == "direct" else "file_upload",
                     schema_snapshot=snapshot,
                     prompt_snapshot=prompt,
@@ -242,14 +242,15 @@ def run_cohort(run_id, difficulty=None, test_category=None, difficulty_missing=F
 
 def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=None,
                  status=None, evaluation_outcome=None, reference_verdict=None, verdict=None, detail=True,
-                 difficulty_missing=False, test_category_missing=False, evaluation_id=None):
+                 difficulty_missing=False, test_category_missing=False, evaluation_id=None, reference_basis="initial",
+                 sort_by="row_number", sort_order="asc"):
     read_snapshot(db)
     cohort = run_cohort(run.id, difficulty, test_category, difficulty_missing, test_category_missing)
     accepted_ids = select(TestRunItem.analysis_id).where(*cohort, TestRunItem.ingest_status == "accepted")
     evaluation = db.get(TestEvaluation, evaluation_id) if evaluation_id else None
     if evaluation_id and (evaluation is None or evaluation.test_run_id != run.id):
         raise AnalysisIngestError("test_evaluation_not_found", 404)
-    relation = fixed_reference_relation(run.id, evaluation)
+    relation = evaluation_relation() if reference_basis == "latest" and evaluation is None else fixed_reference_relation(run.id, evaluation)
     evaluation_summary = summarize_evaluations(db, relation, [Analysis.id.in_(accepted_ids)])
     counts = dict(db.execute(select(TestRunItem.ingest_status, func.count()).where(
         *cohort).group_by(TestRunItem.ingest_status)).all())
@@ -276,6 +277,7 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
         evaluation_summary=evaluation_summary,
         evaluation_id=evaluation.id if evaluation else None,
         evaluation_revision=evaluation.revision if evaluation else 0,
+        reference_basis="saved" if evaluation else reference_basis,
         dataset_version_id=run.dataset_version_id, accepting_items=run.accepting_items,
         started_at=started, completed_at=finished, total_elapsed_ms=elapsed,
     )
@@ -293,7 +295,10 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
         query = query.where(Analysis.verdict == verdict)
     total_items = db.scalar(select(func.count()).select_from(query.subquery())) or 0
     items = []
-    for row in db.execute(query.order_by(TestRunItem.row_number).limit(limit).offset(offset)):
+    column = {"row_number": TestRunItem.row_number, "case_name": TestRunItem.case_name,
+              "status": Analysis.status}.get(sort_by, TestRunItem.row_number)
+    order = column.desc().nulls_last() if sort_order == "desc" else column.asc().nulls_last()
+    for row in db.execute(query.order_by(order, TestRunItem.row_number).limit(limit).offset(offset)):
         item, analysis = row[0], row[1]
         metadata = metadata_from_row(row._mapping) if analysis else None
         items.append(TestRunItemResponse(

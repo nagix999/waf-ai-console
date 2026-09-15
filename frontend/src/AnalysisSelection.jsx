@@ -12,7 +12,7 @@ export function useAnalysisSelection(items, scope) {
   const toggle = id => setState({ scope, ids: ids.includes(id) ? ids.filter(value => value !== id) : [...ids, id] });
   return { ids, clear: () => setState({ scope, ids: [] }),
     cell: (id, label = "분석") => <input type="checkbox" aria-label={`${label} 선택`} checked={ids.includes(id)} onChange={() => toggle(id)} />,
-    header: <input type="checkbox" aria-label="현재 페이지 전체 선택" checked={available.length > 0 && ids.length === available.length} disabled={!available.length} onChange={event => setState({ scope, ids: event.target.checked ? available : [] })} /> };
+    header: <input type="checkbox" aria-label="현재 페이지 전체 선택" aria-checked={ids.length > 0 && ids.length < available.length ? "mixed" : ids.length > 0} ref={element => { if (element) element.indeterminate = ids.length > 0 && ids.length < available.length; }} checked={available.length > 0 && ids.length === available.length} disabled={!available.length} onChange={event => setState({ scope, ids: event.target.checked ? available : [] })} /> };
 }
 
 export default function AnalysisSelectionActions({ ids, onSaved, single = false, onClear }) {
@@ -38,20 +38,22 @@ export default function AnalysisSelectionActions({ ids, onSaved, single = false,
     event.preventDefault(); if (busy) return;
     setBusy(true); setError("");
     try {
+      let message = "";
       if (dialog.kind === "reference") {
         const result = await api.saveReferences({ targets: dialog.targets.map(({ analysis_id, expected_revision }) => ({ analysis_id, expected_revision })), verdict: dialog.verdict, comment: dialog.comment, idempotency_key: dialog.key });
-        setNotice(`${result.applied_count}건의 참고 답안을 저장했습니다. 기존 테스트 점수는 유지됩니다.`);
+        message = `${result.applied_count}건의 참고 답안을 저장했습니다.`;
+        setNotice(message);
       } else {
         const chosen = dialog.catalog.items.find(item => item.id === dialog.datasetId);
         const result = await api.importDatasetAnalyses(chosen.id, { expected_revision: chosen.revision, analysis_ids: dialog.selected });
-        const message = datasetImportMessage(result);
+        message = datasetImportMessage(result);
         if (result.conflicts.length || result.rejected.length) {
           setDialog({ ...dialog, result, message });
           onSaved?.(); return;
         }
         setNotice(message);
       }
-      setDialog(null); onSaved?.(); onClear?.();
+      setDialog(null); onSaved?.({ kind: dialog.kind, message }); onClear?.();
     } catch (err) { setError(validationDataError(err)); }
     finally { setBusy(false); }
   }

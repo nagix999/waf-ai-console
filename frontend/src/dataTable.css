@@ -1,0 +1,31 @@
+/* Shared table surfaces. Keep report and matrix semantics intact. */
+.console-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; line-height: 1.55; }
+.console-table :is(th, td) { padding: 12px 16px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+.console-table thead th { color: var(--muted); background: var(--raised); font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none; }
+.console-table tbody tr:last-child > :is(td, th) { border-bottom: 0; }
+.console-table td { white-space: normal; overflow-wrap: anywhere; }
+.console-table small { display: block; color: var(--muted); margin-top: 3px; }
+.data-table-wrap { max-width: 100%; border-radius: 10px; outline-offset: -2px; }
+.data-table { table-layout: fixed; min-width: 720px; }
+.console-table .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.data-table .analysis-row-pending { background: var(--analysis-wait-row, var(--raised)); }
+.data-table .analysis-row-processing { background: var(--analysis-running-row, var(--accent-soft)); }
+.data-table .analysis-row-failed { background: var(--analysis-failed-row, var(--danger-soft)); }
+.data-table .unified-decision > :is(.status, .severity) { display: table; margin-bottom: 6px; max-width: 100%; white-space: normal; }
+.data-table thead th { position: sticky; top: 0; z-index: 1; }
+.data-table tbody tr { transition: background-color .12s; }
+.data-table tbody tr:hover { background-color: var(--raised); }
+.data-table tbody tr:has(input[type="checkbox"]:checked) { box-shadow: inset 3px 0 var(--accent); background-color: color-mix(in srgb, var(--accent) 7%, var(--panel)); }
+.data-table .selection-cell { width: 44px; padding-left: 14px; padding-right: 10px; vertical-align: middle; }
+.data-table input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+.console-table .numeric { text-align: right; font-variant-numeric: tabular-nums; }
+.table-sort { display: inline-flex; gap: 7px; align-items: center; text-align: inherit; color: inherit; background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
+.table-sort span { color: var(--muted); }
+.table-sort:hover, .table-sort:focus-visible { color: var(--accent); }
+.data-table td > .text-button { max-width: 100%; text-align: left; white-space: normal; overflow-wrap: anywhere; }
+.data-table .summary-preview { max-width: 100%; }
+.data-table .summary-preview-trigger { width: 100%; }
+.data-table .unified-company strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; white-space: normal; }
+.data-table .unified-event-title { font-weight: 600; }
+.data-table .table-meta small { white-space: normal; }
+@media (max-width: 760px) { .console-table :is(th, td) { padding: 10px 12px; } }

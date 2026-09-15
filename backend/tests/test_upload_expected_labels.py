@@ -152,16 +152,20 @@ def test_other_label_metadata_remains_rejected(client, event_payload, field):
         assert db.query(Analysis).count() == db.query(AnalysisLabel).count() == 0
 
 
-def test_production_upload_and_direct_inputs_still_reject_answers(client, event_payload, service_headers):
+def test_production_upload_and_direct_requests_attach_answers(client, event_payload, service_headers):
     login_admin(client)
     payload = {**event_payload, "expected_verdict": "true_positive"}
     production = upload(client, [payload], path="/api/v1/uploads", headers=service_headers).json()
-    assert production["accepted"] == 0 and production["rejected"] == 1
+    assert production["accepted"] == production["label_attached"] == 1
+    assert production["rejected"] == 0
     for path in ("/api/v1/analyses", "/api/v1/test-analyses"):
-        params = {"name": "합성 답안 격리", "idempotency_key": "synthetic-direct-answer"} if path.endswith("/test-analyses") else None
-        assert client.post(path, params=params, json=payload, headers=service_headers if path.endswith("/analyses") else None).status_code == 422
+        params = {"name": "답안 격리 검증", "idempotency_key": "synthetic-direct-answer"} if path.endswith("/test-analyses") else None
+        response = client.post(path, params=params, json=payload, headers=service_headers if path.endswith("/analyses") else None)
+        assert response.status_code == 202, response.text
+        assert response.json()["evaluation"]["reference_label"]["verdict"] == "true_positive"
     with client.app.state.session_factory() as db:
-        assert db.query(Analysis).count() == db.query(AnalysisLabel).count() == 0
+        assert db.query(Analysis).count() == db.query(AnalysisLabel).count() == 2
+        assert all("expected_verdict" not in row.extra_fields for row in db.scalars(select(Analysis)))
 
 
 def test_mixed_rows_keep_row_errors_and_continue_after_conflict(client, event_payload):

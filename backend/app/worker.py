@@ -1093,22 +1093,30 @@ def _process_moduagent_steps(
 
 def _organize_evidence(db, crypto, analysis, run, sequence, snapshot, request_check):
     from .agent.evidence_editor import VERSION, EvidenceEditorOutput, editor_input, input_fits, serialized_input, validate_groups
+    from .agent import result_editor
     from .services.evidence_editor import editor_profile
     from .services.agent_configuration import profile_metadata, role_request_check
     result = dict(analysis.result_json)
     assessment = result.get("analyst_assessment")
-    document = editor_input(assessment)
+    extended = snapshot.version == result_editor.VERSION
+    source_checks = result.get("analyst_guidance", {}).get("checks", [])
+    preparation_failed = False
+    try:
+        document = result_editor.editor_input(assessment, source_checks) if extended else editor_input(assessment)
+    except (ValueError, TypeError, KeyError):
+        document, preparation_failed = None, True
     metadata = {"editor_version": snapshot.version, "instructions_hash": snapshot.instructions_hash,
                 "model_profile_id": snapshot.profile_id, "profile_fingerprint": snapshot.profile_fingerprint,
                 "verdict_changed": False, "llm_called": False}
     presentation = {"version": VERSION, "status": "skipped", "reason": "no_duplicate_candidates"}
-    with measured_step(db, crypto, run, sequence, "llm_evidence_editor", "근거 정리",
+    check_presentation = {"version": result_editor.CHECK_VERSION}
+    with measured_step(db, crypto, run, sequence, "llm_evidence_editor", "근거·확인사항 정리" if extended else "근거 정리",
                        {"instructions": snapshot.instructions, "input": document}, metadata) as step:
         call = None
-        if document is not None:
+        if preparation_failed or snapshot.version not in {VERSION, result_editor.VERSION}:
+            presentation.update(status="fallback", reason="editor_unavailable_or_invalid")
+        elif document is not None:
             try:
-                if snapshot.version != VERSION:
-                    raise ValueError("editor_version_unavailable")
                 profile = editor_profile(db, snapshot)
                 metadata.update(profile_metadata(profile))
                 text = serialized_input(document)
@@ -1124,10 +1132,15 @@ def _organize_evidence(db, crypto, analysis, run, sequence, snapshot, request_ch
                         profile=profile, api_key=key, instructions=snapshot.instructions, user_input=text,
                         session_id=f"{run.id}:evidence-editor", agent_name="waf-evidence-editor",
                         egress_check=check, concurrency_engine=db.get_bind(),
-                        output_model=EvidenceEditorOutput, output_validation_max_attempts=1), timeout=90))
+                        output_model=result_editor.ResultEditorOutput if extended else EvidenceEditorOutput,
+                        output_validation_max_attempts=1), timeout=90))
                     _ensure_benchmark_owner(db)
                     if call.succeeded:
-                        groups = validate_groups(assessment, call.output)
+                        if extended:
+                            groups, check_groups = result_editor.validate_result(assessment, source_checks, call.output)
+                            check_presentation.update(items=result_editor.check_items(source_checks), groups=check_groups)
+                        else:
+                            groups = validate_groups(assessment, call.output)
                         presentation.update(status="completed", reason=None, groups=groups)
                     else:
                         presentation.update(status="fallback", reason="editor_call_failed")
@@ -1142,10 +1155,18 @@ def _organize_evidence(db, crypto, analysis, run, sequence, snapshot, request_ch
             metadata.update(call.telemetry)
             metadata.update(framework_run_id=call.framework_run_id, agent_fingerprint=call.agent_fingerprint,
                             failure_id=call.failure_id)
-        step_output(crypto, step, {"presentation": presentation, "call": _agent_step_output(call) if call else None}, metadata)
+        if extended:
+            check_presentation.update(status=presentation["status"], reason=presentation["reason"])
+            check_count = len(source_checks) if isinstance(source_checks, list) else 0
+            metadata.update(check_count=check_count, displayed_check_count=len(check_presentation["groups"]) if "groups" in check_presentation else check_count)
+        step_output(crypto, step, {"presentation": presentation,
+                    **({"follow_up_presentation": check_presentation} if extended else {}),
+                    "call": _agent_step_output(call) if call else None}, metadata)
         if presentation["status"] == "fallback":
             step.status = "failed"  # Optional stage failure, not analysis failure.
         result["evidence_presentation"] = presentation
+        if extended:
+            result["follow_up_presentation"] = check_presentation
         result["agent"] = {**result["agent"], "evidence_editor": {
             key: metadata[key] for key in ("editor_version", "instructions_hash", "model_profile_id", "profile_fingerprint", "presentation_status")}}
         analysis.result_json = result

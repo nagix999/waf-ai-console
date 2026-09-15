@@ -2,6 +2,7 @@ import { isMockAnalysis } from "./labelEvaluation.js";
 import { decisionExplanation, genericHoldSummary, genericTuningRisk, isGenericCheck } from "./decisionExplanation.js";
 import { analystText, isTechnicalText } from "./analystText.js";
 import { holdReview } from "./holdReview.js";
+import { presentFollowUpChecks } from "./followUpPresentation.js";
 export { analystText, isTechnicalText } from "./analystText.js";
 
 const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -64,7 +65,7 @@ export function analystGuidance(detail) {
   const result = record(detail?.result) ? detail.result : {};
   const guidance = record(result.analyst_guidance) ? result.analyst_guidance : {};
   const explicitChecks = Array.isArray(guidance.checks);
-  const structured = explicitChecks ? guidance.checks
+  const structured = explicitChecks ? presentFollowUpChecks(guidance.checks, result.follow_up_presentation)
     : Array.isArray(result.analyst_checks) ? result.analyst_checks : [];
   const recommended = Array.isArray(result.recommended_checks) ? result.recommended_checks : [];
   const savedLimitations = Array.isArray(guidance.limitations) ? guidance.limitations : [];

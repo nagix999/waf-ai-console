@@ -211,15 +211,54 @@ def test_test_key_isolation_automatic_runs_and_grouped_replay(client, event_payl
     assert client.get("/api/v1/analyses", headers=production_key).json()["total"] == 1
     payload = {"name": "fixture-test-session", "idempotency_key": str(uuid.uuid4())}
     run = client.post("/api/v1/test-sessions", json=payload, headers=test_key).json()
+    assert run["name"] == payload["name"] and run["id"] != payload["name"]
     assert client.post("/api/v1/test-sessions", json=payload, headers=test_key).json()["id"] == run["id"]
     assert client.get(f"/api/v1/test-sessions/{run['id']}", headers=other_key).status_code == 404
     assert client.post(f"/api/v1/analyses?test_run_id={run['id']}", json=event_payload, headers=production_key).status_code == 422
-    grouped = client.post(f"/api/v1/analyses?test_run_id={run['id']}", json=event_payload, headers=test_key).json()
+    grouped = client.post(f"/api/v1/analyses?wait_seconds=0&test_run_id={run['id']}", json=event_payload, headers=test_key).json()
     assert grouped["id"] != first["id"]
+    assert grouped["test_run_id"] == run["id"] and grouped["analysis_purpose"] == "test"
     assert client.post(f"/api/v1/test-sessions/{run['id']}/close", headers=test_key).status_code == 200
     assert client.post(f"/api/v1/analyses?test_run_id={run['id']}", json=event_payload, headers=test_key).json()["id"] == grouped["id"]
     assert client.post(f"/api/v1/analyses?test_run_id={run['id']}", json={**event_payload, "event_id": "later"}, headers=test_key).status_code == 409
-    assert client.get(f"/api/v1/test-sessions/{run['id']}", headers=test_key).json()["total"] == 1
+    saved_run = client.get(f"/api/v1/test-sessions/{run['id']}", headers=test_key).json()
+    assert saved_run["total"] == 1 and saved_run["name"] == payload["name"]
+
+
+@pytest.mark.parametrize("identifier", ["Gemma 검증 1차", "my-custom-test-id", "11111111-1111-4111-8111-111111111111"])
+def test_test_run_id_must_reference_existing_session_not_a_name(client, event_payload, identifier):
+    headers = key(client)
+    response = client.post("/api/v1/analyses", params={"wait_seconds": 0, "test_run_id": identifier}, json=event_payload, headers=headers)
+    assert response.status_code == 404
+    with client.app.state.session_factory() as db:
+        assert db.scalar(select(func.count()).select_from(Run)) == 0
+        assert db.scalar(select(func.count()).select_from(Analysis)) == 0
+
+
+def test_generated_name_and_admin_cookie_are_not_test_session_ids(client, event_payload):
+    headers = key(client)
+    payload = {"idempotency_key": str(uuid.uuid4())}
+    response = client.post("/api/v1/test-sessions", json=payload, headers=headers)
+    assert response.status_code == 201, response.text
+    run = response.json()
+    assert str(uuid.UUID(run["name"])) == run["name"] and run["name"] != run["id"]
+    login(client)
+    # An existing browser administrator session takes precedence over API keys.
+    assert client.post("/api/v1/test-sessions", json=payload, headers=headers).status_code == 403
+    assert client.post("/api/v1/analyses", params={"test_run_id": run["id"]}, json=event_payload, headers=headers).status_code == 422
+    listing = client.get("/api/v1/test-runs").json()
+    assert any(item["id"] == run["id"] and item["name"] == run["name"] for item in listing["items"])
+
+
+def test_openapi_explains_test_session_ids_and_wait_seconds(client):
+    login(client)
+    paths = client.get("/openapi.json").json()["paths"]
+    for path in ("/api/v1/analyses", "/api/v1/uploads"):
+        parameters = {item["name"]: item for item in paths[path]["post"]["parameters"]}
+        assert "test-sessions 응답의 id" in parameters["test_run_id"]["description"]
+        assert "테스트명·임의 ID는 사용할 수 없으며" in parameters["test_run_id"]["description"]
+    parameters = {item["name"]: item for item in paths["/api/v1/analyses"]["post"]["parameters"]}
+    assert "실행 시간 제한이 아닙니다" in parameters["wait_seconds"]["description"]
 
 
 def test_test_upload_answers_do_not_enter_model_input(client, event_payload):

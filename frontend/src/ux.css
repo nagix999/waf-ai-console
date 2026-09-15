@@ -16,6 +16,7 @@
 .ux-toolbar > .ux-grow { flex: 1; }
 .ux-muted { color: var(--muted, #65758d); font-size: 13px; }
 .evaluation-overview .quality-metrics { padding: 16px 20px 0; margin: 0; }
+.evaluation-overview .panel-head > button { flex-shrink: 0; white-space: nowrap; }
 .evaluation-overview > .evaluation-footnote { margin: 12px 20px 16px; }
 .evaluation-overview .quality-metric strong { font-size: 24px; }
 @media (max-width: 600px) { .ux-dialog-head, .ux-dialog-body { padding: 16px; } }

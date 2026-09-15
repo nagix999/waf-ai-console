@@ -1,3 +1,4 @@
+import { Table } from "./DataTable.jsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api.js";
 import { apiSectionNeighbors, filterApiSections, parseApiDocument } from "./apiDocument.js";
@@ -40,7 +41,7 @@ function CodeExample({ block, section }) {
 function Blocks({ blocks, section, inputSchema }) {
   return blocks.map((block, index) => {
     if (block.type === "code") return <CodeExample key={index} block={block} section={section} />;
-    if (block.type === "table") return <div className="table-wrap api-table" key={index}><table><caption className="sr-only">{section} 정의</caption><thead><tr>{block.headers.map((cell, i) => <th key={i} scope="col"><Inline text={cell} /></th>)}</tr></thead><tbody>{block.rows.map((row, i) => <tr key={i}>{row.map((cell, j) => <td key={j}><Inline text={cell} /></td>)}</tr>)}</tbody></table></div>;
+    if (block.type === "table") return <div className="table-wrap api-table" key={index}><Table><caption className="sr-only">{section} 정의</caption><thead><tr>{block.headers.map((cell, i) => <th key={i} scope="col"><Inline text={cell} /></th>)}</tr></thead><tbody>{block.rows.map((row, i) => <tr key={i}>{row.map((cell, j) => <td key={j}><Inline text={cell} /></td>)}</tr>)}</tbody></Table></div>;
     if (block.type === "list") {
       const Tag = block.ordered ? "ol" : "ul";
       return <Tag key={index} {...(block.ordered ? { start: block.start } : {})}>{block.items.map((item, i) => <li key={i}><Inline text={item} /></li>)}</Tag>;

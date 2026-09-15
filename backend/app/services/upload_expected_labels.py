@@ -1,4 +1,4 @@
-"""Atomic test-only ingestion and append-only reference attachment.
+"""Atomic ingestion and append-only reference attachment.
 
 The answer never becomes part of AnalysisInput, the event fingerprint, encrypted
 event content, or agent input. No worker or model is executed here. A caller using
@@ -22,7 +22,7 @@ UPLOAD_LABEL_SOURCE_REF = "test-upload:expected_verdict"
 EXPECTED_VERDICTS = frozenset({"true_positive", "false_positive", "inconclusive"})
 
 
-def enqueue_test_upload_row(
+def enqueue_with_expected_label(
     db: Session,
     crypto: CryptoService,
     source_system: str,
@@ -40,6 +40,9 @@ def enqueue_test_upload_row(
     prompt_snapshot: PromptSnapshot | None = None,
     source_kind: str = "synthetic_expected",
     comment: str = "",
+    analysis_purpose: str = "test",
+    service_api_key_id: str | None = None,
+    actor_kind: str = "admin_session",
 ) -> tuple[Analysis, bool, str | None]:
     """Return (analysis, duplicate, 'attached'/'unchanged'/None).
 
@@ -58,16 +61,15 @@ def enqueue_test_upload_row(
             connection.exec_driver_sql("BEGIN IMMEDIATE")
         analysis, duplicate = enqueue_analysis(
             db, crypto, source_system, payload,
-            analysis_purpose="test", ingest_channel=ingest_channel,
+            analysis_purpose=analysis_purpose, ingest_channel=ingest_channel,
             payload_max_bytes=payload_max_bytes, commit=False,
             schema_snapshot=schema_snapshot,
             prompt_snapshot=prompt_snapshot,
+            service_api_key_id=service_api_key_id,
         )
         label_state = None
         if expected_verdict is not None:
-            # Existing legacy/production submissions must never gain test-file
-            # provenance merely because historical purpose data was incomplete.
-            if analysis.analysis_purpose != "test":
+            if analysis.analysis_purpose != analysis_purpose:
                 raise AnalysisIngestError("event_purpose_conflict", 409)
             if connection.dialect.name != "sqlite":
                 db.execute(select(Analysis.id).where(Analysis.id == analysis.id).with_for_update())
@@ -91,8 +93,8 @@ def enqueue_test_upload_row(
                     encryption_key_version=crypto.key_version if comment else None,
                 ))
                 db.add(AccessAudit(
-                    actor_kind="admin_session", actor_id=actor,
-                    action="attach_test_upload_expected_label",
+                    actor_kind=actor_kind, actor_id=actor,
+                    action="attach_request_expected_label" if label_source_ref == "analysis-request:expected_verdict" else "attach_test_upload_expected_label",
                     resource_type="evaluation_label_attachment", resource_id=identifier,
                 ))
                 label_state = "attached"
@@ -113,3 +115,8 @@ def enqueue_test_upload_row(
         if commit:
             db.rollback()
         raise
+
+
+def enqueue_test_upload_row(*args, **kwargs):
+    """Compatibility entry point for named tests and model validation."""
+    return enqueue_with_expected_label(*args, **kwargs)

@@ -208,6 +208,9 @@ def build_report(detail: dict, *, generated_at: datetime | None = None) -> Analy
     explicit_checks = isinstance(structured, list)
     if not explicit_checks:
         structured = result.get("analyst_checks")
+    if explicit_checks:
+        from ..agent.result_editor import present_checks
+        structured = present_checks(structured, result.get("follow_up_presentation"))
     checks = []
     for item in _list(structured):
         if not isinstance(item, dict):

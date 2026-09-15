@@ -31,7 +31,7 @@ test("comparison state isolates search, selection and item pagination from main 
   assert.equal(state.offset, 25); assert.equal(state.query.q, "합성 기준");
   const rowFilter = testComparisonChange(state, { type: "changes", value: true }); assert.equal(rowFilter.offset, 0); assert.equal(rowFilter.baselineId, "baseline"); assert.equal(rowFilter.query, state.query);
   const closed = testComparisonChange(rowFilter, { type: "open", value: false }); assert.equal(closed.baselineId, "baseline"); assert.equal(closed.queryText, " 합성 기준 "); assert.equal(closed.changes_only, true);
-  const filters = { difficulty: "hard", offset: 50, comparison: closed }; assert.deepEqual(testRunQuery(filters), { limit: 25, offset: 50, difficulty: "hard" });
+  const filters = { difficulty: "hard", offset: 50, comparison: closed }; assert.deepEqual(testRunQuery(filters), { limit: 25, offset: 50, difficulty: "hard", reference_basis: "latest", sort_by: "row_number", sort_order: "asc" });
   assert.deepEqual(testComparisonQuery(closed), { baseline_id: "baseline", limit: 25, offset: 0, changes_only: true });
   assert.equal(start.queryText, ""); assert.equal(start.baselineId, "");
 });
@@ -88,7 +88,12 @@ test("comparison case labels are inert text and both analysis links use immutabl
   const item = { event_id: "evt", case_name: "<script>synthetic</script>", baseline_analysis_id: "baseline-analysis", candidate_analysis_id: "candidate-analysis", baseline_verdict: "false_positive", candidate_verdict: "true_positive", reference_verdict: "true_positive", baseline_outcome: "false_negative", candidate_outcome: "match", comparison_status: "comparable", change: "improved" };
   const html = render(TestComparisonItems, { items: [item], onOpen() {} });
   assert.match(html, /&lt;script&gt;synthetic/); assert.doesNotMatch(html, /<script/); assert.match(html, /기준 분석 상세/); assert.match(html, /후보 분석 상세/);
-  const buttons = node => Array.isArray(node) ? node.flatMap(buttons) : node && typeof node === "object" ? [...(node.type === "button" ? [node] : []), ...buttons(node.props?.children)] : [];
+  const buttons = node => {
+    if (Array.isArray(node)) return node.flatMap(buttons);
+    if (!node || typeof node !== "object") return [];
+    const cells = node.props?.columns?.flatMap(column => node.props.data.map((row, index) => column.render?.(row, index))) || [];
+    return [...(node.type === "button" ? [node] : []), ...buttons(node.props?.children), ...buttons(cells)];
+  };
   const opened = []; buttons(TestComparisonItems({ items: [item], onOpen: id => opened.push(id) })).forEach(button => button.props.onClick());
   assert.deepEqual(opened, ["baseline-analysis", "candidate-analysis"]);
 });

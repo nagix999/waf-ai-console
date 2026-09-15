@@ -63,6 +63,7 @@ class TestRunSummary(UTCResponse):
     evaluation_summary: EvaluationSummary
     evaluation_id: str | None = None
     evaluation_revision: int = 0
+    reference_basis: Literal["initial", "latest", "saved"] = "initial"
     dataset_version_id: str | None = None
     accepting_items: bool = False
     started_at: datetime | None

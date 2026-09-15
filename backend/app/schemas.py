@@ -52,6 +52,22 @@ class AnalysisInput(BaseModel):
         return self.model_extra or {}
 
 
+class AnalysisRequest(AnalysisInput):
+    """HTTP admission metadata, never an agent/event input."""
+    expected_verdict: Literal["true_positive", "false_positive", "inconclusive"] | None = Field(
+        default=None, description="Optional reference answer. Stored separately; never sent to the LLM.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_server_fields(cls, value: Any) -> Any:
+        event = {key: item for key, item in value.items() if key != "expected_verdict"} if isinstance(value, dict) else value
+        AnalysisInput.reject_server_fields(event)
+        return value
+
+    def event_input(self) -> AnalysisInput:
+        return AnalysisInput.model_validate(self.model_dump(mode="json", exclude={"expected_verdict"}, exclude_unset=True))
+
+
 class AnalysisSummary(UTCResponse):
     id: str
     source_system: str

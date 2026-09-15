@@ -49,7 +49,7 @@ def parse_upload(filename: str, content: bytes) -> list[dict[str, Any]]:
 
 
 def extract_test_upload_row(row: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
-    """Detach only the optional test-file answer, before event validation/storage.
+    """Detach only the optional answer, before event validation/storage.
 
     Other reserved evaluation metadata deliberately remains for AnalysisInput to
     reject. This is not a recursive payload sanitizer or a label inference step.

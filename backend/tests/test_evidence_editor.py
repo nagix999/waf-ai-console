@@ -9,6 +9,7 @@ from sqlalchemy import select
 
 from app import worker
 from app.agent.evidence_editor import EvidenceEditorOutput, VERSION, editor_input, validate_groups
+from app.agent.result_editor import ResultEditorOutput
 from app.agent.executor import AgentCallResult, execute_structured_agent
 from app.models import AgentStep, Analysis, TestRun as NamedRun, VLLMProfile
 from app.services.analysis_retries import load_execution_snapshot
@@ -112,7 +113,7 @@ def install_calls(monkeypatch, mode="valid"):
     async def execute(**kwargs):
         kwargs["egress_check"]()
         calls.append(kwargs)
-        if kwargs["output_model"] is EvidenceEditorOutput:
+        if kwargs["output_model"] in {EvidenceEditorOutput, ResultEditorOutput}:
             if mode == "raise":
                 raise TimeoutError("SENSITIVE_PROVIDER_BODY")
             if mode == "lost":
@@ -122,7 +123,8 @@ def install_calls(monkeypatch, mode="valid"):
             groups = [{"member_ids": ids, "representative_id": ids[-1]}]
             if mode == "invalid":
                 groups[0]["member_ids"] = [ids[0]]
-            output = EvidenceEditorOutput(groups=groups)
+            output = (ResultEditorOutput(groups=groups, check_groups=[{"member_ids": [item["check_id"]], "representative_id": item["check_id"]} for item in data["checks"]])
+                      if kwargs["output_model"] is ResultEditorOutput else EvidenceEditorOutput(groups=groups))
         else:
             output = primary_output("q=test")
             output.confidence_score = .6  # Exercise both decision roles.

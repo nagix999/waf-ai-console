@@ -50,7 +50,8 @@ test("unified list has exactly six stable columns without a WAF column or altern
   function visit(node) {
     if (Array.isArray(node)) return node.flatMap(visit);
     if (!node || typeof node !== "object") return [];
-    return [...(node.type === "button" ? [node] : []), ...visit(node.props?.children)];
+    const cells = node.props?.columns?.flatMap(column => node.props.data.map((row, index) => column.render?.(row, index))) || [];
+    return [...(node.type === "button" ? [node] : []), ...visit(node.props?.children), ...visit(cells)];
   }
   visit(tree).find(button => button.props.className.includes("unified-event-title")).props.onClick();
   assert.deepEqual(opened, ["complete"], "displayed event IDs are hidden, but navigation still uses the immutable analysis ID");

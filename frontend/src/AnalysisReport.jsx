@@ -1,3 +1,4 @@
+import { Table } from "./DataTable.jsx";
 import { useId, useMemo, useRef, useState } from "react";
 import { buildAnalysisReport, decodeReportText } from "./analysisReport.js";
 import { parseApiDocument } from "./apiDocument.js";
@@ -23,7 +24,7 @@ function ReportBlocks({ blocks, section }) {
     // The generator appends exactly one LF to separate the excerpt from its
     // closing fence. Remove only that separator, preserving original CR/LF.
     if (block.type === "code") return <pre key={index} className="report-excerpt" tabIndex={0} aria-label={`${section} 원문 발췌`}><code>{block.text.endsWith("\n") ? block.text.slice(0, -1) : block.text}</code></pre>;
-    if (block.type === "table") return <div key={index} className="report-table"><table><caption className="sr-only">{section}</caption><thead><tr>{block.headers.map((cell, i) => <th key={i} scope="col">{decodeReportText(cell)}</th>)}</tr></thead><tbody>{block.rows.map((row, i) => <tr key={i}>{row.map((cell, j) => <td key={j}>{decodeReportText(cell)}</td>)}</tr>)}</tbody></table></div>;
+    if (block.type === "table") return <div key={index} className="report-table"><Table><caption className="sr-only">{section}</caption><thead><tr>{block.headers.map((cell, i) => <th key={i} scope="col">{decodeReportText(cell)}</th>)}</tr></thead><tbody>{block.rows.map((row, i) => <tr key={i}>{row.map((cell, j) => <td key={j}>{decodeReportText(cell)}</td>)}</tr>)}</tbody></Table></div>;
     if (block.type === "list") {
       const Tag = block.ordered ? "ol" : "ul";
       return <Tag key={index} {...(block.ordered ? { start: block.start } : {})}>{block.items.map((item, i) => <li key={i}>{decodeReportText(item)}</li>)}</Tag>;

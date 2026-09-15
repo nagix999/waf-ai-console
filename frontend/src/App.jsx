@@ -17,6 +17,7 @@ import { analysisElapsedTime, analysisQuery, analysisReceivedAt, analysisRowStat
 import { EXTERNAL_DATA_APPROVAL, changeProfileProvider, editProfileForm, modelProfileError, newProfileForm, profilePayload, profileRequiresKey, providerLabel, providerOf, validateProfileForm } from "./llmProfiles.js";
 import { CompactEvaluationDetail, CompactReferenceComparison, EvaluationSummary, LabelAttachment } from "./ReferenceLabels.jsx";
 import AnalysisSelectionActions, { useAnalysisSelection } from "./AnalysisSelection.jsx";
+import DataTable, { Table, serverSorting, changedSort } from "./DataTable.jsx";
 import DataManagement from "./DataManagement.jsx";
 import DatasetAnalysis from "./DatasetAnalysis.jsx";
 import { evaluationOutcomes, isMockAnalysis, labelSources, referenceVerdicts } from "./labelEvaluation.js";
@@ -139,34 +140,25 @@ export function Login({ onLogin }) {
 }
 
 
-export function AnalysisTable({ items, onOpen, title = "분석 결과", subtitle, total = items.length, loading = false, purpose = "", selection }) {
+export function AnalysisTable({ items, onOpen, title = "분석 결과", subtitle, total = items.length, loading = false, purpose = "", selection, sorting, onSortingChange }) {
   const showPurpose = !["test", "production", "legacy_unknown"].includes(purpose);
-  return (
-    <section className="panel">
-      <div className="panel-head"><div><h2>{title}</h2>{subtitle && <small>{subtitle}</small>}</div><span className="count-label" aria-live="polite">{loading ? "조회 중…" : `${total.toLocaleString()}건`}</span></div>
-      <div className="table-wrap">
-        <table className={`analyst-table unified-analysis-table${selection ? " with-selection" : ""}`}>
-          <thead><tr>{selection && <th className="selection-cell" scope="col">{selection.header}</th>}<th scope="col">판정 / 심각도</th><th scope="col">이벤트 / 요약</th><th scope="col">회사 / 연결</th><th scope="col">참고 답안 비교</th><th scope="col">전체 소요 시간</th><th scope="col">접수 시각</th></tr></thead>
-          <tbody>
-            {items.map((item) => {
-              const state = analysisRowState(item.status);
-              const receivedAt = analysisReceivedAt(item.created_at);
-              return <tr key={item.id} className={state.className}>
-                {selection && <td className="selection-cell">{selection.cell(item.id, item.signature || item.event_name || "분석")}</td>}
-                <td className="table-meta unified-decision">{item.status === "completed" ? <><Status value={finalValue(item, "verdict")} /><Severity value={item.severity} /><span className="sr-only">{state.label}</span></> : <span className="analysis-row-state"><Icon name={item.status === "failed" ? "alert" : "clock"} size={14} />{state.label}</span>}{isMockAnalysis(item) && <small className="label-revision">모의 판정 · LLM 아님</small>}{item.input_truncated === true && <small>입력 일부 생략</small>}</td>
-                <td className="table-meta analyst-event unified-event"><button className="text-button unified-event-title" onClick={() => onOpen(item.id)}>{item.signature || item.event_name || "분석 상세 보기"}</button><SummaryPreview text={analystSummary(item)} />{showPurpose && <Purpose value={item.analysis_purpose} />}</td>
-                <td className="table-meta unified-company"><strong title={item.company_name || ""}>{item.company_name}</strong><small title={`${item.src_ip || "-"}${item.src_port != null ? ` : ${item.src_port}` : ""}`}>{item.src_ip || "-"}{item.src_port != null ? ` : ${item.src_port}` : ""}</small><small title={`${item.dest_ip || "-"}${item.dest_port != null ? ` : ${item.dest_port}` : ""}`}>→ {item.dest_ip || "-"}{item.dest_port != null ? ` : ${item.dest_port}` : ""}</small></td>
-                <td className="unified-reference"><CompactReferenceComparison evaluation={item.evaluation} detail={item} /></td>
-                <td>{analysisElapsedTime(item)}</td>
-                <td><time className="analysis-received-at" dateTime={receivedAt.dateTime}><span>{receivedAt.date}</span><small>{receivedAt.time}</small></time></td>
-              </tr>;
-            })}
-            {!items.length && <tr><td colSpan={selection ? 7 : 6} className="empty"><Icon name="search" size={28} /><strong>{loading ? "분석을 불러오는 중…" : "조건에 맞는 분석이 없습니다."}</strong>{!loading && <small>검색 조건을 조정하거나 테스트 데이터를 접수해 보세요.</small>}</td></tr>}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
+  const columns = [
+    ...(selection ? [{ id: "select", header: selection.header, width: 44, className: "selection-cell", render: item => selection.cell(item.id, item.signature || item.event_name || "분석") }] : []),
+    { id: "decision", header: "판정 / 심각도", width: "14%", className: "table-meta unified-decision", render: item => {
+      const state = analysisRowState(item.status);
+      return <>{item.status === "completed" ? <><Status value={finalValue(item, "verdict")} /><Severity value={item.severity} /><span className="sr-only">{state.label}</span></> : <span className="analysis-row-state"><Icon name={item.status === "failed" ? "alert" : "clock"} size={14} />{state.label}</span>}
+        {isMockAnalysis(item) && <small className="label-revision">모의 판정 · LLM 아님</small>}{item.input_truncated === true && <small>입력 일부 생략</small>}</>;
+    }},
+    { id: "summary", header: "이벤트 / 요약", className: "table-meta analyst-event unified-event", render: item => <><button className="text-button unified-event-title" onClick={() => onOpen(item.id)}>{item.signature || item.event_name || "분석 상세 보기"}</button><SummaryPreview text={analystSummary(item)} />{showPurpose && <Purpose value={item.analysis_purpose} />}</> },
+    { id: "company_name", header: "회사 / 연결", sortable: true, width: "18%", className: "table-meta unified-company", render: item => <><strong title={item.company_name || ""}>{item.company_name}</strong><small title={`${item.src_ip || "-"}${item.src_port != null ? ` : ${item.src_port}` : ""}`}>{item.src_ip || "-"}{item.src_port != null ? ` : ${item.src_port}` : ""}</small><small title={`${item.dest_ip || "-"}${item.dest_port != null ? ` : ${item.dest_port}` : ""}`}>→ {item.dest_ip || "-"}{item.dest_port != null ? ` : ${item.dest_port}` : ""}</small></> },
+    { id: "reference", header: "참고 답안 비교", width: "14%", className: "unified-reference", render: item => <CompactReferenceComparison evaluation={item.evaluation} detail={item} /> },
+    { id: "duration", header: "전체 소요 시간", width: "10%", className: "numeric", render: item => analysisElapsedTime(item) },
+    { id: "created_at", header: "접수 시각", sortable: true, width: "13%", render: item => { const receivedAt = analysisReceivedAt(item.created_at); return <time className="analysis-received-at" dateTime={receivedAt.dateTime}><span>{receivedAt.date}</span><small>{receivedAt.time}</small></time>; } },
+  ];
+  return <section className="panel"><div className="panel-head"><div><h2>{title}</h2>{subtitle && <small>{subtitle}</small>}</div><span className="count-label" aria-live="polite">{loading ? "조회 중…" : `${total.toLocaleString()}건`}</span></div>
+    <DataTable label={title} className="analysis-data-table" data={items} columns={columns} sorting={sorting} onSortingChange={onSortingChange} rowClassName={item => analysisRowState(item.status).className}
+      empty={<><Icon name="search" size={28} /><strong>{loading ? "분석을 불러오는 중…" : "조건에 맞는 분석이 없습니다."}</strong>{!loading && <small>검색 조건을 조정하거나 테스트 데이터를 접수해 보세요.</small>}</>} />
+  </section>;
 }
 
 function SelectFilter({ label, name, value, onChange, options }) {
@@ -206,7 +198,7 @@ export function AnalysisList({ state, setState, onOpen, onUnauthorized, onScopeC
   const [formError, setFormError] = useState("");
   const [labelRefresh, setLabelRefresh] = useState(0);
   const [attachmentOpen, setAttachmentOpen] = useState(false);
-  const query = useMemo(() => analysisQuery(state.applied, state.limit, state.offset), [state.applied, state.limit, state.offset]);
+  const query = useMemo(() => ({ ...analysisQuery(state.applied, state.limit, state.offset), sort_by: state.sort_by || "created_at", sort_order: state.sort_order || "desc" }), [state.applied, state.limit, state.offset, state.sort_by, state.sort_order]);
   const selection = useAnalysisSelection(data.items, JSON.stringify(query));
   useEffect(() => {
     let active = true;
@@ -306,7 +298,7 @@ export function AnalysisList({ state, setState, onOpen, onUnauthorized, onScopeC
     {error && <div className="error" role="alert">{error}</div>}
     <EvaluationOverview summary={data.evaluation_summary} loading={loading} error={error} />
     <AnalysisSelectionActions ids={selection.ids} onClear={selection.clear} onSaved={() => setLabelRefresh(value => value + 1)} />
-    <AnalysisTable items={data.items} total={data.total} loading={loading} onOpen={onOpen} purpose={state.applied.analysis_purpose} selection={selection} />
+    <AnalysisTable items={data.items} total={data.total} loading={loading} onOpen={onOpen} purpose={state.applied.analysis_purpose} selection={selection} sorting={serverSorting(query.sort_by, query.sort_order)} onSortingChange={update => setState(current => ({ ...current, ...changedSort(update, serverSorting(query.sort_by, query.sort_order)) }))} />
     <div className="pagination">
       <label>페이지당<select value={state.limit} onChange={(event) => { const limit = Number(event.target.value); setState((current) => ({ ...current, limit, offset: 0 })); }}>{[25, 50, 100].map((limit) => <option key={limit} value={limit}>{limit}건</option>)}</select></label>
       <span aria-live="polite">{data.total ? `${state.offset + 1}–${Math.min(state.offset + state.limit, data.total)} / ${data.total.toLocaleString()}건` : "0건"} · {currentPage} / {pageCount}페이지</span>
@@ -381,7 +373,7 @@ function UploadPage({ onViewTests, onOpen, onCreated, disabledReason }) {
       {error && <div className="error" role="alert">{error}</div>}
       {result && <div className="notice" aria-live="polite">신규 {result.accepted}건 · 중복 {result.duplicates}건 · 거부 {result.rejected}건</div>}
       {uploadLabelNotice(result) && <p role="status">{uploadLabelNotice(result)}</p>}
-      {!!result?.errors?.length && <div className="upload-errors"><h3>접수하지 못한 행</h3><p className="muted">오류를 수정한 뒤 다시 접수하세요. 기존 답안을 수정하려면 분석 결과의 참고 답안 연결에서 미리보기·확정하세요. 오류 상세는 최대 100건 표시합니다.</p><div className="table-wrap"><table><thead><tr><th>행 번호</th><th>오류 필드 / 코드</th></tr></thead><tbody>{result.errors.map((item, index) => <tr key={index}><td>{item.row ?? "—"}</td><td><code>{expectedVerdictUploadError(item) || uploadErrorText(item)}</code></td></tr>)}</tbody></table></div></div>}
+      {!!result?.errors?.length && <div className="upload-errors"><h3>접수하지 못한 행</h3><p className="muted">오류를 수정한 뒤 다시 접수하세요. 기존 답안을 수정하려면 분석 결과의 참고 답안 연결에서 미리보기·확정하세요. 오류 상세는 최대 100건 표시합니다.</p><div className="table-wrap"><Table><thead><tr><th>행 번호</th><th>오류 필드 / 코드</th></tr></thead><tbody>{result.errors.map((item, index) => <tr key={index}><td>{item.row ?? "—"}</td><td><code>{expectedVerdictUploadError(item) || uploadErrorText(item)}</code></td></tr>)}</tbody></Table></div></div>}
       {result && <div className="action-row"><button type="button" className="primary" onClick={() => onCreated(result)}>이 테스트의 진행·평가 보기</button><button type="button" className="secondary" onClick={() => { setResult(null); requestKey.current = null; }}>같은 파일로 새 테스트 준비</button><button type="button" className="secondary" onClick={onViewTests}>테스트 분석 결과 보기</button></div>}
     </section>
   );
@@ -720,21 +712,23 @@ export function ModelSettings({ onProductionChange, onInternalEgress, onViewData
       <section className="panel profile-section">
         <div className="panel-head"><div><h2>모델 목록</h2><p className="ux-muted">현재 설정으로 전체 검증을 통과해야 운영·테스트에 지정할 수 있습니다.</p></div><div className="ux-toolbar"><button type="button" className="primary" disabled={Boolean(busy)} onClick={() => { if (editingProfile) resetForm(); setFormOpen(true); }}>모델 추가</button><button type="button" className="secondary" disabled={Boolean(busy)} onClick={loadProfiles}>새로고침</button></div></div>
         {profilesError && <p className="error" role="alert">{profilesError} 최신 상태를 확인하기 전에는 지정할 수 없습니다.</p>}
-        <div className="table-wrap">
-          <table className="profile-table">
-            <thead><tr><th>이름</th><th>모델</th><th>최근 검증</th><th>사용 상태</th><th>관리</th></tr></thead>
-            <tbody>
-              {profiles.map((profile) => {
+        <DataTable label="LLM 프로필" columns={[
+            { id: "name", header: "이름", width: "22%", render: row => row.cells[0] },
+            { id: "model", header: "모델", width: "25%", render: row => row.cells[1] },
+            { id: "check", header: "최근 검증", width: "20%", render: row => row.cells[2] },
+            { id: "roles", header: "사용 상태", width: "22%", render: row => row.cells[3] },
+            { id: "actions", header: "관리", width: 80, render: row => row.cells[4] }
+          ]} data={profiles.map(profile => {
                 const latest = tests[profile.id]?.[0];
                 const active = ["pending", "running"].includes(latest?.status) || ["waiting", "running"].includes(latest?.dataset_evaluation?.status);
                 const internalTargetIssue = providerOf(profile) === "vllm" ? vllmTargetError(profile.base_url, internalTargets) : "";
                 const assignmentIssue = assignmentBlockReason(profile, { loading: profilesLoading, error: profilesError, targetError: internalTargetIssue, active });
-                return <tr key={profile.id}>
-                  <td><strong>{profile.name}</strong><span className={`provider-badge provider-${providerOf(profile)}`}>{providerLabel(profile)}</span>{internalTargetIssue && <small className="error">연결 허용 확인 필요</small>}{providerOf(profile) === "openai" && !profile.external_data_approved && <small className="error">외부 전송 미승인</small>}</td>
-                  <td><span>{profile.model_name}</span></td>
-                  <td>{latest ? <><Status value={latest.status} /><small>{latest.mode} · {latest.completed_at ? new Date(latest.completed_at).toLocaleString("ko-KR") : "진행 중"}</small></> : <span>-</span>}</td>
-                  <td><div className="profile-role-badges">{profile.status === "production" && <span className="status status-production">Production Primary</span>}{profile.is_test && <span className="status purpose-test">Test Primary</span>}{profile.agent_roles?.map(role => <span className="status" key={role}>{role.startsWith("test") ? "Test" : "Production"} {role.endsWith(".evidence_editor") ? "근거 정리" : "Verifier"}</span>)}</div>{profile.status !== "production" && <Status value={profile.status} />}</td>
-                  <td><button type="button" className="secondary" onClick={() => setManagedId(profile.id)}>관리</button><Dialog open={managedId === profile.id} title={`${profile.name} · 모델 관리`} onClose={() => { if (!busy) setManagedId(null); }}><section className="detail-summary"><div><span>연결 주소</span><strong>{profile.base_url}</strong></div><div><span>입력 한도 / 최대 출력</span><strong>{profile.context_window.toLocaleString()} / {profile.max_output_tokens} 토큰</strong></div><div><span>제한 시간 / 검증 동시 요청</span><strong>{profile.timeout_seconds}초 / {profile.test_concurrency}건</strong></div><div><span>API Key</span><strong>{profile.has_api_key ? "저장됨" : "없음"}</strong></div></section><div className="profile-actions">
+                return { id: profile.id, cells: [
+                  <><strong>{profile.name}</strong><span className={`provider-badge provider-${providerOf(profile)}`}>{providerLabel(profile)}</span>{internalTargetIssue && <small className="error">연결 허용 확인 필요</small>}{providerOf(profile) === "openai" && !profile.external_data_approved && <small className="error">외부 전송 미승인</small>}</>,
+                  <><span>{profile.model_name}</span></>,
+                  <>{latest ? <><Status value={latest.status} /><small>{latest.mode} · {latest.completed_at ? new Date(latest.completed_at).toLocaleString("ko-KR") : "진행 중"}</small></> : <span>-</span>}</>,
+                  <><div className="profile-role-badges">{profile.status === "production" && <span className="status status-production">Production Primary</span>}{profile.is_test && <span className="status purpose-test">Test Primary</span>}{profile.agent_roles?.map(role => <span className="status" key={role}>{role.startsWith("test") ? "Test" : "Production"} {role.endsWith(".evidence_editor") ? "근거 정리" : "Verifier"}</span>)}</div>{profile.status !== "production" && <Status value={profile.status} />}</>,
+                  <><button type="button" className="secondary" onClick={() => setManagedId(profile.id)}>관리</button><Dialog open={managedId === profile.id} title={`${profile.name} · 모델 관리`} onClose={() => { if (!busy) setManagedId(null); }}><section className="detail-summary"><div><span>연결 주소</span><strong>{profile.base_url}</strong></div><div><span>입력 한도 / 최대 출력</span><strong>{profile.context_window.toLocaleString()} / {profile.max_output_tokens} 토큰</strong></div><div><span>제한 시간 / 검증 동시 요청</span><strong>{profile.timeout_seconds}초 / {profile.test_concurrency}건</strong></div><div><span>API Key</span><strong>{profile.has_api_key ? "저장됨" : "없음"}</strong></div></section><div className="profile-actions">
                     <button className="secondary small" disabled={Boolean(busy) || active || profile.status === "disabled" || Boolean(internalTargetIssue) || (providerOf(profile) === "openai" && !profile.external_data_approved)} onClick={() => runTest(profile, "quick")}>{busy === `q-${profile.id}` ? "등록 중" : "빠른 테스트"}</button>
                     <button className="secondary small" disabled={Boolean(busy) || active || profile.status === "disabled" || Boolean(internalTargetIssue) || (providerOf(profile) === "openai" && !profile.external_data_approved)} onClick={() => runTest(profile, "full")}>{busy === `f-${profile.id}` ? "등록 중" : "전체 검증"}</button>
                     <button className="secondary small" disabled={Boolean(busy) || roleAssigned(profile) || Boolean(profilesError)} title={roleAssigned(profile) ? "Agent 배정 중에는 수정할 수 없습니다." : undefined} onClick={() => edit(profile)}>편집</button>
@@ -742,13 +736,9 @@ export function ModelSettings({ onProductionChange, onInternalEgress, onViewData
                     {profile.status === "disabled"
                       ? <button className="secondary small" disabled={Boolean(busy) || Boolean(internalTargetIssue)} onClick={() => act(`e-${profile.id}`, () => api.enableModelProfile(profile.id))}>활성화</button>
                       : <button className="secondary small" disabled={Boolean(busy) || Boolean(profilesError) || Boolean(profile.agent_roles?.length)} onClick={() => openAssignment(profile, "disable")}>비활성화</button>}
-                  </div>{assignmentIssue && <p className="profile-assignment-reason">지정 불가: {assignmentIssue}</p>}{roleAssigned(profile) && <p className="profile-assignment-reason">편집하려면 Agent 설정에서 배정을 해제하세요. 별도 Verifier로 배정된 모델은 해제 후 비활성화할 수 있습니다.</p>}{message && <p className="notice" role="status">{message}</p>}{managedId === profile.id && latest && <TestResult profile={profile} test={latest} onViewDataset={onViewDataset} />}</Dialog></td>
-                </tr>;
-              })}
-              {!profiles.length && <tr><td colSpan="5" className="empty">{profilesLoading ? "모델을 불러오는 중…" : profilesError ? "모델 목록을 확인할 수 없습니다." : "등록된 모델이 없습니다."}</td></tr>}
-            </tbody>
-          </table>
-        </div>
+                  </div>{assignmentIssue && <p className="profile-assignment-reason">지정 불가: {assignmentIssue}</p>}{roleAssigned(profile) && <p className="profile-assignment-reason">편집하려면 Agent 설정에서 배정을 해제하세요. 별도 Verifier로 배정된 모델은 해제 후 비활성화할 수 있습니다.</p>}{message && <p className="notice" role="status">{message}</p>}{managedId === profile.id && latest && <TestResult profile={profile} test={latest} onViewDataset={onViewDataset} />}</Dialog></>
+                ] };
+          })} empty={profilesLoading ? "모델을 불러오는 중…" : profilesError ? "모델 목록을 확인할 수 없습니다." : "등록된 모델이 없습니다."} />
       </section>
 
       <Dialog open={formOpen} title={editingId ? "모델 수정" : "모델 추가"} onClose={() => { if (!busy) setFormOpen(false); }}>

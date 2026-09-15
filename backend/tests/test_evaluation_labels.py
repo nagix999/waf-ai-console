@@ -251,7 +251,7 @@ def test_bounded_json_parser_safe_failures(content, code):
 def test_new_inline_label_metadata_is_rejected_not_silently_stripped(client, event_payload, service_headers, field):
     response = client.post("/api/v1/analyses", headers=service_headers, json={**event_payload, field: "SYNTHETIC_SECRET"})
     assert response.status_code == 422
-    assert "evaluation_labels_require_separate_attachment" in response.text
+    assert ("literal_error" if field == "expected_verdict" else "evaluation_labels_require_separate_attachment") in response.text
     assert "SYNTHETIC_SECRET" not in response.text
     with client.app.state.session_factory() as db:
         assert db.query(Analysis).count() == 0

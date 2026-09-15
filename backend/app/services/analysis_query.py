@@ -23,6 +23,8 @@ class AnalysisFilters(BaseModel):
 
     limit: int = Field(default=50, ge=1, le=200)
     offset: int = Field(default=0, ge=0)
+    sort_by: Literal["created_at", "company_name", "src_ip", "dest_ip", "status"] = "created_at"
+    sort_order: Literal["asc", "desc"] = "desc"
     service_api_key_id: str | None = Field(default=None, min_length=1, max_length=36)
     include_retries: bool = False
     analysis_purpose: AnalysisPurpose | None = None
@@ -151,9 +153,11 @@ def find_analyses(db: Session, filters: AnalysisFilters, source_system: str | No
     evaluation = evaluation_relation()
     conditions = analysis_conditions(filters, source_system, evaluation)
     total = int(db.scalar(select(func.count()).select_from(Analysis).join(evaluation, evaluation.c.analysis_id == Analysis.id).where(*conditions)) or 0)
+    column = getattr(Analysis, filters.sort_by)
+    order = column.desc() if filters.sort_order == "desc" else column.asc()
     query = (
         select(Analysis).options(selectinload(Analysis.reviews)).join(evaluation, evaluation.c.analysis_id == Analysis.id).where(*conditions)
-        .order_by(Analysis.created_at.desc(), Analysis.id.desc()).offset(filters.offset).limit(filters.limit)
+        .order_by(order, Analysis.id.desc()).offset(filters.offset).limit(filters.limit)
     )
     rows = list(db.scalars(query).all())
     attach_evaluations(db, rows)

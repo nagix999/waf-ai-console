@@ -1,3 +1,4 @@
+import { Table } from "./DataTable.jsx";
 import { useEffect, useState } from "react";
 import { api } from "./api.js";
 import { Icon } from "./Icon.jsx";
@@ -19,7 +20,7 @@ export function EvaluationTrend({ trend = [] }) {
       {segments.map((points, index) => <g key={index}><polyline fill="none" points={points.map(p => `${p.x},${p.y}`).join(" ")} />{points.map(point => <circle key={point.date} cx={point.x} cy={point.y} r="3"><title>{point.date}: {metricText(point.value)}</title></circle>)}</g>)}
     </svg> : <p className="trend-empty">평가 가능한 답안이 연결되면 그래프가 표시됩니다.</p>}
     <p className="ux-muted">답안 표본의 일별 지표 · 끊긴 구간은 계산할 표본 없음</p><div className="trend-foot"><span>{trend[0]?.date || "—"} ~ {trend.at(-1)?.date || "—"} · UTC</span><button className="text-button" type="button" onClick={() => setTableOpen(true)}>일별 수치</button></div></div>
-    <Dialog open={tableOpen} title="일별 평가 수치" onClose={() => setTableOpen(false)}><div className="table-wrap"><table><thead><tr><th>접수일 (UTC)</th><th>전체 / 평가 / 확정</th><th>{labels[metric]}</th></tr></thead><tbody>{trend.map(day => <tr key={day.date}><td>{day.date}</td><td>{day.total} / {day.evaluation_summary?.binary_evaluable ?? 0} / {day.evaluation_summary?.binary_decided ?? 0}</td><td>{metricText(day.evaluation_summary?.metrics?.[metric])}</td></tr>)}</tbody></table></div></Dialog>
+    <Dialog open={tableOpen} title="일별 평가 수치" onClose={() => setTableOpen(false)}><div className="table-wrap"><Table><thead><tr><th>접수일 (UTC)</th><th>전체 / 평가 / 확정</th><th>{labels[metric]}</th></tr></thead><tbody>{trend.map(day => <tr key={day.date}><td>{day.date}</td><td>{day.total} / {day.evaluation_summary?.binary_evaluable ?? 0} / {day.evaluation_summary?.binary_decided ?? 0}</td><td>{metricText(day.evaluation_summary?.metrics?.[metric])}</td></tr>)}</tbody></Table></div></Dialog>
   </section>;
 }
 

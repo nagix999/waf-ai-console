@@ -9,6 +9,8 @@
 .test-run-header h2 { margin-top: 8px; }.test-run-header dl { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 20px; margin: 22px 0; }.test-run-header dt { color: var(--muted); font-size: 11px; }.test-run-header dd { margin: 7px 0 0; font-size: 13px; overflow-wrap: anywhere; }
 .test-run-scope h3 { margin-top: 0; font-size: 14px; }.test-run-cases .filter-grid { margin: 16px 0; }.test-name-field { margin: 16px 0; }
 .test-run-detail .panel-head-inline { flex-wrap: wrap; gap: 12px; }
+.test-run-detail { grid-template-columns: minmax(0, 1fr); }
+.test-run-detail .dataset-version-bar { min-width: 0; }
 .test-run-header h2 { overflow-wrap: anywhere; }
 .test-run-detail .panel-head-inline .back { flex-shrink: 0; white-space: nowrap; }
 .test-submission-fields { border: 0; padding: 0; margin: 0; min-width: 0; }.test-submission-fields:disabled { opacity: .7; }

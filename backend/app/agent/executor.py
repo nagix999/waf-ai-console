@@ -20,6 +20,7 @@ from ..services.provider_options import (
 from .contracts import (CONTRACT_ERRORS, EvidenceCorrectionOutput, WAFAnalysisOutput,
                         EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput)
 from .evidence_editor import EvidenceEditorOutput, MAX_SECONDS as EDITOR_SECONDS, MAX_OUTPUT_TOKENS as EDITOR_TOKENS
+from .result_editor import ResultEditorOutput
 
 
 OUTPUT_VALIDATION_FAILURE_CODE = "output_validation_failed"
@@ -293,7 +294,7 @@ async def execute_structured_agent(*, concurrency_engine=None, **kwargs) -> Agen
     if attempts not in {1, 2}:
         raise ValueError("invalid_output_validation_attempt_limit")
     # Queue waiting must not consume the model's response/repair deadline.
-    deadline = min(profile.timeout_seconds, EDITOR_SECONDS) if kwargs.get("output_model") is EvidenceEditorOutput else profile.timeout_seconds * 2 * attempts + 5
+    deadline = min(profile.timeout_seconds, EDITOR_SECONDS) if kwargs.get("output_model") in {EvidenceEditorOutput, ResultEditorOutput} else profile.timeout_seconds * 2 * attempts + 5
     async with call_slot(concurrency_engine, profile, kwargs.get("egress_check"), timeout_seconds=deadline) as admission:
         result = await _execute_structured_agent(**kwargs)
     return replace(result, telemetry={**result.telemetry, "concurrency": admission})
@@ -313,11 +314,11 @@ async def _execute_structured_agent(
 ) -> AgentCallResult:
     if output_validation_max_attempts not in {1, 2}:
         raise ValueError("invalid_output_validation_attempt_limit")
-    if output_model not in {WAFAnalysisOutput, EvidenceCorrectionOutput, EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput, EvidenceEditorOutput}:
+    if output_model not in {WAFAnalysisOutput, EvidenceCorrectionOutput, EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput, EvidenceEditorOutput, ResultEditorOutput}:
         raise ValueError("unsupported_agent_output_contract")
     if issubclass(output_model, EvidenceCorrectionOutput) and output_validation_max_attempts != 1:
         raise ValueError("evidence_correction_requires_single_attempt")
-    editor = output_model is EvidenceEditorOutput
+    editor = output_model in {EvidenceEditorOutput, ResultEditorOutput}
     if editor and output_validation_max_attempts != 1:
         raise ValueError("evidence_editor_requires_single_attempt")
     timeout = min(profile.timeout_seconds, EDITOR_SECONDS) if editor else profile.timeout_seconds

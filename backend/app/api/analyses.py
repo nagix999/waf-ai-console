@@ -15,6 +15,7 @@ from ..schemas import (
     AccessAuditResponse,
     AnalysisDetail,
     AnalysisInput,
+    AnalysisRequest,
     AnalysisListResponse,
     AnalysisSummary,
     RawEventResponse,
@@ -23,12 +24,12 @@ from ..schemas import (
     UploadResponse,
 )
 from ..security import CurrentPrincipal, Principal, require_scope
-from ..services.analysis import AnalysisIngestError, enqueue_analysis, fetch_analysis, to_detail, to_summary
+from ..services.analysis import AnalysisIngestError, fetch_analysis, to_detail, to_summary
 from ..services.analysis_query import AnalysisFilters, filtered_evaluation_summary, find_analyses
 from ..services.timing import run_duration_ms, step_duration_ms
 from ..services.payload_decoding import decode_payload
 from ..services.uploads import UploadFormatError, extract_test_upload_row, normalize_upload_row, parse_upload
-from ..services.upload_expected_labels import enqueue_test_upload_row
+from ..services.upload_expected_labels import enqueue_with_expected_label
 from ..services.input_schemas import InputSchemaError, pin_schema
 from ..retry_schemas import RetryEligibility, RetryRequest, RetryResponse
 from ..services.analysis_retries import RetryError, eligibility, enqueue_retry
@@ -88,13 +89,13 @@ def record_access(db: Session, principal: Principal, action: str, resource_type:
     responses={202: {"model": AnalysisDetail, "description": "Queued or still processing"}},
 )
 async def create_analysis(
-    payload: AnalysisInput,
+    payload: AnalysisRequest,
     request: Request,
     response: Response,
     db: DbSession,
     principal: Annotated[Principal, Depends(require_scope("ingest"))],
-    wait_seconds: int = Query(default=0, ge=0, le=60),
-    test_run_id: str | None = Query(default=None, max_length=36),
+    wait_seconds: int = Query(default=0, ge=0, le=60, description="응답에서 분석 완료를 기다릴 시간(초). 테스트명이나 실행 시간 제한이 아닙니다."),
+    test_run_id: str | None = Query(default=None, max_length=36, description="Test 키 전용. POST /api/v1/test-sessions 응답의 id를 전달합니다. 테스트명·임의 ID는 사용할 수 없으며 생략하면 테스트를 자동 생성합니다."),
 ) -> AnalysisDetail:
     if principal.purpose == "test":
         if set(request.query_params) - {"wait_seconds", "test_run_id"}:
@@ -103,7 +104,7 @@ async def create_analysis(
         from .validation_datasets import errors
         with errors(db):
             run, items = ingest(db, request.app.state.crypto, request.app.state.settings, principal,
-                                [payload.model_dump(mode="json")], run_id=test_run_id)
+                                [payload.model_dump(mode="json", exclude_unset=True)], run_id=test_run_id)
         item = items[0][0]
         if not item.analysis_id:
             raise HTTPException(413 if item.error_code == "payload_too_large" else 422, item.error_code or "invalid_test_event")
@@ -125,7 +126,7 @@ async def create_analysis(
     responses={202: {"model": AnalysisDetail, "description": "Queued or still processing"}},
 )
 async def create_test_analysis(
-    payload: AnalysisInput,
+    payload: AnalysisRequest,
     request: Request,
     response: Response,
     db: DbSession,
@@ -158,20 +159,24 @@ async def create_test_analysis(
 
 
 async def submit_analysis(
-    payload: AnalysisInput, request: Request, response: Response, db: Session,
+    payload: AnalysisRequest, request: Request, response: Response, db: Session,
     principal: Principal, wait_seconds: int, purpose: str, channel: str,
 ) -> AnalysisDetail:
     if set(request.query_params) - {"wait_seconds"}:
         raise HTTPException(status_code=422, detail="unsupported_query_parameter")
     try:
-        row, _duplicate = enqueue_analysis(
-            db, request.app.state.crypto, require_source(principal), payload,
+        row, _duplicate, _label_state = enqueue_with_expected_label(
+            db, request.app.state.crypto, require_source(principal), payload.event_input(),
+            expected_verdict=payload.expected_verdict,
+            actor=principal.username or require_source(principal), actor_kind=principal.kind,
+            source_kind="reference", label_source_ref="analysis-request:expected_verdict",
             analysis_purpose=purpose, ingest_channel=channel,
             payload_max_bytes=request.app.state.settings.payload_max_bytes,
             service_api_key_id=principal.service_api_key_id,
         )
     except AnalysisIngestError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.issues or exc.code) from None
+    row = fetch_analysis(db, row.id, visible_source(principal))
     if wait_seconds:
         deadline = asyncio.get_running_loop().time() + wait_seconds
         while row.status in {"pending", "processing"} and asyncio.get_running_loop().time() < deadline:
@@ -391,7 +396,7 @@ async def upload_events(
     db: DbSession,
     principal: Annotated[Principal, Depends(require_scope("ingest"))],
     file: UploadFile = File(...),
-    test_run_id: str | None = Query(default=None, max_length=36),
+    test_run_id: str | None = Query(default=None, max_length=36, description="Test 키 전용. POST /api/v1/test-sessions 응답의 id를 전달합니다. 테스트명·임의 ID는 사용할 수 없으며 생략하면 테스트를 자동 생성합니다."),
 ) -> UploadResponse:
     if principal.purpose == "test":
         if set(request.query_params) - {"test_run_id"}:
@@ -467,29 +472,21 @@ async def submit_upload(
         raise HTTPException(exc.status_code, exc.code) from None
     for index, raw_row in enumerate(rows, start=1):
         try:
-            expected_verdict = None
-            if purpose == "test":
-                raw_row, expected_verdict = extract_test_upload_row(raw_row)
+            raw_row, expected_verdict = extract_test_upload_row(raw_row)
             payload = AnalysisInput.model_validate(normalize_upload_row(raw_row))
-            if purpose == "test":
-                analysis, duplicate, label_state = enqueue_test_upload_row(
-                    db, request.app.state.crypto, source_system, payload,
-                    expected_verdict=expected_verdict,
-                    actor=principal.username or source_system,
-                    payload_max_bytes=request.app.state.settings.payload_max_bytes,
-                    ingest_channel=channel,
-                    schema_snapshot=schema_snapshot,
-                )
-                label_attached += label_state == "attached"
-                label_unchanged += label_state == "unchanged"
-            else:
-                analysis, duplicate = enqueue_analysis(
-                    db, request.app.state.crypto, source_system, payload,
-                    analysis_purpose=purpose, ingest_channel=channel,
-                    payload_max_bytes=request.app.state.settings.payload_max_bytes,
-                    schema_snapshot=schema_snapshot,
-                    service_api_key_id=principal.service_api_key_id,
-                )
+            analysis, duplicate, label_state = enqueue_with_expected_label(
+                db, request.app.state.crypto, source_system, payload,
+                expected_verdict=expected_verdict,
+                actor=principal.username or source_system,
+                actor_kind=principal.kind,
+                analysis_purpose=purpose, service_api_key_id=principal.service_api_key_id,
+                source_kind="reference", label_source_ref="analysis-request:expected_verdict",
+                payload_max_bytes=request.app.state.settings.payload_max_bytes,
+                ingest_channel=channel,
+                schema_snapshot=schema_snapshot,
+            )
+            label_attached += label_state == "attached"
+            label_unchanged += label_state == "unchanged"
             analysis_ids.append(analysis.id)
             if duplicate:
                 duplicates += 1

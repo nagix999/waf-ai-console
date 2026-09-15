@@ -1,6 +1,6 @@
 """Administrator-only named test submission and fixed-reference reporting."""
 import hashlib
-from typing import Annotated
+from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from pydantic import ValidationError
 from sqlalchemy import func, select
@@ -76,19 +76,26 @@ async def upload_test_run(request: Request, db: DbSession, principal: Admin,
 
 @router.get("", response_model=TestRunList)
 def list_test_runs(db: DbSession, _principal: Admin, limit: int = Query(20, ge=1, le=100),
-                   offset: int = Query(0, ge=0), q: str | None = Query(None, max_length=120)):
+                   offset: int = Query(0, ge=0), q: str | None = Query(None, max_length=120),
+                   reference_basis: Literal["initial", "latest"] = "initial",
+                   sort_by: Literal["created_at", "name"] = "created_at",
+                   sort_order: Literal["asc", "desc"] = "desc"):
     read_snapshot(db)
     query = select(TestRun)
     if q:
         query = query.where(contains_text(TestRun.name, q))
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0
-    rows = db.scalars(query.order_by(TestRun.created_at.desc(), TestRun.id.desc()).offset(offset).limit(limit))
-    return TestRunList(items=[describe_run(db, row, detail=False) for row in rows], total=total, limit=limit, offset=offset)
+    column = TestRun.name if sort_by == "name" else TestRun.created_at
+    rows = db.scalars(query.order_by(column.desc() if sort_order == "desc" else column.asc(), TestRun.id).offset(offset).limit(limit))
+    return TestRunList(items=[describe_run(db, row, detail=False, reference_basis=reference_basis) for row in rows], total=total, limit=limit, offset=offset)
 
 
 @router.get("/{run_id}", response_model=TestRunDetail)
 def get_test_run(run_id: str, db: DbSession, _principal: Admin,
                  evaluation_id: str | None = Query(None, max_length=36),
+                 reference_basis: Literal["initial", "latest"] = "initial",
+                 sort_by: Literal["row_number", "case_name", "status"] = "row_number",
+                 sort_order: Literal["asc", "desc"] = "asc",
                  limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0),
                  difficulty: str | None = Query(None, max_length=80),
                  test_category: str | None = Query(None, max_length=120),
@@ -110,7 +117,8 @@ def get_test_run(run_id: str, db: DbSession, _principal: Admin,
     return describe_run(db, run, limit=limit, offset=offset, difficulty=difficulty,
         test_category=test_category, status=status, evaluation_outcome=evaluation_outcome,
         reference_verdict=reference_verdict, verdict=verdict,
-        difficulty_missing=difficulty_missing, test_category_missing=test_category_missing, evaluation_id=evaluation_id)
+        difficulty_missing=difficulty_missing, test_category_missing=test_category_missing, evaluation_id=evaluation_id,
+        reference_basis=reference_basis, sort_by=sort_by, sort_order=sort_order)
 
 
 @router.get("/{run_id}/evaluations")

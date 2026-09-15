@@ -1,3 +1,4 @@
+import { Table } from "./DataTable.jsx";
 import { useState } from "react";
 import HelpTooltip from "./HelpTooltip.jsx";
 import Dialog from "./Dialog.jsx";
@@ -25,7 +26,7 @@ export function ConfusionMatrix({ matrix, onCell, selectedCell }) {
   const held = matrix.expected_hold_match;
   const confirmed = (matrix.expected_hold_positive ?? 0) + (matrix.expected_hold_negative ?? 0);
   const support = typeof held === "number" ? held + confirmed : 0;
-  return <div className="quality-matrix"><h3>Confusion Matrix <small>최종 판정 기준</small></h3><div className="table-wrap"><table><caption>참고 답안과 AI 최종 판정의 교차표 · 정탐·오탐·보류</caption><thead><tr><th scope="col">참고 답안 ↓ / AI →</th><th scope="col">정탐</th><th scope="col">오탐</th><th scope="col">판정 보류</th></tr></thead><tbody>{["정탐", "오탐", "판정 보류"].map((label, row) => <tr key={label}><th scope="row">{label}</th>{matrixCells.slice(row * 3, row * 3 + 3).map(renderCell)}</tr>)}</tbody></table></div>
+  return <div className="quality-matrix"><h3>Confusion Matrix <small>최종 판정 기준</small></h3><div className="table-wrap"><Table><caption>참고 답안과 AI 최종 판정의 교차표 · 정탐·오탐·보류</caption><thead><tr><th scope="col">참고 답안 ↓ / AI →</th><th scope="col">정탐</th><th scope="col">오탐</th><th scope="col">판정 보류</th></tr></thead><tbody>{["정탐", "오탐", "판정 보류"].map((label, row) => <tr key={label}><th scope="row">{label}</th>{matrixCells.slice(row * 3, row * 3 + 3).map(renderCell)}</tr>)}</tbody></Table></div>
     <div className="quality-metrics quality-metrics-compact">{[["expected_hold_match_rate", "보류 답안 일치율", held], ["expected_hold_decided_rate", "보류 답안 확정률", confirmed]].map(([key, label, count]) => <div className="quality-metric" key={key}><span>{label}<MetricHelp metric={key} label={label} /></span><strong>{metricText(support ? count / support : null, key)}</strong></div>)}</div>
     <p className="evaluation-footnote">기존 Accuracy·Precision·Recall·F1은 정탐·오탐 답안의 확정 판정 기준입니다. 보류 답안의 정탐·오탐 확정은 실제 미탐·과탐과 구분합니다.</p>{onCell && <p className="evaluation-footnote">셀을 선택하면 문항 목록만 좁힙니다. 위 평가 지표와 혼동행렬의 분모는 유지합니다.</p>}</div>;
 }

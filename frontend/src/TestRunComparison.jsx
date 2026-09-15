@@ -1,3 +1,4 @@
+import DataTable, { Table } from "./DataTable.jsx";
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api.js";
 import { formatDate, formatDuration } from "./analysisView.js";
@@ -17,34 +18,36 @@ export function TestComparisonMetrics({ data }) {
   const columns = [data.baseline_evaluation, data.candidate_evaluation];
   const metrics = [["accuracy", "Accuracy"], ["precision", "Precision"], ["recall", "Recall"], ["f1", "F1 score"], ["coverage", "판정 커버리지"], ["abstention_rate", "판정 보류율"]];
   const counts = [["false_negative", "미탐 방향"], ["false_positive", "과탐 방향"], ["abstained", "이진 답안 · AI 보류"], ["expected_abstention_match", "기대 보류 일치"], ["expected_abstention_mismatch", "기대 보류 불일치"]];
-  return <div className="table-wrap"><table className="test-comparison-metrics"><thead><tr><th>동일 비교 문항 기준 지표</th><th>기준 실행</th><th>후보 실행</th></tr></thead><tbody>
+  return <div className="table-wrap"><Table className="test-comparison-metrics"><thead><tr><th>동일 비교 문항 기준 지표</th><th>기준 실행</th><th>후보 실행</th></tr></thead><tbody>
     <tr><th>비교 가능한 문항 수</th>{columns.map((summary, index) => <td key={index}>{countText(summary?.total)}건</td>)}</tr>
     <tr><th>이진 확정 판정 수</th>{columns.map((summary, index) => <td key={index}>{countText(summary?.binary_decided)}건</td>)}</tr>
     {metrics.map(([key, label]) => <tr key={key}><th>{label}<MetricHelp metric={key} label={label} /></th>{columns.map((summary, index) => <td key={index}>{metricText(summary?.metrics?.[key], key)}</td>)}</tr>)}
     {counts.map(([key, label]) => <tr key={key}><th>{label}</th>{columns.map((summary, index) => <td key={index}>{countText(summary?.outcomes?.[key])}건</td>)}</tr>)}
-  </tbody></table></div>;
+  </tbody></Table></div>;
 }
 
 export function TestComparisonPerformance({ performance }) {
   const sides = [performance?.baseline, performance?.candidate];
   return <section className="test-comparison-performance"><h3>처리 시간·토큰<HelpTooltip label="처리 시간과 사용량">비교 가능한 문항의 기록된 재시도·재선점 이력을 포함합니다. 실패 등으로 비교에서 제외된 문항과 미기록 호출은 포함하지 않습니다. 미측정은 0과 구분합니다.</HelpTooltip></h3><p className="muted">두 실행 전체의 비용 또는 청구량은 아닙니다.</p>
-    <div className="table-wrap"><table><thead><tr><th>항목</th><th>기준 실행</th><th>후보 실행</th></tr></thead><tbody>
+    <div className="table-wrap"><Table><thead><tr><th>항목</th><th>기준 실행</th><th>후보 실행</th></tr></thead><tbody>
       {[["mean_ms", "문항 처리 시간 · 평균"], ["p50_ms", "문항 처리 시간 · p50"], ["p95_ms", "문항 처리 시간 · p95"]].map(([key, label]) => <tr key={key}><th>{label}<HelpTooltip label={label}>{key === "p50_ms" ? "비교 가능한 문항 처리 시간의 중앙값입니다. 절반이 이 시간 이내에 처리됐습니다." : key === "p95_ms" ? "비교 가능한 문항 처리 시간의 95백분위입니다. 약 95%가 이 시간 이내에 처리됐습니다. 소수의 느린 문항을 확인할 때 유용합니다." : "비교 가능한 문항의 평균 처리 시간입니다. 낮을수록 빠르지만 모델·입력 조건이 같아야 비교하기 쉽습니다."} 낮을수록 빠른 처리이며 판정 품질을 뜻하지 않습니다.</HelpTooltip></th>{sides.map((side, index) => <td key={index}>{formatDuration(side?.processing_ms?.[key], "미측정")}</td>)}</tr>)}
       <tr><th>문항 처리 시간 측정 / 미기록</th>{sides.map((side, index) => <td key={index}>{countText(side?.processing_ms?.count)} / {countText(side?.processing_ms?.missing_count)}건</td>)}</tr>
       <tr><th>기록된 LLM 단계 시간 합계</th>{sides.map((side, index) => <td key={index}>{side?.llm_step_ms?.count > 0 ? formatDuration(side.llm_step_ms.sum_ms, "미측정") : "미측정"}<small>측정 {countText(side?.llm_step_ms?.count)} · 미기록 {countText(side?.llm_step_ms?.missing_count)}단계</small></td>)}</tr>
       {[["input_tokens", "입력 토큰"], ["output_tokens", "출력 토큰"], ["total_tokens", "전체 토큰"]].map(([key, label]) => <tr key={key}><th>{label} · 완전 측정 단계 합계</th>{sides.map((side, index) => <td key={index}>{tokenCountText(side?.tokens?.[key], side?.missing_agent_histories)}<small>완전 측정 {countText(side?.tokens?.[key]?.measured_steps)} · 미측정 {countText(side?.tokens?.[key]?.missing_steps)}단계</small></td>)}</tr>)}
       <tr><th>출력·근거 교정이 발생한 단계</th>{sides.map((side, index) => <td key={index}>{countText(side?.output_repair_steps)}단계</td>)}</tr>
       <tr><th>실행 이력 미기록 문항</th>{sides.map((side, index) => <td key={index}>{countText(side?.missing_agent_histories)}건</td>)}</tr>
-    </tbody></table></div>
+    </tbody></Table></div>
   </section>;
 }
 
 export function TestComparisonItems({ items, onOpen }) {
-  return <div className="table-wrap"><table className="test-comparison-items"><thead><tr><th>문항 / 참고 답안</th><th>기준 실행</th><th>후보 실행</th><th>변화 / 비교 조건</th></tr></thead><tbody>{items.map((item, index) => <tr key={`${item.event_id}-${index}`}>
-    <td><strong>{item.case_name || item.event_id}</strong><small>{item.case_name ? item.event_id : ""}</small><small>{item.difficulty || "난이도 미분류"} · {item.test_category || "유형 미분류"}</small><small>공통 답안: {referenceVerdicts[item.reference_verdict] || "동일 답안 확인 불가"}</small></td>
-    {[[item.baseline_analysis_id, item.baseline_verdict, item.baseline_outcome, "기준"], [item.candidate_analysis_id, item.candidate_verdict, item.candidate_outcome, "후보"]].map(([id, verdict, outcome, label]) => <td key={label}><strong>{referenceVerdicts[verdict] || "판정 없음"}</strong><small>{evaluationOutcomes[outcome] || "평가 정보 확인 필요"}</small>{id && <button type="button" className="text-button" onClick={() => onOpen(id)}>{label} 분석 상세</button>}</td>)}
-    <td><span className={`comparison-change comparison-${item.change}`}>{comparisonChanges[item.change] || "변화 확인 필요"}</span>{item.comparison_status !== "comparable" && <small>{comparisonExclusions[item.comparison_status] || "비교 조건 확인 필요"}</small>}</td>
-  </tr>)}</tbody></table></div>;
+  const side = (item, prefix, label) => <><strong>{referenceVerdicts[item[prefix + "_verdict"]] || "판정 없음"}</strong><small>{evaluationOutcomes[item[prefix + "_outcome"]] || "평가 정보 확인 필요"}</small>{item[prefix + "_analysis_id"] && <button type="button" className="text-button" onClick={() => onOpen(item[prefix + "_analysis_id"])}>{label} 분석 상세</button>}</>;
+  return <DataTable label="문항별 판정 변화" data={items} getRowId={item => item.event_id} columns={[
+    { id: "case", header: "문항 / 참고 답안", width: "30%", render: item => <><strong>{item.case_name || item.event_id}</strong><small>{item.difficulty || "난이도 미분류"} · {item.test_category || "유형 미분류"}</small><small>공통 답안: {referenceVerdicts[item.reference_verdict] || "동일 답안 확인 불가"}</small></> },
+    { id: "baseline", header: "기준 실행", render: item => side(item, "baseline", "기준") },
+    { id: "candidate", header: "후보 실행", render: item => side(item, "candidate", "후보") },
+    { id: "change", header: "변화 / 비교 조건", render: item => <><span className={`comparison-change comparison-${item.change}`}>{comparisonChanges[item.change] || "변화 확인 필요"}</span>{item.comparison_status !== "comparable" && <small>{comparisonExclusions[item.comparison_status] || "비교 조건 확인 필요"}</small>}</> },
+  ]} />;
 }
 
 export function TestComparisonResult({ data, state, onChange, onOpen, onRefresh, loading }) {

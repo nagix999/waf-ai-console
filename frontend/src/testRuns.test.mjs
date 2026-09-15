@@ -19,6 +19,13 @@ const { EvaluationSummary } = bundle("./ReferenceLabels.jsx");
 const { MetricCards, ConfusionMatrix, AdditionalMetrics, MetricHelp } = bundle("./EvaluationMetrics.jsx");
 const { TestRunRows, TestRunItemRows, TestRunHistory, TestRunHistoryEmpty, TestRunDetail, initialTestRunHistoryState, initialTestRunFilters, testRunHistoryChange, testRunFilterChange, watchTestRunRead } = bundle("./TestRuns.jsx");
 const render = (Component, props) => renderToStaticMarkup(createElement(Component, props));
+test("latest answers are the default; initial and saved evaluations are explicit", () => {
+  assert.equal(testRunQuery().reference_basis, "latest");
+  assert.equal(testRunQuery({ evaluation_id: "initial" }).reference_basis, "initial");
+  const saved = testRunQuery({ evaluation_id: "saved-id" });
+  assert.equal(saved.evaluation_id, "saved-id");
+  assert.equal(saved.reference_basis, undefined);
+});
 function descendants(node) {
   if (Array.isArray(node)) return node.flatMap(descendants);
   if (!node || typeof node !== "object") return [];
@@ -76,8 +83,8 @@ test("confusion matrix includes nine cells, separate abstentions and precise dri
 
 test("test subgroup scopes and row-only matrix filters are transmitted separately with server pagination", () => {
   const query = testRunQuery({ difficulty: "hard", test_category: "xss", cell: "fp", offset: 25 });
-  assert.deepEqual(query, { difficulty: "hard", test_category: "xss", reference_verdict: "false_positive", verdict: "true_positive", evaluation_outcome: "false_positive", limit: 25, offset: 25 });
-  assert.deepEqual(testRunQuery({ difficulty_missing: true, test_category_missing: true }), { limit: 25, offset: 0, difficulty_missing: true, test_category_missing: true });
+  assert.deepEqual(query, { reference_basis: "latest", sort_by: "row_number", sort_order: "asc", difficulty: "hard", test_category: "xss", reference_verdict: "false_positive", verdict: "true_positive", evaluation_outcome: "false_positive", limit: 25, offset: 25 });
+  assert.deepEqual(testRunQuery({ difficulty_missing: true, test_category_missing: true }), { limit: 25, offset: 0, reference_basis: "latest", sort_by: "row_number", sort_order: "asc", difficulty_missing: true, test_category_missing: true });
 });
 
 test("literal subgroup names never collide with the separate missing-metadata option", () => {
@@ -86,7 +93,7 @@ test("literal subgroup names never collide with the separate missing-metadata op
     assert.deepEqual(selected, { difficulty: value, difficulty_missing: false });
     assert.equal(testRunQuery(selected).difficulty, value); assert.equal(testRunQuery(selected).difficulty_missing, undefined);
   }
-  assert.deepEqual(testRunQuery(testScopeSelection("test_category", "missing:")), { limit: 25, offset: 0, test_category_missing: true });
+  assert.deepEqual(testRunQuery(testScopeSelection("test_category", "missing:")), { limit: 25, offset: 0, reference_basis: "latest", sort_by: "row_number", sort_order: "asc", test_category_missing: true });
   assert.deepEqual(testScopeSelection("test_category", ""), { test_category: "", test_category_missing: false });
 });
 
@@ -169,7 +176,7 @@ test("run detail filters preserve population scope during row and page changes a
 test("test list supports preserved controlled search, default navigation guidance and custom headings as inert text", () => {
   const controlled = { queryText: "draft <script>", query: { q: "applied <script>", limit: 10, offset: 20 } };
   const html = render(TestRunHistory, { state: controlled, onStateChange() {}, onSelect() {} });
-  assert.match(html, /<h2>테스트 목록<\/h2>/); assert.match(html, /분석 결과와 평가 지표/); assert.match(html, /value="draft &lt;script&gt;"/); assert.match(html, /applied &lt;script&gt;/); assert.doesNotMatch(html, /<script/);
+  assert.match(html, /<h2>테스트 목록<\/h2>/); assert.match(html, /최신 참고 답안으로 계산한 점수/); assert.match(html, /value="draft &lt;script&gt;"/); assert.match(html, /applied &lt;script&gt;/); assert.doesNotMatch(html, /<script/);
   const custom = render(TestRunHistory, { title: "<img> 제목", description: "<script> 설명", onSelect() {} });
   assert.match(custom, /&lt;img&gt; 제목/); assert.match(custom, /&lt;script&gt; 설명/); assert.doesNotMatch(custom, /<img|<script/);
   const detail = render(TestRunDetail, { id: "synthetic-run", filters: { ...initialTestRunFilters(), offset: 50 }, onFiltersChange() {}, onBack() {}, onOpen() {} });
@@ -190,7 +197,8 @@ test("test and case navigation uses immutable IDs even when names repeat and leg
   function buttons(node) {
     if (Array.isArray(node)) return node.flatMap(buttons);
     if (!node || typeof node !== "object") return [];
-    return [...(node.type === "button" ? [node] : []), ...buttons(node.props?.children)];
+    const cells = node.props?.columns?.flatMap(column => node.props.data.map((row, index) => column.render?.(row, index))) || [];
+    return [...(node.type === "button" ? [node] : []), ...buttons(node.props?.children), ...buttons(cells)];
   }
   const selected = [], opened = []; let legacy = 0;
   const base = { name: "같은 테스트명", status: "completed", kind: "direct", created_at: "2026-09-07T00:00:00Z" };

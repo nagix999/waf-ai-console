@@ -19,7 +19,8 @@ const steps = {
   llm_primary: "위협 분석", llm_verifier: "추가 검증", llm_evidence_editor: "근거 정리", finalize: "최종 판정 정리",
   final: "최종 판정 정리", policy: "추가 검증 조건 확인", result: "결과 저장",
 };
-export const stepLabel = name => steps[name] || name || "이름 없는 단계";
+export const stepLabel = (name, metadata) => name === "llm_evidence_editor" && metadata?.editor_version === "result-editor-v2"
+  ? "근거·확인사항 정리" : steps[name] || name || "이름 없는 단계";
 export const recordText = value => typeof value === "string" ? value : value == null ? "" : JSON.stringify(value, null, 2);
 
 function isSessionAccessError(error) {

@@ -42,10 +42,10 @@ test("analysis results Test tab starts with named runs, not individual result/ev
   assert.match(html, /aria-selected="true">테스트<\/button>/);
   assert.match(html, /테스트 목록/);
   assert.match(html, /테스트명 검색/);
-  assert.match(html, /해당 실행의 분석 결과와 평가 지표/);
+  assert.match(html, /최신 참고 답안으로 계산한 점수/);
   assert.match(html, /테스트 문항 전체 보기/);
   assert.match(html, /테스트명 없이 저장된 이전 결과/);
-  assert.doesNotMatch(html, /\bunified-analysis-table\b|analysis-evaluation-overview|name="source_system"/);
+  assert.doesNotMatch(html, /\banalysis-data-table\b|analysis-evaluation-overview|name="source_system"/);
 });
 
 test("all and Production scopes retain the individual list, reference metrics and field searches", () => {
@@ -57,7 +57,7 @@ test("all and Production scopes retain the individual list, reference metrics an
     options.testState.runId = "synthetic-old-test";
     const before = JSON.stringify(options.state);
     const html = render(options);
-    assert.match(html, /<table class="[^"]*\bunified-analysis-table\b/);
+    assert.match(html, /<table class="[^"]*\banalysis-data-table\b/);
     assert.match(html, /aria-label="평가 지표"/);
     assert.match(html, /답안 표본 기준 · 운영 전체 정확도는 아닙니다/);
     assert.doesNotMatch(html, /aria-label="평가 범위 설명"/);
@@ -79,7 +79,7 @@ test("individual Test fallback includes named and previous items with latest-ref
   assert.match(html, /← 테스트 목록/);
   assert.match(html, /이름 있는 실행과 실행 묶음이 없는 이전 결과를 함께 조회/);
   assert.match(html, /최신 참고 답안 기준/);
-  assert.match(html, /<table class="[^"]*\bunified-analysis-table\b/);
+  assert.match(html, /<table class="[^"]*\banalysis-data-table\b/);
   assert.match(html, /aria-label="평가 지표"/);
   assert.doesNotMatch(html, /테스트명 검색/);
 });
@@ -94,7 +94,7 @@ test("selected Test execution uses the shared detail within analysis results", (
   assert.match(html, /class="page-stack test-run-detail"/);
   assert.match(html, /← 테스트 목록/);
   assert.match(html, /실행 정보를 불러오는 중/);
-  assert.doesNotMatch(html, /테스트명 검색|\bunified-analysis-table\b/);
+  assert.doesNotMatch(html, /테스트명 검색|\banalysis-data-table\b/);
   assert.equal(JSON.stringify(options.testState), before);
 });
 

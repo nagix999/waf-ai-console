@@ -1,7 +1,8 @@
 """Pin optional editor independently from the mandatory decision roles."""
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ..agent.evidence_editor import INSTRUCTIONS, VERSION, instructions_hash
+from ..agent.evidence_editor import instructions_hash
+from ..agent.result_editor import INSTRUCTIONS, VERSION
 from ..models import AgentConfiguration, VLLMProfile
 from .agent_configuration import profile_metadata, validate_role_profile
 

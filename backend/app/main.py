@@ -123,6 +123,9 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         document = deepcopy(app.openapi_schema)
         document["components"]["schemas"]["AnalysisInput"] = {"title": "AnalysisInput", **definition,
             "x-input-schema": metadata, "x-payload-max-bytes": settings.payload_max_bytes}
+        from .services.production_api import request_contract
+        document["components"]["schemas"]["AnalysisRequest"] = {**request_contract(definition),
+            "x-input-schema": metadata, "x-payload-max-bytes": settings.payload_max_bytes}
         document["info"]["x-input-schema"] = metadata
         return document
 
