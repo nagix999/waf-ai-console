@@ -15,7 +15,7 @@ def run(profile, mode="full"):
     return asyncio.run(run_vllm_test(profile, SyntheticCrypto(), mode, egress_check=lambda: None))
 
 
-@pytest.mark.parametrize("limit,expected", [(4096, 256), (256, 256), (128, 128)])
+@pytest.mark.parametrize("limit,expected", [(4096, 1024), (1024, 1024), (512, 512), (256, 256), (128, 128)])
 def test_vllm_probe_cap_respects_profile_without_mutating_it(limit, expected):
     profile = profile_for("vllm")
     profile.max_output_tokens = limit
@@ -44,13 +44,13 @@ def test_single_concurrent_probe_no_longer_fails_due_to_eight_token_cap(monkeypa
     assert profile.max_output_tokens == 3072
     assert result.checks[-1]["detail"]["requests"] == 1
     assert result.checks[-1]["response_diagnostics"] == [{
-        "request_index": 1, "requested_max_output_tokens": 256, "http_status": 200, "error_code": None,
+        "request_index": 1, "requested_max_output_tokens": 1024, "http_status": 200, "error_code": None,
         "finish_reason": "stop", "refused": False,
         "prompt_tokens": 35, "completion_tokens": 16, "total_tokens": 51,
     }]
     assert result.checks[0]["response_diagnostics"] == []
     assert all(len(check["response_diagnostics"]) == 1 for check in result.checks[1:])
-    assert all(json.loads(request.content)["max_tokens"] == 256 for request in requests if request.method == "POST")
+    assert all(json.loads(request.content)["max_tokens"] == 1024 for request in requests if request.method == "POST")
     assert "synthetic answer with formatting" not in json.dumps(result.__dict__)
 
 
@@ -67,7 +67,7 @@ def test_vllm_still_rejects_incomplete_or_refused_output_at_every_check(monkeypa
         if count == failed_index:
             body = completion("OK synthetic-never-store", finish_reason="length" if failure == "length" else "stop",
                               refusal="synthetic-refusal-never-store" if failure == "refusal" else None)
-            body["usage"]["completion_tokens"] = 256
+            body["usage"]["completion_tokens"] = 1024
             return httpx.Response(200, json=body)
 
     requests, _ = install_http(monkeypatch, successful_handler(profile, override))
@@ -78,8 +78,8 @@ def test_vllm_still_rejects_incomplete_or_refused_output_at_every_check(monkeypa
     assert result.error_code == ("vllm_output_incomplete" if failure == "length" else "vllm_refusal")
     assert ("토큰 한도" if failure == "length" else "응답을 거절") in result.error_message
     diagnostic = result.checks[-1]["response_diagnostics"][0]
-    assert diagnostic["requested_max_output_tokens"] == 256
-    assert diagnostic["completion_tokens"] == 256
+    assert diagnostic["requested_max_output_tokens"] == 1024
+    assert diagnostic["completion_tokens"] == 1024
     assert diagnostic["finish_reason"] == ("length" if failure == "length" else "stop")
     assert diagnostic["refused"] is (failure == "refusal")
     assert diagnostic["error_code"] == result.error_code
@@ -161,7 +161,7 @@ def test_request_failures_keep_requested_budget_without_inventing_usage(monkeypa
     assert not result.passed
     assert len(requests) == 2
     record = result.checks[-1]["response_diagnostics"][0]
-    assert record["requested_max_output_tokens"] == 256
+    assert record["requested_max_output_tokens"] == 1024
     assert record["http_status"] == (None if failure in {"timeout", "connection"} else 503 if failure == "http" else 200)
     assert record["finish_reason"] is None
     assert record["refused"] is None
@@ -211,14 +211,15 @@ def test_concurrent_failure_waits_for_all_submitted_requests_and_records_each(mo
     assert [record["finish_reason"] for record in records] == ["length", None, "stop"]
     assert [record["http_status"] for record in records] == [200, None, 200]
     assert [record["error_code"] for record in records] == ["vllm_output_incomplete", "vllm_timeout", None]
-    assert all(record["requested_max_output_tokens"] == 256 for record in records)
+    assert all(record["requested_max_output_tokens"] == 1024 for record in records)
     assert all(len(check["response_diagnostics"]) == 1 for check in result.checks[1:-1])
     assert "never-store" not in json.dumps(result.__dict__)
 
 
 @pytest.mark.usefixtures("registered_vllm_target")
 @pytest.mark.parametrize("include_dataset", [False, True])
-def test_failed_probe_metadata_survives_worker_storage_and_admin_api(client, monkeypatch, include_dataset):
+@pytest.mark.parametrize("failed_index,failed_check", [(3, "nested_json_schema"), (6, "concurrency")])
+def test_failed_probe_metadata_survives_worker_storage_and_admin_api(client, monkeypatch, include_dataset, failed_index, failed_check):
     from app import worker
     from test_model_profiles import login_admin, profile_payload
 
@@ -236,8 +237,8 @@ def test_failed_probe_metadata_survives_worker_storage_and_admin_api(client, mon
     run_id = queued.json()["id"]
 
     def override(request, count):
-        if count == 6:
-            return httpx.Response(200, json=completion("synthetic-never-store", finish_reason="length"))
+        if count == failed_index:
+            return httpx.Response(200, json=completion('{"test":"synthetic-never-store"}' + " " * 60, finish_reason="length"))
 
     requests, _ = install_http(monkeypatch, successful_handler(profile_for("vllm"), override))
     monkeypatch.setattr(worker, "execute_structured_agent", lambda **kwargs: pytest.fail("A failed technical check must not start dataset evaluation"))
@@ -251,11 +252,14 @@ def test_failed_probe_metadata_survives_worker_storage_and_admin_api(client, mon
     report = response.json()
     assert report["status"] == "failed"
     failed = report["checks"][-1]
-    assert failed["name"] == "concurrency"
+    assert failed["name"] == failed_check
     assert failed["error_code"] == "vllm_output_incomplete"
     record = failed["response_diagnostics"][0]
-    assert record["requested_max_output_tokens"] == 256
+    assert record["requested_max_output_tokens"] == 1024
     assert record["finish_reason"] == "length"
     assert record["completion_tokens"] == 250
+    if failed_check == "nested_json_schema":
+        assert record["json_output"]["status"] == "complete"
+        assert record["json_output"]["trailing_whitespace_chars"] == 60
     assert "never-store" not in response.text and "profile-secret" not in response.text
-    assert len(requests) == 6
+    assert len(requests) == failed_index

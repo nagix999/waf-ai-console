@@ -40,7 +40,7 @@ def successful_handler(profile, override=None):
         body = json.loads(request.content)
         schema = body.get("response_format", {}).get("json_schema", {})
         if schema.get("name") == "waf_test":
-            text = json.dumps({"status": "ok", "result": {"code": 200, "message": "synthetic-content-must-not-be-stored"}})
+            text = json.dumps({"status": "ok", "result": {"code": 200, "message": "OK"}})
         elif schema.get("name") == "WAFAnalysisOutput":
             text = json.dumps(synthetic_output())
         else:
@@ -84,7 +84,7 @@ def test_provider_checks_use_matching_options_and_store_no_response_text(monkeyp
         else:
             assert body["temperature"] == 0
             assert body["chat_template_kwargs"] == {"enable_thinking": False}
-            assert body["max_tokens"] == 256
+            assert body["max_tokens"] == 1024
             assert "max_completion_tokens" not in body and "store" not in body
     stored = json.dumps(result.__dict__)
     for excluded in ["synthetic-content-must-not-be-stored", "synthetic-key", "synthetic-encrypted-key", "provider-metadata-must-not-be-stored"]:
@@ -117,12 +117,16 @@ def test_refusal_and_truncation_are_rejected_at_every_openai_check(monkeypatch, 
 
 
 @pytest.mark.parametrize("invalid", [
+    {"status": "ok", "result": {"code": 201, "message": "OK"}},
+    {"status": "ok", "result": {"code": 200.0, "message": "OK"}},
+    {"status": "ok", "result": {"code": 200, "message": "synthetic"}},
+    {"status": "other", "result": {"code": 200, "message": "OK"}},
     {"status": "ok", "result": {"code": True, "message": "synthetic"}},
     {"status": "ok", "result": {"code": 200, "message": "synthetic", "extra": 1}},
     {"status": "ok", "result": {"code": 200, "message": "synthetic"}, "extra": 1},
     [],
 ])
-def test_nested_schema_check_rejects_bool_integer_and_extra_properties(monkeypatch, invalid):
+def test_nested_schema_check_rejects_wrong_values_types_and_extra_properties(monkeypatch, invalid):
     profile = openai_profile()
     install_http(monkeypatch, successful_handler(profile, lambda request, count:
         httpx.Response(200, json=completion(json.dumps(invalid))) if count == 3 else None

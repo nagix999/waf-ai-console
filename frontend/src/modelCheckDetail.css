@@ -9,3 +9,5 @@
   .model-check-table th, .model-check-table td { padding: .65rem .35rem; white-space: normal; overflow-wrap: anywhere; }
   .model-check-table th:first-child { width: 2.25rem; }
 }
+.model-check-json { display: grid; gap: .65rem; overflow-wrap: anywhere; }
+.model-check-json h4, .model-check-json p { margin: 0; }

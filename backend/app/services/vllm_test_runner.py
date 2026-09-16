@@ -11,6 +11,7 @@ from ..models import ModelTestMode, VLLMProfile
 from ..agent.contracts import WAFAnalysisOutput
 from .crypto import CryptoService
 from .internal_egress import InternalEgressError
+from .validation_output_diagnostics import inspect_json_output, inspection_limit_exceeded, probe_json_decoder
 from .vllm_profiles import TargetNotAllowedError
 from .provider_options import (
     CompletionRejected,
@@ -21,9 +22,9 @@ from .provider_options import (
 )
 
 
-# Short technical probes need enough room for Gemma's response formatting.
+# Short technical probes need enough room for model response formatting.
 # This cap does not change the profile or the WAF Agent's output allowance.
-VLLM_PROBE_OUTPUT_TOKENS = 256
+VLLM_PROBE_OUTPUT_TOKENS = 1024
 _FINISH_REASONS = {"stop", "length", "content_filter", "tool_calls", "function_call", "abort", "error"}
 
 
@@ -82,7 +83,7 @@ def safe_http_error(exc: Exception, provider: str = "vllm") -> CheckFailed:
         return CheckFailed(code, "vLLM request blocked by the current Internal Egress policy")
     if isinstance(exc, CompletionRejected):
         messages = {
-            f"{provider}_output_incomplete": "출력이 토큰 한도에 도달해 중단되었습니다. 검증 항목 상세의 출력 한도·사용량과 서버의 문맥 길이 설정을 확인하세요.",
+            f"{provider}_output_incomplete": "출력이 토큰 한도에 도달해 중단되었습니다. 검증 항목 상세의 출력 한도·사용량과 응답 상태를 확인하세요. JSON 형식 오류와는 다른 사유입니다.",
             f"{provider}_refusal": "모델이 응답을 거절했습니다. 출력 길이 부족과는 다른 사유입니다. 서버의 거절 처리 설정을 확인하세요.",
             f"{provider}_completion_not_finished": "모델이 정상 종료 상태로 응답하지 않았습니다. 검증 항목 상세의 종료 사유를 확인하세요.",
             f"{provider}_invalid_response": "모델 응답이 비어 있거나 응답 형식이 올바르지 않습니다. 서버의 응답 형식 설정을 확인하세요.",
@@ -173,6 +174,8 @@ async def run_vllm_test(
                     "error_code": None,
                     **_response_diagnostics(None),
                 }
+                if (body or {}).get("response_format", {}).get("type") == "json_schema":
+                    record["json_output"] = inspect_json_output(None)
                 request_records.append(record)
             started = time.perf_counter()
             try:
@@ -186,6 +189,8 @@ async def run_vllm_test(
                 result = response.json()
                 if record is not None:
                     record.update(_response_diagnostics(result))
+                    if "json_output" in record:
+                        record["json_output"] = inspect_json_output(result)
                     # Record completion failures on the individual request,
                     # including when other concurrent probes succeed or fail.
                     completion_content(result, provider)
@@ -247,7 +252,7 @@ async def run_vllm_test(
                 "status": {"type": "string", "enum": ["ok"]},
                 "result": {
                     "type": "object",
-                    "properties": {"code": {"type": "integer"}, "message": {"type": "string"}},
+                    "properties": {"code": {"type": "integer", "enum": [200]}, "message": {"type": "string", "enum": ["OK"]}},
                     "required": ["code", "message"],
                     "additionalProperties": False,
                 },
@@ -262,12 +267,17 @@ async def run_vllm_test(
                 "/chat/completions",
                 chat_payload(
                     profile,
-                    [{"role": "user", "content": "Return status ok and result code 200 with a short message."}],
+                    [{"role": "user", "content": 'Return exactly {"status":"ok","result":{"code":200,"message":"OK"}}. No explanation.'}],
                     response_format={"type": "json_schema", "json_schema": {"name": "waf_test", "strict": True, "schema": schema}},
                 ),
             )
             content = completion_content(body, provider)
-            parsed = json.loads(content)
+            if inspection_limit_exceeded(content):
+                raise CheckFailed("json_schema_validation_failed", "검증용 JSON 출력이 너무 길거나 중첩이 깊습니다.")
+            try:
+                parsed = probe_json_decoder().decode(content)
+            except (ValueError, RecursionError):
+                raise CheckFailed("json_schema_validation_failed", "응답이 지정한 JSON 형식과 다릅니다.") from None
             valid = (
                 isinstance(parsed, dict)
                 and set(parsed) == {"status", "result"}
@@ -275,7 +285,8 @@ async def run_vllm_test(
                 and isinstance(parsed.get("result"), dict)
                 and set(parsed["result"]) == {"code", "message"}
                 and type(parsed["result"].get("code")) is int
-                and isinstance(parsed["result"].get("message"), str)
+                and parsed["result"]["code"] == 200
+                and parsed["result"].get("message") == "OK"
             )
             if not valid:
                 raise CheckFailed("json_schema_validation_failed", "Response did not match the required nested JSON schema")

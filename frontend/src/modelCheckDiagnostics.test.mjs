@@ -6,7 +6,7 @@ import { runInNewContext } from "node:vm";
 import { buildSync } from "esbuild";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { completionReason, diagnosticCount, modelValidationError } from "./modelCheckDiagnostics.js";
+import { completionReason, diagnosticCount, jsonOutputDescription, modelValidationError } from "./modelCheckDiagnostics.js";
 
 test("incomplete output, refusal and timeout have distinct actionable messages", () => {
   for (const provider of ["vllm", "openai"]) {
@@ -84,4 +84,43 @@ test("malformed and partial diagnostics remain readable with unknown values", ()
   assert.match(html, /제한 시간 안에/); assert.match(html, /미기록/); assert.match(html, /알 수 없음/);
   assert.doesNotMatch(html, /synthetic-secret|<td>0/);
   assert.match(render(null), /기록된 검증 항목이 없습니다/);
+});
+
+test("JSON syntax observations do not override truncated completion failure", () => {
+  const html = render({ name: "nested_json_schema", status: "failed", error_code: "vllm_output_incomplete",
+    response_diagnostics: [{ request_index: 1, requested_max_output_tokens: 1024, prompt_tokens: 27,
+      completion_tokens: 1024, finish_reason: "length", json_output: {
+        status: "complete", trailing_whitespace_chars: 300, trailing_content_chars: 0,
+        repeated_suffix_unit_chars: 0, repeated_suffix_count: 0,
+      },
+    }],
+  });
+  for (const label of ["실패", "토큰 한도 도달", "JSON 문법 정상", "공백·줄바꿈 300자", "JSON이 완성되어도", "원문과 추론 내용은 저장하지 않습니다"]) assert.ok(html.includes(label), label);
+  assert.doesNotMatch(html, /통과|추가 내용 0자|0회 연속 반복/);
+  assert.match(html, /aria-label="JSON 응답 상태"/);
+});
+
+test("JSON diagnostics distinguish invalid syntax, extra content, repeat counts and unavailable data", () => {
+  const repeats = jsonOutputDescription({ status: "complete_with_trailing_content", trailing_content_chars: 240,
+    trailing_whitespace_chars: 2, repeated_suffix_unit_chars: 20, repeated_suffix_count: 12 });
+  assert.equal(repeats.label, "JSON 뒤에 추가 출력 있음");
+  assert.deepEqual(repeats.details, ["JSON 뒤 추가 내용 240자", "끝부분 공백·줄바꿈 2자", "끝부분에서 20자 문자열 12회 연속 반복 확인"]);
+  assert.equal(jsonOutputDescription({ status: "invalid_or_incomplete" }).label, "JSON 미완성 또는 문법 오류");
+  assert.equal(jsonOutputDescription({ status: "empty" }).label, "응답 텍스트 없음");
+  assert.equal(jsonOutputDescription({ status: "unavailable" }).label, "응답 텍스트 확인 불가");
+  assert.equal(jsonOutputDescription({ status: "inspection_limit" }).label, "응답이 너무 길거나 중첩이 깊어 형태 확인 생략");
+  for (const status of [null, undefined, {}, "__proto__", "toString", "synthetic-private-status"]) {
+    const description = jsonOutputDescription({ status, trailing_content_chars: "synthetic-private-content",
+      trailing_whitespace_chars: -1, repeated_suffix_unit_chars: true, repeated_suffix_count: 4 });
+    assert.deepEqual(description, { label: "응답 상태 미기록", details: [] });
+  }
+  assert.deepEqual(jsonOutputDescription(null), { label: "응답 상태 미기록", details: [] });
+});
+
+test("legacy JSON checks remain readable without invented syntax diagnostics", () => {
+  const html = render({ name: "nested_json_schema", status: "failed", error_code: "json_schema_validation_failed",
+    response_diagnostics: [{ request_index: 1, requested_max_output_tokens: 256, finish_reason: "stop" }],
+  });
+  assert.match(html, /JSON 형식이나 값과 다릅니다/);
+  assert.doesNotMatch(html, /aria-label="JSON 응답 상태"|JSON 문법 정상|JSON 미완성/);
 });

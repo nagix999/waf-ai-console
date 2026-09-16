@@ -7,14 +7,14 @@ export const modelCheckNames = {
 export function modelValidationError(code) {
   const reason = typeof code === "string" ? code.replace(/^(vllm|openai)_/, "") : "";
   const messages = {
-    output_incomplete: "출력이 토큰 한도에 도달해 중단되었습니다. 확인 내용에서 당시 출력 한도·사용량을 확인하고, 서버의 문맥 길이 설정도 확인하세요. 동시 요청 수가 1이어도 발생할 수 있습니다.",
+    output_incomplete: "출력이 토큰 한도에 도달해 중단되었습니다. 검증 항목 상세에서 출력 한도·사용량과 응답 상태를 확인하세요. JSON 형식 오류와는 다른 사유이며, 동시 요청 수가 1이어도 발생할 수 있습니다.",
     refusal: "모델이 응답을 거절했습니다. 출력 길이 부족과는 다른 사유입니다. 서버의 거절 처리 설정을 확인하세요.",
     completion_not_finished: "모델이 정상 종료 상태로 응답하지 않았습니다. 확인 내용에서 종료 사유를 확인하세요.",
     invalid_response: "모델 응답이 비어 있거나 응답 형식이 올바르지 않습니다. 서버의 응답 형식 설정을 확인하세요.",
     timeout: "제한 시간 안에 응답을 받지 못했습니다. 서버 부하와 프로필의 제한 시간을 확인하세요.",
     connection_failed: "모델 서버에 연결하지 못했습니다. 서버 상태와 등록된 주소·포트를 확인하세요.",
     concurrency_limit_below_test: "Agent 설정 → 동시 처리의 서버 상한이 검증 요청 수보다 작습니다. 서버 상한 또는 프로필의 검증 동시 요청 수를 조정한 뒤 다시 실행하세요.",
-    json_schema_validation_failed: "응답이 지정한 JSON 형식과 다릅니다. 모델 서버의 구조화 출력 지원을 확인하세요.",
+    json_schema_validation_failed: "응답이 지정한 JSON 형식이나 값과 다릅니다. 모델 서버의 구조화 출력 지원을 확인하세요.",
     waf_schema_validation_failed: "응답이 WAF 판정 형식이나 필수 조건을 충족하지 못했습니다.",
     system_role_not_applied: "응답에서 검증용 지침이 적용된 것을 확인하지 못했습니다. 서버의 채팅 템플릿을 확인하세요.",
     configured_model_not_served: "서버의 모델 목록에 등록한 모델이 없습니다. 프로필의 모델 이름을 확인하세요.",
@@ -32,6 +32,27 @@ export function modelValidationError(code) {
 
 export function diagnosticCount(value) {
   return Number.isSafeInteger(value) && value >= 0 ? value.toLocaleString("ko-KR") : "미기록";
+}
+
+export function jsonOutputDescription(output) {
+  const labels = {
+    complete: "JSON 문법 정상",
+    complete_with_trailing_content: "JSON 뒤에 추가 출력 있음",
+    invalid_or_incomplete: "JSON 미완성 또는 문법 오류",
+    empty: "응답 텍스트 없음",
+    unavailable: "응답 텍스트 확인 불가",
+    inspection_limit: "응답이 너무 길거나 중첩이 깊어 형태 확인 생략",
+  };
+  const status = output?.status;
+  const label = typeof status === "string" && Object.hasOwn(labels, status) ? labels[status] : "응답 상태 미기록";
+  const details = [];
+  const positive = value => Number.isSafeInteger(value) && value > 0;
+  if (positive(output?.trailing_content_chars)) details.push(`JSON 뒤 추가 내용 ${diagnosticCount(output.trailing_content_chars)}자`);
+  if (positive(output?.trailing_whitespace_chars)) details.push(`끝부분 공백·줄바꿈 ${diagnosticCount(output.trailing_whitespace_chars)}자`);
+  if (positive(output?.repeated_suffix_unit_chars) && positive(output?.repeated_suffix_count)) {
+    details.push(`끝부분에서 ${diagnosticCount(output.repeated_suffix_unit_chars)}자 문자열 ${diagnosticCount(output.repeated_suffix_count)}회 연속 반복 확인`);
+  }
+  return { label, details };
 }
 
 export function completionReason(record) {
