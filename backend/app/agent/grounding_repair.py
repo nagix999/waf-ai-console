@@ -67,7 +67,7 @@ def failure_category(call):
     code = summary.get("code") if isinstance(summary, dict) else None
     if code == "output_validation_failed":
         return "output_validation_failed"
-    if code in {"openai_output_incomplete", "vllm_output_incomplete"}:
+    if code in {"model_output_incomplete", "openai_output_incomplete", "vllm_output_incomplete"}:
         return "output_incomplete"
     if code in {"openai_refusal", "vllm_refusal"}:
         return "model_refusal"

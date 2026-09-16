@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -24,6 +24,7 @@ class RetryEligibility(BaseModel):
     evidence_editor_enabled: bool = False
     evidence_editor_model_profile: str | None = None
     evidence_editor_model_name: str | None = None
+    evidence_editor_provider: str | None = None
     prompt_version: str | None = None
     costs_may_apply: bool = True
 
@@ -33,3 +34,7 @@ class RetryResponse(BaseModel):
     retry_of_analysis_id: str
     status: str
     duplicate: bool
+
+
+class TestRetryRequest(RetryRequest):
+    analysis_ids: list[Annotated[str, Field(min_length=1, max_length=36)]] = Field(min_length=1, max_length=5000)

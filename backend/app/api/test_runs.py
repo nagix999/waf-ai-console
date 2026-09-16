@@ -5,6 +5,10 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Reques
 from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
+from ..retry_schemas import TestRetryRequest
+from ..services.analysis_retries import RetryError
+from ..services.test_retries import preview_test_retries, enqueue_test_retries
 from ..database import get_db
 from ..models import TestRun, TestEvaluation
 from ..validation_data_schemas import EvaluationCreate
@@ -127,6 +131,29 @@ def evaluations(run_id: str, db: DbSession, _principal: Admin):
         raise HTTPException(404, "test_run_not_found")
     return {"items": [evaluation_record(row) for row in db.scalars(select(TestEvaluation)
         .where(TestEvaluation.test_run_id == run_id).order_by(TestEvaluation.revision.desc()))]}
+
+
+@router.get("/{run_id}/retry-eligibility")
+def test_retry_eligibility(run_id: str, request: Request, db: DbSession, _principal: Admin):
+    try:
+        return preview_test_retries(db, request.app.state.crypto, request.app.state.settings, run_id)
+    except RetryError as exc:
+        raise HTTPException(exc.status_code, exc.code) from None
+    except SQLAlchemyError:
+        raise HTTPException(503, "retry_storage_unavailable") from None
+
+
+@router.post("/{run_id}/retry-failed", status_code=202)
+def retry_failed_test_items(run_id: str, payload: TestRetryRequest, request: Request, db: DbSession, principal: Admin):
+    try:
+        return enqueue_test_retries(db, request.app.state.crypto, request.app.state.settings, run_id,
+                                   payload, principal.username or "admin")
+    except RetryError as exc:
+        db.rollback()
+        raise HTTPException(exc.status_code, exc.code) from None
+    except SQLAlchemyError:
+        db.rollback()
+        raise HTTPException(503, "retry_storage_unavailable") from None
 
 
 @router.post("/{run_id}/evaluations", status_code=201)

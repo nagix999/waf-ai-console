@@ -28,6 +28,8 @@ class TestRunItemResponse(BaseModel):
     id: str
     row_number: int
     analysis_id: str | None
+    original_analysis_id: str | None = None
+    retry_count: int = 0
     event_id: str | None
     difficulty: str | None
     test_category: str | None

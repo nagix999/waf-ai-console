@@ -257,8 +257,8 @@ def test_openai_refusal_or_incomplete_valid_json_is_not_success(monkeypatch, bod
     assert result.succeeded is False
     assert result.output is None
     assert result.telemetry["error_summary"]["code"] == expected_code
-    assert len(requests) == 1
-    assert result.telemetry["output_validation_retry"]["attempted"] is False
+    assert len(requests) == (4 if expected_code == "openai_output_incomplete" else 1)
+    assert result.telemetry["output_validation_retry"]["attempted"] is (expected_code == "openai_output_incomplete")
     diagnostics = json.dumps(result.telemetry) + str(result.error)
     assert "synthetic-refusal-must-not-leak" not in diagnostics
     assert "synthetic-response-secret" not in diagnostics

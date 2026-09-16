@@ -19,8 +19,10 @@ def utc_datetime(value):
 
 
 def latest_reference(db, analysis_id):
-    return db.scalar(select(AnalysisLabel).where(AnalysisLabel.analysis_id == analysis_id)
-                     .order_by(AnalysisLabel.revision.desc()).limit(1))
+    from .evaluation import latest_labels
+    labels = latest_labels([analysis_id])
+    identifier = db.scalar(select(labels.c.id).where(labels.c.analysis_id == analysis_id))
+    return db.get(AnalysisLabel, identifier) if identifier else None
 
 
 def reference_selection(db, ids):
@@ -28,7 +30,7 @@ def reference_selection(db, ids):
     existing = set(db.scalars(select(Analysis.id).where(Analysis.id.in_(ids))))
     if existing != set(ids):
         raise AnalysisIngestError("analysis_not_found", 404)
-    return [{"analysis_id": identifier, "expected_revision": label.revision if label else 0,
+    return [{"analysis_id": identifier, "expected_revision": label.revision if label and label.analysis_id == identifier else 0,
              "verdict": label.verdict if label else None}
             for identifier in ids for label in [latest_reference(db, identifier)]]
 
@@ -72,17 +74,21 @@ def create_evaluation(db, run_id, payload, actor):
     old = db.scalar(select(TestEvaluation).where(TestEvaluation.idempotency_key == key))
     if old:
         return evaluation_record(old)
-    ids = list(db.scalars(select(TestRunItem.analysis_id).where(TestRunItem.test_run_id == run_id,
-                                                               TestRunItem.ingest_status == "accepted")))
+    from .test_attempts import EVALUATION_RETRY_AUDIT_ACTION, test_attempts
+    _nodes, current = test_attempts(run_id)
+    ids = list(db.scalars(select(current.c.analysis_id).join(TestRunItem, TestRunItem.id == current.c.item_id).where(
+        TestRunItem.ingest_status == "accepted")))
     if run.accepting_items or db.scalar(select(func.count()).select_from(Analysis).where(
             Analysis.id.in_(ids), Analysis.status.in_(["pending", "processing"]))):
         raise AnalysisIngestError("test_must_finish_before_rescoring", 409)
     revision = (db.scalar(select(func.max(TestEvaluation.revision)).where(TestEvaluation.test_run_id == run_id)) or 0) + 1
+    from .evaluation import latest_labels
+    labels = latest_labels(ids)
     row = TestEvaluation(test_run_id=run_id, revision=revision,
-        label_ids=[label.id for identifier in ids if (label := latest_reference(db, identifier))],
+        label_ids=list(db.scalars(select(labels.c.id).order_by(labels.c.analysis_id))),
         idempotency_key=key, created_by=actor)
     db.add(row)
     db.flush()
-    audit(db, actor, "rescore_test", "test_evaluation", row.id)
+    audit(db, actor, EVALUATION_RETRY_AUDIT_ACTION, "test_evaluation", row.id)
     db.commit()
     return evaluation_record(row)

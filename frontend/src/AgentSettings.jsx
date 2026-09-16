@@ -25,7 +25,7 @@ function Diagnostics() {
       <p className="ux-muted">총 {counts.total}건 · 완료 {counts.completed}건 · 보류 사유 미기록·모의 완료 {data.unmeasured_completed}건</p>
       <div className="table-wrap"><Table><thead><tr><th>보류 사유</th><th>분석 수</th></tr></thead><tbody>{Object.entries(diagnosticLabels).filter(([key]) => Number.isInteger(counts[key])).map(([key, label]) => <tr key={key}><td>{label}</td><td>{counts[key]}건</td></tr>)}</tbody></Table></div>
       <h3>근거 오류 재시도 · 완료 분석 기준</h3><p>Primary: {counts.primary_repair_attempted}건 중 {counts.primary_repair_recovered}건 교정 · Verifier: {counts.verifier_repair_attempted}건 중 {counts.verifier_repair_recovered}건 교정</p><p className="ux-muted">교정은 출력 형식·원문 인용 검사를 통과했다는 뜻이며, 판정이 정답이 되었다는 의미는 아닙니다.</p>
-      <h3>LLM 실행 실패</h3><p className="ux-muted">각 분석의 마지막 실행에 기록된 실패 단계 수입니다. 사유가 기록되지 않은 과거 실패는 포함하지 않습니다.</p><ul>{Object.entries({ output_validation_failed: "출력 형식 오류", output_incomplete: "출력 길이 초과", model_refusal: "모델 응답 거절", invocation_failed: "호출 실패" }).map(([key, label]) => <li key={key}>{label}: {data.llm_failure_counts?.[key] || 0}건</li>)}</ul>
+      <h3>LLM 실행 실패</h3><p className="ux-muted">각 분석의 마지막 실행에 기록된 실패 단계 수입니다. 사유가 기록되지 않은 과거 실패는 포함하지 않습니다.</p><ul>{Object.entries({ output_validation_failed: "출력 형식 오류", output_incomplete: "응답 생성 중단", model_refusal: "모델 응답 거절", invocation_failed: "호출 실패" }).map(([key, label]) => <li key={key}>{label}: {data.llm_failure_counts?.[key] || 0}건</li>)}</ul>
       <p>입력 구조 일부 미인식 {counts.parser_incomplete}건 · 입력 생략 {counts.input_truncated}건{Number.isInteger(counts.input_integrity_observed) && <> · 누락·구조 문제 관찰 {counts.input_integrity_observed}건</>}</p><p className="ux-muted">문제 관찰과 판정 제한은 다릅니다. 정상 판정의 근거 구간에 영향을 준 경우에만 위 보류 사유로 집계합니다.</p>
     </>}
   </section>;

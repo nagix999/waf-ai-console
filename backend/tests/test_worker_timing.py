@@ -167,8 +167,8 @@ def test_primary_duration_includes_real_corrective_retry_and_grounding(
             worker.mark_failed(db, analysis, error.value)
         run = db.scalar(select(AgentRun).where(AgentRun.analysis_id == item_id))
         primary_step = next(step for step in run.steps if step.step_type == "llm_primary")
-        assert primary_step.metadata_json["output_validation_retry"]["attempt_count"] == 2
-        assert step_duration_ms(primary_step) == (3250 if repair_succeeds else 3000)
+        assert primary_step.metadata_json["output_validation_retry"]["attempt_count"] == (2 if repair_succeeds else 4)
+        assert step_duration_ms(primary_step) == (3250 if repair_succeeds else 7000)
         assert primary_step.status == ("completed" if repair_succeeds else "failed")
         assert run.status == analysis.status == ("completed" if repair_succeeds else "failed")
         assert run.completed_at is not None
@@ -178,7 +178,7 @@ def test_primary_duration_includes_real_corrective_retry_and_grounding(
             assert analysis.threat_category == "sql_injection"
         else:
             assert analysis.error_code == "primary_agent_failed"
-    assert len(calls) == 2
+    assert len(calls) == (2 if repair_succeeds else 4)
 
 
 @pytest.mark.parametrize("operation_raises", [False, True])

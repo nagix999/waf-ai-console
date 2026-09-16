@@ -297,6 +297,45 @@ def test_lower_server_limit_drains_and_higher_limit_admits_without_restart(runti
     release(engine, first); release(engine, second)
 
 
+def test_output_corrections_share_one_slot_and_release_it(runtime, monkeypatch):
+    import httpx
+    from app.agent.executor import execute_structured_agent
+    from test_agent_openai import completion, openai_profile
+
+    configure(runtime, limit=1)
+    profile = openai_profile(provider="vllm", base_url="http://10.0.0.10:8000/v1")
+    calls, order = {}, []
+    client_type = httpx.AsyncClient
+
+    async def receive(request):
+        body = json.loads(request.content)
+        key = next(m["content"] for m in body["messages"] if m["role"] == "user")
+        calls[key] = calls.get(key, 0) + 1
+        order.append(key)
+        with runtime[2]() as db:
+            assert db.scalar(select(func.count()).select_from(LLMCallSlot)) == 1
+        await asyncio.sleep(.01)
+        return httpx.Response(200, json=completion(finish_reason="stop" if calls[key] == 4 else "length"))
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: client_type(transport=httpx.MockTransport(receive), **kwargs))
+
+    async def run(index):
+        return await execute_structured_agent(profile=profile, api_key=None, instructions="fixture",
+            user_input=f"fixture-{index}", session_id=f"fixture-{index}", agent_name="waf-primary",
+            egress_check=lambda: None, concurrency_engine=runtime[1])
+
+    async def both():
+        return await asyncio.gather(run(0), run(1))
+
+    results = asyncio.run(both())
+    assert all(result.succeeded for result in results)
+    assert sorted(calls.values()) == [4, 4]
+    assert len(set(order[:4])) == len(set(order[4:])) == 1
+    assert any(result.telemetry["concurrency"]["wait_ms"] > 0 for result in results)
+    with runtime[2]() as db:
+        assert db.scalar(select(func.count()).select_from(LLMCallSlot)) == 0
+
+
 def test_actual_moduagent_and_connection_checks_share_server_cap(runtime, monkeypatch):
     import httpx
     from app.agent.executor import execute_structured_agent

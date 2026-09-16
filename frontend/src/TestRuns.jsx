@@ -16,6 +16,8 @@ import AnalysisSelectionActions, { useAnalysisSelection } from "./AnalysisSelect
 import TestReevaluation from "./TestReevaluation.jsx";
 import DataTable, { serverSorting, changedSort } from "./DataTable.jsx";
 import Pagination from "./Pagination.jsx";
+import RetryTestFailures from "./RetryTestFailures.jsx";
+import { afterTestRetry } from "./testRetry.js";
 
 export const initialTestRunHistoryState = () => ({ queryText: "", query: { q: "", limit: 10, offset: 0 } });
 export const initialTestRunFilters = () => ({ difficulty: "", test_category: "", difficulty_missing: false, test_category_missing: false, status: "", evaluation_outcome: "", cell: "", limit: 25, offset: 0, comparison: initialTestComparisonState() });
@@ -120,7 +122,7 @@ export function TestRunItemRows({ items, onOpen, selection, sorting, onSortingCh
     { id: "case_name", header: "문항 / 분류", sortable: true, width: "28%", render: item => <>{item.analysis_id ? <button type="button" className="text-button" onClick={() => onOpen(item.analysis_id)}>{item.case_name || item.event_id || `${item.row_number}행`}</button> : <strong>{item.case_name || item.event_id || `${item.row_number}행`}</strong>}<small>{item.row_number}행 · {item.difficulty || "난이도 미분류"} · {item.test_category || "유형 미분류"}</small></> },
     { id: "summary", header: "판정 / 분석 요약", render: item => <><strong>{item.status === "completed" ? referenceVerdicts[item.verdict] || "판정 정보 없음" : "—"}</strong><SummaryPreview text={item.summary_ko} /></> },
     { id: "reference", header: "참고 답안 비교", width: "20%", render: item => item.ingest_status === "rejected" ? "접수 거부 · 평가 제외" : <CompactReferenceComparison evaluation={item.evaluation} /> },
-    { id: "status", header: "처리 상태", sortable: true, width: "14%", render: item => <>{item.ingest_status === "rejected" ? "접수 거부" : runStatuses[item.status] || "상태 미확인"}{item.error_code && <TestRunItemError item={item} />}</> },
+    { id: "status", header: "처리 상태", sortable: true, width: "14%", render: item => <>{item.ingest_status === "rejected" ? "접수 거부" : runStatuses[item.status] || "상태 미확인"}{item.retry_count > 0 && <small>재실행 {item.retry_count}회</small>}{item.error_code && <TestRunItemError item={item} />}</> },
   ];
   return <DataTable label="문항별 분석 결과" data={items} columns={columns} sorting={sorting} onSortingChange={onSortingChange} rowClassName={item => analysisRowState(item.status).className} />;
 }
@@ -150,6 +152,7 @@ export function TestRunDetail({ id, onBack, onOpen, filters: controlledFilters, 
     <section className="panel test-run-header"><div className="panel-head"><div><h2>{data.name}</h2><small>{runKinds[data.kind]} · {formatDate(data.created_at)}</small></div><span className={`status status-${data.status}`}>{runStatuses[data.status]}</span></div><dl><div><dt>접수 / 거부</dt><dd>{data.accepted} / {data.rejected}건</dd></div><div><dt>진행 / 완료 / 실패</dt><dd>{data.pending + data.processing} / {data.completed} / {data.failed}건</dd></div><div><dt>전체 소요 시간</dt><dd>{formatDuration(data.total_elapsed_ms, ["pending", "processing"].includes(data.status) ? "진행 중" : "측정 정보 없음")}</dd></div></dl><div className="ux-toolbar"><button type="button" className="text-button" onClick={() => setMetadataOpen(true)}>실행 정보</button></div>{["pending", "processing"].includes(data.status) && <p className="notice">분석 진행 중 · 완료된 문항에 따라 지표가 달라집니다.</p>}{data.execution_mode === "stub" && <p className="notice">모의 실행 · 실제 모델의 품질 평가에서 제외됩니다.</p>}</section>
     <Dialog open={metadataOpen} title="테스트 실행 정보" onClose={() => setMetadataOpen(false)}><p className="reference-inline-note">모델·지침은 실행 당시 설정을 유지합니다. 화면의 점수는 선택한 참고 답안 기준이며, 접수 당시 답안과 저장한 평가는 별도로 보존합니다.</p><dl className="label-metadata"><dt>모델</dt><dd>{data.profile_metadata?.model_name || "미기록"}</dd><dt>지침</dt><dd>{data.prompt_version || "미기록"}</dd><dt>연동 시스템 · 답안 연결용</dt><dd><code>{data.source_system}</code></dd><dt>테스트 ID</dt><dd><code>{data.id}</code></dd></dl></Dialog>
     <TestReevaluation run={data} value={filters.evaluation_id} onChange={value => setFilters?.(current => ({ ...current, evaluation_id: value, offset: 0 }))} />
+    <div className="ux-toolbar"><RetryTestFailures key={id} run={data} onSubmitted={message => { setSaveNotice(message); selection.clear(); setFilters?.(afterTestRetry); setReload(value => value + 1); }} /><span className="ux-muted">재실행 결과는 문항별로 한 번만 집계합니다.</span></div>
     <TestRunScope data={data} filters={filters} onChange={scopeChange} />
     <EvaluationOverview summary={data.evaluation_summary} scopeLabel="선택한 테스트·난이도·유형" onMatrixCell={cell => change({ type: "cell", value: cell })} selectedCell={filters.cell} />
     <div className="ux-toolbar"><button type="button" className="secondary" onClick={() => setComparisonOpen(true)}>다른 테스트와 비교</button></div>

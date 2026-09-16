@@ -1,5 +1,7 @@
 # WAF Agent 판정 정책 v2
 
+2026-09-16 **출력 교정 v2**: [응답 교정 재시도 계약](../../../docs/LLM_Output_Recovery_2026-09-16.md)에 따라 Primary/Verifier의 형식 오류와 응답 생성 중단을 최초 포함 최대 4회 처리한다. 교정 지침만 추가하며 고정된 원본 입력·판정 지침·모델·출력 한도·독립 Verifier 정책은 유지한다. 원문 인용 교정과 근거 정리는 기존 한도를 유지한다. 과거 결과를 변경하지 않고 새 DB/의존성도 없다.
+
 2026-09-14 **동시 처리**: [동시 처리 계약](../../../docs/Concurrency_2026-09-14.md)에 따라 일반 운영·테스트 분석을 제한된 작업 풀에서 실행한다. 각 분석의 순서는 유지하며 모든 worker의 유효 lease와 LLM 서버 주소·포트별 예약 상한을 공유한다. 호출 대기는 모델 제한 시간과 분리하고 대기 중 권한·작업 소유권을 다시 검사한다. 별도 150건 후보 검증의 문항 처리 순서는 유지하되 서버 호출 상한에는 포함한다. 기본값은 각각 1, Alembic `0015_concurrency` 필요, 실제 모델 평가·운영 활성화는 별도다.
 
 2026-09-14 **부분 로그·보류 안내 보완**: [처리 계약](../../../docs/Partial_Input_and_Hold_Review_2026-09-14.md)에 따라 v2.12의 새 실행은 request-integrity-v2를 쓴다. HTTP 버전만 빠진 로그에서 명시된 본문 길이와 수집본을 대조하되 미지원 구조는 추정하지 않는다. 과거 v2.9~v2.11은 v1을 유지한다. 보류 안내는 저장된 근거·조건에 연결하며 새 모델 출력이나 판정을 만들지 않는다. 프롬프트 문구는 v2.11과 동일하고 DB·새 패키지·LLM 단계·운영 설정 변경은 없다.
@@ -88,7 +90,7 @@ Verifier 실패 또는 판정 불일치는 최종 `inconclusive`/`UNKNOWN`으로
 - ModuAgent 0.6.2 Standard execution
 - Pydantic 구조화 출력
 - timeout/network/HTTP 408/5xx에 한해 1회 재시도
-- `output_validation_failed`이면 검증 오류와 요구 스키마를 포함한 교정 지시로 1회 재시도
+- `output_validation_failed` 또는 명시적인 미완료 응답이면 원인별 교정 지시로 최대 3회 재시도(최초 포함 4회). 두 오류가 섞여도 같은 총 횟수 안에서 처리
 - 교정 후에도 Primary 검증이 실패하면 분석 실패, Verifier 검증이 실패하면 최종 `inconclusive`
 - 모델이 호출하는 ModuAgent Tool 및 Memory 미사용. 아래 로컬 디코딩 전처리 도구는 worker가 직접 실행
 - vLLM/Gemma thinking 비활성화; OpenAI는 vLLM 전용 옵션을 사용하지 않으며 thinking 비활성화를 보장하지 않음
@@ -118,7 +120,7 @@ vLLM의 기존 `WAF_VLLM_ALLOWED_TARGETS`는 무시하며 호스트명/CIDR 허�
 
 OpenAI 프로필은 API Key·TLS 검증·외부 전송 승인이 필수이며 worker에서도 호출 전에 재검사합니다. 프로필의 승인 여부는 사내 데이터 반출 승인을 대체하지 않습니다. payload와 Cookie를 마스킹하지 않는 기존 정책이 그대로 적용되므로 외부 전송 가능한 데이터만 접수해야 합니다.
 
-OpenAI에는 `store=false`와 `max_completion_tokens`를 적용하고 `chat_template_kwargs`를 보내지 않습니다. 구조화 출력용 스키마는 모든 객체의 속성을 필수로 표시하며 nullable 항목은 null을 허용합니다. 기존 도메인 모델과 결과 버전은 변경하지 않고 Pydantic 검증·필드별 근거 대조·1회 출력 교정 Retry·독립 Verifier 결합 규칙을 유지합니다. 모델별 API 기능·출력 예산·거절 응답은 실제 계정의 합성 테스트로 별도 확인해야 합니다.
+OpenAI에는 `store=false`와 `max_completion_tokens`를 적용하고 `chat_template_kwargs`를 보내지 않습니다. 구조화 출력용 스키마는 모든 객체의 속성을 필수로 표시하며 nullable 항목은 null을 허용합니다. 기존 도메인 모델과 결과 버전은 변경하지 않고 Pydantic 검증·필드별 근거 대조·독립 Verifier 결합 규칙을 유지합니다. 출력 교정은 vLLM과 같은 총 4회 한도이며 명시적인 `length` 중단도 포함합니다. 거절·차단·잘못된 응답 봉투는 교정 재시도하지 않습니다. 모델별 API 기능·출력 예산·거절 응답은 실제 계정의 합성 테스트로 별도 확인해야 합니다.
 
 새 실행의 Agent 메타데이터에 `llm_provider`, 모델 ID, 프로필 ID/지문, 외부 전송 승인 여부를 기록합니다. OpenAI의 `thinking_enabled`는 비활성화 사실을 추정하지 않도록 null이며, 이전 결과는 다시 쓰거나 provider를 추정해 채우지 않습니다. API Key와 임의 upstream 오류 본문은 이 메타데이터에 넣지 않습니다.
 

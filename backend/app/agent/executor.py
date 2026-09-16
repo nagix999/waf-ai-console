@@ -2,6 +2,7 @@ from contextlib import AsyncExitStack
 from dataclasses import dataclass, field, is_dataclass, replace
 from enum import Enum
 from importlib.metadata import PackageNotFoundError, version
+from time import monotonic
 from typing import Any, Callable, Mapping, get_args
 
 import httpx
@@ -24,7 +25,10 @@ from .result_editor import ResultEditorOutput
 
 
 OUTPUT_VALIDATION_FAILURE_CODE = "output_validation_failed"
-OUTPUT_VALIDATION_MAX_ATTEMPTS = 2
+OUTPUT_VALIDATION_MAX_ATTEMPTS = 4
+OUTPUT_RETRY_VERSION = "structured-output-repair-v2"
+INCOMPLETE_FAILURE_CODES = frozenset({"model_output_incomplete", "vllm_output_incomplete", "openai_output_incomplete"})
+INCOMPLETE_FINISH_REASONS = frozenset({"length", "max_tokens", "timeout"})
 SAFE_VALIDATION_TYPES = frozenset(get_args(ErrorType)) | CONTRACT_ERRORS.keys()
 OUTPUT_VALIDATION_REPAIR_INSTRUCTIONS = """
 이전 실행은 output_validation_failed로 종료되었다. 원본 이벤트를 처음부터 다시 분석하고,
@@ -68,11 +72,16 @@ class _OpenAICompletionTransport:
         self.delegate = delegate
         self.before_request = before_request
         self.failure_code: str | None = None
+        self.response_diagnostics: dict[str, Any] = {}
+
+    def reset(self) -> None:
+        self.failure_code = None
+        self.response_diagnostics = {}
 
     async def post_json(self, *args: Any, **kwargs: Any) -> Mapping[str, Any]:
         from moduagent import ModelProtocolError
 
-        self.failure_code = None
+        self.reset()
         if self.before_request is not None:
             self.before_request()
         try:
@@ -89,6 +98,7 @@ class _OpenAICompletionTransport:
         except ModelProtocolError:
             self.failure_code = "openai_invalid_response"
             raise
+        self.response_diagnostics = _completion_diagnostics(value)
         try:
             completion_content(value, "openai")
             usage = safe_openai_usage(value.get("usage"))
@@ -106,14 +116,54 @@ class _VLLMEgressTransport:
         self.delegate = delegate
         self.base_url = base_url
         self.check = check
+        self.failure_code: str | None = None
+        self.response_diagnostics: dict[str, Any] = {}
+
+    def reset(self) -> None:
+        self.failure_code = None
+        self.response_diagnostics = {}
 
     async def post_json(self, url: str, **kwargs: Any) -> Mapping[str, Any]:
+        from moduagent import ModelProtocolError
         from ..services.vllm_profiles import TargetNotAllowedError
 
+        self.reset()
         if url != f"{self.base_url}/chat/completions":
             raise TargetNotAllowedError("vllm_target_not_allowed")
         self.check()
-        return await self.delegate.post_json(url, **kwargs)
+        value = await self.delegate.post_json(url, **kwargs)
+        self.response_diagnostics = _completion_diagnostics(value)
+        try:
+            completion_content(value, "vllm")
+        except CompletionRejected as exc:
+            # Keep ModuAgent's typed incomplete error and stable finish reason.
+            # Refusal/invalid envelopes must never become a corrective retry.
+            if (exc.code in {"vllm_output_incomplete", "vllm_completion_not_finished"}
+                    and self.response_diagnostics.get("provider_finish_reason") in INCOMPLETE_FINISH_REASONS):
+                return value
+            self.failure_code = exc.code
+            raise ModelProtocolError(exc.code) from None
+        return value
+
+
+def _completion_diagnostics(value: Any) -> dict[str, Any]:
+    """Capture only allowlisted finish reasons and counts, including truncation.
+
+    Incomplete output is rejected before framework usage aggregation. Never
+    retain its content, refusal text, reasoning or arbitrary provider fields.
+    """
+    if not isinstance(value, Mapping):
+        return {}
+    choices = value.get("choices")
+    if not isinstance(choices, list) or len(choices) != 1 or not isinstance(choices[0], Mapping):
+        return {}
+    reason = choices[0].get("finish_reason")
+    safe_reason = reason if isinstance(reason, str) and reason in INCOMPLETE_FINISH_REASONS | {"stop", "content_filter", "tool_calls"} else None
+    usage = value.get("usage")
+    counters = {target: usage.get(source) for source, target in (
+        ("prompt_tokens", "input_tokens"), ("completion_tokens", "output_tokens"), ("total_tokens", "total_tokens")
+    )} if isinstance(usage, Mapping) else None
+    return {"provider_finish_reason": safe_reason, "usage": _usage_jsonable(counters)}
 
 
 @dataclass(frozen=True)
@@ -265,6 +315,50 @@ def _repair_instructions(validation_issues: list[dict[str, str]]) -> str:
     )
 
 
+def _retry_kind(error_code: str | None, provider_finish_reason: str | None) -> str | None:
+    if error_code == OUTPUT_VALIDATION_FAILURE_CODE:
+        return "schema_correction"
+    if error_code in INCOMPLETE_FAILURE_CODES and provider_finish_reason in INCOMPLETE_FINISH_REASONS:
+        return "timeout_recovery" if provider_finish_reason == "timeout" else "compact_output"
+    return None
+
+
+def _retry_instructions(attempts: list[dict[str, Any]], max_output_tokens: int) -> str:
+    previous = attempts[-1]
+    if previous["retry_kind"] == "schema_correction":
+        feedback = _repair_instructions(previous["validation_issues"])
+    else:
+        reason = previous["provider_finish_reason"]
+        explanation = "출력 한도에 도달해" if reason in {"length", "max_tokens"} else "응답 생성 시간이 초과되어"
+        feedback = (
+            f"이전 실행은 {previous['error_code']} ({reason})로 종료되었다. {explanation} 결과가 완성되지 않았다.\n"
+            "같은 원본 이벤트와 판정 기준으로 완전한 JSON 결과를 처음부터 다시 작성하라. "
+            "이전 응답을 이어 쓰거나 Markdown·서문을 출력하지 않는다."
+        )
+    # No repeated output or ever-growing conversation: only bounded, safe
+    # feedback. Escalate concision so deterministic models do not repeat an
+    # identical failed request, without loosening the evidence/schema checks.
+    level = min(len(attempts), 3)
+    compact = any(item["retry_kind"] in {"compact_output", "timeout_recovery"} for item in attempts) or level > 1
+    feedback += f"\n교정 단계 {level}. 출력 한도는 {max_output_tokens} 토큰이다."
+    if compact:
+        sentences = "1~2문장" if level == 1 else "1문장"
+        feedback += (
+            f"\n요약과 각 해석은 핵심 {sentences}으로 작성하고 같은 설명은 반복하지 않는다. "
+            "필수 필드·최소 길이·개수 조건과 판정을 뒷받침하는 원문 근거는 유지한다. "
+            "서로 다른 핵심 근거와 판정에 필요한 확인사항을 생략하지 않는다. "
+            "길이를 줄이기 위해 판정·심각도·신뢰도를 바꾸거나 보류를 선택하지 않는다."
+        )
+    if level == 3:
+        feedback += "\n불필요한 수식어·일반론·이미 다른 필드에서 한 설명을 빼고 모든 객체와 배열을 끝까지 닫는다."
+    return feedback
+
+
+def _validate_attempt_limit(attempts: int) -> None:
+    if type(attempts) is not int or not 1 <= attempts <= OUTPUT_VALIDATION_MAX_ATTEMPTS:
+        raise ValueError("invalid_output_validation_attempt_limit")
+
+
 def _attempt_telemetry(
     result: Any,
     attempt: int,
@@ -291,8 +385,7 @@ async def execute_structured_agent(*, concurrency_engine=None, **kwargs) -> Agen
     from ..services.concurrency import call_slot
     profile = kwargs["profile"]
     attempts = kwargs.get("output_validation_max_attempts", OUTPUT_VALIDATION_MAX_ATTEMPTS)
-    if attempts not in {1, 2}:
-        raise ValueError("invalid_output_validation_attempt_limit")
+    _validate_attempt_limit(attempts)
     # Queue waiting must not consume the model's response/repair deadline.
     deadline = min(profile.timeout_seconds, EDITOR_SECONDS) if kwargs.get("output_model") in {EvidenceEditorOutput, ResultEditorOutput} else profile.timeout_seconds * 2 * attempts + 5
     async with call_slot(concurrency_engine, profile, kwargs.get("egress_check"), timeout_seconds=deadline) as admission:
@@ -312,8 +405,7 @@ async def _execute_structured_agent(
     output_validation_max_attempts: int = OUTPUT_VALIDATION_MAX_ATTEMPTS,
     output_model: type[WAFAnalysisOutput] | type[EvidenceCorrectionOutput] = WAFAnalysisOutput,
 ) -> AgentCallResult:
-    if output_validation_max_attempts not in {1, 2}:
-        raise ValueError("invalid_output_validation_attempt_limit")
+    _validate_attempt_limit(output_validation_max_attempts)
     if output_model not in {WAFAnalysisOutput, EvidenceCorrectionOutput, EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput, EvidenceEditorOutput, ResultEditorOutput}:
         raise ValueError("unsupported_agent_output_contract")
     if issubclass(output_model, EvidenceCorrectionOutput) and output_validation_max_attempts != 1:
@@ -370,18 +462,18 @@ async def _execute_structured_agent(
             http_client = await stack.enter_async_context(
                 httpx.AsyncClient(verify=True, follow_redirects=False, trust_env=False)
             )
-            client_kwargs["transport"] = _VLLMEgressTransport(
+            guarded_transport = _VLLMEgressTransport(
                 HttpxTransport(client=http_client), base_url, egress_check,
             )
+            client_kwargs["transport"] = guarded_transport
         model = await stack.enter_async_context(client_type(**client_kwargs))
         attempts: list[dict[str, Any]] = []
         result = None
         spec = None
-        previous_validation_issues: list[dict[str, str]] = []
         for attempt in range(1, output_validation_max_attempts + 1):
             repairing_output = attempt > 1
             run_instructions = (
-                f"{instructions}\n\n{_repair_instructions(previous_validation_issues)}"
+                f"{instructions}\n\n{_retry_instructions(attempts, profile.max_output_tokens)}"
                 if repairing_output
                 else instructions
             )
@@ -401,6 +493,8 @@ async def _execute_structured_agent(
                 ),
             )
             spec = agent.inspect()
+            guarded_transport.reset()
+            started = monotonic()
             result = await agent.run(
                 user_input,
                 session_id=session_id if not repairing_output else f"{session_id}:output-repair-{attempt - 1}",
@@ -415,10 +509,24 @@ async def _execute_structured_agent(
             )
             if guarded_transport is not None and guarded_transport.failure_code:
                 attempts[-1]["error_code"] = guarded_transport.failure_code
-            previous_validation_issues = output_codec.validation_issues
+            diagnostics = guarded_transport.response_diagnostics
+            summary = _jsonable(result.error_summary)
+            reason = diagnostics.get("provider_finish_reason")
+            if reason is None and isinstance(summary, Mapping):
+                candidate = summary.get("provider_finish_reason")
+                reason = candidate if isinstance(candidate, str) and candidate in INCOMPLETE_FINISH_REASONS else None
+            attempt_record = attempts[-1]
+            attempt_record.update({
+                "provider_finish_reason": reason,
+                "duration_ms": round((monotonic() - started) * 1000),
+                "max_output_tokens": min(profile.max_output_tokens, EDITOR_TOKENS) if editor else profile.max_output_tokens,
+                "retry_kind": _retry_kind(attempt_record["error_code"], reason),
+            })
+            if attempt_record["usage"] is None:
+                attempt_record["usage"] = diagnostics.get("usage")
             if (
                 result.output is not None
-                or _error_code(result.error_summary) != OUTPUT_VALIDATION_FAILURE_CODE
+                or attempt_record["retry_kind"] is None
                 or attempt == output_validation_max_attempts
             ):
                 break
@@ -429,16 +537,19 @@ async def _execute_structured_agent(
         finish_reason = getattr(result.finish_reason, "value", result.finish_reason)
         error_summary = _jsonable(result.error_summary)
         safe_error = str(result.error) if result.error is not None else None
-        if provider == "openai":
+        if provider == "openai" or guarded_transport.failure_code:
             error_code = attempts[-1]["error_code"]
-            # OpenAI HTTP/protocol diagnostics never persist provider response text.
+            # HTTP/protocol diagnostics never persist provider response text.
             error_summary = {"code": error_code} if error_code else None
             safe_error = error_code if result.error is not None else None
+        if error_summary and attempts[-1]["provider_finish_reason"]:
+            error_summary = {**error_summary, "provider_finish_reason": attempts[-1]["provider_finish_reason"]}
+        succeeded = str(finish_reason) == "completed" and output is not None
         telemetry = {
             "framework": "moduagent",
             "framework_version": framework_version(),
             "execution": "standard",
-            "usage": _usage_jsonable(result.usage),
+            "usage": attempts[-1]["usage"],
             "run_usage": _jsonable(result.run_usage),
             "metadata": _jsonable(result.metadata),
             "tool_trace": _jsonable(result.tool_trace),
@@ -447,10 +558,13 @@ async def _execute_structured_agent(
             "provider": provider,
             "thinking_enabled": None if provider == "openai" else False,
             "output_validation_retry": {
+                "version": OUTPUT_RETRY_VERSION,
                 "attempted": len(attempts) > 1,
                 "attempt_count": len(attempts),
                 "max_attempts": output_validation_max_attempts,
-                "recovered": len(attempts) > 1 and str(finish_reason) == "completed" and output is not None,
+                "recovered": len(attempts) > 1 and succeeded,
+                "stop_reason": "completed" if succeeded else "attempt_limit" if attempts[-1]["retry_kind"] else "not_retryable",
+                "max_transport_attempts_per_attempt": 1 if editor else 2,
                 "attempts": attempts,
             },
         }

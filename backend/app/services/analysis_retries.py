@@ -224,10 +224,11 @@ def eligibility(db, crypto, analysis_id, agent_mode):
                                        "verifier_provider": verifier.provider,
                                        "evidence_editor_enabled": _snapshot.evidence_editor is not None,
                                        "evidence_editor_model_profile": editor.name if editor else None,
+                                       "evidence_editor_provider": editor.provider if editor else None,
                                        "evidence_editor_model_name": editor.model_name if editor else None})
 
 
-def enqueue_retry(db, crypto, settings, analysis_id, request, actor):
+def enqueue_retry(db, crypto, settings, analysis_id, request, actor, *, commit=True):
     from .test_runs import write_lock
     write_lock(db)
     original = db.get(Analysis, analysis_id)
@@ -243,6 +244,7 @@ def enqueue_retry(db, crypto, settings, analysis_id, request, actor):
     snapshot, _profile = retry_context(db, crypto, original, settings.agent_mode)
     # Copy only the immutable observation. Do not reset the original failure,
     # attach a new TestRunItem, copy its fixed Label, or overwrite any review.
+    # Test views resolve the lineage and inherited reference at read time.
     fields = (
         "source_system", "analysis_purpose", "ingest_channel", "event_fingerprint", "event_id", "company_name",
         "src_ip", "dest_ip", "src_port", "dest_port", "signature", "event_name", "waf_vendor", "waf_action",
@@ -257,5 +259,8 @@ def enqueue_retry(db, crypto, settings, analysis_id, request, actor):
     db.add(row)
     db.add(AccessAudit(actor_kind="admin_session", actor_id=actor, action="retry_failed_analysis",
                        resource_type="analysis", resource_id=row.id))
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
     return RetryResponse(analysis_id=row.id, retry_of_analysis_id=original.id, status=row.status, duplicate=False)

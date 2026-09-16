@@ -47,6 +47,7 @@ export const comparisonWarnings = {
   execution_identity_unknown: "실제 모델 실행 식별 정보를 확인할 수 없는 문항이 있습니다.", execution_identity_mismatch: "접수 설정과 실제 모델 실행 식별 정보가 맞지 않는 문항이 있습니다.",
   executed_verifier_threshold_unknown: "실제 실행의 독립 검증 임계값을 확인할 수 없는 문항이 있습니다.", executed_verifier_threshold_mismatch: "접수 시 고정한 독립 검증 임계값과 실행 기록이 다릅니다.",
   token_usage_incomplete: "토큰 사용량에 미측정 기록이 있습니다. 기록된 합계를 전체 사용량으로 해석하지 마세요.",
+  retry_results_included: "재실행한 문항은 최신 결과를 비교합니다. 시간·토큰은 선택된 실행 기준이며 이전 실패 실행의 비용은 포함하지 않습니다.",
   timing_incomplete: "일부 소요 시간 또는 실행 이력이 미기록입니다. 미기록을 0으로 계산하지 않습니다.",
 };
 

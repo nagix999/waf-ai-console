@@ -219,11 +219,19 @@ def enqueue_named_run(db, crypto, settings, *, name, idempotency_key, rows, kind
         raise
 
 
-def fixed_reference_relation(run_id, evaluation=None):
+def fixed_reference_relation(run_id, evaluation=None, *, include_retries=True):
+    from .test_attempts import test_attempts
+    nodes, current = test_attempts(run_id, before=evaluation.created_at if evaluation else None, include_retries=include_retries)
     if evaluation is not None:
-        return evaluation_relation(select(AnalysisLabel).where(AnalysisLabel.id.in_(evaluation.label_ids)).subquery())
-    labels = select(AnalysisLabel).join(TestRunItem, TestRunItem.label_id == AnalysisLabel.id).where(
-        TestRunItem.test_run_id == run_id, TestRunItem.ingest_status == "accepted").subquery()
+        labels = select(*(column for column in AnalysisLabel.__table__.columns if column.name != "analysis_id"),
+            current.c.analysis_id.label("analysis_id")).join(nodes, nodes.c.analysis_id == AnalysisLabel.analysis_id).join(
+                current, current.c.item_id == nodes.c.item_id).join(TestRunItem, TestRunItem.id == nodes.c.item_id).where(
+                AnalysisLabel.id.in_(evaluation.label_ids), TestRunItem.ingest_status == "accepted").subquery()
+    else:
+        labels = select(*(column for column in AnalysisLabel.__table__.columns if column.name != "analysis_id"),
+            current.c.analysis_id.label("analysis_id")).join(TestRunItem, TestRunItem.label_id == AnalysisLabel.id).join(
+                current, current.c.item_id == TestRunItem.id).where(
+                TestRunItem.test_run_id == run_id, TestRunItem.ingest_status == "accepted").subquery()
     return evaluation_relation(labels)
 
 
@@ -246,11 +254,19 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
                  sort_by="row_number", sort_order="asc"):
     read_snapshot(db)
     cohort = run_cohort(run.id, difficulty, test_category, difficulty_missing, test_category_missing)
-    accepted_ids = select(TestRunItem.analysis_id).where(*cohort, TestRunItem.ingest_status == "accepted")
     evaluation = db.get(TestEvaluation, evaluation_id) if evaluation_id else None
     if evaluation_id and (evaluation is None or evaluation.test_run_id != run.id):
         raise AnalysisIngestError("test_evaluation_not_found", 404)
-    relation = evaluation_relation() if reference_basis == "latest" and evaluation is None else fixed_reference_relation(run.id, evaluation)
+    from .test_attempts import EVALUATION_RETRY_AUDIT_ACTION, test_attempts
+    # Before this feature, saved evaluations deliberately ignored all retries,
+    # including retries already completed at save time. Preserve that meaning.
+    include_retries = evaluation is None or bool(db.scalar(select(AccessAudit.id).where(
+        AccessAudit.action == EVALUATION_RETRY_AUDIT_ACTION,
+        AccessAudit.resource_type == "test_evaluation", AccessAudit.resource_id == evaluation.id).limit(1)))
+    _nodes, current = test_attempts(run.id, before=evaluation.created_at if evaluation else None, include_retries=include_retries)
+    accepted_ids = select(current.c.analysis_id).join(TestRunItem, TestRunItem.id == current.c.item_id).where(
+        *cohort, TestRunItem.ingest_status == "accepted")
+    relation = evaluation_relation() if reference_basis == "latest" and evaluation is None else fixed_reference_relation(run.id, evaluation, include_retries=include_retries)
     evaluation_summary = summarize_evaluations(db, relation, [Analysis.id.in_(accepted_ids)])
     counts = dict(db.execute(select(TestRunItem.ingest_status, func.count()).where(
         *cohort).group_by(TestRunItem.ingest_status)).all())
@@ -260,6 +276,9 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
         "failed" if processing.get("failed") or counts.get("rejected") else "completed")
     started, finished = db.execute(select(func.min(Analysis.started_at), func.max(Analysis.completed_at)).where(
         Analysis.id.in_(accepted_ids))).one()
+    history_ids = select(_nodes.c.analysis_id).join(TestRunItem, TestRunItem.id == _nodes.c.item_id).where(
+        *cohort, TestRunItem.ingest_status == "accepted")
+    started = db.scalar(select(func.min(Analysis.started_at)).where(Analysis.id.in_(history_ids)))
     if state in {"pending", "processing"}:
         finished = None
     end = finished or (run.created_at if not processing else datetime.now(UTC))
@@ -283,7 +302,7 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
     )
     if not detail:
         return summary
-    query = select(TestRunItem, Analysis, relation).outerjoin(Analysis, Analysis.id == TestRunItem.analysis_id).outerjoin(
+    query = select(TestRunItem, Analysis, current.c.retry_count, relation).join(current, current.c.item_id == TestRunItem.id).outerjoin(Analysis, Analysis.id == current.c.analysis_id).outerjoin(
         relation, relation.c.analysis_id == Analysis.id).where(*cohort)
     if status is not None:
         query = query.where(Analysis.status == status)
@@ -302,8 +321,10 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
         item, analysis = row[0], row[1]
         metadata = metadata_from_row(row._mapping) if analysis else None
         items.append(TestRunItemResponse(
-            **{key: getattr(item, key) for key in ("id", "row_number", "analysis_id", "event_id", "difficulty",
+            **{key: getattr(item, key) for key in ("id", "row_number", "event_id", "difficulty",
                 "test_category", "case_name", "ingest_status")},
+            analysis_id=analysis.id if analysis else None, original_analysis_id=item.analysis_id,
+            retry_count=row._mapping["retry_count"],
             error_code=item.error_code or (analysis.error_code if analysis else None),
             status=analysis.status if analysis else None, verdict=analysis.verdict if analysis else None,
             summary_ko=analysis.summary_ko if analysis else None,
@@ -321,15 +342,21 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
 
 
 def analysis_test_run(db, analysis):
-    return db.scalar(select(TestRun).join(TestRunItem, TestRunItem.test_run_id == TestRun.id).where(
-        TestRunItem.analysis_id == analysis.id, TestRunItem.ingest_status == "accepted"))
+    from .test_attempts import test_attempts
+    nodes, _current = test_attempts()
+    return db.scalar(select(TestRun).join(TestRunItem, TestRunItem.test_run_id == TestRun.id).join(
+        nodes, nodes.c.item_id == TestRunItem.id).where(
+        nodes.c.analysis_id == analysis.id, TestRunItem.ingest_status == "accepted"))
 
 
 def attach_test_run_ids(db, rows):
     if not rows:
         return
-    mapping = dict(db.execute(select(TestRunItem.analysis_id, TestRunItem.test_run_id).where(
-        TestRunItem.analysis_id.in_([row.id for row in rows]), TestRunItem.ingest_status == "accepted")).all())
+    from .test_attempts import test_attempts
+    nodes, _current = test_attempts()
+    mapping = dict(db.execute(select(nodes.c.analysis_id, TestRunItem.test_run_id).join(
+        TestRunItem, TestRunItem.id == nodes.c.item_id).where(
+        nodes.c.analysis_id.in_([row.id for row in rows]), TestRunItem.ingest_status == "accepted")).all())
     for row in rows:
         row._test_run_id = mapping.get(row.id)
 

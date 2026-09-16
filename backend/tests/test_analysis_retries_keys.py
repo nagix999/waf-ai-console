@@ -271,7 +271,7 @@ def test_worker_never_recreates_missing_retry_snapshots(client, registered_vllm_
     assert called == []
 
 
-def test_test_retry_does_not_change_fixed_cohort_or_labels(client, registered_vllm_target, event_payload):
+def test_test_retry_updates_current_result_without_changing_membership_or_labels(client, registered_vllm_target, event_payload):
     login(client)
     client.app.state.settings.agent_mode = "moduagent"
     profile_id = profile_fixture(client, is_test=True)
@@ -289,7 +289,12 @@ def test_test_retry_does_not_change_fixed_cohort_or_labels(client, registered_vl
     response = retry(client, identifier)
     assert response.status_code == 202, response.text
     after = client.get(f"/api/v1/test-runs/{run['id']}").json()
-    assert before == after
+    assert before["failed"] == 1 and after["pending"] == 1 and after["failed"] == 0
+    assert after["total"] == before["total"] == 1
+    assert after["items"][0]["analysis_id"] == response.json()["analysis_id"]
+    assert after["items"][0]["original_analysis_id"] == identifier
+    assert after["items"][0]["retry_count"] == 1
+    assert after["items"][0]["evaluation"]["reference_label"]["id"] == before["items"][0]["evaluation"]["reference_label"]["id"]
     with client.app.state.session_factory() as db:
         assert db.scalar(select(func.count()).select_from(NamedItem)) == 1
         assert db.scalar(select(func.count()).select_from(AnalysisLabel)) == 1

@@ -90,14 +90,16 @@ def _finalize_binary_summary(summary: EvaluationBinarySummary) -> None:
     summary.metrics = calculate_binary_metrics(matrix)
 
 
-def latest_labels():
-    revisions = select(
-        AnalysisLabel.analysis_id, func.max(AnalysisLabel.revision).label("revision"),
-    ).group_by(AnalysisLabel.analysis_id).subquery()
-    return select(AnalysisLabel).join(revisions, and_(
-        AnalysisLabel.analysis_id == revisions.c.analysis_id,
-        AnalysisLabel.revision == revisions.c.revision,
-    )).subquery()
+def latest_labels(analysis_ids=None):
+    from .test_attempts import reference_ancestors
+    ancestors = reference_ancestors(analysis_ids)
+    ranked = select(*(column for column in AnalysisLabel.__table__.columns if column.name != "analysis_id"),
+        ancestors.c.target_id.label("analysis_id"), func.row_number().over(
+            partition_by=ancestors.c.target_id,
+            order_by=(ancestors.c.depth, AnalysisLabel.revision.desc())).label("position")
+    ).join(ancestors, ancestors.c.ancestor_id == AnalysisLabel.analysis_id).subquery()
+    return select(*(ranked.c[column.name] for column in AnalysisLabel.__table__.columns)).where(
+        ranked.c.position == 1).subquery()
 
 
 def evaluation_relation(labels=None):

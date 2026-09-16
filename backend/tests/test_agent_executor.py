@@ -203,7 +203,7 @@ def test_non_validation_failure_is_not_retried(monkeypatch):
     assert result.telemetry["output_validation_retry"]["attempted"] is False
 
 
-def test_output_validation_retry_stops_after_one_repair_attempt(monkeypatch):
+def test_output_validation_retry_respects_explicit_two_attempt_limit(monkeypatch):
     created, sessions = install_fake_agents(
         monkeypatch,
         [
@@ -231,6 +231,7 @@ def test_output_validation_retry_stops_after_one_repair_attempt(monkeypatch):
             user_input="synthetic event",
             session_id="analysis-1:primary",
             agent_name="waf-primary",
+            output_validation_max_attempts=2,
         )
     )
 

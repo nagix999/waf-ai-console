@@ -19,6 +19,9 @@ export function retryError(code) {
     retry_idempotency_conflict: "재실행 요청이 충돌했습니다. 결과를 새로고침하세요.",
     retry_concurrent_request_conflict: "다른 재실행 요청이 접수되었습니다. 다시 확인하세요.",
     analysis_not_found: "분석을 찾을 수 없습니다.",
+    test_run_not_found: "테스트를 찾을 수 없습니다.",
+    retry_target_not_in_test: "재실행 대상이 이 테스트에 속하지 않습니다. 다시 확인하세요.",
+    duplicate_retry_target: "재실행 대상이 중복되었습니다. 다시 확인하세요.",
   };
   return messages[code] || "재실행을 접수하지 못했습니다. 다시 확인하세요.";
 }

@@ -88,12 +88,21 @@ def contains_text(column, value: str):
 
 def analysis_conditions(filters: AnalysisFilters, source_system: str | None, evaluation):
     conditions = []
+    from .test_attempts import test_attempts
+    nodes, current = test_attempts(filters.test_run_id)
     if not filters.include_retries:
-        conditions.append(Analysis.retry_of_analysis_id.is_(None))
+        # One current attempt per test item; production's historical behavior
+        # stays unchanged. Unnamed test retries follow the same leaf rule.
+        child = Analysis.__table__.alias("retry_child")
+        conditions.append(or_(
+            (Analysis.analysis_purpose != "test") & Analysis.retry_of_analysis_id.is_(None),
+            (Analysis.analysis_purpose == "test") & ~select(child.c.id).where(
+                child.c.retry_of_analysis_id == Analysis.id).exists()))
     if filters.service_api_key_id is not None:
         conditions.append(Analysis.service_api_key_id == filters.service_api_key_id)
     if filters.test_run_id is not None or filters.test_difficulty is not None or filters.test_category is not None:
-        members = select(TestRunItem.analysis_id).where(TestRunItem.ingest_status == "accepted")
+        attempts = nodes if filters.include_retries else current
+        members = select(attempts.c.analysis_id).join(TestRunItem, TestRunItem.id == attempts.c.item_id).where(TestRunItem.ingest_status == "accepted")
         for name, value in (("test_run_id", filters.test_run_id), ("difficulty", filters.test_difficulty), ("test_category", filters.test_category)):
             if value is not None:
                 members = members.where(getattr(TestRunItem, name) == value)

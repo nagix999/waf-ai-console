@@ -28,12 +28,14 @@ def _object(value):
 
 
 def _cohort(db, run, warnings):
+    from .test_attempts import test_attempts
+    _nodes, current = test_attempts(run.id)
     relation = fixed_reference_relation(run.id)
     result = case((func.json_valid(Analysis.result_json) == 1, Analysis.result_json), else_=literal("{}"))
     value = lambda path: func.json_extract(result, path)
     query = select(
         TestRunItem.event_id, TestRunItem.row_number, TestRunItem.case_name,
-        TestRunItem.difficulty, TestRunItem.test_category, TestRunItem.analysis_id,
+        TestRunItem.difficulty, TestRunItem.test_category, current.c.analysis_id, current.c.retry_count,
         TestRunItem.label_id.label("fixed_label_id"),
         Analysis.id.label("present_analysis_id"), Analysis.event_id.label("analysis_event_id"),
         Analysis.event_fingerprint, Analysis.verdict, Analysis.started_at, Analysis.completed_at,
@@ -45,13 +47,15 @@ def _cohort(db, run, warnings):
         value("$.verifier.executed").label("verifier_executed"),
         relation.c.outcome, relation.c.reference_verdict, relation.c.source_kind,
         relation.c.source_ref, relation.c.ai_visible, relation.c.label_id,
-    ).select_from(TestRunItem).outerjoin(Analysis, Analysis.id == TestRunItem.analysis_id).outerjoin(
+    ).select_from(TestRunItem).join(current, current.c.item_id == TestRunItem.id).outerjoin(Analysis, Analysis.id == current.c.analysis_id).outerjoin(
         relation, relation.c.analysis_id == Analysis.id).where(
         TestRunItem.test_run_id == run.id, TestRunItem.ingest_status == "accepted",
     ).order_by(TestRunItem.row_number, TestRunItem.id)
     indexed = {}
     for found in db.execute(query).mappings():
         row = dict(found)
+        if row["retry_count"]:
+            warnings.add("retry_results_included")
         identifier = row["event_id"] or f"missing-event-id:{row['row_number']}"
         if identifier in indexed:
             warnings.add("duplicate_event_rows_ignored")

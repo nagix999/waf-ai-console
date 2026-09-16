@@ -135,6 +135,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
     async def no_stale_openapi(request: Request, call_next):
         response = await call_next(request)
         if (request.url.path == app.openapi_url or request.url.path.startswith("/api/v1/validation-datasets")
+                or request.url.path.startswith("/api/v1/test-runs")
                 or request.url.path.startswith("/api/v1/test-sessions") or request.url.path.endswith("/evaluation-labels")):
             response.headers["Cache-Control"] = "no-store"
         return response
