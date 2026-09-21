@@ -14,6 +14,8 @@ bash scripts/github-upload.sh --message "Add deployment and GitHub upload script
 
 현재 환경은 일반 `.git`을 사용할 수 없어 `.local-deploy/canonical-v5-reviewed.git`을 자동 탐색합니다. 원래 `.git`은 변경하지 않습니다. 현재 브랜치는 **`feature/canonical-v5-reviewed`**이며 기본 업로드도 이 브랜치입니다. **`main` 반영, PR 생성, GitHub Release 생성, Docker 재배포는 하지 않습니다.** 일반 clone 환경에서는 그 저장소의 정상 `.git`과 현재 브랜치를 사용합니다.
 
+`main` 반영과 현재 서버의 Docker 재배포를 한 번에 하려면 [통합 배포 안내](Unified_Deployment_Script.md)의 `bash scripts/deploy.sh`를 사용하세요. 이 문서의 `github-upload.sh`는 업로드만 수행하는 용도로 유지합니다.
+
 ## 선택 옵션
 
 ```bash

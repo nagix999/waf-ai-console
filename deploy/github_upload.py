@@ -234,6 +234,7 @@ def upload(git, args, branch, original_head, selected, snapshot=None):
     actual = git.text("ls-remote", "--heads", args.remote, f"refs/heads/{branch}").split()
     require(actual and actual[0] == commit, "업로드 후 원격 커밋을 확인하지 못했습니다. GitHub에서 상태를 확인하세요.")
     print(f"완료: {branch} / {commit[:12]}" + (f" / {args.tag}" if args.tag else ""))
+    return commit
 
 
 def main(argv=None):

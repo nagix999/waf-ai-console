@@ -30,6 +30,39 @@ def environment(row):
     return dict(item.split("=", 1) for item in row["Config"]["Env"])
 
 
+def existing_compose_command(project, labels, files=None, env_file=None, cwd=None):
+    """CLI paths use the caller's cwd; recorded relative paths use the original cwd."""
+    cwd = Path(cwd or Path.cwd()).resolve()
+    recorded = Path(labels.get("com.docker.compose.project.working_dir") or cwd)
+    recorded = (recorded if recorded.is_absolute() else cwd / recorded).resolve()
+
+    def resolve(raw, base):
+        path = Path(raw)
+        return (path if path.is_absolute() else base / path).resolve()
+
+    names = files or labels.get("com.docker.compose.project.config_files", "").split(",")
+    require(names and all(names), "기존 Compose 파일이 없습니다. --file 경로를 지정하세요.")
+    compose_files = [resolve(name, cwd if files else recorded) for name in names]
+    for path in compose_files:
+        require(path.is_file(), "기존 Compose 파일이 없습니다: " + json.dumps(str(path), ensure_ascii=False) + ". --file 경로를 지정하세요.")
+    project_dir = recorded if recorded.is_dir() else compose_files[0].parent
+    command = ["docker", "compose", "--project-directory", str(project_dir), "-p", project]
+    recorded_env = labels.get("com.docker.compose.project.environment_file")
+    # A user-supplied path is one filename, even when it contains a comma.
+    env_names = [env_file] if env_file is not None else (recorded_env.split(",") if recorded_env else [])
+    for name in env_names:
+        require(bool(name), "Docker 기록에 빈 env 경로가 있습니다. --env-file을 명시하세요.")
+        path = resolve(name, cwd if env_file is not None else recorded)
+        # Our frozen Compose uses /dev/null deliberately, not a missing .env.
+        valid = path.is_file() or (path == Path("/dev/null") and path.is_char_device())
+        require(valid, "기존 env 파일을 찾을 수 없습니다: " + json.dumps(str(path), ensure_ascii=False)
+                + ". 실제 기존 파일을 --env-file로 지정하세요. 새 키나 빈 env 파일을 만들지 마세요.")
+        command += ["--env-file", str(path)]
+    for path in compose_files:
+        command += ["-f", str(path)]
+    return command
+
+
 def ports(service):
     result = {}
     for port in service.get("ports", []):
@@ -82,13 +115,13 @@ def validate(model, rows):
     return mounts[0]
 
 
-def target_model(model, project, stamp):
+def target_model(model, project, stamp, source_root=None):
     result = deepcopy(model)
     result["name"] = project
     for role, service in result["services"].items():
         backend = role in BACKENDS
         service["image"] = f"{project}-{'backend' if backend else 'web'}:redeploy-{stamp}"
-        service["build"] = {"context": str(ROOT), "dockerfile": "backend/Dockerfile" if backend else "frontend/Dockerfile"}
+        service["build"] = {"context": str(source_root or ROOT), "dockerfile": "backend/Dockerfile" if backend else "frontend/Dockerfile"}
         service["pull_policy"] = "never"
     # Reuse resources by exact name. Missing resources must not create a fresh DB/network.
     for kind in ("volumes", "networks"):
@@ -140,16 +173,7 @@ class Redeploy:
                     and row["Config"]["Labels"].get("com.docker.compose.oneoff", "false").lower() != "true"]
         self.rows = {row["Config"]["Labels"]["com.docker.compose.service"]: row for row in selected}
         require(len(selected) == len(self.rows), "서비스별 컨테이너가 여러 개입니다. 이 스크립트는 각 서비스 1개 배포용입니다.")
-        files = self.args.file or labels.get("com.docker.compose.project.config_files", "").split(",")
-        require(all(path and Path(path).is_file() for path in files), "기존 Compose 파일이 없습니다. --file 경로를 지정하세요.")
-        command = ["docker", "compose", "-p", self.project]
-        env_file = self.args.env_file or labels.get("com.docker.compose.project.environment_file")
-        if env_file:
-            for path in env_file.split(","):
-                require(Path(path).is_file(), "기존 env 파일이 없습니다.")
-                command += ["--env-file", str(Path(path).resolve())]
-        for path in files:
-            command += ["-f", str(Path(path).resolve())]
+        command = existing_compose_command(self.project, labels, self.args.file, self.args.env_file)
         self.model = compose_model(json.loads(self.run(command + ["config", "--format", "json"],
              "Compose 해석 실패. --file / --env-file을 확인하세요. 비밀 값 보호를 위해 원문 오류는 숨깁니다.")))
         self.volume = validate(self.model, self.rows)
@@ -187,15 +211,17 @@ class Redeploy:
                       "at": datetime.now(timezone.utc).isoformat()})
         print(phase, flush=True)
 
-    def deploy(self):
+    def deploy(self, source_root=None):
+        source_root = Path(source_root or ROOT)
         state_root = secure_dir(ROOT / ".local-deploy/redeploy")
         self.directory = Path(tempfile.mkdtemp(prefix="run-", dir=state_root))
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-") + self.directory.name[4:]
-        updated = target_model(self.model, self.project, stamp)
+        updated = target_model(self.model, self.project, stamp, source_root)
         private_write(self.directory / "previous-compose.json", compose_text(self.model))
         private_write(self.directory / "compose.json", compose_text(updated))
         private_write(self.directory / "previous-containers.json", self.rows)
-        shutil.copy2(ROOT / "deploy/redeploy_db.py", self.directory / "redeploy_db.py")
+        shutil.copy2(source_root / "deploy/redeploy_db.py", self.directory / "redeploy_db.py")
+        self.db_code = (self.directory / "redeploy_db.py").read_text()
         self.compose("config", "--quiet", message="새 실행 구성 검사 실패. 서비스는 중지하지 않았습니다.")
         self.journal("새 이미지 빌드 중 — 기존 서비스는 계속 실행됩니다.")
         # Only the backend and web need building; workers share the same immutable tag.

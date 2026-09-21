@@ -82,6 +82,61 @@ class ConfigurationTests(unittest.TestCase):
             redeploy.validate(model, rows)
 
 
+class ComposePathTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.original = self.root / "original"
+        self.original.mkdir()
+        (self.original / "compose.json").write_text("{}")
+        self.caller = self.root / "caller"
+        self.caller.mkdir()
+        self.labels = {"com.docker.compose.project.working_dir": str(self.original),
+                       "com.docker.compose.project.config_files": "compose.json"}
+
+    def command(self, env=None):
+        return redeploy.existing_compose_command("synthetic", self.labels, env_file=env, cwd=self.caller)
+
+    def test_null_device_from_previous_redeploy_is_allowed(self):
+        self.labels["com.docker.compose.project.environment_file"] = "/dev/null"
+        command = self.command()
+        self.assertEqual(command[command.index("--env-file") + 1], "/dev/null")
+        self.assertEqual(command[command.index("-f") + 1], str(self.original / "compose.json"))
+        self.assertEqual(self.command("/dev/null")[command.index("--env-file") + 1], "/dev/null")
+
+    def test_relative_recorded_paths_use_original_directory(self):
+        (self.original / ".env").write_text("SYNTHETIC_ONLY=yes")
+        self.labels["com.docker.compose.project.environment_file"] = ".env"
+        command = self.command()
+        self.assertEqual(command[command.index("--env-file") + 1], str(self.original / ".env"))
+
+    def test_explicit_env_overrides_stale_label_and_keeps_comma_in_filename(self):
+        (self.caller / "my,settings.env").write_text("SYNTHETIC_ONLY=yes")
+        self.labels["com.docker.compose.project.environment_file"] = "/missing/.env"
+        command = self.command("my,settings.env")
+        self.assertEqual(command[command.index("--env-file") + 1], str(self.caller / "my,settings.env"))
+
+    def test_missing_env_is_not_silently_ignored(self):
+        self.labels["com.docker.compose.project.environment_file"] = ".env.missing"
+        with self.assertRaisesRegex(DeployError, "--env-file") as caught:
+            self.command()
+        self.assertIn(str(self.original / ".env.missing"), str(caught.exception))
+
+    def test_other_special_devices_and_directories_are_refused(self):
+        for path in ("/dev/zero", str(self.original)):
+            with self.subTest(path=path), self.assertRaises(DeployError):
+                self.command(path)
+
+    def test_multiple_recorded_env_files_keep_order(self):
+        for name in ("base.env", "override.env"):
+            (self.original / name).write_text("SYNTHETIC_ONLY=yes")
+        self.labels["com.docker.compose.project.environment_file"] = "base.env,override.env"
+        command = self.command()
+        values = [command[i + 1] for i, item in enumerate(command) if item == "--env-file"]
+        self.assertEqual(values, [str(self.original / name) for name in ("base.env", "override.env")])
+
+
 class DatabaseTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
