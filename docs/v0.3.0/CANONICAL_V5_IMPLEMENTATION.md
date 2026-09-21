@@ -107,7 +107,7 @@ KR/EN은 공통 탐색·상세 탭과 신규 운영 수명주기 화면에 적�
 
 - [Overview · SK · 1600](../../test-results/canonical-v5/overview-sk-1600.png)
 - [Ground Truth · SK · 1600](../../test-results/canonical-v5/ground-truth-sk-1600.png)
-- [Promote · SK · 1600](../../test-results/canonical-v5/promote-sk-1600.png)
+- [Promote · SK · 전체 승격 조건](../../test-results/canonical-v5/promote-sk-full.png)
 - [Promote · EN / Dark · 1600](../../test-results/canonical-v5/promote-en-dark-1600.png)
 - [Runtime](../../test-results/canonical-v5/runtime-sk-1600.png)
 - [Agent 실행 이력](../../test-results/canonical-v5/detail-agent-trace-sk-1600.png)

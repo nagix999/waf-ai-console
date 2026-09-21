@@ -106,6 +106,7 @@ try {
       if (name === "ground-truth") { await page.getByRole("button", { name: "SQLi 경계 사례", exact:true }).click(); await page.locator(".v5-workbench-detail .gt-editor").waitFor(); }
       if (name === "promote") { await page.locator(".v5-promotion select").selectOption('00000008-1111-4111-8111-111111111111'); await page.locator(".v5-preflight").waitFor(); }
       await page.screenshot({path:join(output,`${name}-${theme}-1600.png`)});
+      if (name === "promote") await page.screenshot({path:join(output,`${name}-${theme}-full.png`),fullPage:true});
     }
   }
   const screens = [
