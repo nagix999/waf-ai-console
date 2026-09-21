@@ -68,6 +68,10 @@
 
 별도 호스트 HTTPS 프록시를 사용하는 경우에는 [신규 Docker Compose 수동 설치 가이드](docs/Production_Docker_Compose_Guide.md)를 사용하세요. [운영용 Compose](docker-compose.production.yml)는 기본 개발용 파일과 합치지 않는 단독 구성입니다. 새 DB·비밀값 생성부터 HTTPS·모델 검증·서비스 키 발급까지 안내하며 기존 로컬 데이터는 옮기지 않습니다.
 
+이미 실행 중인 WAF를 현재 소스로 교체하려면 `bash scripts/redeploy.sh --check`로 사전 확인 후 `bash scripts/redeploy.sh`를 실행하세요. 기존 설정·포트·모드를 유지하며 DB 백업·사본 이전 시험·마이그레이션·상태 확인을 수행합니다. [재배포 스크립트 안내와 복구 절차](docs/Docker_Redeploy_Script.md)를 참고하세요. 스크립트 작성 과정에서는 실제 재배포를 수행하지 않았습니다.
+
+GitHub 업로드는 `bash scripts/github-upload.sh --check`로 확인한 뒤 `bash scripts/github-upload.sh --message "변경 내용"`을 실행하세요. 기본 대상은 현재 브랜치이며 `main` 반영·태그 생성·배포는 자동으로 하지 않습니다. [GitHub 업로드 안내](docs/GitHub_Upload_Script.md)를 참고하세요.
+
 2026-09-08 **전체 화면의 도움말 재정리·운영 API 정의서 PDF와 Docker 재배포를 완료**했습니다. 단순한 안내는 짧은 텍스트로, 페이지 소개는 제목 아래 회색 문장으로 표시하고 해석이 필요한 설명만 `?`로 유지합니다. 정의서 12개 항목의 본문 아래에 이전·다음 제목으로 이동하는 버튼을 추가했습니다. 현재 UI는 http://127.0.0.1:18080 이며 기존 분석 380건·키·모델·공통 지침과 DB `0013_analysis_retries_keys`를 보존했습니다. 최신 상태와 검증은 [도움말·API PDF 배포 기록](docs/UI_Help_and_API_PDF_2026-09-08.md)을 기준으로 하세요. 아래 단계별 기록의 미배포 안내는 해당 단계 당시의 상태입니다.
 
 같은 날 앞선 전체 화면·세부 화면 UI/UX 정리에서는 로그인부터 원문·디코딩·Agent 실행 이력·보고서·참고 답안·설정의 세부 창까지 정리하고, 단건/배치 분석·키별 대시보드·실패 당시 설정 재실행·단건 PDF/Excel을 반영했습니다. 그 단계의 검증·복구 자료는 [세부 UI/UX 및 배포 기록](docs/UI_UX_Detail_Deployment_2026-09-08.md)에 보존합니다.
