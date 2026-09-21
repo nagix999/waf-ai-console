@@ -134,7 +134,7 @@ test("named run rows and case names are escaped and rejected rows do not display
   const cases = render(TestRunItemRows, { items: [{ id: "case", row_number: 1, case_name: hostile, ingest_status: "rejected", verdict: "true_positive", error_code: "invalid_expected_verdict" }], onOpen() {} });
   assert.match(cases, /접수 거부 · 평가 제외/); assert.doesNotMatch(cases, /<script|>정탐</); assert.match(cases, /오류 정보/); assert.doesNotMatch(cases, /invalid_expected_verdict/);
   const unmeasured = render(TestRunRows, { items: [{ id: "missing", name: "정보 미기록", kind: "direct", status: "completed", evaluation_summary: null }], onSelect() {} });
-  assert.match(unmeasured, /평가 정보 미기록/); assert.doesNotMatch(unmeasured, /확정 판정 0건/);
+  assert.match(unmeasured, /Acc — · F1 — · Cov —/); assert.doesNotMatch(unmeasured, /확정 판정 0건|0.0%/);
 });
 
 test("test list state preserves draft, applied search and page independently across navigation", () => {
@@ -225,20 +225,20 @@ test("changing run or query cancels its request and blocks late success and fail
   }
 });
 
-test("run readers poll only unfinished reads, never overlap, stop at terminal state and clear timers on departure", async () => {
+test("run readers poll active reads at 5s, stable reads at 25s without overlap and clear timers on departure", async () => {
   const first = deferredRead(); const scheduled = []; const cleared = []; let calls = 0;
   const cancel = watchTestRunRead({ read: () => { calls++; return calls === 1 ? first.promise : Promise.resolve({ status: "completed" }); }, onUpdate() {}, isRunning: data => data.status === "processing", errorMessage: "조회 실패", setTimer: (callback, ms) => { scheduled.push({ callback, ms }); return scheduled.length; }, clearTimer: id => cleared.push(id) });
   assert.equal(calls, 1); assert.equal(scheduled.length, 0);
   first.resolve({ status: "processing" }); await flushRead(); assert.equal(scheduled.length, 1); assert.equal(scheduled[0].ms, 5000);
-  scheduled[0].callback(); await flushRead(); assert.equal(calls, 2); assert.equal(scheduled.length, 1);
-  cancel(); assert.equal(cleared.at(-1), 1);
+  scheduled[0].callback(); await flushRead(); assert.equal(calls, 2); assert.equal(scheduled.length, 2); assert.equal(scheduled[1].ms, 25000);
+  cancel(); assert.equal(cleared.at(-1), 2);
 });
 
-test("read errors expose no server text, never retry automatically and propagate session expiry exactly once", async () => {
+test("read errors expose no server text, back off server errors and stop on authorization failure", async () => {
   for (const status of [401, 403, 500]) {
     const updates = []; let unauthorized = 0, calls = 0, timers = 0;
     const cancel = watchTestRunRead({ read: async () => { calls++; throw Object.assign(new Error("PRIVATE_RESPONSE"), { status }); }, onUpdate: state => updates.push(state), onUnauthorized: () => unauthorized++, isRunning: () => true, errorMessage: "조회하지 못했습니다.", setTimer: () => { timers++; } });
-    await flushRead(); assert.equal(calls, 1); assert.equal(timers, 0); assert.equal(unauthorized, status === 401 ? 1 : 0); assert.equal(updates.length, 1); assert.doesNotMatch(updates[0].error, /PRIVATE_RESPONSE/); assert.equal(updates[0].loading, false); cancel();
+    await flushRead(); assert.equal(calls, 1); assert.equal(timers, status === 500 ? 1 : 0); assert.equal(unauthorized, status === 401 ? 1 : 0); assert.equal(updates.length, 1); assert.doesNotMatch(updates[0].error, /PRIVATE_RESPONSE/); assert.equal(updates[0].loading, false); cancel();
   }
 });
 
@@ -250,7 +250,7 @@ test("test names are validated after automatic naming and model validation prese
   controller.open(profile);
   const generatedKey = controller.getState().idempotencyKey;
   assert.equal(await controller.submit(true), true); assert.equal(requests.length, 1);
-  assert.equal(requests[0][4].name, generatedKey); assert.equal(requests[0][4].idempotency_key, generatedKey);
+  assert.match(requests[0][4].name, /^Test \d{4}-\d{2}-\d{2} \d{2}:\d{2}$/); assert.equal(requests[0][4].idempotency_key, generatedKey);
   controller.open(profile); controller.setName("a".repeat(121));
   assert.equal(await controller.submit(true), false); assert.equal(requests.length, 1); assert.match(controller.getState().error, /테스트명/);
   controller.setName("합성 150건 1차"); assert.equal(await controller.submit(true), true); assert.equal(requests.length, 2);

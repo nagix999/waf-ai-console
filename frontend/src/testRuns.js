@@ -7,8 +7,15 @@ export function newTestRequestKey() {
   return globalThis.crypto?.randomUUID?.() || `test-${Date.now()}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}`;
 }
 
+const generatedNames = new Map();
 export function autoTestName(name, requestId) {
-  return typeof name === "string" && name.trim() ? name.trim() : requestId;
+  if (typeof name === "string" && name.trim()) return name.trim();
+  if (generatedNames.has(requestId)) return generatedNames.get(requestId);
+  const date = new Date(); const pad = n => String(n).padStart(2, "0");
+  const generated = `Test ${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  generatedNames.set(requestId, generated);
+  if (generatedNames.size > 512) generatedNames.delete(generatedNames.keys().next().value);
+  return generated;
 }
 
 export function emptySingleTest() {

@@ -27,9 +27,9 @@ test("selection is deduplicated, page-scoped and excludes rejected rows", () => 
   assert.deepEqual(selectedPageIds(["a"], []), []);
 });
 
-test("dataset URLs contain only UUIDs and browser route restores the selection", () => {
+test("datasets use a flat route while legacy UUID links restore in-page selection", () => {
   const id = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
-  assert.equal(writeAppHash({ page: "datasets", datasetId: id }), `#evaluate/ground-truth/${id}`);
+  assert.equal(writeAppHash({ page: "datasets", datasetId: id }), "#evaluate/ground-truth");
   assert.deepEqual(readAppHash(`#datasets/${id}`), { page: "datasets", datasetId: id });
   assert.equal(applyAppRoute({ datasetId: id }, readAppHash("#datasets")).datasetId, null);
   assert.equal(readAppHash("#datasets/SECRET_PAYLOAD"), null);

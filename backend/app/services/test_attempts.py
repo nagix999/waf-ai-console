@@ -39,3 +39,11 @@ def reference_ancestors(analysis_ids=None):
         Analysis, Analysis.id == nodes.c.ancestor_id).where(
         Analysis.analysis_purpose == "test", Analysis.retry_of_analysis_id.is_not(None))
     return nodes.union_all(parents)
+
+
+def failed_test_ids():
+    """Tests with unresolved failed attempts or rejected rows, not old retries."""
+    _, current = test_attempts()
+    return select(current.c.test_run_id).join(TestRunItem, TestRunItem.id == current.c.item_id).outerjoin(
+        Analysis, Analysis.id == current.c.analysis_id).where(
+        (Analysis.status == "failed") | (TestRunItem.ingest_status == "rejected")).distinct()

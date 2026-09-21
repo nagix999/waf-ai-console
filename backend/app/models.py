@@ -537,6 +537,9 @@ class ValidationDatasetVersion(Base):
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     description: Mapped[str] = mapped_column(String(1000), nullable=False)
     item_version_ids: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    is_published: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
+    membership_hash: Mapped[str | None] = mapped_column(String(64))
+    publish_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
@@ -575,6 +578,46 @@ class ValidationDatasetItem(Base):
     original_analysis_deleted: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"), nullable=False)
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class ValidationDatasetWorkingState(Base):
+    __tablename__ = "validation_dataset_working_states"
+    dataset_id: Mapped[str] = mapped_column(ForeignKey("validation_datasets.id", ondelete="RESTRICT"), primary_key=True)
+    working_revision: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class ValidationDatasetWorkingItem(Base):
+    __tablename__ = "validation_dataset_working_items"
+    __table_args__ = (UniqueConstraint("dataset_id", "item_id"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    dataset_id: Mapped[str] = mapped_column(ForeignKey("validation_datasets.id", ondelete="RESTRICT"), nullable=False, index=True)
+    item_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    event_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    schema_snapshot_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    encryption_key_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    reference_verdict: Mapped[str | None] = mapped_column(String(32))
+    excluded: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    validation_state: Mapped[str] = mapped_column(String(24), default="needs_attention", nullable=False)
+    validation_issues_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
+    source_kind: Mapped[str] = mapped_column(String(32), default="reference", nullable=False)
+    source_ref: Mapped[str | None] = mapped_column(String(255))
+    source_label_id: Mapped[str | None] = mapped_column(String(36))
+    source_created_by: Mapped[str | None] = mapped_column(String(255))
+    ai_visible: Mapped[bool | None] = mapped_column(Boolean)
+    comment_ciphertext: Mapped[str | None] = mapped_column(Text)
+    difficulty: Mapped[str | None] = mapped_column(String(80))
+    test_category: Mapped[str | None] = mapped_column(String(120))
+    case_name: Mapped[str | None] = mapped_column(String(240))
+    tags: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    internal_only: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    original_analysis_id: Mapped[str | None] = mapped_column(ForeignKey("analyses.id", ondelete="SET NULL"))
+    original_analysis_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
 class TestEvaluation(Base):

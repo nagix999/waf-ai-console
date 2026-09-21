@@ -18,8 +18,9 @@ function load(file) {
   const module = { exports: {} }; runInNewContext(result.outputFiles[0].text, { module, exports: module.exports, require: createRequire(import.meta.url), process, URL, Date }); return module.exports;
 }
 
-test("six canonical workspaces map every leaf to a real route, preserving legacy links", () => {
-  assert.deepEqual(consoleGroups.map(group => group.key), ["overview", "configure", "evaluate", "promote", "operate", "connect"]);
+test("five R3 workspaces map every leaf to a real route, preserving legacy links", () => {
+  assert.deepEqual(consoleGroups.map(group => group.key), ["overview", "evaluate", "configure", "operate", "connect"]);
+  assert.equal(consoleLocation({ page: "promote" }).group, null);
   for (const group of consoleGroups) for (const key of group.items) {
     const next = consoleDestination(initial(), key);
     assert.equal(consoleLocation(next).item, key);

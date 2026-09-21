@@ -1,4 +1,4 @@
-"""Approved-only frozen evaluations; artificial events, never model transport."""
+"""Published-revision frozen evaluations; artificial events, no model transport."""
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 
@@ -25,8 +25,17 @@ def settings(settings, tmp_path):
 
 
 def approved_item(client, dataset, event, verdict="inconclusive", **metadata):
-    item = add_item(client, dataset, event, verdict, **metadata)
-    return review(client, dataset, review(client, dataset, item, "reviewed"), "approved")
+    # Compatibility name for release-gate fixtures; R3 has no review workflow.
+    base = f"/api/v1/validation-datasets/{dataset['id']}"
+    draft = client.get(f"{base}/working").json()
+    response = client.post(f"{base}/working/items", json={"expected_working_revision": draft["working_revision"],
+        "event": event, "reference_verdict": verdict, **metadata})
+    assert response.status_code == 201, response.text
+    identifier = response.json()["item"]["item_id"]
+    result = client.post(f"{base}/publish", json={"expected_working_revision": response.json()["working_revision"], "acknowledge_exclusions": True})
+    assert result.status_code == 201, result.text
+    dataset["revision"] = result.json()["revision"]
+    return next(i for i in client.get(base).json()["items"] if i["item_id"] == identifier)
 
 
 def execute(client, dataset, candidate, *, mode="ground_truth", key=None, status=202):
@@ -47,21 +56,20 @@ def records(client, run):
     return client.get(f"/api/v1/test-runs/{run['id']}/evaluations").json()["items"]
 
 
-def test_approved_only_frozen_scope_and_no_production_changes(client, event_payload, candidate):
+def test_published_only_frozen_scope_and_no_production_changes(client, event_payload, candidate):
     dataset = create_dataset(client)
     approved = approved_item(client, dataset, {**event_payload, "vendor_score": 2}, difficulty="hard")
-    draft = add_item(client, dataset, {**event_payload, "signature": "draft"}, "true_positive")
-    reviewed = add_item(client, dataset, {**event_payload, "signature": "reviewed"}, "false_positive")
-    review(client, dataset, reviewed, "reviewed")
+    base = f"/api/v1/validation-datasets/{dataset['id']}"
+    client.post(f"{base}/working/items", json={"expected_working_revision": 1, "event": {**event_payload, "signature": "draft"}})
     key = str(uuid.uuid4())
     frozen_revision = dataset["revision"]
     run = execute(client, dataset, candidate, key=key)
     assert run["total"] == run["accepted"] == 1
     assert run["evaluation_mode"] == run["reference_basis"] == "ground_truth"
-    assert run["ground_truth"]["approved_count"] == 1 and run["ground_truth"]["excluded_count"] == 2
+    assert run["ground_truth"]["sample_count"] == 1 and run["ground_truth"]["published"]
     assert run["official_evaluation_pending"]
     assert finalize(client, run) is None and records(client, run) == []
-    review(client, dataset, draft, "reviewed")
+    client.post(f"{base}/working/items", json={"expected_working_revision": 2, "event": {**event_payload, "signature": "another-draft"}})
     replay = execute(client, {**dataset, "revision": frozen_revision}, candidate, key=key)
     assert replay["id"] == run["id"]
     assert execute(client, {**dataset, "revision": frozen_revision}, candidate, key=key, mode="reference", status=409)["detail"] == "test_run_idempotency_conflict"
@@ -74,13 +82,11 @@ def test_approved_only_frozen_scope_and_no_production_changes(client, event_payl
         assert not {"review_status", "evaluation_mode", "ground_truth", "expected_verdict"}.intersection(event.extra_fields)
 
 
-def test_no_approved_or_stub_and_schema_invalid_reject_atomically(client, event_payload, candidate):
+def test_no_published_or_stub_and_schema_invalid_reject_atomically(client, event_payload, candidate):
     dataset = create_dataset(client)
-    add_item(client, dataset, event_payload, "inconclusive")
-    assert execute(client, dataset, candidate, status=422)["detail"] == "approved_ground_truth_required"
-    # Approved item missing the candidate schema's required vendor_score.
-    current = client.get(f"/api/v1/validation-datasets/{dataset['id']}").json()["items"][0]
-    review(client, dataset, review(client, dataset, current, "reviewed"), "approved")
+    assert execute(client, dataset, candidate, status=422)["detail"] == "ground_truth_published_revision_required"
+    # Published item missing the candidate schema's required vendor_score.
+    approved_item(client, dataset, event_payload, "inconclusive")
     assert execute(client, dataset, candidate, status=422)["detail"]["code"] == "dataset_current_schema_invalid"
     client.app.state.settings.agent_mode = "stub"
     assert execute(client, dataset, None, status=409)["detail"] == "official_evaluation_requires_llm"
@@ -166,7 +172,7 @@ def test_comparison_requires_identical_approved_versions_and_pairs_duplicate_eve
     ordinary = execute(client, dataset, candidate, mode="reference")
     comparison = client.get(url, params={"baseline_id": ordinary["id"]}).json()
     assert not comparison["comparable"] and comparison["items"] == []
-    add_item(client, dataset, {**event_payload, "signature": "new-unapproved"})
+    approved_item(client, dataset, {**event_payload, "vendor_score": 2, "signature": "new-published-case"})
     changed = execute(client, dataset, candidate)
     comparison = client.get(url, params={"baseline_id": changed["id"]}).json()
     assert not comparison["comparable"] and comparison["baseline_evaluation"]["metrics"]["accuracy"] is None

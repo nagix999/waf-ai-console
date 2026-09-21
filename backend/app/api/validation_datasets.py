@@ -7,6 +7,8 @@ from ..database import get_db
 from ..models import ValidationDataset, ValidationDatasetVersion, utcnow
 from ..security import Principal, require_scope
 from ..validation_data_schemas import DatasetCreate, DatasetUpdate, DatasetImport, DatasetItemWrite, DatasetItemReview, DatasetReviewStatus, DatasetRun, RevisionRequest, DatasetSearch
+from ..validation_data_schemas import WorkingSearch, WorkingItemWrite, WorkingRevision, WorkingBulk, WorkingImport, PublishRevision, WorkingMetadata
+from ..services import ground_truth_working as working
 from ..services import validation_datasets as service
 from ..services.analysis import AnalysisIngestError
 from ..services.input_schemas import InputSchemaError
@@ -87,10 +89,79 @@ def detail(identifier: str, db: DbSession, _principal: Admin,
                     .order_by(ValidationDatasetVersion.revision.desc()))]}
 
 
+@router.post("/{identifier}/working/search")
+def working_search(identifier: str, payload: WorkingSearch, request: Request, db: DbSession, _principal: Admin):
+    with errors(db):
+        read_snapshot(db)
+        return working.document(db, identifier, request.app.state.crypto, payload)
+
+
+@router.get("/{identifier}/working")
+def working_detail(identifier: str, request: Request, db: DbSession, _principal: Admin):
+    with errors(db):
+        read_snapshot(db)
+        return working.document(db, identifier, request.app.state.crypto)
+
+
+@router.get("/{identifier}/working/items/{case_id}")
+def working_item(identifier: str, case_id: str, request: Request, db: DbSession, principal: Admin):
+    with errors(db):
+        return working.read_item(db, identifier, case_id, request.app.state.crypto, principal.username or "admin")
+
+
+@router.post("/{identifier}/working/items", status_code=201)
+def working_add(identifier: str, payload: WorkingItemWrite, request: Request, db: DbSession, principal: Admin):
+    with errors(db):
+        return working.write_item(db, identifier, payload, request.app.state.crypto, request.app.state.settings, principal.username or "admin")
+
+
+@router.put("/{identifier}/working/items/{case_id}")
+def working_edit(identifier: str, case_id: str, payload: WorkingItemWrite, request: Request, db: DbSession, principal: Admin):
+    with errors(db):
+        return working.write_item(db, identifier, payload, request.app.state.crypto, request.app.state.settings, principal.username or "admin", case_id)
+
+
+@router.post("/{identifier}/working/bulk")
+def working_bulk(identifier: str, payload: WorkingBulk, request: Request, db: DbSession, principal: Admin):
+    with errors(db):
+        return working.bulk(db, identifier, payload, request.app.state.crypto, principal.username or "admin")
+
+
+@router.post("/{identifier}/working/imports")
+def working_import(identifier: str, payload: WorkingImport, request: Request, db: DbSession, principal: Admin):
+    with errors(db):
+        return working.import_analyses(db, identifier, payload, request.app.state.crypto, request.app.state.settings, principal.username or "admin")
+
+
+@router.post("/{identifier}/working/items/{case_id}/revert")
+def working_revert(identifier: str, case_id: str, payload: WorkingRevision, request: Request, db: DbSession, principal: Admin):
+    with errors(db):
+        return working.restore(db, identifier, payload, request.app.state.crypto, principal.username or "admin", case_id)
+
+
+@router.post("/{identifier}/working/discard")
+def working_discard(identifier: str, payload: WorkingRevision, request: Request, db: DbSession, principal: Admin):
+    with errors(db):
+        return working.restore(db, identifier, payload, request.app.state.crypto, principal.username or "admin")
+
+
+@router.post("/{identifier}/publish", status_code=201)
+def publish(identifier: str, payload: PublishRevision, request: Request, db: DbSession, principal: Admin):
+    with errors(db):
+        return working.publish(db, identifier, payload, request.app.state.crypto, principal.username or "admin")
+
+
+@router.patch("/{identifier}/working/metadata")
+def working_metadata(identifier: str, payload: WorkingMetadata, request: Request, db: DbSession, principal: Admin):
+    with errors(db):
+        return working.update_metadata(db, identifier, payload, request.app.state.crypto, principal.username or "admin")
+
+
 @router.patch("/{identifier}")
 def update(identifier: str, payload: DatasetUpdate, db: DbSession, principal: Admin):
     with errors(db):
         write_lock(db)
+        service.require_legacy_draft(db, identifier)
         row, version = service.dataset(db, identifier, payload.expected_revision)
         row.name, row.description = payload.name.strip(), payload.description
         service.save_version(db, row, version.item_version_ids, principal.username or "admin")
@@ -141,6 +212,7 @@ def update_item(identifier: str, item_id: str, payload: DatasetItemWrite, reques
 def remove_item(identifier: str, item_id: str, payload: RevisionRequest, db: DbSession, principal: Admin):
     with errors(db):
         write_lock(db)
+        service.require_legacy_draft(db, identifier)
         row, version = service.dataset(db, identifier, payload.expected_revision)
         items = service.version_items(db, version)
         ids = [item.id for item in items if item.item_id != item_id]

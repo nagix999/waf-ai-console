@@ -40,11 +40,19 @@ def ground_truth_metadata(db, run):
         return None
     version = db.get(ValidationDatasetVersion, run.dataset_version_id)
     approved = run.approved_item_version_ids or []
-    return {"dataset_id": version.dataset_id, "dataset_name": version.name,
+    metadata = {"dataset_id": version.dataset_id, "dataset_name": version.name,
             "dataset_revision": version.revision, "dataset_version_id": version.id,
             "approved_count": len(approved), "excluded_count": len(version.item_version_ids) - len(approved),
             "membership_hash": hashlib.sha256(json.dumps(sorted(approved)).encode()).hexdigest(),
             "metrics_version": run.metrics_version} if version else None
+    if metadata and version.is_published:
+        from .validation_datasets import digest
+        scope_hash = digest({"scope": "published_membership", "filters": {}})
+        metadata.update({"published": True, "dataset_revision_id": version.id,
+            "sample_count": len(version.item_version_ids), "evaluation_scope_hash": scope_hash,
+            "comparison_key": digest([version.dataset_id, version.id, scope_hash, run.metrics_version]),
+            "publish_metadata": {k: v for k, v in (version.publish_metadata or {}).items() if k != "cases"}})
+    return metadata
 
 
 def finalize_official_evaluation(db, run_id):
@@ -66,6 +74,9 @@ def finalize_official_evaluation(db, run_id):
     items = list(db.execute(select(TestRunItem, current.c.analysis_id).join(
         current, current.c.item_id == TestRunItem.id).where(TestRunItem.test_run_id == run.id)))
     approved = run.approved_item_version_ids or []
+    version = db.get(ValidationDatasetVersion, run.dataset_version_id)
+    if version and version.is_published and sorted(approved) != sorted(version.item_version_ids):
+        raise ValueError("official_evaluation_membership_invalid")
     if not approved or sorted(item.dataset_item_version_id or "" for item, _ in items) != sorted(approved):
         raise ValueError("official_evaluation_membership_invalid")
     ids = sorted(identifier for _, identifier in items if identifier)

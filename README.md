@@ -1,8 +1,8 @@
 # WAF AI Analysis Console v0.3.0
 
-2026-09-21 **Canonical V5 REVIEWED 구현**: 최종 기준은 [`WAF_AI_Console_Astra_Handoff_CANONICAL_V5_REVIEWED/ASTRA_HANDOFF.md`](WAF_AI_Console_Astra_Handoff_CANONICAL_V5_REVIEWED/ASTRA_HANDOFF.md)입니다. 6개 Workspace와 SK 기본 테마로 전환하고, Production 모델·분석 지침·입력 스키마 변경을 **Candidate Test → Approved Ground Truth 공식 평가 → Promote**로 통합했습니다. 기존 분석·암호화 이력·동시 처리·재실행·ReportLab PDF 기능은 유지합니다. 새 DB head는 `0022_production_lifecycle`이며 운영 서비스에 적용하지 않았습니다. [시작점·보존 내역·API/DB 영향·검증 보고서](docs/v0.3.0/CANONICAL_V5_IMPLEMENTATION.md)를 먼저 확인하세요.
+2026-09-21 **Canonical R3 SOLO 구현**: 최종 기준은 [`WAF_AI_Console_Astra_Handoff_CANONICAL_V5_REVIEWED_R3_SOLO/ASTRA_HANDOFF.md`](WAF_AI_Console_Astra_Handoff_CANONICAL_V5_REVIEWED_R3_SOLO/ASTRA_HANDOFF.md)입니다. 메뉴는 **Overview → Evaluate → Configure → Operate → Connect**이며, 승격은 자격을 갖춘 테스트에서 여는 별도 화면입니다. Ground Truth는 **작업 초안 → 리비전 발행 → 공식 평가**로 관리합니다. Production의 Primary·Verifier·Evidence Editor·분석 지침·입력 스키마는 공식 평가와 관리자 승격으로만 변경합니다. 기존 Backend·암호화·동시 처리·재실행·ReportLab PDF 기능은 유지합니다. 새 DB head는 `0023_ground_truth_working`이며 실행 중인 서비스에는 아직 적용하지 않았습니다. [R3 변경·API/DB·검증 보고서](docs/v0.3.0/CANONICAL_R3_SOLO_IMPLEMENTATION.md)를 확인하세요.
 
-아래는 과거 작업 당시 기록입니다. 이전 v0.3.0의 5개 메뉴, Light 기본값, Production 직접 적용을 임시 유지한다는 설명은 **V5에서 대체**되었습니다. 과거 문서나 목업을 현재 구현 기준으로 사용하지 않습니다.
+아래는 과거 작업 당시 기록입니다. 이전 V5/R2의 6개 메뉴·별도 Promote 메뉴·문항별 Draft/Reviewed/Approved 흐름은 **R3에서 대체**되었습니다. 이전 설계·목업은 현재 구현 기준이 아닙니다. 과거 이력과 유효한 기능은 보존합니다.
 
 2026-09-17 **최신 로컬 Docker 배포 완료**: 목업 기반 UI와 현재 v0.3.0 개발본을 API·두 worker·frontend에 반영했습니다. UI는 http://127.0.0.1:18080 입니다. DB `0019~0021` 적용 전 백업·리허설을 수행했고 분석 1,214건·암호화 값 20,884개·기존 설정·`moduagent`·포트를 보존했습니다. HTTP 29개와 데스크톱 18개 화면·3개 테마를 확인했습니다. Git 게시·실제 LLM 호출은 하지 않았고 v0.3.0 전체 기능 완성을 뜻하지 않습니다. [검증·백업·남은 범위](docs/Deployment_UI_v030_2026-09-17.md)를 참고하세요. 아래 개발·배포 기록은 각 작업 당시 기준입니다.
 

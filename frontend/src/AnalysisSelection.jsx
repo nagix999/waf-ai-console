@@ -47,7 +47,8 @@ export default function AnalysisSelectionActions({ ids, onSaved, single = false,
         setNotice(message);
       } else {
         const chosen = dialog.catalog.items.find(item => item.id === dialog.datasetId);
-        const result = await api.importDatasetAnalyses(chosen.id, { expected_revision: chosen.revision, analysis_ids: dialog.selected });
+        const working = await api.workingDataset(chosen.id);
+        const result = await api.importWorkingAnalyses(chosen.id, { expected_working_revision: working.working_revision, analysis_ids: dialog.selected });
         message = datasetImportMessage(result);
         if (result.conflicts.length || result.rejected.length) {
           setDialog({ ...dialog, result, message });

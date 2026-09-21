@@ -62,6 +62,10 @@ def test_batch_recovery_updates_results_metrics_filters_and_detail_without_new_i
     ids = [item["analysis_id"] for item in run["items"]]
     info = preview(client, run)
     assert info["failed_count"] == info["eligible_count"] == 3
+    failed_listing = client.get("/api/v1/test-runs", params={"has_failures": True}).json()
+    assert failed_listing["total"] == 1 and failed_listing["items"][0]["id"] == run["id"]
+    actions = client.get("/api/v1/admin/production-configurations/overview").json()["actions"]
+    assert next(action for action in actions if action["kind"] == "failed_tests")["count"] == 1
     response = submit(client, run, info["eligible_ids"])
     assert response.status_code == 202, response.text
     assert response.json()["enqueued"] == 3
@@ -73,6 +77,9 @@ def test_batch_recovery_updates_results_metrics_filters_and_detail_without_new_i
         finish(client, item["analysis_id"], verdict)
     done = detail(client, run)
     assert done["completed"] == done["accepted"] == done["total"] == 3 and done["failed"] == 0
+    assert client.get("/api/v1/test-runs", params={"has_failures": True}).json()["total"] == 0
+    assert not any(action["kind"] == "failed_tests" for action in client.get(
+        "/api/v1/admin/production-configurations/overview").json()["actions"])
     summary = done["evaluation_summary"]
     assert summary["total"] == summary["evaluable"] == summary["matches"] == 3
     assert summary["metrics"]["accuracy"] == 1 and summary["confusion_matrix"]["expected_hold_match"] == 1

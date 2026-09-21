@@ -23,6 +23,14 @@ export function ConsolePopover({ label, trigger, children, className = "", disab
   </div>;
 }
 
+export function ConsoleAppearance() {
+  const { locale, setLocale, theme, setTheme, t } = useConsolePreferences();
+  return <div className="r3-appearance">
+    <div className="console-choice-row console-locale" role="group" aria-label={t("language")}>{[["ko", "KR"], ["en", "EN"]].map(([value, label]) => <button type="button" key={value} aria-pressed={locale === value} onClick={() => setLocale(value)}>{label}</button>)}</div>
+    <ConsolePopover label={t("theme")} trigger={<Icon name={theme === "dark" ? "moon" : "sun"} size={18} />}>{close => <div className="console-theme-choices">{[["light", "themeLight"], ["sk", "themeSk"], ["dark", "themeDark"]].map(([value, key]) => <button type="button" key={value} aria-pressed={theme === value} onClick={() => { setTheme(value); close(); }}><span className={`console-theme-swatch swatch-${value}`} />{t(key)}{theme === value && <Icon name="check" size={16} />}</button>)}</div>}</ConsolePopover>
+  </div>;
+}
+
 function Navigation({ screen, onNavigate }) {
   const { t } = useConsolePreferences(); const { item, group: activeGroup } = consoleLocation(screen);
   return <nav className="console-navigation" aria-label={t("navigation")}>{consoleGroups.map(group =>
@@ -32,7 +40,7 @@ function Navigation({ screen, onNavigate }) {
 }
 
 export default function ConsoleShell({ screen, principal, healthError, onNavigate, onSearch, logoutState, onLogout, children }) {
-  const { locale, setLocale, theme, setTheme, t } = useConsolePreferences();
+  const { t } = useConsolePreferences();
   const location = consoleLocation(screen);
   const [mobileOpen, setMobileOpen] = useState(false), [accountOpen, setAccountOpen] = useState(false);
   const [field, setField] = useState("event_id"), [query, setQuery] = useState(""), [searchError, setSearchError] = useState("");
@@ -58,13 +66,13 @@ export default function ConsoleShell({ screen, principal, healthError, onNavigat
         </form>
         <div className="header-actions console-header-actions">
           <button type="button" className={`console-health ${healthError ? "has-error" : ""}`} title={t("healthNote")} onClick={() => navigate("status")}><Icon name={healthError ? "alert" : "server"} size={15} /><span>{t(healthError ? "healthError" : "healthUnknown")}</span></button>
-          <div className="console-choice-row console-locale" role="group" aria-label={t("language")}>{[["ko", "KR"], ["en", "EN"]].map(([value, label]) => <button type="button" key={value} aria-pressed={locale === value} onClick={() => setLocale(value)}>{label}</button>)}</div>
-          <ConsolePopover label={t("theme")} trigger={<Icon name={theme === "dark" ? "moon" : "sun"} size={18} />}>{close => <div className="console-theme-choices">{[["light", "themeLight"], ["sk", "themeSk"], ["dark", "themeDark"]].map(([value, key]) => <button type="button" key={value} aria-pressed={theme === value} onClick={() => { setTheme(value); close(); }}><span className={`console-theme-swatch swatch-${value}`} />{t(key)}{theme === value && <Icon name="check" size={16} />}</button>)}</div>}</ConsolePopover>
+          <ConsoleAppearance />
+
           <ConsolePopover label={t("account")} trigger={<><span className="admin-avatar" aria-hidden="true">{Array.from(username)[0].toUpperCase()}</span><span className="console-admin-label">{username}</span><Icon name="chevronDown" size={14} /></>}>{close => <><button type="button" onClick={() => { close(); setAccountOpen(true); }}>{t("account")}</button><button type="button" disabled={logoutState.busy} onClick={() => { close(); onLogout(); }}><Icon name="logout" size={16} />{t(logoutState.busy ? "loggingOut" : "logout")}</button></>}</ConsolePopover>
         </div>
       </header>
       <div className="content console-content" id="workspace-content" tabIndex={-1}>
-        <div className="console-page-heading"><p className="console-breadcrumb">WAF AI Console<span aria-hidden="true">/</span>{t(location.group)}</p><h1>{t(location.title === "detail" ? "detail" : location.group)}</h1><p className="page-description">{t(`${location.title}.description`)}</p></div>
+        <div className="console-page-heading"><p className="console-breadcrumb">WAF AI Console<span aria-hidden="true">/</span>{t(location.group || location.title)}</p><h1>{t(location.title === "detail" ? "detail" : location.group || location.title)}</h1><p className="page-description">{t(`${location.title}.description`)}</p></div>
         {consoleGroups.find(group => group.key === location.group)?.items.length > 1 && <nav className="v5-workspace-tabs" aria-label={t(location.group)}>{consoleGroups.find(group => group.key === location.group).items.map(key => <button type="button" key={key} aria-current={location.item === key ? "page" : undefined} onClick={() => navigate(key)}>{t(key)}</button>)}</nav>}
         {children}
       </div>

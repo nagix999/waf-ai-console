@@ -93,6 +93,21 @@ const page = name => snapshot => ({ ...snapshot, page: name });
 const detail = id => snapshot => ({ ...snapshot, page: "analysis", id, tab: "result" });
 const query = (value, number = 0) => snapshot => ({ ...snapshot, filters: { query: value, page: number } });
 
+test("back restores scroll in memory without adding positions or filters to URL/state", () => {
+  const browser = fakeBrowser(); const frames = [];
+  browser.scrollY = 0; browser.history.scrollRestoration = "auto";
+  browser.requestAnimationFrame = callback => frames.push(callback);
+  browser.scrollTo = (_, value) => { browser.scrollY = value; };
+  const controller = makeController(browser), stop = controller.start();
+  controller.navigate(page("results")); browser.scrollY = 420;
+  controller.navigate(detail("case-1")); browser.scrollY = 10;
+  browser.history.back(); browser.flush();
+  while (frames.length) frames.shift()();
+  assert.equal(browser.scrollY, 420);
+  assert.doesNotMatch(JSON.stringify(browser.history.state), /420|scroll/);
+  stop(); assert.equal(browser.history.scrollRestoration, "auto");
+});
+
 test("construction is read-only and bootstraps the current URL without another history entry", () => {
   const browser = fakeBrowser("#analysis/synthetic-1/report");
   const controller = makeController(browser);

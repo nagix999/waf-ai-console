@@ -303,6 +303,17 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
     utc = lambda value: value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
     elapsed = max(0, int((utc(end) - utc(run.created_at)).total_seconds() * 1000))
     from .official_evaluations import ground_truth_metadata
+    ground_truth = ground_truth_metadata(db, run)
+    if ground_truth and ground_truth.get("published"):
+        from .validation_datasets import digest as scope_digest
+        scope = {"difficulty": difficulty, "test_category": test_category,
+            "difficulty_missing": difficulty_missing, "test_category_missing": test_category_missing}
+        scope_hash = scope_digest({"scope": "published_membership", "filters": {k: v for k, v in scope.items() if v}})
+        for key in ("dataset_id", "dataset_revision_id", "metrics_version"):
+            setattr(evaluation_summary, key, ground_truth[key])
+        evaluation_summary.sample_count = sum(counts.values())
+        evaluation_summary.evaluation_scope_hash = scope_hash
+        evaluation_summary.comparison_key = scope_digest([ground_truth["dataset_id"], run.dataset_version_id, scope_hash, run.metrics_version])
     summary = TestRunSummary(
         id=run.id, name=run.name, kind=run.kind, source_system=run.source_system, created_at=run.created_at,
         status=state, total=sum(counts.values()), accepted=counts.get("accepted", 0),
@@ -311,7 +322,7 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
         completed=processing.get("completed", 0), failed=processing.get("failed", 0),
         execution_mode=run.execution_mode, profile_metadata=run.profile_metadata,
         configuration_snapshot=run.configuration_snapshot_json, configuration_hash=run.configuration_hash,
-        evaluation_mode=run.evaluation_mode, ground_truth=ground_truth_metadata(db, run),
+        evaluation_mode=run.evaluation_mode, ground_truth=ground_truth,
         official_evaluation_pending=run.official_evaluation_pending if not evaluation else False,
         prompt_version=run.prompt_version, model_test_run_id=run.model_test_run_id,
         prompt_policy_version_id=run.prompt_policy_version_id,

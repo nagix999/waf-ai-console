@@ -40,6 +40,10 @@ test("comparison UI independently checks official membership and metric versions
   }
   assert.equal(officialComparisonAllowed({ comparable: false, baseline: run, candidate: run }), false);
   assert.equal(officialComparisonAllowed({ baseline: {}, candidate: {} }), true);
+  const published = { ...run, ground_truth: { ...run.ground_truth, published: true, comparison_key: "r3-context" } };
+  assert.equal(officialComparisonAllowed({ baseline: published, candidate: published }), true);
+  assert.equal(officialComparisonAllowed({ baseline: published, candidate: run }), false);
+  assert.equal(officialComparisonAllowed({ baseline: published, candidate: { ...published, ground_truth: { ...published.ground_truth, comparison_key: "different-scope" } } }), false);
   const Result = component("./TestRunComparison.jsx", "TestComparisonResult");
   const html = renderToStaticMarkup(createElement(Result, { data: { comparable: false }, state: {} }));
   assert.match(html, /평가 기준이 달라/); assert.doesNotMatch(html, /Accuracy|F1|<table/);
@@ -48,7 +52,7 @@ test("comparison UI independently checks official membership and metric versions
 test("official result view only offers frozen evaluations; manual answer action is hidden", () => {
   const Reevaluation = component("./TestReevaluation.jsx");
   const html = renderToStaticMarkup(createElement(Reevaluation, { run: { id: "run", evaluation_mode: "ground_truth", official_evaluation_pending: true } }));
-  assert.match(html, /공식 평가 기록/); assert.match(html, /승인 답안 고정/); assert.doesNotMatch(html, /평가 기록 저장<|최신 답안/);
+  assert.match(html, /공식 평가 기록/); assert.match(html, /당시 답안 고정/); assert.doesNotMatch(html, /평가 기록 저장<|최신 답안/);
   const Actions = component("./AnalysisSelection.jsx");
   const actions = renderToStaticMarkup(createElement(Actions, { ids: ["fixture"], allowReferences: false }));
   assert.match(actions, /데이터셋에 추가/); assert.doesNotMatch(actions, /참고 답안 일괄 입력/);

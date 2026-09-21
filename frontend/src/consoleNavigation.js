@@ -2,9 +2,8 @@ import { initialListState } from "./analysisView.js";
 
 export const consoleGroups = [
   { key: "overview", icon: "dashboard", items: ["status"] },
-  { key: "configure", icon: "settings", items: ["profiles", "agents", "instructions"] },
   { key: "evaluate", icon: "test", items: ["runs", "groundTruth", "quality"] },
-  { key: "promote", icon: "arrow", items: ["promote"] },
+  { key: "configure", icon: "settings", items: ["profiles", "agents", "instructions"] },
   { key: "operate", icon: "analyses", items: ["runtime", "history", "changes"] },
   { key: "connect", icon: "server", items: ["api", "keys", "schema", "targets"] },
 ];
@@ -20,6 +19,7 @@ export function consoleDestination(state, key) {
   return { ...state, page: { status: "dashboard", run: "test", api: "apiDocs" }[key] || state.page };
 }
 export function consoleLocation(state) {
+  if (state.page === "promote") return { item: null, group: null, title: "promote" };
   let item;
   if (state.page === "detail") item = state.detailReturnPage === "testRun" ? "runs" : state.detailReturnPage === "test" ? "run" : "history";
   else if (state.page === "analyses") item = state.resultsPurpose === "test" && state.testResults?.view !== "items" ? "runs" : "history";

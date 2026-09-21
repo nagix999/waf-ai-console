@@ -32,7 +32,7 @@ function useRead(read, dependencies = []) {
   return { value, error, refresh: () => refresh(n => n + 1) };
 }
 function ReadState({ error, children }) { const w = useWords(); return error ? <p role="alert" className="error">{w("정보를 불러오지 못했습니다. 다시 조회해 주세요.", "Could not load data. Please retry.")}</p> : children; }
-function ConfigurationRows({ snapshot, names = {}, versions = {} }) {
+export function ConfigurationRows({ snapshot, names = {}, versions = {} }) {
   const w = useWords();
   const name = role => snapshot?.[role]?.profile_id ? names[snapshot[role].profile_id] || w("프로필 정보 없음", "Profile unavailable") : w("미지정", "Not assigned");
   return <dl className="v5-facts">{[["Primary", name("primary")], ["Verifier", name("verifier")], ["Evidence Editor", snapshot?.evidence_editor?.enabled ? name("evidence_editor") : w("사용 안 함", "Disabled")],
@@ -51,12 +51,12 @@ const actions = {
   create_internal_egress: ["vLLM 대상 등록", "vLLM target added"], update_internal_egress: ["vLLM 대상 수정", "vLLM target updated"], delete_internal_egress: ["vLLM 대상 삭제", "vLLM target deleted"],
 };
 const actionLabel = (action, w) => actions[action] ? w(...actions[action]) : w("변경 기록", "Change recorded");
-function OfficialMetrics({ evaluation, baseline, comparable }) {
+export function OfficialMetrics({ evaluation, baseline, comparable }) {
   const w = useWords(); const summary = evaluation?.summary; const metrics = summary?.evaluation_summary?.metrics;
   if (!evaluation) return <p className="v5-empty">{w("현재 구성에 연결된 공식 평가가 없습니다.", "No official evaluation is linked to this configuration.")}</p>;
-  return <><p className="v5-context">{summary?.ground_truth?.dataset_name} · r{summary?.ground_truth?.dataset_revision} · {w("승인 문항", "Approved cases")} {summary?.ground_truth?.approved_count} · {formatDate(evaluation.created_at)}</p>
+  return <><p className="v5-context">{summary?.ground_truth?.dataset_name} · r{summary?.ground_truth?.dataset_revision} · {w("평가 문항", "Published cases")} {summary?.ground_truth?.sample_count ?? summary?.ground_truth?.approved_count} · {formatDate(evaluation.created_at)}</p>
     <MetricStrip items={metricKeys.map(([key, label]) => { const value = metrics?.[key]; const previous = baseline?.summary?.evaluation_summary?.metrics?.[key]; return [label, typeof value === "number" ? `${(value * 100).toFixed(1)}%` : "—", comparable && typeof previous === "number" && typeof value === "number" ? `${value >= previous ? "+" : ""}${((value - previous) * 100).toFixed(1)} pp` : null, metricHelp[key]]; })} />
-    <p className="v5-context">{w("승인된 Ground Truth 표본의 평가입니다. 운영 전체 트래픽의 정확도가 아닙니다.", "Official Approved Ground Truth sample evaluation, not live Production traffic accuracy.")}</p></>;
+    <p className="v5-context">{w("발행된 Ground Truth 표본의 평가입니다. 운영 전체 트래픽의 정확도가 아닙니다.", "Evaluation on published Ground Truth cases, not live Production traffic accuracy.")}</p></>;
 }
 export function Overview({ onNavigate, onOpen }) {
   const w = useWords(); const [key, setKey] = useState("");
@@ -79,7 +79,7 @@ const checkNames = {
   candidate_snapshot_valid: ["테스트 구성 기록 확인", "Candidate snapshot integrity"],
   candidate_completed_without_failures: ["모든 문항 실행 완료", "All cases completed without failures"],
   official_approved_evaluation: ["공식 Ground Truth 평가 완료", "Official Ground Truth evaluation complete"],
-  approved_membership_valid: ["승인된 문항과 버전 확인", "Approved membership and revision"],
+  published_membership_valid: ["발행된 리비전의 전체 문항 확인", "Exact published revision membership"],
   official_snapshot_matches_candidate: ["평가와 후보 구성 일치", "Evaluation matches candidate"],
   tested_profiles_still_valid: ["모델 설정·검증·전송 승인 유효", "Model fingerprints, validation and approval valid"],
   tested_instructions_still_current: ["지침·스키마·처리 규칙 일치", "Instructions, schema and execution rules unchanged"],
@@ -90,16 +90,17 @@ const promotionErrors = {
   candidate_not_eligible_for_promotion: ["승격 조건이 충족되지 않았습니다. 다시 확인해 주세요.", "This test no longer qualifies. Refresh the checks."],
   test_run_not_found: ["선택한 테스트를 찾을 수 없습니다.", "The selected test was not found."],
 };
-export function Promotion({ initialRunId, onNavigate }) {
+export function Promotion({ initialRunId, onNavigate, onBack }) {
   const w = useWords(); const [id, setId] = useState(initialRunId || ""), [data, setData] = useState(null), [error, setError] = useState(""), [ack, setAck] = useState(false), [busy, setBusy] = useState(false), [revision, setRevision] = useState(0), [done, setDone] = useState(false), [technical, setTechnical] = useState(false);
-  const inFlight = useRef(false); const [search, setSearch] = useState(""), [filter, setFilter] = useState(""), [offset, setOffset] = useState(0); const runs = useRead(options => api.testRuns({ limit: 30, offset, ...(filter ? { q: filter } : {}) }, options), [filter, offset]);
+  const inFlight = useRef(false);
+  useEffect(() => setId(initialRunId || ""), [initialRunId]);
   useEffect(() => { setData(null); setError(""); setAck(false); setDone(false); if (!id) return;
     const controller = new AbortController(); api.promotionPreflight(id, { signal: controller.signal }).then(result => { if (!controller.signal.aborted) setData(result); }).catch(e => { if (!controller.signal.aborted) setError(e.message); }); return () => controller.abort();
   }, [id, revision]);
   async function promote() { if (inFlight.current || !data?.eligible || done || data.schema_changed && !ack) return; inFlight.current = true; setBusy(true); setError("");
     try { await api.promoteConfiguration({ candidate_test_run_id: id, expected_production_configuration_hash: data.current.configuration_hash, acknowledge_schema_change: ack }); setDone(true); }
     catch (e) { setError(e.message); setData(null); } finally { inFlight.current = false; setBusy(false); } }
-  return <div className="page-stack v5-promotion"><Section title={w("승격할 테스트", "Candidate test")} context={w("실행 시 고정한 구성을 그대로 적용합니다.", "Promotes the exact configuration captured at test admission.")} action={<button className="text-button" disabled={busy} onClick={() => setRevision(n => n + 1)}>{w("다시 확인", "Refresh checks")}</button>}><form className="ux-toolbar" onSubmit={e => { e.preventDefault(); setFilter(search.trim()); setOffset(0); }}><label>{w("테스트명 검색", "Find test")}<input value={search} onChange={e => setSearch(e.target.value)} maxLength={120} placeholder={w("테스트 이름", "Test name")} /></label><button className="secondary" disabled={busy}>{w("검색", "Search")}</button></form><label>{w("테스트 선택", "Select test")}<select value={id} disabled={busy} onChange={e => setId(e.target.value)}><option value="">{w("테스트를 선택하세요", "Choose a test")}</option>{id && !runs.value?.items.some(r => r.id === id) && <option value={id}>{w("선택한 테스트", "Selected test")}</option>}{runs.value?.items.map(run => <option key={run.id} value={run.id}>{run.name} · {run.status} · {run.evaluation_mode === "ground_truth" ? "Ground Truth" : w("참고 답안", "Reference labels")}</option>)}</select></label>{runs.value?.total > 30 && <Pagination total={runs.value.total} offset={offset} limit={30} onOffsetChange={setOffset} disabled={busy} />}<ReadState error={runs.error} />{!id && <p className="v5-context">{w("승인된 Ground Truth 문항으로 공식 평가를 완료한 테스트가 필요합니다.", "An official evaluation on Approved Ground Truth cases is required.")}</p>}</Section>
+  return <div className="page-stack v5-promotion"><button className="back" disabled={busy} onClick={onBack}>← {w("테스트로 돌아가기", "Back to test")}</button><Section title={data?.candidate_name || w("승격 조건 확인", "Checking candidate")} context={w("이 테스트에서 실행한 구성과 공식 평가를 검토합니다. 다른 테스트를 임의로 선택하지 않습니다.", "Review this test's captured configuration and official evaluation.")} action={<button className="text-button" disabled={busy} onClick={() => setRevision(n => n + 1)}>{w("다시 확인", "Refresh checks")}</button>}><p className="v5-context">{w("모델·분석 지침·입력 스키마를 하나의 구성으로 적용합니다.", "Models, analysis instructions and input schema are promoted as one configuration.")}</p></Section>
     {error && <p role="alert" className="error">{promotionErrors[error] ? w(...promotionErrors[error]) : w("승격 조건 확인에 실패했습니다. 다시 확인해 주세요.", "Could not check promotion conditions. Please refresh.")}</p>}
     {done && <p role="status" className="notice">{w("운영 승격을 완료했습니다.", "Promoted to Production.")}</p>}
     {data && <><Section title={w("운영 구성 비교", "Configuration comparison")} action={<button className="text-button" onClick={() => setTechnical(true)}>{w("버전·식별정보", "Versions & identifiers")}</button>}><div className="v5-comparison"><div><h3>Current Production</h3><ConfigurationRows snapshot={data.current.snapshot} names={data.current.profile_names} versions={data.current.version_names} /></div><div><h3>Candidate · {data.candidate_name}</h3><ConfigurationRows snapshot={data.candidate} names={data.current.profile_names} versions={data.current.version_names} /></div></div><div className="v5-diff-strip">{["primary", "verifier", "evidence_editor", "prompt", "input_schema"].map(key => <span key={key} className={JSON.stringify(data.current.snapshot?.[key]) === JSON.stringify(data.candidate?.[key]) ? "" : "v5-changed"}>{key} · {JSON.stringify(data.current.snapshot?.[key]) === JSON.stringify(data.candidate?.[key]) ? w("동일", "Unchanged") : w("변경", "Changed")}</span>)}</div></Section>
@@ -164,7 +165,7 @@ export function Activity({ deploymentOnly = false }) {
   const { value, error } = useRead(options => api.activity({ category, offset, limit: 30 }, options), [category, offset]);
   const deployment = useRead(api.deployment);
   return <div className="page-stack"><div className="ux-toolbar"><label>{w("변경 종류", "Change type")}<select value={category} onChange={e => { setCategory(e.target.value); setOffset(0); setSelected(null); }}>{[["all", "전체", "All"], ["promotion", "운영 승격", "Promotion"], ["runtime", "실행 설정", "Runtime"], ["configuration", "모델·지침·스키마", "Configuration"], ["integration", "외부 연동", "Integration"], ["deployment", "배포", "Deployment"]].map(([key, ko, en]) => <option key={key} value={key}>{w(ko, en)}</option>)}</select></label><button className="text-button" onClick={() => setDeploymentOpen(true)}>{w("배포 정보", "Deployment metadata")} →</button></div><ReadState error={error} />
-    <div className="v5-workbench"><DataTable data={value?.items || []} label={w("변경 이력", "Change history")} columns={[{ id: "date", header: w("시각", "Time"), render: row => formatDate(row.created_at) }, { id: "action", header: w("변경", "Change"), render: row => <button className="text-button" onClick={() => setSelected(row)}>{actionLabel(row.action, w)}</button> }, { id: "actor", header: w("작업자", "Actor"), render: row => row.actor }]} /><aside className="v5-workbench-detail">{selected ? <><h2>{actionLabel(selected.action, w)}</h2><p>{selected.actor} · {formatDate(selected.created_at)}</p><TextInspector label={w("변경 전후", "Before / after")} value={{ action: selected.action, resource: { type: selected.resource_type, id: selected.resource_id }, before: selected.before, after: selected.after }} /></> : <p className="v5-empty">{w("변경 항목을 선택하세요.", "Select a change to inspect.")}</p>}</aside></div>
+    <div className="v5-workbench"><DataTable data={value?.items || []} label={w("변경 이력", "Change history")} columns={[{ id: "date", header: w("시각", "Time"), render: row => formatDate(row.created_at) }, { id: "category", header: w("종류", "Type"), render: row => w(...({ promotion: ["운영 승격", "Promotion"], runtime: ["실행 설정", "Runtime"], configuration: ["구성 변경", "Configuration"], integration: ["연동", "Integration"], deployment: ["배포", "Deployment"] }[row.category] || ["변경", "Change"])) }, { id: "action", header: w("변경", "Change"), render: row => <button className="text-button" onClick={() => setSelected(row)}>{actionLabel(row.action, w)}</button> }]} /><aside className="v5-workbench-detail">{selected ? <><h2>{actionLabel(selected.action, w)}</h2><p>{selected.actor} · {formatDate(selected.created_at)}</p><TextInspector label={w("변경 전후", "Before / after")} value={{ action: selected.action, resource: { type: selected.resource_type, id: selected.resource_id }, before: selected.before, after: selected.after }} /></> : <p className="v5-empty">{w("변경 항목을 선택하세요.", "Select a change to inspect.")}</p>}</aside></div>
     <Pagination total={value?.total || 0} limit={30} offset={offset} onOffsetChange={setOffset} />
     <Dialog open={deploymentOpen} title={w("배포 정보 · 읽기 전용", "Deployment · read only")} onClose={() => setDeploymentOpen(false)}><ReadState error={deployment.error} /><TextInspector label="Deployment metadata" value={deployment.value} /><p>{w("이미지·커밋·배포 시각은 제공된 기록이 있을 때만 표시합니다.", "Images, commit and deployment time are shown only when supplied.")}</p></Dialog></div>;
 }

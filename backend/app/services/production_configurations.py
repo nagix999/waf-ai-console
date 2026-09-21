@@ -76,7 +76,9 @@ def official_document(record):
 
 
 def official_for_hash(db, digest):
-    return db.scalar(select(TestEvaluation).where(TestEvaluation.configuration_hash == digest,
+    return db.scalar(select(TestEvaluation).join(TestRun, TestRun.id == TestEvaluation.test_run_id)
+        .join(ValidationDatasetVersion, ValidationDatasetVersion.id == TestRun.dataset_version_id)
+        .where(ValidationDatasetVersion.is_published.is_(True), TestEvaluation.configuration_hash == digest,
         TestEvaluation.evaluation_kind == "ground_truth", TestEvaluation.metrics_version == METRICS_VERSION)
         .order_by(TestEvaluation.created_at.desc(), TestEvaluation.revision.desc()).limit(1))
 
@@ -113,9 +115,11 @@ def preflight(db, crypto, settings, identifier):
     version = db.get(ValidationDatasetVersion, run.dataset_version_id) if run.dataset_version_id else None
     approved_ids = run.approved_item_version_ids or []
     approved = list(db.scalars(select(ValidationDatasetItem).where(ValidationDatasetItem.id.in_(approved_ids))))
-    check("approved_membership_valid", version and approved_ids and len(approved) == len(approved_ids)
-        and set(approved_ids).issubset(version.item_version_ids)
-        and all(item.review_status == "approved" and item.reference_verdict is not None for item in approved))
+    from .validation_datasets import digest
+    check("published_membership_valid", version and version.is_published and approved_ids and len(approved) == len(approved_ids)
+        and sorted(approved_ids) == sorted(version.item_version_ids)
+        and version.membership_hash == digest(sorted(version.item_version_ids))
+        and all(item.reference_verdict is not None for item in approved))
     frozen = evaluation.summary_json if evaluation else None
     check("official_snapshot_matches_candidate", evaluation and frozen and
         evaluation.configuration_hash == run.configuration_hash and evaluation.metrics_version == METRICS_VERSION
@@ -161,7 +165,8 @@ def preflight(db, crypto, settings, identifier):
         "candidate_configuration_hash": run.configuration_hash, "current": current,
         "checks": checks, "eligible": all(c["passed"] for c in checks), **schema,
         "evaluation": official_document(evaluation), "baseline_evaluation": official_document(baseline_eval),
-        "comparable": bool(left_gt and right_gt and left_gt == right_gt and baseline_eval.metrics_version == evaluation.metrics_version)}
+        "comparable": bool(left_gt and right_gt and left_gt.get("comparison_key") and
+            left_gt.get("comparison_key") == right_gt.get("comparison_key") and baseline_eval.metrics_version == evaluation.metrics_version)}
 
 
 def promote(db, crypto, settings, payload, actor):

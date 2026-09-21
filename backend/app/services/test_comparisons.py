@@ -242,12 +242,16 @@ def _run_summary(db, run):
 
 
 def compare_test_runs(db, baseline, candidate, *, limit=25, offset=0, changes_only=False):
+    from .official_evaluations import ground_truth_metadata
+    left_gt, right_gt = ground_truth_metadata(db, baseline) or {}, ground_truth_metadata(db, candidate) or {}
     official = baseline.evaluation_mode == "ground_truth" or candidate.evaluation_mode == "ground_truth"
     compatible = (baseline.evaluation_mode == candidate.evaluation_mode == "ground_truth"
         and bool(baseline.dataset_version_id) and baseline.dataset_version_id == candidate.dataset_version_id
         and bool(baseline.approved_item_version_ids)
         and bool(baseline.metrics_version) and baseline.metrics_version == candidate.metrics_version
         and sorted(baseline.approved_item_version_ids) == sorted(candidate.approved_item_version_ids or []))
+    if left_gt.get("published") or right_gt.get("published"):
+        compatible = compatible and bool(left_gt.get("comparison_key")) and left_gt.get("comparison_key") == right_gt.get("comparison_key")
     if official and not compatible:
         return TestComparisonResponse(comparable=False, comparison_block_reason="ground_truth_scope_mismatch",
             baseline=_run_summary(db, baseline), candidate=_run_summary(db, candidate),

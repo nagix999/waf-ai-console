@@ -15,7 +15,11 @@ const canonical = {
 };
 
 export function readAppHash(hash) {
-  if (hash === "#promote") return { page: "promote" };
+  if (hash === "#promote") return { page: "analyses", purpose: "test", view: "runs" };
+  const promotion = typeof hash === "string" && hash.match(/^#promotion\/([^/]+)$/);
+  if (promotion && uuid.test(promotion[1])) return { page: "promote", promoteRunId: promotion[1].toLowerCase() };
+  const caseRoute = typeof hash === "string" && hash.match(/^#evaluate\/tests\/([^/]+)\/case\/([^/]+)$/);
+  if (caseRoute && uuid.test(caseRoute[1]) && uuid.test(caseRoute[2])) return { page: "analyses", purpose: "test", view: "runs", runId: caseRoute[1].toLowerCase(), caseId: caseRoute[2].toLowerCase() };
   if (hash === "#operate/runtime") return { page: "runtime" };
   if (hash === "#settings/concurrency" || hash === "#runtime/diagnostics") return { page: "runtime" };
   if (canonical[hash]) hash = canonical[hash];
@@ -34,7 +38,7 @@ export function readAppHash(hash) {
   if (hash === "#production-api") return { page: "apiDocs" };
   if (hash === "#test") return { page: "test" };
   if (hash === "#datasets") return { page: "datasets", datasetId: null };
-  if (hash === "#analyses") return { page: "analyses", purpose: "" };
+  if (hash === "#analyses" || hash === "#analyses/all") return { page: "analyses", purpose: "" };
   if (hash === "#analyses/production") return { page: "analyses", purpose: "production" };
   if (hash === "#analyses/test") return { page: "analyses", purpose: "test", view: "runs" };
   if (hash === "#analyses/test/items") return { page: "analyses", purpose: "test", view: "items" };
@@ -54,7 +58,9 @@ export function readAppHash(hash) {
 
 export function writeAppHash(state) {
   const legacy = writeLegacyHash(state);
-  if (state.page === "promote") return "#promote";
+  if (state.page === "promote") return uuid.test(state.promoteRunId || "") ? `#promotion/${state.promoteRunId}` : "#evaluate/tests";
+  if (state.page === "datasets") return "#evaluate/ground-truth";
+  if (state.page === "analyses" && state.resultsPurpose === "test" && state.testResults?.view === "runs" && uuid.test(state.testResults?.runId || "") && uuid.test(state.testResults?.caseId || "")) return `#evaluate/tests/${state.testResults.runId}/case/${state.testResults.caseId}`;
   if (["runtime", "diagnostics"].includes(state.page) || state.page === "settings" && state.settingsTab === "concurrency") return "#operate/runtime";
   if (state.page === "detail" && uuid.test(state.selectedId || "")) {
     const tabs = { result: "result", agent: "agent-trace", raw: "input", json: "result-json", report: "report" };
@@ -89,6 +95,7 @@ function writeLegacyHash(state) {
 export function applyAppRoute(state, route) {
   if (!route) return state;
   const next = { ...state, page: route.page };
+  if (route.page === "promote") next.promoteRunId = route.promoteRunId;
   if (route.page === "datasets") next.datasetId = route.datasetId;
   if (route.page === "settings") next.settingsTab = route.tab;
   if (route.page === "detail") {
@@ -98,7 +105,7 @@ export function applyAppRoute(state, route) {
   }
   if (route.page === "analyses") {
     next.resultsPurpose = route.purpose;
-    next.testResults = { ...state.testResults, view: route.view || "runs", runId: route.runId || null };
+    next.testResults = { ...state.testResults, view: route.view || "runs", runId: route.runId || null, caseId: route.caseId || null };
     if (route.purpose !== "test") next.listState = {
       ...state.listState,
       draft: { ...state.listState.draft, analysis_purpose: route.purpose },

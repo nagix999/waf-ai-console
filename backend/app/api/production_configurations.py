@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..models import ProductionPromotion, TestEvaluation
+from ..models import ProductionPromotion, TestEvaluation, TestRun, ValidationDatasetVersion
 from ..security import Principal, require_scope
 from ..services.analysis import AnalysisIngestError
 from ..services import production_configurations as service
@@ -49,9 +49,20 @@ def history(request: Request, db: Db, response: Response, _admin: Admin):
 def evaluations(request: Request, db: Db, response: Response, _admin: Admin):
     prepare(request, db, response)
     config = service.current_configuration(db, request.app.state.crypto, request.app.state.settings)
-    rows = db.scalars(select(TestEvaluation).where(TestEvaluation.configuration_hash == config["configuration_hash"],
+    rows = db.scalars(select(TestEvaluation).join(TestRun, TestRun.id == TestEvaluation.test_run_id)
+        .join(ValidationDatasetVersion, ValidationDatasetVersion.id == TestRun.dataset_version_id)
+        .where(ValidationDatasetVersion.is_published.is_(True), TestEvaluation.configuration_hash == config["configuration_hash"],
         TestEvaluation.evaluation_kind == "ground_truth").order_by(TestEvaluation.created_at.desc()).limit(100))
     result = {"configuration": config, "items": [service.official_document(row) for row in rows]}
+    db.commit()
+    return result
+
+
+@router.get("/overview")
+def overview(request: Request, db: Db, response: Response, _admin: Admin):
+    from ..services.overview import overview_document
+    prepare(request, db, response)
+    result = overview_document(db, request.app.state.crypto, request.app.state.settings)
     db.commit()
     return result
 

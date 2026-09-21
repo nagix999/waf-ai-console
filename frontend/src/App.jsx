@@ -11,7 +11,7 @@ import HelpTooltip from "./HelpTooltip.jsx";
 import SummaryPreview from "./SummaryPreview.jsx";
 import Dialog from "./Dialog.jsx";
 import EvaluationOverview from "./EvaluationOverview.jsx";
-import ConsoleShell from "./ConsoleShell.jsx";
+import ConsoleShell, { ConsoleAppearance } from "./ConsoleShell.jsx";
 import { ConsolePreferencesProvider, useConsolePreferences } from "./consolePreferences.jsx";
 import MoreActions from "./MoreActions.jsx";
 import { consoleDestination, consoleSearch } from "./consoleNavigation.js";
@@ -26,6 +26,8 @@ import { CompactEvaluationDetail, CompactReferenceComparison, EvaluationSummary,
 import AnalysisSelectionActions, { useAnalysisSelection } from "./AnalysisSelection.jsx";
 import DataTable, { Table, serverSorting, changedSort } from "./DataTable.jsx";
 import DataManagement from "./DataManagement.jsx";
+import GroundTruthWorkspace from "./GroundTruthWorkspace.jsx";
+import R3Overview from "./R3Overview.jsx";
 import RegistryFilters from "./RegistryFilters.jsx";
 import DatasetAnalysis from "./DatasetAnalysis.jsx";
 import CandidateConfiguration from "./CandidateConfiguration.jsx";
@@ -111,6 +113,8 @@ function Severity({ value, describe = false }) {
 }
 
 export function Login({ onLogin }) {
+  const { locale } = useConsolePreferences();
+  const w = (ko, en) => locale === "en" ? en : ko;
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -137,16 +141,15 @@ export function Login({ onLogin }) {
 
   return (
     <main className="login-shell">
+      <div className="r3-login-appearance"><ConsoleAppearance /></div>
       <form className="login-card" onSubmit={submit}>
         <div className="brand-mark"><Icon name="shield" size={26} /></div>
         <span className="eyebrow">WAF AI CONSOLE</span>
-        <h1>WAF AI 분석 콘솔</h1>
-        <p>관리자 계정으로 로그인하세요.</p>
-        <label>아이디<input required value={username} placeholder="관리자 아이디" onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="none" spellCheck={false} /></label>
-        <div><label htmlFor="login-password">비밀번호</label><div className="login-password"><input id="login-password" required type={showPassword ? "text" : "password"} value={password} placeholder="비밀번호 입력" onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /><button type="button" className="secondary" aria-label={showPassword ? "비밀번호 숨기기" : "비밀번호 표시"} aria-pressed={showPassword} onClick={() => setShowPassword(value => !value)}>{showPassword ? "숨김" : "표시"}</button></div></div>
+        <h1>{w("WAF AI 분석 콘솔", "WAF AI Console")}</h1>
+        <label>{w("아이디", "Username")}<input required value={username} placeholder={w("관리자 아이디", "Admin username")} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="none" spellCheck={false} /></label>
+        <div><label htmlFor="login-password">{w("비밀번호", "Password")}</label><div className="login-password"><input id="login-password" required type={showPassword ? "text" : "password"} value={password} placeholder={w("비밀번호 입력", "Enter password")} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /><button type="button" className="secondary" aria-label={showPassword ? w("비밀번호 숨기기", "Hide password") : w("비밀번호 표시", "Show password")} aria-pressed={showPassword} onClick={() => setShowPassword(value => !value)}>{showPassword ? w("숨김", "Hide") : w("표시", "Show")}</button></div></div>
         {error && <div className="error" role="alert">{error}</div>}
-        <button className="primary" disabled={busy}>{busy ? "확인 중…" : "로그인"}<Icon name="arrow" size={17} /></button>
-        <small className="login-footnote">관리자 전용</small>
+        <button className="primary" disabled={busy}>{busy ? w("확인 중…", "Signing in…") : w("로그인", "Sign in")}<Icon name="arrow" size={17} /></button>
       </form>
     </main>
   );
@@ -189,7 +192,7 @@ export function initialTestResultsState() {
 }
 
 // Test-run searches and item filters never become Production analysis filters.
-export function AnalysisResultsPage({ purpose, onScopeChange, state, setState, testState, setTestState, onSelectRun, onOpenRunItem, onOpen, onUnauthorized, onShowTestRuns, onShowAllTestItems, splitNavigation = false }) {
+export function AnalysisResultsPage({ purpose, onScopeChange, state, setState, testState, setTestState, onSelectRun, onOpenRunItem, onOpen, onUnauthorized, onShowTestRuns, onShowAllTestItems, onCaseChange, onPromote, splitNavigation = false }) {
   const setPart = key => update => setTestState(current => ({ ...current, [key]: typeof update === "function" ? update(current[key]) : update }));
   const showRuns = onShowTestRuns || (() => setTestState(current => ({ ...current, view: "runs", runId: null })));
   const showAllTestItems = onShowAllTestItems || (() => setTestState(current => ({ ...current, view: "items", runId: null, items: initialListState("test") })));
@@ -198,7 +201,7 @@ export function AnalysisResultsPage({ purpose, onScopeChange, state, setState, t
   return <div className="page-stack test-results-page">
     <div className="analysis-list-toolbar">{!splitNavigation && <AnalysisScopeTabs purpose="test" onChange={onScopeChange} />}{!testState.runId && <button type="button" className="secondary" onClick={showAllTestItems}>테스트 문항 전체 보기</button>}</div>
     {testState.runId
-      ? <TestRunDetail key={testState.runId} id={testState.runId} filters={testState.filters} onFiltersChange={setPart("filters")} onBack={showRuns} onOpen={onOpenRunItem} onUnauthorized={onUnauthorized} />
+      ? <TestRunDetail key={testState.runId} id={testState.runId} caseId={testState.caseId} onCaseChange={onCaseChange} onPromote={onPromote} filters={testState.filters} onFiltersChange={setPart("filters")} onBack={showRuns} onOpen={onOpenRunItem} onUnauthorized={onUnauthorized} />
       : <TestRunHistory state={testState.history} onStateChange={setPart("history")} onSelect={onSelectRun} onViewAnalyses={showAllTestItems} onUnauthorized={onUnauthorized} />}
     {!testState.runId && <p className="evaluation-footnote">테스트명 없이 저장된 이전 결과는 ‘테스트 문항 전체 보기’에서 확인할 수 있습니다. 기존 데이터를 임의의 테스트 실행으로 묶지 않습니다.</p>}
   </div>;
@@ -888,7 +891,7 @@ function ConsoleApp() {
   function showAllTestItems() { move(current => ({ ...current, resultsPurpose: "test", testResults: { ...current.testResults, view: "items", runId: null, items: initialListState("test") }, page: "analyses" })); }
   function openTestRun(id) {
     if (!id) { backToTests(); return; }
-    move(current => ({ ...current, resultsPurpose: "test", testResults: { ...current.testResults, view: "runs", runId: id, filters: current.testResults.runId === id ? current.testResults.filters : initialTestRunFilters() }, page: "analyses" }));
+    move(current => ({ ...current, resultsPurpose: "test", testResults: { ...current.testResults, view: "runs", runId: id, caseId: null, filters: current.testResults.runId === id ? current.testResults.filters : initialTestRunFilters() }, page: "analyses" }));
   }
   function openRunItem(id) { move(current => ({ ...current, selectedId: id, detailReturnPage: "testRun", detailTab: "result", page: "detail" })); }
   function viewDataset(source, runId) {
@@ -916,15 +919,15 @@ function ConsoleApp() {
     {logoutState.error && <div className="error" role="alert">{logoutState.error}</div>}
     {mode === "stub" && <div className="runtime-banner"><Icon name="test" size={18} /><div><strong>{t("stubTitle")}</strong><span>{t("stubNote")}</span></div><span className="runtime-tag">STUB</span></div>}
     {summaryError && !["dashboard", "quality"].includes(page) && <div className="error" role="alert">{t("readError")}</div>}
-    {page === "dashboard" && <Overview onNavigate={navigate} onOpen={openDetail} />}
+    {page === "dashboard" && <R3Overview onNavigate={navigate} onOpenRun={openTestRun} onPromotion={id => move(current => ({ ...current, page: "promote", promoteRunId: id }))} onGroundTruth={(id, state) => move(current => ({ ...current, page: "datasets", datasetId: id, groundTruthState: state }))} onFailures={purpose => { if (purpose === "test") { move(current => ({ ...current, page: "analyses", resultsPurpose: "test", testResults: { ...current.testResults, view: "runs", runId: null, caseId: null, history: { ...current.testResults.history, query: { ...current.testResults.history.query, has_failures: true, offset: 0 } } } })); } else filterProduction({ status: "failed" }); }} />}
     {page === "quality" && <ProductionEvaluation onOpenRun={openTestRun} referenceProps={runtimeProps} />}
     {["runtime", "diagnostics"].includes(page) && <RuntimeWorkspace onOpen={openDetail} />}
     {["deployment", "changes"].includes(page) && <Activity deploymentOnly={page === "deployment"} />}
-    {page === "promote" && <Promotion initialRunId={screen.promoteRunId} onNavigate={navigate} />}
-    {page === "analyses" && <>{resultsPurpose === "test" && testResults.view === "runs" && <div className="v5-list-action">{testResults.runId ? <button className="secondary" onClick={() => move(current => ({ ...current, page: "promote", promoteRunId: testResults.runId }))}>{t("promote")} →</button> : <button className="primary" onClick={() => navigate("run")}>+ {t("run")}</button>}</div>}<AnalysisResultsPage splitNavigation purpose={resultsPurpose} onScopeChange={changeResultsScope} state={listState} setState={setListState} testState={testResults} setTestState={setTestResults} onSelectRun={openTestRun} onOpenRunItem={openRunItem} onOpen={openDetail} onUnauthorized={onUnauthorized} onShowTestRuns={backToTests} onShowAllTestItems={showAllTestItems} /></>}
+    {page === "promote" && <Promotion initialRunId={screen.promoteRunId} onNavigate={navigate} onBack={() => openTestRun(screen.promoteRunId)} />}
+    {page === "analyses" && <>{resultsPurpose === "test" && testResults.view === "runs" && !testResults.runId && <div className="v5-list-action"><button className="primary" onClick={() => navigate("run")}>+ {t("run")}</button></div>}<AnalysisResultsPage onCaseChange={caseId => caseId ? navigation.navigate(current => ({ ...current, testResults: { ...current.testResults, caseId } })) : navigation.backTo(current => current.page === "analyses" && current.testResults.runId === testResults.runId && !current.testResults.caseId, current => ({ ...current, testResults: { ...current.testResults, caseId: null } }))} onPromote={id => move(current => ({ ...current, page: "promote", promoteRunId: id }))} splitNavigation purpose={resultsPurpose} onScopeChange={changeResultsScope} state={listState} setState={setListState} testState={testResults} setTestState={setTestResults} onSelectRun={openTestRun} onOpenRunItem={openRunItem} onOpen={openDetail} onUnauthorized={onUnauthorized} onShowTestRuns={backToTests} onShowAllTestItems={showAllTestItems} /></>}
     {page === "test" && <TestAnalysisPage onViewTests={viewTests} onOpen={openTest} selectedRunId={null} onSelectRun={openTestRun} agentMode={mode} onConfigureModels={() => navigate("agents")} />}
     {page === "apiDocs" && <ProductionApi />}
-    {page === "datasets" && <DataManagement key={screen.datasetId || "list"} id={screen.datasetId} onSelect={id => move(current => ({ ...current, page: "datasets", datasetId: id }))} />}
+    {page === "datasets" && <GroundTruthWorkspace id={screen.datasetId} initialState={screen.groundTruthState} onSelect={id => navigation.remember(current => ({ ...current, page: "datasets", datasetId: id, groundTruthState: undefined }))} />}
     {page === "settings" && <Settings standalone onProductionChange={setProductionName} onViewDataset={viewDataset} tab={settingsTab} onTabChange={tab => move(current => ({ ...current, settingsTab: tab }))} />}
     {page === "detail" && <Detail key={selectedId} id={selectedId} onBack={backFromDetail} onOpen={id => move(current => ({ ...current, selectedId: id, detailTab: "result" }))} tab={detailTab} onTabChange={tab => navigation.navigate(current => ({ ...current, detailTab: tab }))} backLabel={t(detailReturnPage === "testRun" ? "runs" : detailReturnPage === "test" ? "run" : detailReturnPage === "dashboard" ? "status" : "history")} />}
   </ConsoleShell>;

@@ -7,7 +7,7 @@ const id = "10000000-0000-4000-8000-000000000001";
 const initial = () => ({ page: "dashboard", resultsPurpose: "", listState: initialListState(), testResults: { view: "runs", runId: null, filters: {} }, settingsTab: "models", detailTab: "result" });
 
 test("canonical workspace routes round trip", () => {
-  for (const hash of ["#overview", "#connect/production-api", "#evaluate/tests/new", "#operate/inference", "#evaluate/tests", "#promote", "#operate/runtime", "#operate/activity",
+  for (const hash of ["#overview", "#connect/production-api", "#evaluate/tests/new", "#operate/inference", "#evaluate/tests", `#promotion/${id}`, `#evaluate/tests/${id}/case/${id}`, "#operate/runtime", "#operate/activity",
     ...["llm-profiles", "agent-roles", "instructions"].map(tab => `#configure/${tab}`),
     ...["input-schema", "api-keys", "vllm-targets"].map(tab => `#connect/${tab}`),
     `#evaluate/tests/${id}`, ...["result", "agent-trace", "input", "result-json", "report"].map(tab => `#operate/inference/${id}/${tab}`)]) {
@@ -15,6 +15,12 @@ test("canonical workspace routes round trip", () => {
     assert.ok(route, hash);
     assert.equal(writeAppHash(applyAppRoute(initial(), route)), hash);
   }
+});
+
+test("legacy promotion selects no candidate, datasets stay flat, contextual promotion has no sidebar", () => {
+  assert.equal(writeAppHash(applyAppRoute(initial(), readAppHash("#promote"))), "#evaluate/tests");
+  assert.equal(writeAppHash({ ...initial(), page: "datasets", datasetId: id }), "#evaluate/ground-truth");
+  assert.equal(readAppHash("#promotion/secret"), null);
 });
 
 test("unknown, malformed and non-UUID fragments cannot become API identifiers", () => {

@@ -17,6 +17,25 @@ export function createBrowserHistory({ browser, initialSnapshot, readHash, write
   let cursor = -1;
   let currentId = null;
   let pendingTraversal = null;
+  let originalScrollRestoration;
+  const saveScroll = () => {
+    const record = records.get(currentId);
+    if (record && Number.isFinite(browser.scrollY)) record.scrollY = browser.scrollY;
+  };
+  const restoreScroll = record => {
+    const frame = browser.requestAnimationFrame?.bind(browser);
+    let attempts = 0;
+    const restore = () => {
+      if (record.id !== currentId) return;
+      const target = record.scrollY || 0;
+      // The destination list may still be loading. Give it bounded time to
+      // regain its height rather than clamping its remembered position to 0.
+      const available = browser.document?.documentElement?.scrollHeight - browser.innerHeight;
+      if (available < target && attempts++ < 120) { frame(restore); return; }
+      browser.scrollTo?.(0, target);
+    };
+    if (frame) frame(() => frame(restore));
+  };
 
   function freshSnapshot() {
     const fresh = initialSnapshot();
@@ -85,6 +104,7 @@ export function createBrowserHistory({ browser, initialSnapshot, readHash, write
     const record = markerRecord();
     if (record) {
       if (record.id === currentId) return;
+      saveScroll();
       pendingTraversal = null;
       const position = stack.indexOf(record.id);
       if (position < 0) {
@@ -98,6 +118,7 @@ export function createBrowserHistory({ browser, initialSnapshot, readHash, write
       currentId = record.id;
       snapshot = record.snapshot;
       emit();
+      restoreScroll(record);
       return;
     }
 
@@ -123,6 +144,7 @@ export function createBrowserHistory({ browser, initialSnapshot, readHash, write
   function navigate(updateFn, { replace = false } = {}) {
     // Also detect URL edits made while React effects were temporarily detached.
     if (!markerRecord() || markerRecord().id !== currentId) reconcile();
+    saveScroll();
     const next = updateFn(snapshot);
     const hash = canonicalHash(next);
     const current = records.get(currentId);
@@ -175,6 +197,8 @@ export function createBrowserHistory({ browser, initialSnapshot, readHash, write
     const registration = {};
     starts.add(registration);
     if (starts.size === 1) {
+      originalScrollRestoration = browser.history.scrollRestoration;
+      if (originalScrollRestoration !== undefined) browser.history.scrollRestoration = "manual";
       browser.addEventListener("popstate", reconcile);
       browser.addEventListener("hashchange", reconcile);
       reconcile();
@@ -183,6 +207,7 @@ export function createBrowserHistory({ browser, initialSnapshot, readHash, write
       if (!starts.delete(registration) || starts.size !== 0) return;
       browser.removeEventListener("popstate", reconcile);
       browser.removeEventListener("hashchange", reconcile);
+      if (originalScrollRestoration !== undefined) browser.history.scrollRestoration = originalScrollRestoration;
     };
   }
 

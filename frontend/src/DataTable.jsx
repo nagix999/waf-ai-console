@@ -16,7 +16,7 @@ export function Table({ className = "", children, ...props }) {
 // caller and must trigger a server query; never reorder just the loaded page.
 // Column renderers are plain render callbacks (no hooks), not component types.
 export default function DataTable({ data, columns, getRowId = rowId, rowClassName,
-  sorting = noSorting, onSortingChange, label, className = "", empty = "표시할 항목이 없습니다." }) {
+  sorting = noSorting, onSortingChange, label, headerGroups, className = "", empty = "표시할 항목이 없습니다." }) {
   const definitions = useMemo(() => columns.map(column => ({
     id: column.id, accessorFn: row => row[column.id], header: column.header,
     enableSorting: Boolean(onSortingChange && column.sortable), meta: column,
@@ -28,7 +28,7 @@ export default function DataTable({ data, columns, getRowId = rowId, rowClassNam
     <Table className={`data-table ${className}`}>
       {label && <caption className="sr-only">{label}</caption>}
       <colgroup>{columns.map(column => <col key={column.id} style={column.width ? { width: column.width } : undefined} />)}</colgroup>
-      <thead>{table.getHeaderGroups().map(group => <tr key={group.id}>{group.headers.map(header => {
+      <thead>{headerGroups && <tr className="r3-group-header">{headerGroups.map((group, index) => <th key={index} scope="colgroup" colSpan={group.span}>{group.label}</th>)}</tr>}{table.getHeaderGroups().map(group => <tr key={group.id}>{group.headers.map(header => {
         const sorted = header.column.getIsSorted();
         return <th key={header.id} scope="col" className={header.column.columnDef.meta.className}
           aria-sort={sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : undefined}>

@@ -12,6 +12,12 @@ from .manual_references import audit, latest_reference, utc_datetime
 from .test_runs import MAX_TEST_ITEMS, add_run_items, create_run_record, write_lock
 
 
+def require_legacy_draft(db, identifier):
+    from ..models import ValidationDatasetWorkingState
+    if db.get(ValidationDatasetWorkingState, identifier):
+        raise AnalysisIngestError("ground_truth_working_api_required", 409)
+
+
 def digest(document):
     return hashlib.sha256(json.dumps(document, sort_keys=True, ensure_ascii=False, allow_nan=False,
                                      separators=(",", ":")).encode()).hexdigest()
@@ -54,10 +60,11 @@ def save_version(db, row, ids, actor, *, initial=False):
 
 
 def dataset_summary(db, row, version=None):
+    current = version is None
     version = version or db.scalar(select(ValidationDatasetVersion).where(
         ValidationDatasetVersion.dataset_id == row.id, ValidationDatasetVersion.revision == row.revision))
     items = version_items(db, version)
-    return {"id": row.id, "name": version.name, "description": version.description, "revision": version.revision,
+    return {"id": row.id, "name": row.name if current else version.name, "description": row.description if current else version.description, "revision": version.revision,
         "version_id": version.id, "total": len(items), "labeled": sum(item.reference_verdict is not None for item in items),
         "review_counts": {status: sum(item.review_status == status for item in items)
                           for status in ("draft", "reviewed", "approved")},
@@ -144,6 +151,7 @@ def new_item(db, crypto, row, event, schema, *, actor, old=None, original=None, 
 
 def write_item(db, crypto, settings, identifier, payload, actor, item_id=None):
     write_lock(db)
+    require_legacy_draft(db, identifier)
     row, version = dataset(db, identifier, payload.expected_revision)
     items = version_items(db, version)
     old = next((item for item in items if item.item_id == item_id), None)
@@ -167,6 +175,7 @@ def write_item(db, crypto, settings, identifier, payload, actor, item_id=None):
 def review_item(db, identifier, item_id, payload, actor):
     """Review creates immutable revisions; it never rewrites inputs or labels."""
     write_lock(db)
+    require_legacy_draft(db, identifier)
     row, version = dataset(db, identifier, payload.expected_revision)
     items = version_items(db, version)
     old = next((item for item in items if item.item_id == item_id), None)
@@ -198,6 +207,7 @@ def review_item(db, identifier, item_id, payload, actor):
 
 def import_analyses(db, crypto, settings, identifier, payload, actor):
     write_lock(db)
+    require_legacy_draft(db, identifier)
     row, version = dataset(db, identifier, payload.expected_revision)
     items = version_items(db, version)
     seen = {item.input_hash: item for item in items}
@@ -270,6 +280,8 @@ def execute_dataset(db, crypto, settings, identifier, payload, actor):
     # must return its original run even if the dataset has since been edited.
     key = digest(["dataset-run", actor, identifier, payload.idempotency_key])
     request_parts = [identifier, payload.expected_revision, payload.name]
+    if payload.dataset_revision_id:
+        request_parts.append({"dataset_revision_id": payload.dataset_revision_id})
     if payload.candidate_configuration is not None:
         request_parts.append(payload.candidate_configuration.model_dump(mode="json"))
     if payload.evaluation_mode == "ground_truth":
@@ -280,17 +292,22 @@ def execute_dataset(db, crypto, settings, identifier, payload, actor):
         if existing.request_hash != request_hash:
             raise AnalysisIngestError("test_run_idempotency_conflict", 409)
         return existing
-    row, version = dataset(db, identifier, payload.expected_revision)
+    row, version = dataset(db, identifier, None if payload.dataset_revision_id else payload.expected_revision)
+    if payload.dataset_revision_id:
+        version = db.get(ValidationDatasetVersion, payload.dataset_revision_id)
+        if version is None or version.dataset_id != identifier or version.revision != payload.expected_revision:
+            raise AnalysisIngestError("dataset_version_unavailable", 404)
     entries = version_items(db, version)
     if payload.evaluation_mode == "ground_truth":
         if settings.agent_mode != "moduagent":
             raise AnalysisIngestError("official_evaluation_requires_llm", 409)
-        entries = [entry for entry in entries if entry.review_status == "approved"]
-        if not entries:
-            raise AnalysisIngestError("approved_ground_truth_required", 422)
+        if not version.is_published or not entries:
+            raise AnalysisIngestError("ground_truth_published_revision_required", 422)
+        if version.membership_hash != digest(sorted(version.item_version_ids)) or any(entry.reference_verdict is None for entry in entries):
+            raise AnalysisIngestError("ground_truth_membership_invalid", 409)
     if not entries:
         raise AnalysisIngestError("dataset_empty", 422)
-    run, _ = create_run_record(db, crypto, settings, name=(payload.name or "").strip() or str(uuid.uuid4()),
+    run, _ = create_run_record(db, crypto, settings, name=(payload.name or "").strip() or utcnow().strftime("Test %Y-%m-%d %H:%M"),
         idempotency_key=key, request_hash=request_hash, kind="dataset", actor=actor, dataset_hash=digest([entry.id for entry in entries]),
         candidate_configuration=payload.candidate_configuration)
     run.dataset_version_id = version.id

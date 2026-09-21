@@ -28,6 +28,11 @@ export function officialComparisonAllowed(data) {
   if (data?.comparable === false) return false;
   if (![data?.baseline, data?.candidate].some(run => run?.evaluation_mode === "ground_truth")) return true;
   const [left, right] = [data.baseline, data.candidate];
+  if (left?.ground_truth?.published || right?.ground_truth?.published) {
+    return left?.evaluation_mode === "ground_truth" && right?.evaluation_mode === "ground_truth"
+      && left.ground_truth?.published === true && right.ground_truth?.published === true
+      && Boolean(left.ground_truth.comparison_key) && left.ground_truth.comparison_key === right.ground_truth.comparison_key;
+  }
   return left?.evaluation_mode === "ground_truth" && right?.evaluation_mode === "ground_truth"
     && Boolean(left.dataset_version_id) && left.dataset_version_id === right.dataset_version_id
     && Boolean(left.ground_truth?.membership_hash) && left.ground_truth.membership_hash === right.ground_truth?.membership_hash

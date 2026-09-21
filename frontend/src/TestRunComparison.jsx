@@ -57,7 +57,7 @@ export function TestComparisonItems({ items, onOpen }) {
 
 export function TestComparisonResult({ data, state, onChange, onOpen, onRefresh, loading }) {
   const [tab, setTab] = useState("quality");
-  if (!officialComparisonAllowed(data)) return <p className="notice" role="status">평가 기준이 달라 점수 차이를 비교할 수 없습니다. 같은 데이터셋 버전·승인 문항·지표 기준으로 실행한 공식 평가를 선택하세요.</p>;
+  if (!officialComparisonAllowed(data)) return <p className="notice" role="status">평가 기준이 달라 점수 차이를 비교할 수 없습니다. 같은 발행 리비전·평가 범위·지표 기준으로 실행한 공식 평가를 선택하세요.</p>;
   return <div className="test-comparison-result">
     <div className="test-comparison-runs">{[["baseline", "기준"], ["candidate", "후보 · 현재 실행"]].map(([key, label]) => <div key={key}><span>{label}</span><strong>{runLabel(data[key])}</strong><small>Primary: {data[key]?.profile_metadata?.model_name || "모델 미기록"}</small>{data[key]?.profile_metadata?.verifier_profile?.model_name && <small>Verifier: {data[key].profile_metadata.verifier_profile.model_name}</small>}</div>)}</div>
     <p className="notice">공통 접수 {countText(data.counts?.accepted_pairs)}쌍 중 같은 이벤트 내용·같은 접수 당시 답안으로 평가 가능한 {countText(data.counts?.comparable_pairs)}쌍을 비교합니다. 위 실행 상세의 난이도·유형 필터는 이 비교에 적용되지 않습니다.</p>

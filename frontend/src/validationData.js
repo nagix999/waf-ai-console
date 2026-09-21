@@ -8,9 +8,14 @@ export function reviewActions(status) {
 
 export function validationDataError(error) {
   const messages = {
-    approved_ground_truth_required: "승인된 답안이 없습니다. 데이터 관리에서 문항을 검토·승인하세요.",
+    ground_truth_working_changed: "다른 작업으로 초안이 변경되었습니다. 새로고침 후 다시 확인하세요.",
+    ground_truth_published_revision_required: "발행된 리비전이 필요합니다. Ground Truth에서 리비전을 먼저 발행하세요.",
+    ground_truth_ready_cases_required: "입력과 답안이 준비된 문항이 하나 이상 있어야 발행할 수 있습니다.",
+    ground_truth_exclusion_ack_required: "평가에서 빠지는 문항 수와 포함 비율을 확인해 주세요.",
+    ground_truth_case_not_in_published_revision: "이 문항은 최근 발행 리비전에 없어 되돌릴 수 없습니다.",
+    approved_ground_truth_required: "공식 평가에 사용할 발행 리비전이 없습니다. Ground Truth에서 문항을 확인하고 발행하세요.",
     official_evaluation_requires_llm: "공식 평가는 실제 LLM 실행 모드에서만 가능합니다.",
-    official_ground_truth_fixed: "공식 평가 답안은 접수 당시 승인 버전으로 고정되어 있습니다.",
+    official_ground_truth_fixed: "공식 평가 답안은 접수 당시 리비전으로 고정되어 있습니다.",
     dataset_changed_reload: "데이터셋이 변경되었습니다. 새로고침 후 다시 선택하세요.",
     reference_changed_reload: "선택한 분석의 답안이 변경되었습니다. 다시 확인한 뒤 저장하세요.",
     dataset_duplicate_input: "같은 입력의 문항이 이미 있습니다. 기존 문항을 수정하세요.",

@@ -112,6 +112,12 @@ class EvaluationSourceGroup(EvaluationBinarySummary):
 
 
 class EvaluationSummary(EvaluationBinarySummary):
+    dataset_id: str | None = None
+    dataset_revision_id: str | None = None
+    metrics_version: str | None = None
+    evaluation_scope_hash: str | None = None
+    comparison_key: str | None = None
+    sample_count: int | None = None
     total: int = 0
     labeled: int = 0
     evaluable: int = 0

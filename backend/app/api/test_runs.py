@@ -21,6 +21,7 @@ from ..services.prompt_policies import PromptPolicyError
 from ..services.prompt_snapshots import PromptSnapshotError
 from ..services.analysis_query import contains_text
 from ..services.test_runs import describe_run, enqueue_named_run, read_snapshot
+from ..services.test_attempts import failed_test_ids
 from ..services.uploads import UploadFormatError, parse_upload
 from ..services.vllm_profiles import TargetNotAllowedError
 
@@ -87,11 +88,14 @@ async def upload_test_run(request: Request, db: DbSession, principal: Admin,
 @router.get("", response_model=TestRunList)
 def list_test_runs(db: DbSession, _principal: Admin, limit: int = Query(20, ge=1, le=100),
                    offset: int = Query(0, ge=0), q: str | None = Query(None, max_length=120),
+                   has_failures: bool = False,
                    reference_basis: Literal["initial", "latest"] = "initial",
                    sort_by: Literal["created_at", "name"] = "created_at",
                    sort_order: Literal["asc", "desc"] = "desc"):
     read_snapshot(db)
     query = select(TestRun)
+    if has_failures:
+        query = query.where(TestRun.id.in_(failed_test_ids()))
     if q:
         query = query.where(contains_text(TestRun.name, q))
     total = db.scalar(select(func.count()).select_from(query.subquery())) or 0

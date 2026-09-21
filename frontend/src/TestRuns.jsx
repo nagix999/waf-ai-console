@@ -20,6 +20,8 @@ import RetryTestFailures from "./RetryTestFailures.jsx";
 import DetailTabs from "./DetailTabs.jsx";
 import TextInspector from "./TextInspector.jsx";
 import { afterTestRetry } from "./testRetry.js";
+import { useWords, MetricStrip } from "./LifecycleViews.jsx";
+import CaseDrawer from "./CaseDrawer.jsx";
 
 export const initialTestRunHistoryState = () => ({ queryText: "", query: { q: "", limit: 10, offset: 0 } });
 export const initialTestRunFilters = () => ({ view: "items", difficulty: "", test_category: "", difficulty_missing: false, test_category_missing: false, status: "", evaluation_outcome: "", cell: "", limit: 25, offset: 0, comparison: initialTestComparisonState() });
@@ -48,36 +50,49 @@ export function testRunFilterChange(filters, action) {
 
 // Each read belongs to one mounted query. Cancellation invalidates even a late
 // response from a transport that does not honor AbortSignal.
-export function watchTestRunRead({ read, onUpdate, isRunning, errorMessage, onUnauthorized, setTimer = setTimeout, clearTimer = clearTimeout }) {
-  let active = true, timer;
+export function watchTestRunRead({ read, onUpdate, isRunning, errorMessage, onUnauthorized, setTimer = setTimeout, clearTimer = clearTimeout, document: doc = globalThis.document }) {
+  let active = true, timer, loading = false, failures = 0;
   const controller = new AbortController();
   async function load() {
+    clearTimer(timer);
+    if (!active || loading || doc?.hidden) return;
+    loading = true;
     try {
       const data = await read({ signal: controller.signal });
       if (!active) return;
-      onUpdate({ data, error: "", loading: false });
-      if (isRunning(data)) timer = setTimer(load, 5000);
+      failures = 0;
+      onUpdate({ data, error: "", loading: false, updatedAt: new Date().toISOString() });
+      if (!doc?.hidden) timer = setTimer(load, isRunning(data) ? 5000 : 25000);
     } catch (error) {
       if (!active) return;
       onUpdate({ error: error?.status === 401 ? "로그인 세션이 만료되었습니다. 다시 로그인하세요." : errorMessage, loading: false });
       if (error?.status === 401) onUnauthorized?.();
+      if ([401, 403, 404].includes(error?.status)) active = false;
+      else if (!doc?.hidden) timer = setTimer(load, Math.min(25000 * 2 ** Math.min(++failures, 3), 120000));
+    } finally {
+      loading = false;
     }
   }
+  const visibility = () => { clearTimer(timer); if (!doc?.hidden) void load(); };
+  doc?.addEventListener("visibilitychange", visibility);
   void load();
-  return () => { active = false; clearTimer(timer); controller.abort(); };
+  return () => { active = false; clearTimer(timer); controller.abort(); doc?.removeEventListener("visibilitychange", visibility); };
 }
 
 const emptyRead = () => ({ key: null, data: null, error: "", loading: true });
 
-export function TestRunRows({ items, onSelect, sorting, onSortingChange }) {
+const testMetric = value => Number.isFinite(value) ? metricText(value) : "—";
+export function TestRunRows({ items, onSelect, sorting, onSortingChange, expanded = false, words: w = ko => ko }) {
+  const metadata = run => run.ground_truth ? `${run.ground_truth.dataset_name} · r${run.ground_truth.dataset_revision} · ${run.ground_truth.sample_count ?? run.ground_truth.approved_count} ${w("문항", "cases")}` : w("참고 답안 비교", "Reference comparison");
   const columns = [
-    { id: "name", header: "테스트명 / 접수 시각", sortable: true, width: "30%", render: run => <><button type="button" className="text-button" onClick={() => onSelect(run.id)}>{run.name}</button><small>{runKinds[run.kind] || "유형 미확인"} · {formatDate(run.created_at)}</small></> },
-    { id: "model", header: "모델", width: "20%", render: run => run.execution_mode === "stub" ? "모의 실행 · 품질 평가 제외" : run.profile_metadata?.model_name || "실행 모델 정보 없음" },
-    { id: "progress", header: "진행 상태", width: "19%", render: run => <><span>{runStatuses[run.status] || "상태 미확인"}</span><small>완료 {run.completed} · 실패 {run.failed} · 거부 {run.rejected}</small><small>접수 {run.accepted} / 전체 {run.total}건</small></> },
-    { id: "metrics", header: <>Accuracy<MetricHelp metric="accuracy" label="Accuracy" /> / 커버리지<MetricHelp metric="coverage" label="커버리지" /></>, width: "20%", className: "numeric", render: run => <>{metricText(run.evaluation_summary?.metrics?.accuracy)} / {metricText(run.evaluation_summary?.metrics?.coverage)}<small>{Number.isFinite(run.evaluation_summary?.binary_decided) ? `확정 판정 ${run.evaluation_summary.binary_decided}건 기준` : "평가 정보 미기록"}</small></> },
-    { id: "duration", header: "소요 시간", className: "numeric", render: run => formatDuration(run.total_elapsed_ms, ["pending", "processing"].includes(run.status) ? "진행 중" : "측정 정보 없음") },
+    { id: "name", header: w("테스트", "Test"), sortable: true, render: run => <><button type="button" className="text-button" onClick={() => onSelect(run.id)}>{run.name}</button><small>{metadata(run)}</small></> },
+    ...(!expanded ? [{ id: "configuration", header: w("구성", "Configuration"), render: run => <>{run.execution_mode === "stub" ? w("모의 실행", "Stub") : run.profile_metadata?.model_name || "—"}<small>{run.prompt_version || "—"}</small></> }] : []),
+    { id: "status", header: w("상태", "Status"), render: run => <><span className={`status status-${run.status}`}>{w(runStatuses[run.status] || "미확인", run.status)}</span><small>{run.completed ?? "—"} / {run.total ?? "—"} · {w("실패", "failed")} {run.failed ?? "—"}</small></> },
+    ...(expanded ? ["accuracy", "precision", "recall", "f1", "coverage"].map(key => ({ id: key, header: <>{key === "f1" ? "F1" : key[0].toUpperCase() + key.slice(1)}<MetricHelp metric={key} label={key} /></>, className: "numeric", render: run => testMetric(run.evaluation_summary?.metrics?.[key]) }))
+      : [{ id: "evaluation", header: w("평가", "Evaluation"), render: run => <span className="r3-test-metrics">Acc {testMetric(run.evaluation_summary?.metrics?.accuracy)} · F1 {testMetric(run.evaluation_summary?.metrics?.f1)} · Cov {testMetric(run.evaluation_summary?.metrics?.coverage)}</span> }]),
+    { id: "duration", header: w("소요 시간", "Duration"), className: "numeric", render: run => formatDuration(run.total_elapsed_ms, "—") },
   ];
-  return <DataTable label="테스트 목록" data={items} columns={columns} sorting={sorting} onSortingChange={onSortingChange} rowClassName={run => analysisRowState(run.status).className} />;
+  return <DataTable label={w("테스트 목록", "Tests")} data={items} columns={columns} headerGroups={expanded ? [{ label: "", span: 2 }, { label: w("평가지표", "Evaluation metrics"), span: 5 }, { label: "", span: 1 }] : undefined} sorting={sorting} onSortingChange={onSortingChange} rowClassName={run => analysisRowState(run.status).className} />;
 }
 
 export function TestRunScope({ data, filters, onChange }) {
@@ -92,6 +107,7 @@ export function TestRunHistoryEmpty({ query, onClear, onViewAnalyses }) {
 }
 
 export function TestRunHistory({ refresh = 0, onSelect, state, onStateChange, onViewAnalyses, onUnauthorized, title = "테스트 목록", description = "최신 참고 답안으로 계산한 점수입니다. 테스트명을 선택하면 문항별 결과를 확인합니다." }) {
+  const w = useWords();
   const [localState, setLocalState] = useState(initialTestRunHistoryState);
   const view = state ?? localState;
   const setView = state == null ? setLocalState : onStateChange;
@@ -106,10 +122,11 @@ export function TestRunHistory({ refresh = 0, onSelect, state, onStateChange, on
     return watchTestRunRead({ read: async options => { const result = await api.testRuns({ ...query, reference_basis: "latest" }, options); if (!Array.isArray(result?.items)) throw new Error("invalid_test_runs"); return result; }, onUpdate: patch => setRead(current => ({ ...current, ...patch, key: requestKey })), isRunning: result => result.items.some(run => ["pending", "processing"].includes(run.status)), errorMessage: "테스트 목록을 조회하지 못했습니다. 다시 조회하세요.", onUnauthorized: () => unauthorized.current?.() });
   }, [requestKey]);
   return <section className="panel test-run-history" aria-busy={loading}><div className="panel-head"><div><h2>{title}</h2><small>{description}</small></div><button type="button" className="secondary" disabled={loading} onClick={() => setReload(v => v + 1)}>새로고침</button></div>
-    <form className="test-run-search" onSubmit={event => { event.preventDefault(); change({ type: "search" }); }}><label>테스트명 검색<input value={queryText} maxLength={120} onChange={event => change({ type: "draft", value: event.target.value })} placeholder="예: SQLi 회귀 검증 1차" /></label><button type="submit" className="secondary" disabled={loading}>검색</button></form>
+    <form className="test-run-search" onSubmit={event => { event.preventDefault(); change({ type: "search" }); }}><label>{w("테스트명 검색", "Find test")}<input value={queryText} maxLength={120} onChange={event => change({ type: "draft", value: event.target.value })} placeholder={w("테스트 이름", "Test name")} /></label><button type="submit" className="secondary" disabled={loading}>{w("검색", "Search")}</button><button type="button" className="secondary r3-metrics-toggle" aria-expanded={Boolean(view.metricsExpanded)} onClick={() => setView(current => ({ ...current, metricsExpanded: !current.metricsExpanded }))}>{view.metricsExpanded ? w("평가지표 접기", "Collapse metrics") : w("평가지표 펼치기", "Expand metrics")}</button></form>
+    <label className="checkbox-row"><input type="checkbox" checked={Boolean(query.has_failures)} onChange={e => setView(current => ({ ...current, query: { ...current.query, has_failures: e.target.checked, offset: 0 } }))} />{w("실패·접수 거부가 있는 테스트", "Tests with failed or rejected cases")}</label>
     {query.q && <p className="test-run-applied">적용된 테스트명: <strong>{query.q}</strong> <button type="button" className="text-button" onClick={() => change({ type: "clear" })}>검색 초기화</button></p>}
     {error && <p className="error" role="alert">{error}</p>}{!data && !error && <p role="status">테스트 목록을 불러오는 중…</p>}
-    {data && <>{data.items.length ? <TestRunRows items={data.items} onSelect={onSelect} sorting={serverSorting(query.sort_by || "created_at", query.sort_order || "desc")} onSortingChange={update => setView?.(current => ({ ...current, query: { ...current.query, ...changedSort(update, serverSorting(query.sort_by || "created_at", query.sort_order || "desc")) } }))} /> : <TestRunHistoryEmpty query={query} onClear={() => change({ type: "clear" })} onViewAnalyses={onViewAnalyses} />}<Pagination label="테스트 목록 페이지" total={data.total} limit={query.limit} offset={query.offset} disabled={loading} unit="개" onOffsetChange={value => change({ type: "offset", value })} /></>}
+    {data && <>{data.items.length ? <TestRunRows words={w} expanded={Boolean(view.metricsExpanded)} items={data.items} onSelect={onSelect} sorting={serverSorting(query.sort_by || "created_at", query.sort_order || "desc")} onSortingChange={update => setView?.(current => ({ ...current, query: { ...current.query, ...changedSort(update, serverSorting(query.sort_by || "created_at", query.sort_order || "desc")) } }))} /> : <TestRunHistoryEmpty query={query} onClear={() => change({ type: "clear" })} onViewAnalyses={onViewAnalyses} />}<Pagination label="테스트 목록 페이지" total={data.total} limit={query.limit} offset={query.offset} disabled={loading} unit="개" onOffsetChange={value => change({ type: "offset", value })} /></>}
   </section>;
 }
 
@@ -129,7 +146,10 @@ export function TestRunItemRows({ items, onOpen, selection, sorting, onSortingCh
   return <DataTable label="문항별 분석 결과" data={items} columns={columns} sorting={sorting} onSortingChange={onSortingChange} rowClassName={item => analysisRowState(item.status).className} />;
 }
 
-export function TestRunDetail({ id, onBack, onOpen, filters: controlledFilters, onFiltersChange, backLabel = "테스트 목록", onUnauthorized }) {
+export function TestRunDetail({ id, onBack, onOpen, filters: controlledFilters, onFiltersChange, backLabel = "테스트 목록", onUnauthorized, caseId, onCaseChange, onPromote }) {
+  const w = useWords(); const [localCase, setLocalCase] = useState(null), [eligible, setEligible] = useState(false);
+  const selectedCase = onCaseChange ? caseId : localCase;
+  const selectCase = onCaseChange || setLocalCase;
   const [metadataOpen, setMetadataOpen] = useState(false);
   const [saveNotice, setSaveNotice] = useState("");
   const [localFilters, setLocalFilters] = useState(initialTestRunFilters);
@@ -143,6 +163,7 @@ export function TestRunDetail({ id, onBack, onOpen, filters: controlledFilters, 
   const query = useMemo(() => testRunQuery(filters), [filters]);
   const requestKey = JSON.stringify([id, query, reload]);
   const { data, error, loading } = read.key === requestKey ? read : emptyRead();
+  useEffect(() => { setEligible(false); if (!onPromote || data?.status !== "completed" || !data?.ground_truth?.published || data?.official_evaluation_pending) return; const controller = new AbortController(); api.promotionPreflight(id, { signal: controller.signal }).then(value => { if (!controller.signal.aborted) setEligible(value.eligible); }).catch(() => {}); return () => controller.abort(); }, [id, data?.status, data?.official_evaluation_pending, data?.ground_truth?.published, Boolean(onPromote)]);
   useEffect(() => {
     setRead({ ...emptyRead(), key: requestKey });
     return watchTestRunRead({ read: async options => { const result = await api.testRun(id, query, options); if (result?.id !== id || !Array.isArray(result.items)) throw new Error("invalid_test_run"); return result; }, onUpdate: patch => setRead(current => ({ ...current, ...patch, key: requestKey })), isRunning: result => ["pending", "processing"].includes(result.status) || result.official_evaluation_pending, errorMessage: "테스트 실행 정보를 조회하지 못했습니다. 다시 조회하세요.", onUnauthorized: () => unauthorized.current?.() });
@@ -153,7 +174,10 @@ export function TestRunDetail({ id, onBack, onOpen, filters: controlledFilters, 
   return <div className="page-stack test-run-detail" aria-busy={loading}>{saveNotice && <p className="notice" role="status">{saveNotice}</p>}<div className="panel-head-inline"><button type="button" className="back" onClick={onBack}>← {backLabel}</button><button type="button" className="secondary" disabled={loading} onClick={() => setReload(v => v + 1)}>새로고침</button></div>{error && <p className="error" role="alert">{error}</p>}{!data && !error && <p role="status">실행 정보를 불러오는 중…</p>}{data && <>
     <section className="panel test-run-header"><div className="panel-head"><div><h2>{data.name}</h2><small>{runKinds[data.kind]} · {formatDate(data.created_at)}</small></div><span className={`status status-${data.status}`}>{runStatuses[data.status]}</span></div><dl><div><dt>접수 / 거부</dt><dd>{data.accepted} / {data.rejected}건</dd></div><div><dt>진행 / 완료 / 실패</dt><dd>{data.pending + data.processing} / {data.completed} / {data.failed}건</dd></div><div><dt>전체 소요 시간</dt><dd>{formatDuration(data.total_elapsed_ms, ["pending", "processing"].includes(data.status) ? "진행 중" : "측정 정보 없음")}</dd></div></dl><dl className="test-config-strip"><div><dt>Primary</dt><dd>{data.profile_metadata?.model_name || "미기록"}</dd></div><div><dt>Verifier</dt><dd>{data.profile_metadata?.verifier_profile?.model_name || "미기록"}</dd></div><div><dt>지침</dt><dd>{data.prompt_version || "미기록"}</dd></div></dl><div className="ux-toolbar"><button type="button" className="secondary" onClick={() => setComparisonOpen(true)}>다른 테스트와 비교</button><button type="button" className="text-button" onClick={() => setMetadataOpen(true)}>실행 정보</button></div>{["pending", "processing"].includes(data.status) && <p className="notice">분석 진행 중 · 완료된 문항에 따라 지표가 달라집니다.</p>}{data.execution_mode === "stub" && <p className="notice">모의 실행 · 실제 모델의 품질 평가에서 제외됩니다.</p>}</section>
     <Dialog open={metadataOpen} title="테스트 실행 정보" onClose={() => setMetadataOpen(false)}><p className="reference-inline-note">모델·지침은 실행 당시 설정을 유지합니다. 화면의 점수는 선택한 참고 답안 기준이며, 접수 당시 답안과 저장한 평가는 별도로 보존합니다.</p><dl className="label-metadata"><dt>모델</dt><dd>{data.profile_metadata?.model_name || "미기록"}</dd><dt>지침</dt><dd>{data.prompt_version || "미기록"}</dd><dt>연동 시스템 · 답안 연결용</dt><dd><code>{data.source_system}</code></dd><dt>테스트 ID</dt><dd><code>{data.id}</code></dd></dl>{data.configuration_snapshot ? <TextInspector label="실행 당시 구성" value={data.configuration_snapshot} /> : <p className="ux-muted">이 실행에는 구성 전체를 기록한 정보가 없습니다. 현재 설정으로 대신 표시하지 않습니다.</p>}</Dialog>
-    <p className="notice">{data.evaluation_mode === "ground_truth" ? `공식 평가 · ${data.ground_truth?.dataset_name || "데이터셋"} 버전 ${data.ground_truth?.dataset_revision} · 승인 ${data.ground_truth?.approved_count}문항 · 미승인 ${data.ground_truth?.excluded_count}문항 제외` : "일반 참고 답안 비교 · 공식 평가 아님"}</p>
+    <p className="v5-context">{data.evaluation_mode === "ground_truth" ? `${data.ground_truth?.published ? w("공식 평가", "Official evaluation") : w("이전 평가 기록", "Legacy evaluation")} · ${data.ground_truth?.dataset_name || "Ground Truth"} · r${data.ground_truth?.dataset_revision} · ${data.ground_truth?.sample_count ?? data.ground_truth?.approved_count} ${w("문항", "cases")}` : w("참고 답안 비교 · 비공식", "Reference comparison · unofficial")}</p>
+    <MetricStrip items={["accuracy", "precision", "recall", "f1", "coverage"].map(key => [key === "f1" ? "F1" : key[0].toUpperCase() + key.slice(1), testMetric(data.evaluation_summary?.metrics?.[key])])} />
+    {eligible && <div className="v5-list-action"><button className="secondary" onClick={() => onPromote(id)}>{w("운영 승격 검토", "Review promotion")} →</button></div>}
+    <CaseDrawer id={selectedCase} onClose={() => selectCase(null)} onOpen={onOpen} />
     <TestReevaluation run={data} value={filters.evaluation_id} onChange={value => setFilters?.(current => ({ ...current, evaluation_id: value, offset: 0 }))} />
     <div className="ux-toolbar"><RetryTestFailures key={id} run={data} onSubmitted={message => { setSaveNotice(message); selection.clear(); setFilters?.(afterTestRetry); setReload(value => value + 1); }} /><span className="ux-muted">재실행 결과는 문항별로 한 번만 집계합니다.</span></div>
     <TestRunScope data={data} filters={filters} onChange={scopeChange} />
@@ -161,6 +185,6 @@ export function TestRunDetail({ id, onBack, onOpen, filters: controlledFilters, 
     <Dialog className="comparison-dialog" open={comparisonOpen} title="테스트 비교" onClose={() => setComparisonOpen(false)}>{comparisonOpen && <TestRunComparison embedded candidateId={id} state={filters.comparison || initialTestComparisonState()} onStateChange={update => setFilters?.(current => ({ ...current, comparison: typeof update === "function" ? update(current.comparison || initialTestComparisonState()) : update }))} onOpen={onOpen} onUnauthorized={onUnauthorized} />}</Dialog>
     <DetailTabs label="테스트 결과 상세" items={[["items", "문항별 결과"], ["metrics", "평가 지표"]]} value={filters.view || "items"} onChange={view => setFilters?.(current => ({ ...current, view }))}>{key => key === "metrics" ? <EvaluationOverview evaluationMode={data.evaluation_mode} summary={data.evaluation_summary} scopeLabel="선택한 테스트·난이도·유형" onMatrixCell={cell => { setFilters?.(current => ({ ...testRunFilterChange(current, { type: "cell", value: cell }), view: "items" })); }} selectedCell={filters.cell} /> : <>
     <AnalysisSelectionActions allowReferences={data.evaluation_mode !== "ground_truth"} ids={selection.ids} onClear={selection.clear} onSaved={result => { if (result?.kind === "reference") { setSaveNotice(result.message); setFilters?.(current => ({ ...current, evaluation_id: "latest", status: "", evaluation_outcome: "", cell: "", offset: 0 })); } setReload(value => value + 1); }} />
-    <section className="panel test-run-cases"><div className="panel-head"><div><h2>문항별 분석 결과</h2><small>상태·답안 비교·행렬 선택은 문항 목록만 좁힙니다. 평가 지표의 집계 범위는 유지됩니다.</small></div></div><div className="filter-grid"><label>처리 상태<select name="status" value={filters.status} onChange={rowChange}><option value="">전체</option>{Object.entries(runStatuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>참고 답안 비교<select name="evaluation_outcome" value={filters.evaluation_outcome} onChange={rowChange}><option value="">전체</option>{Object.entries(evaluationOutcomes).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>{(filters.status || filters.evaluation_outcome || filters.cell) && <button type="button" className="text-button" onClick={() => change({ type: "clear_rows" })}>문항 필터 초기화</button>}{filters.cell && <p className="notice">선택한 셀: {matrixCells.find(([key]) => key === filters.cell)?.[1]} <button type="button" className="text-button" onClick={() => change({ type: "clear_cell" })}>선택 해제</button></p>}{data.items.length ? <TestRunItemRows items={data.items} onOpen={onOpen} selection={selection} sorting={serverSorting(filters.sort_by || "row_number", filters.sort_order || "asc")} onSortingChange={update => setFilters?.(current => ({ ...current, ...changedSort(update, serverSorting(filters.sort_by || "row_number", filters.sort_order || "asc")) }))} /> : <div className="test-run-empty"><p>{data.total_items > 0 && filters.offset ? "이 페이지에 표시할 문항이 없습니다." : "조건에 맞는 문항이 없습니다."}</p>{filters.offset > 0 && <button type="button" className="secondary small" onClick={() => change({ type: "first_page" })}>첫 페이지로</button>}{!filters.status && !filters.evaluation_outcome && !filters.cell && <p className="muted">선택한 난이도·테스트 유형을 확인해 보세요.</p>}</div>}<Pagination label="테스트 문항 페이지" total={data.total_items} limit={filters.limit} offset={filters.offset} disabled={loading} onOffsetChange={value => change({ type: "offset", value })} onLimitChange={value => change({ type: "limit", value })} /></section></>}</DetailTabs>
+    <section className="panel test-run-cases"><div className="panel-head"><div><h2>문항별 분석 결과</h2><small>상태·답안 비교·행렬 선택은 문항 목록만 좁힙니다. 평가 지표의 집계 범위는 유지됩니다.</small></div></div><div className="filter-grid"><label>처리 상태<select name="status" value={filters.status} onChange={rowChange}><option value="">전체</option>{Object.entries(runStatuses).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label><label>참고 답안 비교<select name="evaluation_outcome" value={filters.evaluation_outcome} onChange={rowChange}><option value="">전체</option>{Object.entries(evaluationOutcomes).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>{(filters.status || filters.evaluation_outcome || filters.cell) && <button type="button" className="text-button" onClick={() => change({ type: "clear_rows" })}>문항 필터 초기화</button>}{filters.cell && <p className="notice">선택한 셀: {matrixCells.find(([key]) => key === filters.cell)?.[1]} <button type="button" className="text-button" onClick={() => change({ type: "clear_cell" })}>선택 해제</button></p>}{data.items.length ? <TestRunItemRows items={data.items} onOpen={selectCase} selection={selection} sorting={serverSorting(filters.sort_by || "row_number", filters.sort_order || "asc")} onSortingChange={update => setFilters?.(current => ({ ...current, ...changedSort(update, serverSorting(filters.sort_by || "row_number", filters.sort_order || "asc")) }))} /> : <div className="test-run-empty"><p>{data.total_items > 0 && filters.offset ? "이 페이지에 표시할 문항이 없습니다." : "조건에 맞는 문항이 없습니다."}</p>{filters.offset > 0 && <button type="button" className="secondary small" onClick={() => change({ type: "first_page" })}>첫 페이지로</button>}{!filters.status && !filters.evaluation_outcome && !filters.cell && <p className="muted">선택한 난이도·테스트 유형을 확인해 보세요.</p>}</div>}<Pagination label="테스트 문항 페이지" total={data.total_items} limit={filters.limit} offset={filters.offset} disabled={loading} onOffsetChange={value => change({ type: "offset", value })} onLimitChange={value => change({ type: "limit", value })} /></section></>}</DetailTabs>
   </>}</div>;
 }

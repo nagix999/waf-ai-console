@@ -5,9 +5,11 @@ import { autoTestName, emptySingleTest, singleTestEvent } from "./testRuns.js";
 import { dashboardAnalysisQuery, metricSegments } from "./dashboardView.js";
 import { retryError, retryPayload } from "./analysisRetry.js";
 
-test("optional test names use one stable request ID and all sample inputs remain empty", () => {
+test("optional test names use a stable readable timestamp and all sample inputs remain empty", () => {
   const id = "11111111-1111-4111-8111-111111111111";
-  assert.equal(autoTestName("  ", id), id);
+  const generated = autoTestName("  ", id);
+  assert.match(generated, /^Test \d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+  assert.equal(autoTestName("", id), generated);
   assert.equal(autoTestName(" name ", id), "name");
   const form = emptySingleTest();
   assert.ok(Object.values(form).every(value => value === ""));
