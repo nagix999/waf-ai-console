@@ -438,7 +438,8 @@ class VLLMTestRun(Base):
 class TestRun(Base):
     """Named, immutable submission boundary; analyses remain the work queue."""
     __tablename__ = "test_runs"
-    __table_args__ = (Index("ix_test_runs_created", "created_at"),)
+    __table_args__ = (Index("ix_test_runs_created", "created_at"),
+                     Index("ix_test_runs_official_pending", "official_evaluation_pending", "id"))
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     idempotency_key: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
@@ -454,6 +455,12 @@ class TestRun(Base):
     profile_id: Mapped[str | None] = mapped_column(ForeignKey("vllm_profiles.id", ondelete="RESTRICT"))
     profile_fingerprint: Mapped[str | None] = mapped_column(String(64))
     profile_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    configuration_snapshot_json: Mapped[dict | None] = mapped_column(JSON)
+    configuration_hash: Mapped[str | None] = mapped_column(String(64))
+    evaluation_mode: Mapped[str] = mapped_column(String(24), default="reference", server_default="reference", nullable=False)
+    approved_item_version_ids: Mapped[list[str] | None] = mapped_column(JSON)
+    metrics_version: Mapped[str | None] = mapped_column(String(64))
+    official_evaluation_pending: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("0"), nullable=False)
     execution_mode: Mapped[str] = mapped_column(String(32), nullable=False)
     prompt_snapshot_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
     evidence_editor_snapshot_ciphertext: Mapped[str | None] = mapped_column(Text)
@@ -478,6 +485,7 @@ class TestRunItem(Base):
     row_number: Mapped[int] = mapped_column(Integer, nullable=False)
     analysis_id: Mapped[str | None] = mapped_column(ForeignKey("analyses.id", ondelete="RESTRICT"))
     label_id: Mapped[str | None] = mapped_column(ForeignKey("analysis_labels.id", ondelete="RESTRICT"))
+    dataset_item_version_id: Mapped[str | None] = mapped_column(ForeignKey("validation_dataset_items.id", ondelete="RESTRICT"))
     event_id: Mapped[str | None] = mapped_column(String(255))
     difficulty: Mapped[str | None] = mapped_column(String(80))
     test_category: Mapped[str | None] = mapped_column(String(120))
@@ -536,7 +544,11 @@ class ValidationDatasetVersion(Base):
 class ValidationDatasetItem(Base):
     """Immutable item revisions. A dataset version freezes membership by IDs."""
     __tablename__ = "validation_dataset_items"
-    __table_args__ = (UniqueConstraint("item_id", "revision", name="uq_validation_item_revision"),)
+    __table_args__ = (
+        UniqueConstraint("item_id", "revision", name="uq_validation_item_revision"),
+        CheckConstraint("review_status IN ('draft', 'reviewed', 'approved')", name="ck_dataset_review_status"),
+        CheckConstraint("review_status = 'draft' OR reference_verdict IS NOT NULL", name="ck_dataset_review_verdict"),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     dataset_id: Mapped[str] = mapped_column(ForeignKey("validation_datasets.id", ondelete="RESTRICT"), nullable=False)
     item_id: Mapped[str] = mapped_column(String(36), nullable=False)
@@ -546,7 +558,13 @@ class ValidationDatasetItem(Base):
     encryption_key_version: Mapped[str] = mapped_column(String(64), nullable=False)
     input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     reference_verdict: Mapped[str | None] = mapped_column(String(32))
+    review_status: Mapped[str] = mapped_column(String(16), default="draft", server_default="draft", nullable=False)
     source_kind: Mapped[str] = mapped_column(String(32), default="reference", nullable=False)
+    # Frozen source-label provenance, not a live FK: dataset copies survive
+    # explicit deletion of their source analysis and labels.
+    source_ref: Mapped[str | None] = mapped_column(String(120))
+    source_label_id: Mapped[str | None] = mapped_column(String(36))
+    source_created_by: Mapped[str | None] = mapped_column(String(255))
     ai_visible: Mapped[bool | None] = mapped_column(Boolean)
     comment_ciphertext: Mapped[str | None] = mapped_column(Text)
     difficulty: Mapped[str | None] = mapped_column(String(80))
@@ -566,6 +584,45 @@ class TestEvaluation(Base):
     test_run_id: Mapped[str] = mapped_column(ForeignKey("test_runs.id", ondelete="RESTRICT"), nullable=False)
     revision: Mapped[int] = mapped_column(Integer, nullable=False)
     label_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False)
+    evaluation_kind: Mapped[str] = mapped_column(String(24), default="reference", server_default="reference", nullable=False)
+    metrics_version: Mapped[str | None] = mapped_column(String(64))
+    configuration_hash: Mapped[str | None] = mapped_column(String(64))
+    analysis_ids_json: Mapped[list[str] | None] = mapped_column(JSON)
+    summary_json: Mapped[dict | None] = mapped_column(JSON)
     idempotency_key: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
     created_by: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class ProductionPromotion(Base):
+    """Immutable baseline/promotion records. Execution tables remain authoritative."""
+    __tablename__ = "production_promotions"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    source_test_run_id: Mapped[str | None] = mapped_column(ForeignKey("test_runs.id", ondelete="RESTRICT"))
+    evaluation_id: Mapped[str | None] = mapped_column(ForeignKey("test_evaluations.id", ondelete="RESTRICT"))
+    previous_configuration_hash: Mapped[str | None] = mapped_column(String(64))
+    configuration_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    snapshot_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    actor_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class ChangeEvent(Base):
+    __tablename__ = "change_events"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    category: Mapped[str] = mapped_column(String(24), nullable=False)
+    actor: Mapped[str] = mapped_column(String(255), nullable=False)
+    action: Mapped[str] = mapped_column(String(80), nullable=False)
+    resource_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    resource_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    before_json: Mapped[dict | None] = mapped_column(JSON)
+    after_json: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False, index=True)
+
+
+class WorkerHeartbeat(Base):
+    __tablename__ = "worker_heartbeats"
+    worker_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    worker_kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)

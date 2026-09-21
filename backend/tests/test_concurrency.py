@@ -425,3 +425,20 @@ def test_running_worker_picks_up_increase_then_stops_admission_and_drains(runtim
     with runtime[2]() as db:
         states = list(db.scalars(select(Analysis.status)))
         assert states.count("completed") == 2 and states.count("pending") == 6
+
+
+def test_evaluation_storage_failure_does_not_change_completed_analysis(runtime, monkeypatch, caplog):
+    # In-process Alembic tests can disable existing application loggers.
+    # Restore this logger for the redaction assertion without leaking state.
+    monkeypatch.setattr("app.services.worker_concurrency.logger.disabled", False)
+    caplog.set_level("ERROR", logger="app.services.worker_concurrency")
+    identifier = seed(runtime, 1)[0]
+    claimed = claim(runtime)
+    def fail(*args):
+        raise ValueError("PRIVATE-EVENT-MUST-NOT-BE-LOGGED")
+    monkeypatch.setattr("app.services.official_evaluations.finalize_for_analysis", fail)
+    run_analysis(runtime[2], runtime[3], runtime[0], *claimed)
+    with runtime[2]() as db:
+        assert db.get(Analysis, identifier).status == "completed"
+    assert "evaluation save failed error_type=ValueError" in caplog.text
+    assert "PRIVATE-EVENT-MUST-NOT-BE-LOGGED" not in caplog.text

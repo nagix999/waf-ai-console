@@ -42,6 +42,8 @@ export function testScopeSelection(name, value) {
 
 export function testRunError(error) {
   const messages = {
+    candidate_requires_llm_test: "실제 LLM 실행 모드에서만 후보 구성을 선택할 수 있습니다.",
+    agent_context_budget_too_small: "선택한 지침을 담을 모델 입력 공간이 부족합니다. 입력·출력 한도를 확인하세요.",
     test_run_idempotency_conflict: "같은 접수 키로 다른 요청을 보낼 수 없습니다. 실행 이력을 확인한 뒤 새 테스트로 접수하세요.",
     idempotency_key_conflict: "같은 접수 키의 요청 내용이 다릅니다. 실행 이력을 확인한 뒤 새 테스트로 접수하세요.",
     production_model_not_configured: "운영 모델이 설정되지 않았습니다. 설정에서 모델을 검증하고 Production으로 지정하세요.",

@@ -10,7 +10,7 @@ from ..agent.input_builder import PROMPT_SCHEMA_RESERVED_TOKENS
 from ..agent.prompts import FIXED_INSTRUCTIONS, FIXED_RULES_VERSION, PROMPT_VERSION, build_role_instructions, policy_reserved_tokens
 from ..models import Analysis
 from .crypto import CryptoService
-from .prompt_policies import get_active_policy, read_policy_text
+from .prompt_policies import get_active_policy, get_policy_version, read_policy_text
 
 
 class PromptSnapshotError(ValueError):
@@ -65,16 +65,18 @@ def load_analysis_prompt(analysis: Analysis, crypto: CryptoService) -> PromptSna
 
 
 def pin_analysis_prompt(
-    db: Session, crypto: CryptoService, analysis: Analysis, *, origin: str = "enqueue",
+    db: Session, crypto: CryptoService, analysis: Analysis, *, origin: str = "enqueue", version_id: str | None = None,
 ) -> PromptSnapshot:
     if analysis.prompt_snapshot_ciphertext:
+        if version_id is not None and version_id != analysis.prompt_policy_version_id:
+            raise PromptSnapshotError()
         return load_analysis_prompt(analysis, crypto)
     if analysis.prompt_policy_version_id is not None or (
         isinstance(analysis.prompt_version, str) and "/policy-" in analysis.prompt_version
     ):
         raise PromptSnapshotError()
-    # Production and named tests use the same active policy and system rules.
-    version = get_active_policy(db, crypto)
+    # Saved test policies do not change the common active policy or system rules.
+    version = get_policy_version(db, version_id) if version_id is not None else get_active_policy(db, crypto)
     try:
         policy_text = read_policy_text(version, crypto)
     except (AttributeError, TypeError):

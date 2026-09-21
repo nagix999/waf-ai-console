@@ -82,6 +82,12 @@ def test_same_words_at_different_source_locations_not_grouped():
 
 def configure(client, primary, editor, *, enabled=True, purpose="production", acknowledge=False):
     current = client.get(URL).json()
+    if purpose == "production":
+        # Pre-existing Production state for isolated worker/recovery tests.
+        from legacy_state_helpers import seed_production_roles
+        seed_production_roles(client, primary["id"], current["assignments"]["production"]["verifier_profile_id"],
+            editor=editor["id"] if editor else None, editor_enabled=enabled)
+        return client.get(URL)
     draft = current["assignments"]
     draft[purpose].update(primary_profile_id=primary["id"], evidence_editor_enabled=enabled,
                           evidence_editor_profile_id=editor["id"] if editor else None)
@@ -93,19 +99,19 @@ def test_editor_assignment_verification_ack_and_old_client_preservation(client):
     login_admin(client)
     primary = create_verified(client, "editor-primary")
     editor = create_verified(client, "editor-remote", provider="openai")
-    assert configure(client, primary, editor).status_code == 422
-    result = configure(client, primary, editor, acknowledge=True)
+    assert configure(client, primary, editor, purpose="test").status_code == 422
+    result = configure(client, primary, editor, purpose="test", acknowledge=True)
     assert result.status_code == 200, result.text
-    assert "production.evidence_editor" in next(p for p in result.json()["profiles"] if p["id"] == editor["id"])["agent_roles"]
+    assert "test.evidence_editor" in next(p for p in result.json()["profiles"] if p["id"] == editor["id"])["agent_roles"]
     assert client.post(f"/api/v1/model-profiles/{editor['id']}/disable").status_code == 409
     # An older settings form cannot silently disable or replace the editor.
-    response = assign(client, primary["id"], acknowledge=True)
+    response = assign(client, None, test_primary=primary["id"], acknowledge=True)
     assert response.status_code == 200
-    assert response.json()["assignments"]["production"]["evidence_editor_profile_id"] == editor["id"]
+    assert response.json()["assignments"]["test"]["evidence_editor_profile_id"] == editor["id"]
     with client.app.state.session_factory() as db:
         db.get(VLLMProfile, editor["id"]).max_output_tokens += 1
         db.commit()
-    assert configure(client, primary, editor, acknowledge=True).status_code == 409
+    assert configure(client, primary, editor, purpose="test", acknowledge=True).status_code == 409
 
 
 def install_calls(monkeypatch, mode="valid"):

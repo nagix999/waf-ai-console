@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models import ValidationDataset, ValidationDatasetVersion, utcnow
 from ..security import Principal, require_scope
-from ..validation_data_schemas import DatasetCreate, DatasetUpdate, DatasetImport, DatasetItemWrite, DatasetRun, RevisionRequest
+from ..validation_data_schemas import DatasetCreate, DatasetUpdate, DatasetImport, DatasetItemWrite, DatasetItemReview, DatasetReviewStatus, DatasetRun, RevisionRequest, DatasetSearch
 from ..services import validation_datasets as service
 from ..services.analysis import AnalysisIngestError
 from ..services.input_schemas import InputSchemaError
@@ -51,9 +51,23 @@ def create(payload: DatasetCreate, db: DbSession, principal: Admin):
         return service.create_dataset(db, payload, principal.username or "admin")
 
 
+@router.post("/search")
+def search(payload: DatasetSearch, db: DbSession, _principal: Admin):
+    # Search text stays out of access-log URLs and browser history.
+    read_snapshot(db)
+    query = select(ValidationDataset).where(ValidationDataset.deleted_at.is_(None))
+    if payload.query.strip():
+        query = query.where(ValidationDataset.name.contains(payload.query.strip(), autoescape=True))
+    total = db.scalar(select(func.count()).select_from(query.subquery()))
+    return {"items": [service.dataset_summary(db, row) for row in db.scalars(query
+        .order_by(ValidationDataset.created_at.desc(), ValidationDataset.id).limit(payload.limit).offset(payload.offset))],
+        "total": total, "limit": payload.limit, "offset": payload.offset}
+
+
 @router.get("/{identifier}")
 def detail(identifier: str, db: DbSession, _principal: Admin,
-           revision: int | None = Query(None, ge=1), limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0)):
+           revision: int | None = Query(None, ge=1), limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0),
+           review_status: DatasetReviewStatus | None = None):
     with errors(db):
         read_snapshot(db)
         row, version = service.dataset(db, identifier)
@@ -63,7 +77,10 @@ def detail(identifier: str, db: DbSession, _principal: Admin,
             if version is None:
                 raise HTTPException(404, "dataset_version_not_found")
         items = service.version_items(db, version)
+        if review_status is not None:
+            items = [item for item in items if item.review_status == review_status]
         return {**service.dataset_summary(db, row, version), "current_revision": row.revision,
+            "filtered_total": len(items),
             "items": [service.item_summary(item) for item in items[offset:offset + limit]], "limit": limit, "offset": offset,
             "versions": [{"id": v.id, "revision": v.revision, "created_at": utc_datetime(v.created_at), "total": len(v.item_version_ids)}
                 for v in db.scalars(select(ValidationDatasetVersion).where(ValidationDatasetVersion.dataset_id == row.id)
@@ -132,6 +149,12 @@ def remove_item(identifier: str, item_id: str, payload: RevisionRequest, db: DbS
         service.save_version(db, row, ids, principal.username or "admin")
         db.commit()
         return {"revision": row.revision}
+
+
+@router.post("/{identifier}/items/{item_id}/reviews")
+def review(identifier: str, item_id: str, payload: DatasetItemReview, db: DbSession, principal: Admin):
+    with errors(db):
+        return service.review_item(db, identifier, item_id, payload, principal.username or "admin")
 
 
 @router.post("/{identifier}/runs", status_code=202)

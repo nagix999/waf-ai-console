@@ -31,9 +31,13 @@ def capture_editor(db, purpose, primary):
     # Assignment API prevents missing profiles. Do not silently select a new one.
     if profile is None:
         return None
+    return capture_editor_profile(profile)
+
+
+def capture_editor_profile(profile):
     meta = profile_metadata(profile)
     return EditorSnapshot(version=VERSION, instructions=INSTRUCTIONS, instructions_hash=instructions_hash(INSTRUCTIONS),
-                          profile_id=identifier, profile_fingerprint=meta["profile_fingerprint"])
+                          profile_id=profile.id, profile_fingerprint=meta["profile_fingerprint"])
 
 
 def editor_profile(db, snapshot):

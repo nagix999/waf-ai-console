@@ -28,9 +28,12 @@ def create_and_activate(client, text="요청의 처리 조건을 구체적으로
         "name": "새 작성 지침", "policy_text": text, "change_note": "합성 테스트용 변경",
         "parent_version_id": current["active_version_id"],
     }).json()
-    assert client.post(f"{BASE}/{version['id']}/activate", json={
-        "expected_revision": current["revision"], "acknowledge_unverified": True,
-    }).status_code == 200
+    # Seed a legacy active state for snapshot/recovery unit tests. Production
+    # API activation is intentionally blocked; the promotion suite tests that gate.
+    from app.services.prompt_policies import activate_policy_version
+    with client.app.state.session_factory() as db:
+        activate_policy_version(db, client.app.state.crypto, version["id"], current["revision"])
+        db.commit()
     return version
 
 

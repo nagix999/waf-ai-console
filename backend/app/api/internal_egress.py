@@ -10,6 +10,8 @@ from ..internal_egress_schemas import InternalEgressCreate, InternalEgressRespon
 from ..models import AccessAudit, InternalEgressTarget
 from ..security import Principal, require_scope
 from ..services.internal_egress import InternalEgressError, create_target, delete_target, to_egress_response, update_target
+from ..services.internal_egress import lock_egress_mutation
+from ..services.change_events import record_change, target_metadata
 
 
 router = APIRouter(prefix="/admin/internal-egress", tags=["internal-egress"])
@@ -17,7 +19,10 @@ DbSession = Annotated[Session, Depends(get_db)]
 AdminPrincipal = Annotated[Principal, Depends(require_scope("admin"))]
 
 
-def audit(db: Session, principal: Principal, action: str, target_id: str) -> None:
+def audit(db: Session, principal: Principal, action: str, target_id: str, before=None) -> None:
+    record_change(db, category="integration", actor=principal.username or "unknown", action=action,
+        resource_type="vllm_target", resource_id=target_id, before=before,
+        after=None if action == "delete_internal_egress" else target_metadata(db.get(InternalEgressTarget, target_id)))
     db.add(AccessAudit(actor_kind=principal.kind, actor_id=principal.username or "unknown",
                        action=action, resource_type="internal_egress_target", resource_id=target_id))
 
@@ -52,9 +57,11 @@ def create_egress(payload: InternalEgressCreate, db: DbSession, principal: Admin
 @router.put("/{target_id}", response_model=InternalEgressResponse)
 def update_egress(target_id: str, payload: InternalEgressUpdate, db: DbSession, principal: AdminPrincipal) -> InternalEgressResponse:
     try:
+        lock_egress_mutation(db)
+        before = target_metadata(db.get(InternalEgressTarget, target_id))
         target = update_target(db, target_id, payload)
         result = to_egress_response(db, target)
-        audit(db, principal, "update_internal_egress", target.id)
+        audit(db, principal, "update_internal_egress", target.id, before)
         db.commit()
         return result
     except (InternalEgressError, IntegrityError, OperationalError) as exc:
@@ -67,8 +74,10 @@ def delete_egress(
     expected_revision: Annotated[int, Query(ge=1, le=2**63 - 1)],
 ) -> Response:
     try:
+        lock_egress_mutation(db)
+        before = target_metadata(db.get(InternalEgressTarget, target_id))
         delete_target(db, target_id, expected_revision)
-        audit(db, principal, "delete_internal_egress", target_id)
+        audit(db, principal, "delete_internal_egress", target_id, before)
         db.commit()
         return Response(status_code=204)
     except (InternalEgressError, IntegrityError, OperationalError) as exc:

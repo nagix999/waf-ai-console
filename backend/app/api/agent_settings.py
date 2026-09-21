@@ -32,7 +32,7 @@ class RoleSelection(BaseModel):
 class ConfigurationUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     expected_state_token: str = Field(pattern=r"^[0-9a-f]{64}$")
-    production: RoleSelection
+    production: RoleSelection | None = None
     test: RoleSelection
     external_transfer_acknowledged: bool = False
 
@@ -79,6 +79,11 @@ def set_concurrency(payload: ConcurrencyUpdate, db: Db, admin: Admin, response: 
     # Preserve limits for temporarily absent endpoints; never silently reset.
     config.server_limits = {**config.server_limits, **{item.server_key: item.max_calls for item in payload.servers}}
     config.revision += 1
+    from ..services.change_events import record_change
+    record_change(db, category="runtime", actor=admin.username or "admin", action="update_concurrency",
+        resource_type="concurrency_configuration", resource_id=str(config.revision),
+        before={"production": current["production"], "test": current["test"]},
+        after={"production": payload.production, "test": payload.test, "servers": [s.model_dump() for s in payload.servers]})
     db.add(AccessAudit(actor_kind=admin.kind, actor_id=admin.username or "admin",
                       action="update_concurrency_configuration", resource_type="concurrency_configuration",
                       resource_id=str(config.revision)))
@@ -143,13 +148,16 @@ def set_configuration(payload: ConfigurationUpdate, db: Db, admin: Admin, reques
     current = configuration_document(db)
     if current["state_token"] != payload.expected_state_token:
         raise HTTPException(409, "agent_configuration_changed")
+    requested_production = {**current["assignments"]["production"], **(payload.production.model_dump(exclude_unset=True) if payload.production else {})}
+    if requested_production != current["assignments"]["production"]:
+        raise HTTPException(409, "production_promotion_required")
     selected = {}
     from ..services.prompt_policies import PromptPolicyError, get_active_policy, read_policy_text
     try:
         policy_text = read_policy_text(get_active_policy(db, request.app.state.crypto), request.app.state.crypto)
     except PromptPolicyError as exc:
         raise HTTPException(exc.status_code, exc.code) from None
-    for purpose in ("production", "test"):
+    for purpose in ("test",):
         roles = getattr(payload, purpose)
         # Older clients save only Primary/Verifier. Preserve the optional role.
         for field in ("evidence_editor_enabled", "evidence_editor_profile_id"):
@@ -178,21 +186,19 @@ def set_configuration(payload: ConfigurationUpdate, db: Db, admin: Admin, reques
         config = AgentConfiguration(id=1, revision=0)
         db.add(config)
     for profile in db.scalars(select(VLLMProfile)):
-        if profile.status == "production":
-            profile.status = "verified"
         profile.is_test = False
     db.flush()  # Respect the existing partial unique Primary-role indexes.
-    for purpose in ("production", "test"):
+    for purpose in ("test",):
         primary = selected.get((purpose, "primary_profile_id"))
         if primary:
-            if purpose == "production":
-                primary.status = "production"
-            else:
-                primary.is_test = True
+            primary.is_test = True
         setattr(config, purpose + "_verifier_profile_id", getattr(payload, purpose).verifier_profile_id)
         setattr(config, purpose + "_evidence_editor_enabled", getattr(payload, purpose).evidence_editor_enabled)
         setattr(config, purpose + "_evidence_editor_profile_id", getattr(payload, purpose).evidence_editor_profile_id)
     config.revision += 1
+    from ..services.change_events import record_change
+    record_change(db, category="configuration", actor=admin.username or "admin", action="update_test_defaults",
+        resource_type="agent_configuration", resource_id="test", before=current["assignments"]["test"], after=payload.test.model_dump())
     db.add(AccessAudit(actor_kind=admin.kind, actor_id=admin.username or "admin",
                        action="update_agent_configuration", resource_type="agent_configuration",
                        resource_id=str(config.revision)))

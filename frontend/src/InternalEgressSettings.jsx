@@ -3,6 +3,9 @@ import { api } from "./api.js";
 import { createInternalEgressController, emptyInternalEgressState, internalTargetAddress, sameInternalTarget } from "./internalEgress.js";
 import HelpTooltip from "./HelpTooltip.jsx";
 import Dialog from "./Dialog.jsx";
+import MoreActions from "./MoreActions.jsx";
+import DataTable from "./DataTable.jsx";
+import RegistryFilters from "./RegistryFilters.jsx";
 import "./internalEgressSettings.css";
 
 const profileStatus = { production: "운영 사용", verified: "검증 완료", draft: "미검증", disabled: "사용 중지" };
@@ -11,6 +14,8 @@ export function InternalEgressView({ state, controller, addressRef }) {
   const addressId = useId();
   const [editorOpen, setEditorOpen] = useState(false); const [deleting, setDeleting] = useState(null); const [technical, setTechnical] = useState(null);
   const [discardOpen, setDiscardOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const items = (state.items || []).filter(item => `${internalTargetAddress(item)} ${item.description || ""} ${item.in_use_profiles.map(profile => profile.name).join(" ")}`.toLowerCase().includes(search.trim().toLowerCase()));
   const busy = Boolean(state.busy);
   const blocked = busy || state.loading || state.needsRefresh || !state.items;
   const latest = state.items?.find((item) => item.id === state.editing?.id);
@@ -30,14 +35,15 @@ export function InternalEgressView({ state, controller, addressRef }) {
     <div className="egress-layout egress-list-first">
       <section className="panel egress-list" aria-label="내부 허용 대상 목록">
         <div className="panel-head"><h2>내부 허용 대상</h2><span>{state.items ? `${state.items.length}개` : "미조회"}</span></div>
+        <RegistryFilters search={search} onSearch={setSearch} placeholder="IP · 포트 · 설명 · 연결 프로필" />
         {!state.items ? <p className="egress-empty" role="status">{state.loading ? "허용 대상을 불러오는 중…" : "목록을 확인하지 못했습니다. 새로고침해 주세요."}</p>
-          : !state.items.length ? <p className="egress-empty">등록된 내부 대상이 없습니다. vLLM을 사용하려면 먼저 IP와 포트를 등록하세요.</p>
-            : <div className="egress-targets">{state.items.map((item) => <article key={item.id} className={state.editing?.id === item.id ? "egress-selected" : ""}>
-              <div className="egress-target-heading"><strong>{internalTargetAddress(item)}</strong><span className="egress-use">{item.in_use_profiles.length ? `사용 중 · ${item.in_use_profiles.length}개 프로필` : "연결된 활성 프로필 없음"}</span></div>
-              <p className="egress-description">{item.description || "설명 없음"}</p>
-              {item.in_use_profiles.length > 0 && <ul className="egress-profiles" aria-label="사용 중인 vLLM 프로필">{item.in_use_profiles.map((profile) => <li key={profile.id}><span>{profile.name}</span><small>{profileStatus[profile.status] || profile.status}</small></li>)}</ul>}
-              <div className="egress-actions"><button type="button" className="secondary small" disabled={blocked} onClick={() => { if (state.editing?.id !== item.id) controller?.edit(item); setEditorOpen(true); }} aria-label={`${internalTargetAddress(item)} 편집`}>편집</button><button type="button" className="secondary small" disabled={blocked || item.in_use_profiles.length > 0} onClick={() => setDeleting(item)} aria-label={`${internalTargetAddress(item)} 삭제`}>삭제</button><button type="button" className="text-button" onClick={() => setTechnical(item)}>기술정보</button>{item.in_use_profiles.length > 0 && <span className="egress-description">설명만 수정 가능 · 주소 변경·삭제는 연결 프로필을 모두 비활성화한 뒤 가능합니다.</span>}</div>
-            </article>)}</div>}
+          : <DataTable label="vLLM 연결 대상" data={items} columns={[
+            {id:"address", header:"IP / 포트", render:item => <strong>{internalTargetAddress(item)}</strong>},
+            {id:"description", header:"설명", render:item => <span className="v5-clamp" title={item.description}>{item.description || "—"}</span>},
+            {id:"profiles", header:"연결 프로필", render:item => item.in_use_profiles.length ? <ul className="egress-profiles" aria-label="사용 중인 vLLM 프로필">{item.in_use_profiles.map(profile => <li key={profile.id}><span>{profile.name}</span><small>{profileStatus[profile.status] || profile.status}</small></li>)}</ul> : <span className="ux-muted">사용 안 함</span>},
+            {id:"actions", header:"관리", width:160, render:item => <div className="egress-actions"><button type="button" className="secondary small" disabled={blocked} onClick={() => { if (state.editing?.id !== item.id) controller?.edit(item); setEditorOpen(true); }} aria-label={`${internalTargetAddress(item)} 편집`}>편집</button><MoreActions label={`${internalTargetAddress(item)} 관리`}><button type="button" disabled={blocked || item.in_use_profiles.length > 0} onClick={() => setDeleting(item)} aria-label={`${internalTargetAddress(item)} 삭제`}>삭제</button><button type="button" onClick={() => setTechnical(item)}>기술정보</button></MoreActions></div>},
+          ]} empty={search ? "검색 조건에 맞는 대상이 없습니다." : "등록된 내부 대상이 없습니다. vLLM을 사용하려면 IP와 포트를 등록하세요."} />}
+        {state.items?.some(item => item.in_use_profiles.length > 0) && <p className="egress-description">사용 중인 대상은 설명만 수정할 수 있습니다. 주소 변경·삭제는 연결 프로필을 모두 비활성화한 뒤 가능합니다.</p>}
         {state.needsRefresh && state.items && <p className="egress-empty">이전 조회 목록입니다. 최신 목록 조회에 성공할 때까지 변경할 수 없습니다.</p>}
       </section>
     </div>
@@ -55,7 +61,7 @@ export function InternalEgressView({ state, controller, addressRef }) {
       </form>
     </Dialog>
     <Dialog open={discardOpen && editorOpen && Boolean(state.editing)} title="내부 대상 편집 취소" onClose={() => setDiscardOpen(false)} className="internal-egress-settings egress-dialog"><p>저장하지 않은 편집 내용을 버립니다. 등록된 내부 IP·포트와 설명은 바뀌지 않습니다.</p><div className="egress-actions"><button type="button" className="secondary" onClick={() => setDiscardOpen(false)}>계속 편집</button><button type="button" className="primary" disabled={busy} onClick={() => { if (!busy) { controller?.cancel(); setEditorOpen(false); setDiscardOpen(false); } }}>편집 취소 확인</button></div></Dialog>
-    <Dialog open={Boolean(deleting)} title="내부 허용 대상 삭제" onClose={() => { if (!busy) setDeleting(null); }} className="internal-egress-settings egress-dialog">{deleting && <><p><strong>{internalTargetAddress(deleting)}</strong> 허용 대상을 삭제합니다.</p><p className="egress-warning">이 IP·포트로 이후 vLLM 요청을 보낼 수 없게 됩니다. 이미 전송된 요청은 취소되지 않으며 기존 분석 결과는 보존합니다.</p>{state.error && <p className="error" role="alert">{state.error}</p>}<div className="egress-actions"><button type="button" className="secondary" disabled={busy} onClick={() => setDeleting(null)}>취소</button><button type="button" className="primary" disabled={blocked} onClick={async () => { if (await controller?.remove(deleting)) setDeleting(null); }}>허용 대상 삭제</button></div></>}</Dialog>
+    <Dialog open={Boolean(deleting)} title="내부 허용 대상 삭제" onClose={() => { if (!busy) setDeleting(null); }} className="internal-egress-settings egress-dialog">{deleting && <><p><strong>{internalTargetAddress(deleting)}</strong> 허용 대상을 삭제합니다.</p><p className="egress-warning">이 IP·포트로 이후 vLLM 요청을 보낼 수 없게 됩니다. 이미 전송된 요청은 취소되지 않으며 기존 분석 결과는 보존합니다.</p>{state.error && <p className="error" role="alert">{state.error}</p>}<div className="egress-actions"><button type="button" className="secondary" disabled={busy} onClick={() => setDeleting(null)}>취소</button><button type="button" className="primary danger" disabled={blocked} onClick={async () => { if (await controller?.remove(deleting)) setDeleting(null); }}>허용 대상 삭제</button></div></>}</Dialog>
     <Dialog open={Boolean(technical)} title="내부 대상 기술정보" onClose={() => setTechnical(null)} className="internal-egress-settings egress-dialog">{technical && <dl><dt>대상 ID</dt><dd>{technical.id}</dd><dt>설정 버전</dt><dd>{technical.revision}</dd></dl>}</Dialog>
   </div>;
 }

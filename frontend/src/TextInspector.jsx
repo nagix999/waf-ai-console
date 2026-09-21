@@ -12,7 +12,7 @@ function JsonText({ tokens, start, query, mark }) {
   });
 }
 
-export default function TextInspector({ value, label = "원문", empty = "기록된 내용이 없습니다.", compact = false, jsonText = false }) {
+export default function TextInspector({ value, label = "원문", empty = "기록된 내용이 없습니다.", compact = false, jsonText = false, searchRequest }) {
   const originalText = useMemo(() => recordText(value), [value]);
   const parsed = useMemo(() => jsonText && typeof value === "string" ? parseJsonRecord(value) : null, [value, jsonText]);
   const structured = (value !== null && typeof value === "object") || !!parsed;
@@ -39,7 +39,8 @@ export default function TextInspector({ value, label = "원문", empty = "기록
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => { setSelected(0); }, [text, query]);
   useEffect(() => { setCopied(""); }, [originalText, query]);
-  useEffect(() => { mark.current?.scrollIntoView({ block: "nearest", inline: "nearest" }); }, [index, query]);
+  useEffect(() => { if (searchRequest) { setQuery(searchRequest.query || ""); setSelected(0); } }, [searchRequest]);
+  useEffect(() => { if (mark.current?.getClientRects().length) mark.current.scrollIntoView({ block: "nearest", inline: "nearest" }); }, [index, query, text, searchRequest]);
   async function copy() {
     setCopying(true); setCopied("");
     try { await navigator.clipboard.writeText(originalText); if (mounted.current) setCopied("복사했습니다."); }

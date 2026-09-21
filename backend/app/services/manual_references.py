@@ -62,7 +62,8 @@ def save_references(db, crypto, payload, actor):
 
 
 def evaluation_record(row):
-    return {"id": row.id, "revision": row.revision, "created_by": row.created_by, "created_at": utc_datetime(row.created_at)}
+    return {"id": row.id, "revision": row.revision, "created_by": row.created_by, "created_at": utc_datetime(row.created_at),
+            "evaluation_kind": row.evaluation_kind, "metrics_version": row.metrics_version}
 
 
 def create_evaluation(db, run_id, payload, actor):
@@ -70,6 +71,8 @@ def create_evaluation(db, run_id, payload, actor):
     run = db.get(TestRun, run_id)
     if run is None:
         raise AnalysisIngestError("test_run_not_found", 404)
+    if run.evaluation_mode == "ground_truth":
+        raise AnalysisIngestError("official_ground_truth_fixed", 409)
     key = hashlib.sha256(f"{actor}:{run_id}:{payload.idempotency_key}".encode()).hexdigest()
     old = db.scalar(select(TestEvaluation).where(TestEvaluation.idempotency_key == key))
     if old:

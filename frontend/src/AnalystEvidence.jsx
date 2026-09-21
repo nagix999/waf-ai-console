@@ -14,7 +14,7 @@ export function DecisionIssues({ detail }) {
   </section>;
 }
 
-export function AnalystEvidence({ result }) {
+export function AnalystEvidence({ result, onViewInput }) {
   const view = assessmentView(result);
   if (!view) return null;
   const groups = Object.keys(evidenceLabels).map(supports => ({ supports, items: view.evidence.filter(item => item.supports === supports) }));
@@ -27,6 +27,7 @@ export function AnalystEvidence({ result }) {
         {group.items.map(item => <article className="evidence-item" key={item.number}>
           <div className="evidence-heading"><span className="evidence-number">근거 {item.number}</span><strong>{analystFieldLabel(item.field)}</strong></div>
           <div className="evidence-section"><span>로그 발췌</span><code dir="ltr">{decodingDisplayText(item.excerpt)}</code></div>
+          {onViewInput && <button type="button" className="text-button evidence-input-link" onClick={() => onViewInput(item)}>입력에서 보기</button>}
           <div className="evidence-section evidence-interpretation"><span>판단 이유</span><p>{item.interpretation_ko}</p></div>
           {!!item.related_numbers.length && <small className="evidence-related">같은 로그 발췌: 근거 {item.related_numbers.join(" · ")}</small>}
         </article>)}

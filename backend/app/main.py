@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 
+from . import __version__
 from .api.analyses import router as analyses_router
 from .api.analysis_exports import router as analysis_exports_router
 from .api.auth import router as auth_router
@@ -24,6 +25,8 @@ from .api.test_sessions import router as test_sessions_router
 from .api.test_comparisons import router as test_comparisons_router
 from .api.input_schemas import router as input_schemas_router
 from .api.production_api import router as production_api_router
+from .api.production_configurations import router as production_configurations_router
+from .api.runtime import router as runtime_router
 from .config import Settings, get_settings
 from .browser_security import BrowserSecurityMiddleware
 from .database import Base, build_engine, build_session_factory
@@ -61,12 +64,19 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
     async def lifespan(_app: FastAPI):
         if create_schema:
             Base.metadata.create_all(engine)
+        # Capture, never activate, the installation's existing configuration.
+        # SQLite write locking makes simultaneous API starts idempotent.
+        from .services.production_configurations import ensure_baseline
+        if not create_schema:  # Metadata-only test databases keep lazy bootstrap.
+            with session_factory() as db:
+                ensure_baseline(db, _app.state.crypto, settings)
+                db.commit()
         yield
         engine.dispose()
 
     app = FastAPI(
         title=settings.app_name,
-        version="0.2.0",
+        version=__version__,
         description=(
             "WAF analysis ingestion and polling API. Service clients use X-API-Key. "
             "POST /api/v1/analyses uses the service key's Production/Test purpose. "
@@ -106,6 +116,8 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
     app.include_router(test_comparisons_router, prefix="/api/v1", responses=ANALYSIS_ERROR_RESPONSES)
     app.include_router(input_schemas_router, prefix="/api/v1")
     app.include_router(production_api_router, prefix="/api/v1")
+    app.include_router(production_configurations_router, prefix="/api/v1")
+    app.include_router(runtime_router, prefix="/api/v1")
 
     def live_openapi():
         # Cache only the static route contracts, never the active definition.

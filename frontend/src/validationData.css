@@ -27,4 +27,13 @@
 .reference-history { padding-left: 22px; }
 .reference-history li { padding: 10px 0; }
 .reference-history p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.ground-truth-review { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--line, #e2e8ef); border-radius: 9px; }
+.ground-truth-review-heading, .ground-truth-review-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.ground-truth-confirm { display: grid; gap: 12px; border-top: 1px solid var(--line, #e2e8ef); padding-top: 12px; }
+.review-badge { display: inline-flex; align-items: center; white-space: nowrap; font-size: 12px; line-height: 1.5; font-weight: 600; padding: 3px 8px; border-radius: 6px; background: #edf0f4; color: #445267; }
+.review-badge.reviewed { background: #eaf2ff; color: #1d53a1; }
+.review-badge.approved { background: #e8f5ee; color: #186440; }
+.review-filters { display: flex; align-items: center; gap: 8px; overflow-x: auto; padding: 16px 20px; }
+.review-filters button { flex-shrink: 0; }
+.review-filters button[aria-pressed="true"] { border-color: var(--primary, #1767b2); font-weight: 700; }
 @media (max-width: 700px) { .data-form .event-fields { grid-template-columns: 1fr; } .dataset-version-bar label { width: 100%; min-width: 0; } }

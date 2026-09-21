@@ -1,6 +1,7 @@
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 from .evaluation_schemas import ReferenceVerdict
+from .candidate_schemas import CandidateConfiguration
 
 
 class StrictModel(BaseModel):
@@ -49,13 +50,28 @@ class DatasetItemWrite(RevisionRequest):
     case_name: str | None = Field(default=None, max_length=240)
 
 
+DatasetReviewStatus = Literal["draft", "reviewed", "approved"]
+
+
+class DatasetItemReview(RevisionRequest):
+    review_status: DatasetReviewStatus
+
+
 class DatasetRun(RevisionRequest):
     name: str | None = Field(default=None, max_length=120)
     idempotency_key: str = Field(min_length=8, max_length=120, pattern=r"^[A-Za-z0-9_.:-]+$")
+    candidate_configuration: CandidateConfiguration | None = None
+    evaluation_mode: Literal["reference", "ground_truth"] = "reference"
 
 
 class EvaluationCreate(StrictModel):
     idempotency_key: str = Field(min_length=8, max_length=120, pattern=r"^[A-Za-z0-9_.:-]+$")
+
+
+class DatasetSearch(StrictModel):
+    query: str = Field(default="", max_length=120)
+    limit: int = Field(default=20, ge=1, le=50)
+    offset: int = Field(default=0, ge=0)
 
 
 class TestSessionCreate(EvaluationCreate):

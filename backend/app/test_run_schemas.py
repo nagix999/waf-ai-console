@@ -4,6 +4,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from .evaluation_schemas import EvaluationMetadata, EvaluationSummary
 from .schemas import UTCResponse
+from .candidate_schemas import CandidateConfiguration
 
 
 class TestRunCreate(BaseModel):
@@ -11,6 +12,7 @@ class TestRunCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     idempotency_key: str = Field(min_length=8, max_length=120, pattern=r"^[A-Za-z0-9_.:-]+$")
     event: dict[str, Any]
+    candidate_configuration: CandidateConfiguration | None = None
     expected_verdict: Literal["true_positive", "false_positive", "inconclusive"] | None = None
     difficulty: str | None = Field(default=None, max_length=80)
     test_category: str | None = Field(default=None, max_length=120)
@@ -59,13 +61,18 @@ class TestRunSummary(UTCResponse):
     failed: int
     execution_mode: str
     profile_metadata: dict[str, Any]
+    configuration_snapshot: dict[str, Any] | None = None
+    configuration_hash: str | None = None
+    evaluation_mode: Literal["reference", "ground_truth"] = "reference"
+    ground_truth: dict[str, Any] | None = None
+    official_evaluation_pending: bool = False
     prompt_version: str
     prompt_policy_version_id: str | None = None
     model_test_run_id: str | None
     evaluation_summary: EvaluationSummary
     evaluation_id: str | None = None
     evaluation_revision: int = 0
-    reference_basis: Literal["initial", "latest", "saved"] = "initial"
+    reference_basis: Literal["initial", "latest", "saved", "ground_truth"] = "initial"
     dataset_version_id: str | None = None
     accepting_items: bool = False
     started_at: datetime | None

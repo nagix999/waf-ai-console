@@ -43,7 +43,7 @@ test("agent history defaults to stage output and hides identifiers and other sta
   const AgentHistory = component("./AgentHistory.jsx");
   const runs = [{ id: "hidden-run-canary", status: "failed", fingerprint: "hidden-fingerprint-canary", started_at: "2026-09-08T00:00:00Z", duration_ms: 1400, steps: [{ id: "step-canary", step_type: "llm_primary", name: "Primary LLM 판정", status: "failed", duration_ms: 0, input: "hidden-input-canary", output: "stored-output-canary", metadata: { private: "hidden-metadata-canary" } }] }];
   const html = render(AgentHistory, { runs });
-  assert.match(html, /위협 분석/); assert.match(html, /stored-output-canary/); assert.match(html, /기술 식별정보/);
+  assert.match(html, /위협 분석/); assert.match(html, /stored-output-canary/); assert.match(html, /실행 식별자/);
   assert.doesNotMatch(html, /hidden-fingerprint-canary|hidden-input-canary|hidden-metadata-canary/);
   assert.doesNotMatch(html, />hidden-run-canary</);
   assert.doesNotMatch(html, /metric-help-trigger/);

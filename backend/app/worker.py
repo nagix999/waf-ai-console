@@ -757,6 +757,9 @@ def _process_moduagent_steps(
         if named_run is not None:
             if named_run.execution_mode != "moduagent" or analysis.analysis_purpose != "test":
                 raise WorkerExecutionError("test_run_execution_mode_mismatch")
+            if named_run.configuration_hash or named_run.configuration_snapshot_json is not None:
+                from .services.candidate_configurations import verify_configuration
+                verify_configuration(named_run, crypto, analysis)
             check_named = named_test_request_check(db.get_bind(), named_run.id)
             check_named()
             previous_check = request_check

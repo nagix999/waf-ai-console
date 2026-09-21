@@ -40,6 +40,6 @@ export default function ServiceKeyDelete({ item, controller, busy, blocked, erro
     </>}
     {!production && <p className="service-key-warning">분석 결과와 감사 이력은 보존됩니다. 삭제한 키는 다시 사용할 수 없습니다.</p>}
     {error && <p className="error" role="alert">{error}</p>}
-    <div className="service-key-actions"><button type="button" className="secondary" disabled={busy} onClick={onClose}>취소</button><button type="submit" className="primary" disabled={blocked || (production && (!preview || name !== keyName || (removeAnalyses && cannotPurge)))}>{busy ? "삭제 중…" : removeAnalyses ? "키와 분석 삭제" : "API 키 삭제"}</button></div>
+    <div className="service-key-actions"><button type="button" className="secondary" disabled={busy} onClick={onClose}>취소</button><button type="submit" className="primary danger" disabled={blocked || (production && (!preview || name !== keyName || (removeAnalyses && cannotPurge)))}>{busy ? "삭제 중…" : removeAnalyses ? "키와 분석 삭제" : "API 키 삭제"}</button></div>
   </form>;
 }

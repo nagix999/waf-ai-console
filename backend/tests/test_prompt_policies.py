@@ -93,19 +93,20 @@ def test_save_clone_activate_compare_and_restore_preserve_versions(client):
     assert client.put(f"{ROOT}/{saved['id']}", json=payload).status_code == 405
     assert client.delete(f"{ROOT}/{saved['id']}").status_code == 405
     activated = client.post(f"{ROOT}/{saved['id']}/activate", json={"expected_revision": 1, "acknowledge_unverified": True})
-    assert activated.status_code == 200
-    assert activated.json() == {"active_version_id": saved["id"], "revision": 2}
+    assert activated.status_code == 409
+    assert activated.json()["detail"] == "production_promotion_required"
     stale = client.post(f"{ROOT}/{previous['id']}/activate", json={"expected_revision": 1, "acknowledge_unverified": True})
     assert stale.status_code == 409
-    assert stale.json()["detail"] == "prompt_policy_changed_concurrently"
+    assert stale.json()["detail"] == "production_promotion_required"
     restored = client.post(f"{ROOT}/{previous['id']}/activate", json={"expected_revision": 2, "acknowledge_unverified": True})
-    assert restored.json() == {"active_version_id": previous["id"], "revision": 3}
+    assert restored.json()["detail"] == "production_promotion_required"
+    assert client.get(ROOT).json()["active_version_id"] == previous["id"]
     assert client.get(f"{ROOT}/{previous['id']}").json() == previous
     assert client.get(f"{ROOT}/{saved['id']}").json() == saved
     with client.app.state.session_factory() as db:
         assert db.scalar(select(func.count()).select_from(PromptPolicyVersion)) == 2
         actions = db.scalars(select(AccessAudit.action)).all()
-        assert actions.count("activate_prompt_policy") == 2
+        assert actions.count("activate_prompt_policy") == 0
 
 
 @pytest.mark.parametrize("field,value", [
@@ -140,7 +141,7 @@ def test_unknown_versions_and_missing_ack_do_not_change_active(client):
     initial = client.get(ROOT).json()
     assert client.get(ROOT + "/missing").status_code == 404
     assert client.post(ROOT, json=policy_payload(parent_version_id="missing")).status_code == 404
-    assert client.post(ROOT + "/missing/activate", json={"expected_revision": 1, "acknowledge_unverified": True}).status_code == 404
+    assert client.post(ROOT + "/missing/activate", json={"expected_revision": 1, "acknowledge_unverified": True}).json()["detail"] == "production_promotion_required"
     assert client.post(f"{ROOT}/{initial['active_version_id']}/activate", json={"expected_revision": 1}).status_code == 422
     assert client.get(ROOT).json() == initial
 
@@ -164,7 +165,7 @@ def test_corrupt_policy_is_not_returned_or_activated(client, corruption, code):
     assert response.status_code == 503
     assert response.json()["detail"] == code
     activation = client.post(f"{ROOT}/{version_id}/activate", json={"expected_revision": 1, "acknowledge_unverified": True})
-    assert activation.status_code == 503
+    assert activation.status_code == 409
     with client.app.state.session_factory() as db:
         assert db.get(PromptPolicyState, 1).revision == 1
 
@@ -283,8 +284,10 @@ def test_impossible_policy_can_be_saved_but_not_activated_for_current_profile(cl
     assert saved_response.status_code == 201
     saved = saved_response.json()
     rejected = client.post(f"{ROOT}/{saved['id']}/activate", json={"expected_revision": 1, "acknowledge_unverified": True})
-    assert rejected.status_code == 422
-    assert rejected.json()["detail"] == "prompt_policy_context_budget_too_small"
+    assert rejected.status_code == 409
+    assert rejected.json()["detail"] == "production_promotion_required"
+    with client.app.state.session_factory() as db, pytest.raises(PromptPolicyError, match="prompt_policy_context_budget_too_small"):
+        activate_policy_version(db, client.app.state.crypto, saved["id"], 1)
     current = client.get(ROOT).json()
     assert current["active_version_id"] == initial["active_version_id"]
     assert current["revision"] == 1
@@ -320,8 +323,15 @@ def test_activation_uses_worker_minimum_input_budget_boundary(client, remaining_
                               is_test=purpose == "test"))
             db.add(AgentConfiguration(id=1, revision=1, **{purpose + "_verifier_profile_id": profile.id}))
         db.commit()
-    response = client.post(f"{ROOT}/{saved['id']}/activate", json={"expected_revision": 1, "acknowledge_unverified": True})
-    assert response.status_code == (200 if accepted else 422)
+    # The internal legacy transition still shares the worker's budget check.
+    # HTTP activation is tested separately as unconditionally gated.
+    with client.app.state.session_factory() as db:
+        if accepted:
+            activate_policy_version(db, client.app.state.crypto, saved["id"], 1)
+            db.commit()
+        else:
+            with pytest.raises(PromptPolicyError, match="prompt_policy_context_budget_too_small"):
+                activate_policy_version(db, client.app.state.crypto, saved["id"], 1)
     assert client.get(ROOT).json()["revision"] == (2 if accepted else 1)
 
 
@@ -335,6 +345,7 @@ def test_activation_without_production_profile_does_not_validate_draft_profile_b
         ))
         db.commit()
     saved = client.post(ROOT, json=policy_payload(policy_text="가" * 4000)).json()
-    response = client.post(f"{ROOT}/{saved['id']}/activate", json={"expected_revision": 1, "acknowledge_unverified": True})
-    assert response.status_code == 200
-    assert response.json()["active_version_id"] == saved["id"]
+    with client.app.state.session_factory() as db:
+        state = activate_policy_version(db, client.app.state.crypto, saved["id"], 1)
+        assert state.active_version_id == saved["id"]
+        db.commit()

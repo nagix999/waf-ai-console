@@ -436,7 +436,9 @@ async def upload_test_events(
         raise HTTPException(422, "unsupported_query_parameter")
     from .test_runs import upload_test_run
     from ..models import TestRunItem
-    detail = await upload_test_run(request, db, principal, name, idempotency_key, file)
+    # This direct call does not pass through FastAPI's Form dependency binding.
+    # The legacy endpoint always uses the configured Test defaults.
+    detail = await upload_test_run(request, db, principal, name, idempotency_key, file, candidate_configuration=None)
     rows = list(db.scalars(select(TestRunItem).where(TestRunItem.test_run_id == detail.id).order_by(TestRunItem.row_number)))
     return UploadResponse(accepted=detail.accepted, duplicates=detail.duplicates, rejected=detail.rejected,
         analysis_ids=[row.analysis_id for row in rows if row.analysis_id],

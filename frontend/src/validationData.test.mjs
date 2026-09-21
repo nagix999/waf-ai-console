@@ -7,7 +7,7 @@ import { runInNewContext } from "node:vm";
 import { buildSync } from "esbuild";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { selectedPageIds, validationDataError, datasetImportMessage } from "./validationData.js";
+import { selectedPageIds, validationDataError, datasetImportMessage, reviewActions } from "./validationData.js";
 import { readAppHash, writeAppHash, applyAppRoute } from "./appRoutes.js";
 import { testRunQuery } from "./testRuns.js";
 import { serviceKeyMetadata, createServiceKeysController } from "./serviceApiKeys.js";
@@ -29,11 +29,11 @@ test("selection is deduplicated, page-scoped and excludes rejected rows", () => 
 
 test("dataset URLs contain only UUIDs and browser route restores the selection", () => {
   const id = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
-  assert.equal(writeAppHash({ page: "datasets", datasetId: id }), `#datasets/${id}`);
+  assert.equal(writeAppHash({ page: "datasets", datasetId: id }), `#evaluate/ground-truth/${id}`);
   assert.deepEqual(readAppHash(`#datasets/${id}`), { page: "datasets", datasetId: id });
   assert.equal(applyAppRoute({ datasetId: id }, readAppHash("#datasets")).datasetId, null);
   assert.equal(readAppHash("#datasets/SECRET_PAYLOAD"), null);
-  assert.equal(writeAppHash({ page: "datasets", datasetId: "SECRET_PAYLOAD" }), "#datasets");
+  assert.equal(writeAppHash({ page: "datasets", datasetId: "SECRET_PAYLOAD" }), "#evaluate/ground-truth");
 });
 
 test("regrading has explicit version query and never changes ordinary defaults", () => {
@@ -51,10 +51,10 @@ test("analyst error messages are bounded and unknown server content is not echoe
   assert.match(datasetImportMessage({ added: 2, duplicates: 1, conflicts: ["a"], rejected: [] }), /2건 추가 · 1건 중복 제외 · 1건 충돌/);
 });
 
-test("selection controls have both actions and no active mutation in initial rendering", () => {
+test("bulk controls are hidden until selection, with both actions available after selection", () => {
   const Actions = component("./AnalysisSelection.jsx");
   const empty = renderToStaticMarkup(createElement(Actions, { ids: [] }));
-  assert.match(empty, /참고 답안 일괄 입력/); assert.match(empty, /데이터셋에 추가/); assert.match(empty, /disabled/);
+  assert.doesNotMatch(empty, /참고 답안 일괄 입력|데이터셋에 추가|<button/);
   const single = renderToStaticMarkup(createElement(Actions, { ids: ["fixture"], single: true }));
   assert.match(single, /참고 답안 입력/); assert.doesNotMatch(single, /일괄 입력/);
 });
@@ -96,4 +96,34 @@ test("report evidence groups have distinct presentation and full paragraph width
   const html = renderToStaticMarkup(createElement(Report, { detail, mode: "preview", onModeChange() {} }));
   for (const group of ["attack", "normal", "context"]) assert.match(html, new RegExp(`report-evidence-group ${group}`));
   assert.doesNotMatch(html, /dangerouslySetInnerHTML|<script/);
+});
+
+test("Ground Truth states are distinct from answers and direct approval is not offered", () => {
+  assert.deepEqual(reviewActions("draft"), ["reviewed"]);
+  assert.deepEqual(reviewActions("reviewed"), ["approved", "draft"]);
+  assert.deepEqual(reviewActions("approved"), ["draft"]);
+  for (const value of ["inconclusive", "true_positive", "unknown", "__proto__", "constructor"]) assert.deepEqual(reviewActions(value), []);
+  const Review = component("./GroundTruthReview.jsx");
+  const render = props => renderToStaticMarkup(createElement(Review, { item: { id: "item", review_status: "draft", reference_verdict: "inconclusive", revision: 1 }, ...props }));
+  const draft = render({});
+  assert.match(draft, /미검토/); assert.match(draft, /답안: 보류/); assert.match(draft, />검토 완료<\/button>/);
+  assert.doesNotMatch(draft, />승인<\/button>/);
+  assert.match(render({ dirty: true }), /먼저 변경 내용을 저장/);
+  assert.match(render({ dirty: true }), /disabled/);
+  assert.doesNotMatch(render({ readonly: true }), /<button/);
+  const approved = render({ item: { id: "item", review_status: "approved", reference_verdict: "true_positive", created_by: "<script>test</script>" } });
+  assert.match(approved, /승인됨/); assert.match(approved, /미검토로 되돌리기/);
+  assert.doesNotMatch(approved, /<script>/);
+});
+
+test("review API sends optimistic revision and explicit status only in the body", async () => {
+  const previous = globalThis.fetch, calls = [];
+  globalThis.fetch = async (url, options) => { calls.push({ url, options }); return { ok: true, json: async () => ({}) }; };
+  try {
+    await api.reviewDatasetItem("dataset", "item", { expected_revision: 7, review_status: "approved" });
+    assert.equal(calls[0].url, "/api/v1/validation-datasets/dataset/items/item/reviews");
+    assert.equal(calls[0].options.method, "POST");
+    assert.deepEqual(JSON.parse(calls[0].options.body), { expected_revision: 7, review_status: "approved" });
+    assert.match(validationDataError({ message: "dataset_review_verdict_required" }), /보류도 답안/);
+  } finally { globalThis.fetch = previous; }
 });

@@ -49,8 +49,8 @@ test("comparison display uses whole paired cohort metrics even when changed-only
   assert.match(html, /답안 일치로 변경 2건/); assert.match(html, /답안 불일치로 변경 1건/); assert.match(html, /접수 당시 참고 답안 없음: 2건/);
   assert.match(html, /전체 비교 분모를 바꾸지 않습니다/); assert.match(html, /난이도·유형 필터는 이 비교에 적용되지 않습니다/);
   assert.match(html, /비교 조건 설명/); assert.match(html, /해당하는 비교 문항이 없습니다/);
-  const tree = TestComparisonResult({ data, state: { ...initialTestComparisonState(), changes_only: true }, onChange() {}, onOpen() {}, onRefresh() {} });
-  const helpText = node => Array.isArray(node) ? node.map(helpText).join(" ") : node && typeof node === "object" ? helpText(node.props?.children) : typeof node === "string" ? node : "";
+  let tree; function Capture() { tree = TestComparisonResult({ data, state: { ...initialTestComparisonState(), changes_only: true }, onChange() {}, onOpen() {}, onRefresh() {} }); return null; } render(Capture);
+  const helpText = node => Array.isArray(node) ? node.map(helpText).join(" ") : node && typeof node === "object" ? typeof node.props?.children === "function" ? helpText(node.props.children("items")) : helpText(node.props?.children) : typeof node === "string" ? node : "";
   assert.match(helpText(tree), /프롬프트 변경 때문에 발생했다고 단정할 수 없습니다/);
   assert.equal(data.baseline_evaluation.total, 10);
 });

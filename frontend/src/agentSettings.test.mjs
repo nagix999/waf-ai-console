@@ -18,7 +18,10 @@ test("validated role selection and explicit external transfer", () => {
   assert.ok(validAgentCatalog(value)); assert.equal(selectionIssue(value, draft), "");
   assert.equal(hasExternalRole(value, draft), false);
   draft.production.verifier_profile_id = "remote";
+  assert.equal(hasExternalRole(value, draft), false); // Production is read-only here.
+  draft.test.primary_profile_id = "remote";
   assert.equal(hasExternalRole(value, draft), true);
+  draft.test.primary_profile_id = null;
   draft.test.verifier_profile_id = "local";
   assert.match(selectionIssue(value, draft), /Primary/);
   draft.test.primary_profile_id = "draft";
@@ -27,7 +30,7 @@ test("validated role selection and explicit external transfer", () => {
 });
 
 test("old prompt bookmark opens integrated Agent settings", () => {
-  assert.deepEqual(readAppHash("#settings/prompts"), { page: "settings", tab: "agents" });
+  assert.deepEqual(readAppHash("#settings/prompts"), { page: "settings", tab: "instructions" });
   assert.deepEqual(readAppHash("#settings/agents"), { page: "settings", tab: "agents" });
 });
 
@@ -35,12 +38,15 @@ test("save is one atomic request, no LLM call and no unacknowledged external ass
   let writes = [];
   const value = catalog();
   const controller = createAgentSettingsController({ api: { agentSettings: async () => value,
-    updateAgentSettings: async payload => { writes.push(payload); return { ...value, assignments: { production: payload.production, test: payload.test } }; } }, onChange() {} });
+    updateAgentSettings: async payload => { writes.push(payload); return { ...value, assignments: { production: value.assignments.production, test: payload.test } }; } }, onChange() {} });
   await controller.refresh(); controller.change("production", "verifier_profile_id", "remote");
+  assert.equal(controller.getState().draft.production.verifier_profile_id, null);
+  controller.change("test", "primary_profile_id", "remote");
   assert.equal(await controller.save(false), false); assert.equal(writes.length, 0);
   assert.equal(await controller.save(true), true); assert.equal(writes.length, 1);
   assert.equal(writes[0].expected_state_token, "a".repeat(64));
-  assert.equal(writes[0].production.verifier_profile_id, "remote");
+  assert.equal(writes[0].test.primary_profile_id, "remote");
+  assert.equal(writes[0].production, undefined);
 });
 
 test("ambiguous write failure blocks resubmission until explicit refresh", async () => {

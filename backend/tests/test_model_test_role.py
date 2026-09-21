@@ -15,6 +15,7 @@ from app.services.test_runs import named_test_request_check, selected_test_reque
 from app.services.vllm_profiles import TargetNotAllowedError, profile_fingerprint
 from app.services.vllm_test_runner import VLLMTestResult
 from test_model_profiles import login_admin, profile_payload
+from legacy_state_helpers import seed_production
 
 pytestmark = pytest.mark.usefixtures("registered_vllm_target")
 
@@ -56,7 +57,8 @@ def named(client, event):
 def test_roles_are_independent_and_same_profile_can_hold_both(client):
     login_admin(client)
     first, second = create_verified(client, "synthetic-first"), create_verified(client, "synthetic-second", provider="openai")
-    assert role(client, first, "promote").status_code == 200
+    assert role(client, first, "promote").json()["detail"] == "production_promotion_required"
+    seed_production(client, first)
     assert role(client, second, "assign-test").status_code == 200
     assert get_profile(client, first["id"])["status"] == "production"
     assert get_profile(client, second["id"])["status"] == "verified"
@@ -65,7 +67,7 @@ def test_roles_are_independent_and_same_profile_can_hold_both(client):
     assert both.json()["status"] == "production"
     assert role(client, first, "assign-test").json()["is_test"] is True
     assert get_profile(client, second["id"])["is_test"] is False
-    assert role(client, second, "promote").status_code == 200
+    seed_production(client, second)
     retained = get_profile(client, first["id"])
     assert retained["is_test"] is True and retained["status"] == "verified"
     assert retained["profile_fingerprint"] == first["profile_fingerprint"]
@@ -102,7 +104,7 @@ def test_role_assignment_requires_admin_and_current_fingerprint(client, service_
         response = client.post(f"/api/v1/model-profiles/{profile['id']}/{action}",
                                json={"expected_profile_fingerprint": "0" * 64})
         assert response.status_code == 409
-        assert response.json()["detail"] == "model_profile_changed_reconfirm"
+        assert response.json()["detail"] == ("production_promotion_required" if action == "promote" else "model_profile_changed_reconfirm")
     assert client.post(f"/api/v1/model-profiles/{profile['id']}/assign-test").status_code == 422
     client.post("/api/v1/auth/logout")
     assert client.post(f"/api/v1/model-profiles/{profile['id']}/assign-test", headers=service_headers,
@@ -148,7 +150,7 @@ def test_quick_pass_does_not_restore_role_eligibility_after_invalidation(client,
 def test_new_tests_require_test_profile_and_pin_it_without_production_fallback(client, event_payload):
     login_admin(client)
     production = create_verified(client, "synthetic-production")
-    assert role(client, production, "promote").status_code == 200
+    seed_production(client, production)
     client.app.state.settings.agent_mode = "moduagent"
     request = {"name": "합성 실행", "idempotency_key": str(uuid.uuid4()), "event": event_payload}
     rejected = client.post("/api/v1/test-runs", json=request)
@@ -184,7 +186,7 @@ def test_pinned_ordinary_test_blocks_unverified_reenable_but_not_role_removal(cl
 def test_legacy_pending_test_has_no_production_fallback(client, event_payload):
     login_admin(client)
     production = create_verified(client, "synthetic-legacy-production")
-    role(client, production, "promote")
+    seed_production(client, production)
     with client.app.state.session_factory() as db:
         row, _ = enqueue_analysis(db, client.app.state.crypto, "admin-ui", AnalysisInput.model_validate(event_payload),
                                    analysis_purpose="test", ingest_channel="test_lab")
@@ -237,7 +239,7 @@ def test_worker_routes_each_purpose_to_its_own_selected_profile(client, event_pa
     login_admin(client)
     production = create_verified(client, "synthetic-worker-production")
     testing = create_verified(client, "synthetic-worker-test", provider="openai")
-    role(client, production, "promote")
+    seed_production(client, production)
     role(client, testing, "assign-test")
     client.app.state.settings.agent_mode = "moduagent"
     if purpose == "test":

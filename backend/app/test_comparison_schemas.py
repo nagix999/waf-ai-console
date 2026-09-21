@@ -18,6 +18,7 @@ class ComparisonCounts(BaseModel):
 
 class ComparisonItem(BaseModel):
     event_id: str
+    pair_id: str | None = None
     case_name: str | None = None
     difficulty: str | None = None
     test_category: str | None = None
@@ -77,6 +78,8 @@ class ComparisonPerformance(BaseModel):
 
 
 class TestComparisonResponse(BaseModel):
+    comparable: bool = True
+    comparison_block_reason: str | None = None
     baseline: TestRunSummary
     candidate: TestRunSummary
     baseline_evaluation: EvaluationSummary

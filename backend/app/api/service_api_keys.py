@@ -12,6 +12,7 @@ from ..security import Principal, require_scope
 from ..services.service_api_keys import ServiceApiKeyError, delete_key, issue_key, rename_key, revoke_key, to_key_item
 from ..services.key_analysis_deletion import preview, purge
 from ..services.test_runs import read_snapshot, write_lock
+from ..services.change_events import record_change, key_metadata
 
 
 router = APIRouter(prefix="/admin/service-api-keys", tags=["service-api-keys"])
@@ -24,7 +25,10 @@ def no_store(response: Response) -> None:
     response.headers.update(NO_STORE_HEADERS)
 
 
-def audit(db: Session, principal: Principal, action: str, key_id: str) -> None:
+def audit(db: Session, principal: Principal, action: str, key_id: str, before=None) -> None:
+    record_change(db, category="integration", actor=principal.username or "unknown", action=action,
+        resource_type="service_api_key", resource_id=key_id, before=before,
+        after=key_metadata(db.get(ServiceApiKey, key_id)))
     db.add(AccessAudit(actor_kind=principal.kind, actor_id=principal.username or "unknown",
                        action=action, resource_type="service_api_key", resource_id=key_id))
 
@@ -65,9 +69,11 @@ def create_key(payload: ServiceApiKeyCreate, response: Response, db: DbSession, 
 def update_key_name(key_id: str, payload: ServiceApiKeyRename, response: Response, db: DbSession, principal: AdminPrincipal) -> ServiceApiKeyItem:
     no_store(response)
     try:
+        write_lock(db)
+        before = key_metadata(db.get(ServiceApiKey, key_id))
         key = rename_key(db, key_id, payload.name)
         result = to_key_item(key)
-        audit(db, principal, "rename_service_api_key", key.id)
+        audit(db, principal, "rename_service_api_key", key.id, before)
         db.commit()
         return result
     except (ServiceApiKeyError, SQLAlchemyError) as exc:
@@ -78,10 +84,12 @@ def update_key_name(key_id: str, payload: ServiceApiKeyRename, response: Respons
 def revoke_service_key(key_id: str, response: Response, db: DbSession, principal: AdminPrincipal) -> ServiceApiKeyItem:
     no_store(response)
     try:
+        write_lock(db)
+        before = key_metadata(db.get(ServiceApiKey, key_id))
         key, changed = revoke_key(db, key_id, principal.username or "unknown")
         result = to_key_item(key)
         if changed:
-            audit(db, principal, "revoke_service_api_key", key.id)
+            audit(db, principal, "revoke_service_api_key", key.id, before)
         db.commit()
         return result
     except (ServiceApiKeyError, SQLAlchemyError) as exc:
@@ -93,6 +101,7 @@ def delete_service_key(key_id: str, db: DbSession, principal: AdminPrincipal, pa
     try:
         write_lock(db)
         key = db.get(ServiceApiKey, key_id, populate_existing=True)
+        before = key_metadata(key)
         if key is None:
             raise ServiceApiKeyError("service_api_key_not_found", 404)
         if key.purpose == "production" and (payload is None or payload.confirm_name != key.name):
@@ -106,7 +115,7 @@ def delete_service_key(key_id: str, db: DbSession, principal: AdminPrincipal, pa
         if payload and payload.delete_analyses:
             purge(db, key_id, payload, principal.username or "unknown")
         if delete_key(db, key_id, principal.username or "unknown"):
-            audit(db, principal, "delete_service_api_key", key_id)
+            audit(db, principal, "delete_service_api_key", key_id, before)
         db.commit()
         return Response(status_code=204, headers=NO_STORE_HEADERS)
     except (ServiceApiKeyError, SQLAlchemyError) as exc:

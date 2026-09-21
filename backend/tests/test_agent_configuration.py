@@ -14,6 +14,7 @@ from app.services.vllm_profiles import profile_fingerprint
 from test_model_profiles import login_admin, profile_payload
 from test_model_test_role import create_verified, named, role
 from test_moduagent_worker import primary_output
+from legacy_state_helpers import seed_production, seed_production_roles
 
 pytestmark = pytest.mark.usefixtures("registered_vllm_target")
 URL = "/api/v1/admin/agent-settings"
@@ -44,11 +45,13 @@ def test_admin_only_and_no_implicit_model_calls(client, service_headers):
 def test_legacy_roles_preserved_until_explicit_atomic_assignment(client):
     login_admin(client)
     first, second = create_verified(client, "fixture-first"), create_verified(client, "fixture-second")
-    role(client, first, "promote")
+    seed_production(client, first)
     role(client, first, "assign-test")
     before = client.get(URL).json()
     assert before["assignments"]["production"] == {"primary_profile_id": first["id"], "verifier_profile_id": None,
         "evidence_editor_enabled": False, "evidence_editor_profile_id": None}
+    assert assign(client, second["id"], first["id"]).json()["detail"] == "production_promotion_required"
+    seed_production_roles(client, second["id"], first["id"])
     result = assign(client, second["id"], first["id"], test_primary=first["id"], test_verifier=second["id"])
     assert result.status_code == 200, result.text
     profiles = {item["id"]: item for item in result.json()["profiles"]}
@@ -73,7 +76,7 @@ def test_verifier_requires_matching_full_verification(client, invalid):
         else:
             db.scalar(select(VLLMTestRun).where(VLLMTestRun.profile_id == profile.id)).mode = "quick"
         db.commit()
-    response = assign(client, primary["id"], verifier["id"])
+    response = assign(client, None, test_primary=primary["id"], test_verifier=verifier["id"])
     assert response.status_code == 409, response.text
     assert client.get(URL).json()["assignments"]["production"]["primary_profile_id"] is None
 
@@ -82,7 +85,7 @@ def test_stale_legacy_primary_assignment_invalidates_confirmation(client):
     login_admin(client)
     profile = create_verified(client, "fixture-profile")
     before = client.get(URL).json()
-    role(client, profile, "promote")
+    seed_production(client, profile)
     assert assign(client, profile["id"], token=before["state_token"]).status_code == 409
 
 
@@ -90,8 +93,8 @@ def test_cross_provider_requires_explicit_acknowledgement(client):
     login_admin(client)
     primary = create_verified(client, "fixture-local")
     verifier = create_verified(client, "fixture-external", provider="openai")
-    assert assign(client, primary["id"], verifier["id"]).status_code == 422
-    assert assign(client, primary["id"], verifier["id"], acknowledge=True).status_code == 200
+    assert assign(client, None, test_primary=primary["id"], test_verifier=verifier["id"]).status_code == 422
+    assert assign(client, None, test_primary=primary["id"], test_verifier=verifier["id"], acknowledge=True).status_code == 200
 
 
 def install_calls(monkeypatch, *, repair=False):
@@ -122,7 +125,7 @@ def test_distinct_roles_same_input_bounded_repair_encrypted_history(client, even
         row.context_window = 18000
         db.scalar(select(VLLMTestRun).where(VLLMTestRun.profile_id == row.id)).profile_fingerprint = profile_fingerprint(row)
         db.commit()
-    assert assign(client, primary["id"], verifier["id"], acknowledge=True).status_code == 200
+    seed_production_roles(client, primary["id"], verifier["id"])
     created = client.post("/api/v1/analyses", json=event_payload).json()
     calls = install_calls(monkeypatch, repair=True)
     with client.app.state.session_factory() as db:
@@ -155,9 +158,11 @@ def test_named_test_pins_both_roles_before_assignment_change(client, event_paylo
     login_admin(client)
     client.app.state.settings.agent_mode = "moduagent"
     first, second = create_verified(client, "fixture-first"), create_verified(client, "fixture-second")
+    seed_production(client, first)
     assert assign(client, first["id"], test_primary=first["id"], test_verifier=second["id"]).status_code == 200
     run = named(client, event_payload)
     assert run["profile_metadata"]["verifier_profile"]["model_profile_id"] == second["id"]
+    seed_production(client, second)
     assert assign(client, second["id"], test_primary=second["id"], test_verifier=first["id"]).status_code == 200
     calls = install_calls(monkeypatch)
     with client.app.state.session_factory() as db:
@@ -172,7 +177,7 @@ def test_unmeasured_history_not_reported_as_zero_abstention(client, event_payloa
     assert result["inconclusive_rate"] is None and result["counts"]["measured"] == 0
     assert client.get(URL + "/diagnostics?days=91").status_code == 422
     assert client.get(URL + "/diagnostics?purpose=unknown").status_code == 422
-    assert assign(client, None, "missing-profile").status_code == 422
+    assert assign(client, None, test_verifier="missing-profile").status_code == 422
 
 
 def test_diagnostics_count_old_and_new_versions_without_rewriting_history(client, event_payload):
@@ -208,7 +213,7 @@ def test_verified_profile_still_needs_space_for_common_instructions_and_repair(c
         row.context_window = 8192
         db.scalar(select(VLLMTestRun).where(VLLMTestRun.profile_id == row.id)).profile_fingerprint = profile_fingerprint(row)
         db.commit()
-    response = assign(client, profile["id"])
+    response = assign(client, None, test_primary=profile["id"])
     assert response.status_code == 422
     assert response.json()["detail"] == "agent_context_budget_too_small"
 
@@ -220,7 +225,7 @@ def test_failed_retry_keeps_both_original_roles_after_reassignment(client, event
     client.app.state.settings.agent_mode = "moduagent"
     primary, verifier = create_verified(client, "fixture-primary"), create_verified(client, "fixture-verifier")
     replacement = create_verified(client, "fixture-replacement")
-    assert assign(client, primary["id"], verifier["id"]).status_code == 200
+    seed_production_roles(client, primary["id"], verifier["id"])
     created = client.post("/api/v1/analyses", json=event_payload).json()
 
     async def fail(**kwargs):
@@ -235,7 +240,7 @@ def test_failed_retry_keeps_both_original_roles_after_reassignment(client, event
             worker.process_moduagent(db, client.app.state.crypto, original, "", .75)
         worker.mark_failed(db, original, failure.value)
     assert client.get(URL + "/diagnostics").json()["llm_failure_counts"] == {"output_validation_failed": 1}
-    assert assign(client, replacement["id"]).status_code == 200
+    seed_production_roles(client, replacement["id"])
     eligibility = client.get(f"/api/v1/analyses/{created['id']}/retry-eligibility").json()
     assert eligibility["allowed"] and eligibility["verifier_model_profile"] == verifier["name"]
     response = retry(client, created["id"])
@@ -251,7 +256,7 @@ def test_failed_retry_keeps_both_original_roles_after_reassignment(client, event
 def test_revoked_verifier_is_blocked_before_transport_without_profile_fallback(client, event_payload, monkeypatch):
     login_admin(client)
     primary, verifier = create_verified(client, "fixture-primary"), create_verified(client, "fixture-verifier")
-    assert assign(client, primary["id"], verifier["id"]).status_code == 200
+    seed_production_roles(client, primary["id"], verifier["id"])
     created = client.post("/api/v1/analyses", json=event_payload).json()
     transported = []
 

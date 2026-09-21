@@ -11,7 +11,13 @@ import HelpTooltip from "./HelpTooltip.jsx";
 import SummaryPreview from "./SummaryPreview.jsx";
 import Dialog from "./Dialog.jsx";
 import EvaluationOverview from "./EvaluationOverview.jsx";
-import DashboardView from "./DashboardView.jsx";
+import ConsoleShell from "./ConsoleShell.jsx";
+import { ConsolePreferencesProvider, useConsolePreferences } from "./consolePreferences.jsx";
+import MoreActions from "./MoreActions.jsx";
+import { consoleDestination, consoleSearch } from "./consoleNavigation.js";
+import { RuntimeStatus, RuntimeQuality, RuntimeInformation } from "./RuntimeViews.jsx";
+import { Overview, Promotion, ProductionEvaluation, RuntimeWorkspace, Activity } from "./LifecycleViews.jsx";
+import { startVisiblePolling } from "./visiblePolling.js";
 import RetryAnalysis from "./RetryAnalysis.jsx";
 import AnalysisDownloads from "./AnalysisDownloads.jsx";
 import { analysisElapsedTime, analysisQuery, analysisReceivedAt, analysisRowState, appliedFilterTags, dashboardListState, executionDuration, formatDate, formatDuration, initialListState, removeAppliedFilter, searchFields, uploadErrorText, validateFilters } from "./analysisView.js";
@@ -20,17 +26,23 @@ import { CompactEvaluationDetail, CompactReferenceComparison, EvaluationSummary,
 import AnalysisSelectionActions, { useAnalysisSelection } from "./AnalysisSelection.jsx";
 import DataTable, { Table, serverSorting, changedSort } from "./DataTable.jsx";
 import DataManagement from "./DataManagement.jsx";
+import RegistryFilters from "./RegistryFilters.jsx";
 import DatasetAnalysis from "./DatasetAnalysis.jsx";
+import CandidateConfiguration from "./CandidateConfiguration.jsx";
 import { evaluationOutcomes, isMockAnalysis, labelSources, referenceVerdicts } from "./labelEvaluation.js";
 import { createDetailLoader, emptyDetailState } from "./detailLoader.js";
 import { analysisNotices, analystFieldLabel, analystFollowUp, analystGuidance, analystItems, analystSummary, analystText, finalValue, groupedEvidence, hasTuningContent, isTechnicalText } from "./analystView.js";
-import DecodingView from "./DecodingView.jsx";
 import RawEventView from "./RawEventView.jsx";
 import AgentHistory from "./AgentHistory.jsx";
+import DetailTabs from "./DetailTabs.jsx";
+import InferenceSummary from "./InferenceSummary.jsx";
+import "./inferenceDetail.css";
 import QuickValidationDialog from "./QuickValidationDialog.jsx";
 import TextInspector from "./TextInspector.jsx";
 import { createLogoutController, loginError } from "./inspection.js";
-import AgentSettings from "./AgentSettings.jsx";
+import AgentSettings, { Diagnostics } from "./AgentSettings.jsx";
+import PromptSettings from "./PromptSettings.jsx";
+import ConcurrencySettings from "./ConcurrencySettings.jsx";
 import InputSchemaSettings, { InputSchemaMetadata } from "./InputSchemaSettings.jsx";
 import InternalEgressSettings from "./InternalEgressSettings.jsx";
 import ServiceApiKeys from "./ServiceApiKeys.jsx";
@@ -42,8 +54,8 @@ import { allowedInternalTarget, internalEgressError, internalTargetAddress, inte
 import "./unifiedAnalysis.css";
 import { initialTestRunFilters, initialTestRunHistoryState, TestRunDetail, TestRunHistory } from "./TestRuns.jsx";
 import { autoTestName, emptySingleTest, newTestRequestKey, singleTestEvent, testRunError, validateTestName } from "./testRuns.js";
-import { ModelAssignmentDialog, TestModelNotice } from "./ModelAssignments.jsx";
-import { assignmentBlockReason, createAssignmentController, emptyAssignmentState, roleAssigned, testModelAvailability } from "./modelAssignments.js";
+import { ModelAssignmentDialog } from "./ModelAssignments.jsx";
+import { assignmentBlockReason, createAssignmentController, emptyAssignmentState, roleAssigned } from "./modelAssignments.js";
 import { createBrowserHistory } from "./browserHistory.js";
 import { applyAppRoute, isDetailOrigin, readAppHash, writeAppHash } from "./appRoutes.js";
 
@@ -177,14 +189,14 @@ export function initialTestResultsState() {
 }
 
 // Test-run searches and item filters never become Production analysis filters.
-export function AnalysisResultsPage({ purpose, onScopeChange, state, setState, testState, setTestState, onSelectRun, onOpenRunItem, onOpen, onUnauthorized, onShowTestRuns, onShowAllTestItems }) {
+export function AnalysisResultsPage({ purpose, onScopeChange, state, setState, testState, setTestState, onSelectRun, onOpenRunItem, onOpen, onUnauthorized, onShowTestRuns, onShowAllTestItems, splitNavigation = false }) {
   const setPart = key => update => setTestState(current => ({ ...current, [key]: typeof update === "function" ? update(current[key]) : update }));
   const showRuns = onShowTestRuns || (() => setTestState(current => ({ ...current, view: "runs", runId: null })));
   const showAllTestItems = onShowAllTestItems || (() => setTestState(current => ({ ...current, view: "items", runId: null, items: initialListState("test") })));
   if (purpose !== "test") return <AnalysisList key={state.applied.analysis_purpose || "all"} state={state} setState={setState} onScopeChange={onScopeChange} onOpen={onOpen} onUnauthorized={onUnauthorized} />;
   if (!testState.runId && testState.view === "items") return <AnalysisList key="test-items" state={testState.items} setState={setPart("items")} onScopeChange={onScopeChange} onShowTestRuns={showRuns} onOpen={onOpen} onUnauthorized={onUnauthorized} />;
   return <div className="page-stack test-results-page">
-    <div className="analysis-list-toolbar"><AnalysisScopeTabs purpose="test" onChange={onScopeChange} />{!testState.runId && <button type="button" className="secondary" onClick={showAllTestItems}>테스트 문항 전체 보기</button>}</div>
+    <div className="analysis-list-toolbar">{!splitNavigation && <AnalysisScopeTabs purpose="test" onChange={onScopeChange} />}{!testState.runId && <button type="button" className="secondary" onClick={showAllTestItems}>테스트 문항 전체 보기</button>}</div>
     {testState.runId
       ? <TestRunDetail key={testState.runId} id={testState.runId} filters={testState.filters} onFiltersChange={setPart("filters")} onBack={showRuns} onOpen={onOpenRunItem} onUnauthorized={onUnauthorized} />
       : <TestRunHistory state={testState.history} onStateChange={setPart("history")} onSelect={onSelectRun} onViewAnalyses={showAllTestItems} onUnauthorized={onUnauthorized} />}
@@ -203,24 +215,23 @@ export function AnalysisList({ state, setState, onOpen, onUnauthorized, onScopeC
   const selection = useAnalysisSelection(data.items, JSON.stringify(query));
   useEffect(() => {
     let active = true;
-    let timer;
-    const controller = new AbortController();
     setLoading(true); setData({ items: [], total: 0 }); setError("");
-    async function load() {
+    const stop = startVisiblePolling(async signal => {
       try {
-        const next = await api.analyses(query, { signal: controller.signal });
+        const next = await api.analyses(query, { signal });
         if (active) {
           setData(next); setError("");
           if (query.offset > 0 && query.offset >= next.total) {
             setState((current) => ({ ...current, offset: Math.max(0, (Math.ceil(next.total / current.limit) - 1) * current.limit) }));
           }
         }
+        return next.items.some(item => ["pending", "processing"].includes(item.status));
       } catch (err) {
-        if (active) { setError(err.message); if (err.status === 401) onUnauthorized(); }
-      } finally { if (active) { setLoading(false); timer = setTimeout(load, 5000); } }
-    }
-    load();
-    return () => { active = false; clearTimeout(timer); controller.abort(); };
+        if (active) { setError(err.status === 401 ? "로그인이 만료되었습니다. 다시 로그인하세요." : "분석 목록을 불러오지 못했습니다. 다시 조회하세요."); if (err.status === 401) onUnauthorized(); }
+        throw err;
+      } finally { if (active) setLoading(false); }
+    });
+    return () => { active = false; stop(); };
   }, [query, onUnauthorized, setState, labelRefresh]);
   const update = (event) => { const { name, value } = event.target; setState((current) => ({ ...current, draft: { ...current.draft, [name]: value } })); };
   function apply(event) {
@@ -304,53 +315,50 @@ export function AnalysisList({ state, setState, onOpen, onUnauthorized, onScopeC
 
 export function TestAnalysisPage({ onViewTests, onOpen, selectedRunId, onSelectRun, agentMode, onConfigureModels }) {
   const [inputMode, setInputMode] = useState("direct");
-  const [testModels, setTestModels] = useState({ profiles: null, loading: true, error: "" }); const testModelRequest = useRef(null);
+  const [candidate, setCandidate] = useState({ configuration: null, blocked: "실행 구성을 불러오는 중입니다." });
+  const [submitting, setSubmitting] = useState(false);
   const [localRunId, setLocalRunId] = useState(null);
   const runId = selectedRunId === undefined ? localRunId : selectedRunId;
   const selectRun = onSelectRun || setLocalRunId;
   const createdRun = run => selectRun(run.id);
-  const loadTestModel = useCallback(async () => {
-    testModelRequest.current?.abort(); const controller = new AbortController(); testModelRequest.current = controller;
-    setTestModels(previous => ({ ...previous, loading: true, error: "" }));
-    try { const profiles = await api.modelProfiles({ signal: controller.signal }); if (!Array.isArray(profiles)) throw new Error("invalid_profiles"); if (!controller.signal.aborted) setTestModels({ profiles, loading: false, error: "" }); }
-    catch (error) { if (!controller.signal.aborted) setTestModels({ profiles: null, loading: false, error: "조회 실패" }); }
-  }, []);
-  useEffect(() => { if (runId) return undefined; void loadTestModel(); window.addEventListener("focus", loadTestModel); return () => { testModelRequest.current?.abort(); window.removeEventListener("focus", loadTestModel); }; }, [loadTestModel, runId]);
-  const testBlocked = testModelAvailability({ ...testModels, agentMode }).blocked;
+  const testBlocked = candidate.blocked;
+  const submissionProps = { candidateConfiguration: candidate.configuration, onBusy: setSubmitting, disabledReason: testBlocked };
   if (runId) return <TestRunDetail key={runId} id={runId} onBack={() => selectRun(null)} onOpen={onOpen} />;
   return <div className="page-stack test-workspace">
     <div className="ux-toolbar"><span className="ux-grow ux-muted">새 테스트</span><button type="button" className="secondary" onClick={onViewTests}>테스트 결과 보기</button></div>
-    <TestModelNotice state={testModels} agentMode={agentMode} onRefresh={loadTestModel} onConfigure={onConfigureModels} />
+    <CandidateConfiguration agentMode={agentMode} busy={submitting} onChange={setCandidate} onConfigure={onConfigureModels} />
     <div className="tabs" role="tablist" aria-label="테스트 입력 방식">
-      {[["direct", "단건 분석"], ["file", "배치 파일 분석"], ["dataset", "검증 데이터셋 분석"]].map(([value, label]) => <button key={value} id={`test-input-${value}`} type="button" role="tab" aria-controls={`test-panel-${value}`} aria-selected={inputMode === value} onClick={() => setInputMode(value)}>{label}</button>)}
+      {[["direct", "단건 분석"], ["file", "배치 파일 분석"], ["dataset", "검증 데이터셋 분석"]].map(([value, label]) => <button key={value} id={`test-input-${value}`} type="button" role="tab" disabled={submitting} aria-controls={`test-panel-${value}`} aria-selected={inputMode === value} onClick={() => setInputMode(value)}>{label}</button>)}
     </div>
     {/* Keep both forms mounted so switching input methods retains drafts and upload results. */}
-    <div id="test-panel-direct" role="tabpanel" aria-labelledby="test-input-direct" hidden={inputMode !== "direct"}><SingleTest onCreated={createdRun} disabledReason={testBlocked} /></div>
-    <div id="test-panel-file" role="tabpanel" aria-labelledby="test-input-file" hidden={inputMode !== "file"}><UploadPage onViewTests={onViewTests} onOpen={onOpen} onCreated={createdRun} disabledReason={testBlocked} /></div>
-    <div id="test-panel-dataset" role="tabpanel" aria-labelledby="test-input-dataset" hidden={inputMode !== "dataset"}><DatasetAnalysis onCreated={createdRun} disabledReason={testBlocked} /></div>
+    <div id="test-panel-direct" role="tabpanel" aria-labelledby="test-input-direct" hidden={inputMode !== "direct"}><SingleTest onCreated={createdRun} {...submissionProps} /></div>
+    <div id="test-panel-file" role="tabpanel" aria-labelledby="test-input-file" hidden={inputMode !== "file"}><UploadPage onViewTests={onViewTests} onOpen={onOpen} onCreated={createdRun} {...submissionProps} /></div>
+    <div id="test-panel-dataset" role="tabpanel" aria-labelledby="test-input-dataset" hidden={inputMode !== "dataset"}><DatasetAnalysis onCreated={createdRun} agentMode={agentMode} external={candidate.external} {...submissionProps} /></div>
   </div>;
 }
 
-function UploadPage({ onViewTests, onOpen, onCreated, disabledReason }) {
+function UploadPage({ onViewTests, onOpen, onCreated, disabledReason, candidateConfiguration, onBusy }) {
   const [file, setFile] = useState(null);
   const [name, setName] = useState(""); const requestKey = useRef(null);
   const [result, setResult] = useState(null);
+  useEffect(() => { requestKey.current = null; setResult(null); }, [candidateConfiguration]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   async function upload() {
+    if (busy) return;
     if (disabledReason) { setError(disabledReason); return; }
     if (!file) return;
     requestKey.current ||= newTestRequestKey();
     const testName = autoTestName(name, requestKey.current);
     const nameError = validateTestName(testName); if (nameError) { setError(nameError); return; }
-    setBusy(true); setError(""); setResult(null);
+    setBusy(true); onBusy?.(true); setError(""); setResult(null);
     try {
-      const next = await api.uploadTestRun(file, testName, requestKey.current);
+      const next = await api.uploadTestRun(file, testName, requestKey.current, candidateConfiguration);
       setResult(next);
       requestKey.current = null;
       if (!next.rejected) onCreated(next);
     } catch (err) { setError(testRunError(err)); }
-    finally { setBusy(false); }
+    finally { setBusy(false); onBusy?.(false); }
   }
   return (
     <section className="panel upload-panel">
@@ -373,25 +381,31 @@ function UploadPage({ onViewTests, onOpen, onCreated, disabledReason }) {
   );
 }
 
-function SingleTest({ onCreated, disabledReason }) {
+function SingleTest({ onCreated, disabledReason, candidateConfiguration, onBusy }) {
   const [name, setName] = useState(""); const [expectedVerdict, setExpectedVerdict] = useState("");
   const [difficulty, setDifficulty] = useState(""); const [category, setCategory] = useState(""); const requestKey = useRef(null);
   const [form, setForm] = useState(emptySingleTest);
+  const [additionalFields, setAdditionalFields] = useState("");
+  useEffect(() => { requestKey.current = null; }, [candidateConfiguration]);
   const [extraOpen, setExtraOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const update = (key) => (event) => { setForm({ ...form, [key]: event.target.value }); requestKey.current = null; };
   async function run(event) {
-    event.preventDefault(); if (disabledReason) { setMessage(disabledReason); return; }
+    event.preventDefault(); if (busy) return; if (disabledReason) { setMessage(disabledReason); return; }
     requestKey.current ||= newTestRequestKey();
     const testName = autoTestName(name, requestKey.current);
-    const nameError = validateTestName(testName); if (nameError) { setMessage(nameError); return; } setMessage("등록 중…"); setBusy(true);
+    const nameError = validateTestName(testName); if (nameError) { setMessage(nameError); return; }
+    let observation = singleTestEvent(form, requestKey.current);
+    try { const extra = additionalFields.trim() ? JSON.parse(additionalFields) : {}; if (!extra || Array.isArray(extra) || typeof extra !== "object" || Object.keys(extra).some(key => Object.hasOwn(observation, key))) throw new Error(); observation = { ...observation, ...extra }; }
+    catch { setMessage("추가 필드는 JSON 객체로 입력하세요. 기본 필드를 중복해서 넣을 수 없습니다."); return; }
+    setMessage("등록 중…"); setBusy(true); onBusy?.(true);
     try {
-      const created = await api.createTestRun({ name: testName, idempotency_key: requestKey.current, event: singleTestEvent(form, requestKey.current), ...(expectedVerdict ? { expected_verdict: expectedVerdict } : {}), ...(difficulty.trim() ? { difficulty: difficulty.trim() } : {}), ...(category.trim() ? { test_category: category.trim() } : {}) });
+      const created = await api.createTestRun({ name: testName, idempotency_key: requestKey.current, event: observation, ...(candidateConfiguration ? { candidate_configuration: candidateConfiguration } : {}), ...(expectedVerdict ? { expected_verdict: expectedVerdict } : {}), ...(difficulty.trim() ? { difficulty: difficulty.trim() } : {}), ...(category.trim() ? { test_category: category.trim() } : {}) });
       setMessage("테스트를 접수했습니다.");
       requestKey.current = null; onCreated(created);
     } catch (err) { setMessage(testRunError(err)); }
-    finally { setBusy(false); }
+    finally { setBusy(false); onBusy?.(false); }
   }
   return (
     <form className="panel form-panel" onSubmit={run}>
@@ -411,16 +425,19 @@ function SingleTest({ onCreated, disabledReason }) {
       <label>HTTP 원문<textarea rows="8" required value={form.payload} onChange={update("payload")} placeholder={"GET /search?q=example HTTP/1.1\nHost: example.internal\n\n"} /></label>
       <button type="button" className="text-button" aria-expanded={extraOpen} aria-controls="single-test-extra" onClick={() => setExtraOpen(value => !value)}>{extraOpen ? "추가 입력 닫기" : "추가 입력"}</button>
       <div className="form-grid" id="single-test-extra" hidden={!extraOpen}><label>이벤트 ID<input value={form.event_id} onChange={update("event_id")} placeholder="비워두면 ID 자동 생성" /></label><label>이벤트명<input value={form.event_name} onChange={update("event_name")} placeholder="예: 검색 요청" /></label><label>출발지 포트<input type="number" min="0" max="65535" value={form.src_port} onChange={update("src_port")} placeholder="예: 42310" /></label><label>목적지 포트<input type="number" min="0" max="65535" value={form.dest_port} onChange={update("dest_port")} placeholder="예: 443" /></label></div>
+      {extraOpen && <label>스키마 추가 필드 (JSON)<textarea value={additionalFields} rows={3} placeholder={'{"vendor_score": 2}'} onChange={event => { setAdditionalFields(event.target.value); requestKey.current = null; }} /></label>}
       </fieldset><div className="action-row"><button className="primary" disabled={busy || Boolean(disabledReason)}>{busy ? "접수 중…" : "분석 시작"}</button><span aria-live="polite">{message}</span></div>
     </form>
   );
 }
 
-function Detail({ id, onBack, onOpen, backLabel = "분석 결과", tab: controlledTab, onTabChange }) {
+export function Detail({ id, onBack, onOpen, backLabel = "분석 결과", tab: controlledTab, onTabChange }) {
+  const { t } = useConsolePreferences();
   const [view, setView] = useState(() => emptyDetailState(id));
   const loader = useRef(null);
   const { detail, error, loading, runs, runsError, runsLoading, labelHistory, labelHistoryError, labelsLoading } = view;
-  const [raw, setRaw] = useState(null);
+  const [rawRecord, setRawRecord] = useState(null);
+  const raw = rawRecord?.id === id ? rawRecord.event : null;
   const [rawError, setRawError] = useState("");
   const [rawAttempt, setRawAttempt] = useState(0);
   const [localTab, setLocalTab] = useState("result");
@@ -428,85 +445,95 @@ function Detail({ id, onBack, onOpen, backLabel = "분석 결과", tab: controll
   const setTab = onTabChange || setLocalTab;
   const [reportMode, setReportMode] = useState("preview");
   const [technicalOpen, setTechnicalOpen] = useState(false);
-  const [technicalTab, setTechnicalTab] = useState("meta");
-  const [decodingOpen, setDecodingOpen] = useState(false);
+  const [inputTarget, setInputTarget] = useState(null);
+  const [reportAppendix, setReportAppendix] = useState(false);
+  const openInput = item => { setInputTarget({ field: item.field, excerpt: item.excerpt }); setTab("raw"); };
   useEffect(() => {
     const current = createDetailLoader({ id, api, onChange: setView });
     loader.current = current;
-    setRaw(null); setRawError("");
+    setRawRecord(null); setRawError(""); setInputTarget(null); setTechnicalOpen(false); setReportAppendix(false);
     current.start();
     return () => { current.dispose(); loader.current = null; };
   }, [id]);
-  useEffect(() => { loader.current?.setAgentVisible(technicalOpen && technicalTab === "agent"); }, [id, technicalOpen, technicalTab]);
+  useEffect(() => { loader.current?.setAgentVisible(tab === "agent"); }, [id, tab]);
   useEffect(() => {
-    if (!(tab === "raw" || (tab === "result" && decodingOpen)) || raw) return;
+    if (tab !== "raw" || raw) return;
     let active = true;
     const controller = new AbortController();
     setRawError("");
-    api.rawEvent(id, { signal: controller.signal }).then((value) => { if (active) setRaw(value); }).catch((err) => { if (active) setRawError(err.message); });
+    api.rawEvent(id, { signal: controller.signal }).then(value => { if (active) setRawRecord({ id, event: value }); }).catch(() => { if (active) setRawError("unavailable"); });
     return () => { active = false; controller.abort(); };
-  }, [id, raw, tab, decodingOpen, rawAttempt]);
-  const [reportAppendix, setReportAppendix] = useState(false);
-  useEffect(() => setReportAppendix(false), [id]);
-  const referenceActions = <AnalysisSelectionActions ids={[id]} single onSaved={() => loader.current?.refresh()} />;
-  const navigation = <div className="panel-head-inline"><button className="back" onClick={onBack}>← {backLabel}</button><div className="ux-toolbar">{detail && <RetryAnalysis key={id} detail={detail} onOpen={onOpen} />}{detail && <AnalysisDownloads id={id} status={detail.status} includeAppendix={reportAppendix} includeDecoding={Boolean(raw?.decoding)} />}<button type="button" className="secondary" disabled={loading || labelsLoading || runsLoading} onClick={() => loader.current?.refresh()}>새로고침</button></div></div>;
-  if (!detail || view.id !== id) return <div className="page-stack">{navigation}{error ? <div className="error" role="alert">{error}</div> : <div className="loading">불러오는 중…</div>}</div>;
-  const durationFallback = ["pending", "processing"].includes(detail.status) ? "진행 중" : "측정 전 데이터";
+  }, [id, raw, tab, rawAttempt]);
+  const navigation = <div className="panel-head-inline inference-toolbar">
+    <button className="back" onClick={onBack}>← {backLabel}</button>
+    <div className="ux-toolbar">
+      {detail && view.id === id && <RetryAnalysis key={id} detail={detail} onOpen={onOpen} />}
+      {detail && view.id === id && <AnalysisDownloads id={id} status={detail.status} includeAppendix={reportAppendix} includeDecoding={Boolean(raw?.decoding)} />}
+      <button type="button" className="icon-button" aria-label={t("detail.refresh")} title={t("detail.refresh")} disabled={loading || labelsLoading || runsLoading} onClick={() => loader.current?.refresh()}><Icon name="refresh" size={18} /></button>
+    </div>
+  </div>;
+  if (!detail || view.id !== id) return <div className="page-stack">{navigation}{error ? <div className="error" role="alert">{error}</div> : <div className="loading">{t("loading")}</div>}</div>;
   const notices = analysisNotices(detail);
   const decisionReason = isMockAnalysis(detail) ? null : decisionExplanation(detail);
-  const rawFailure = rawError && <div className="error" role="alert"><p>원문 정보를 불러오지 못했습니다. {rawError}</p><button type="button" className="secondary" onClick={() => setRawAttempt((value) => value + 1)}>원문 다시 불러오기</button></div>;
-  return (
-    <div className="page-stack">
-      {navigation}
-      {error && <div className="error" role="alert">{error}</div>}
-      <section className={`panel decision-card decision-${detail.status === "completed" ? finalValue(detail, "verdict") : "pending"}`}>
-        <div><span>{isMockAnalysis(detail) ? "모의 판정" : "판정 요약"}</span>{detail.status === "completed" ? <Status value={finalValue(detail, "verdict")} /> : <Status value={detail.status} />}{detail.status === "completed" ? <Severity value={detail.result?.threat_analysis?.severity} describe /> : <span className="muted">심각도 미확정</span>}</div>
-        {decisionReason && <p className="decision-reason-label">{decisionReason.title_ko}</p>}
-        <div className="decision-summary-line"><strong>{analystSummary(detail)}</strong></div>
-        {!isMockAnalysis(detail) && <DecisionIssues detail={detail} />}
-        {notices.map((notice) => <small className="analyst-notice" key={notice}>{notice}</small>)}
-      </section>
-      <CompactEvaluationDetail detail={detail} history={labelHistory} historyError={labelHistoryError} />
-      {referenceActions}
-      <section className="detail-summary panel">
-        <div><span>회사</span><strong>{detail.company_name || "미기록"}</strong></div>
-        <div><span>출발지 IP / 포트</span><strong>{detail.src_ip || "미기록"}</strong><small>{detail.src_port ?? "포트 미기록"}</small></div>
-        <div><span>목적지 IP / 포트</span><strong>{detail.dest_ip || "미기록"}</strong><small>{detail.dest_port ?? "포트 미기록"}</small></div>
-        <div><span>전체 소요 시간</span><strong>{formatDuration(detail.total_elapsed_ms, durationFallback)}</strong><small>접수부터 종료까지</small></div>
-      </section>
-      <div className="tabs" role="tablist" aria-label="분석 상세">
-        {[['result','판정 결과'],['raw','HTTP 원문'],['report','보고서']].map(([value,label]) => <button key={value} role="tab" aria-selected={tab === value} onClick={() => setTab(value)}>{label}</button>)}
+  const rawFailure = rawError && <div className="error" role="alert"><p>{t("detail.rawError")}</p><button type="button" className="secondary" onClick={() => setRawAttempt(value => value + 1)}>{t("retry")}</button></div>;
+  const tabItems = ["result", "agent", "raw", "json", "report"].map(key => [key, t(`detail.tab.${key}`)]);
+  return <div className="page-stack inference-detail">
+    {navigation}
+    {error && <div className="error" role="alert">{error}</div>}
+    <InferenceSummary detail={detail} runs={runs} onMetadata={() => setTechnicalOpen(true)}>
+      <h2>{t(isMockAnalysis(detail) ? "detail.mock" : "detail.summary")}</h2>
+      <div className="snapshot-highlight" data-verdict={detail.status === "completed" ? finalValue(detail, "verdict") : detail.status}>
+        <div className="snapshot-verdict"><span className="snapshot-mark"><Icon name={detail.status === "failed" ? "close" : "shield"} size={25} /></span><div><small>{t("detail.verdict")}</small>{detail.status === "completed" ? <Status value={finalValue(detail, "verdict")} /> : <Status value={detail.status} />}</div>{detail.status === "completed" && <Severity value={detail.result?.threat_analysis?.severity} describe />}</div>
+        <div className="snapshot-summary"><SummaryPreview text={analystSummary(detail)} /></div>
       </div>
-      {tab === "result" && <><ResultView detail={detail} /><section className="panel inspection-section-head"><div><h2>인코딩·난독화 문자열</h2><p className="ux-muted">원본과 변환 결과 비교</p></div><button type="button" className="secondary" onClick={() => setDecodingOpen(true)}>문자열 비교</button></section><Dialog open={decodingOpen} title="인코딩·난독화 문자열" className="inspection-dialog" onClose={() => setDecodingOpen(false)}>{decodingOpen && (rawFailure || (raw ? <DecodingView decoding={raw.decoding} /> : <p className="loading" role="status">원문과 변환 결과를 불러오는 중…</p>))}</Dialog></>}
-      {tab === "raw" && (rawFailure || (raw ? <RawEventView event={raw} /> : <p className="panel loading" role="status">원문을 불러오는 중…</p>))}
-      {tab === "report" && <AnalysisReport detail={detail} decoding={raw?.decoding ?? null} mode={reportMode} onModeChange={setReportMode} includeAppendix={reportAppendix} onAppendixChange={setReportAppendix} />}
-      <div className="ux-toolbar"><button type="button" className="secondary" onClick={() => setTechnicalOpen(true)}>이벤트·실행 정보</button></div><Dialog open={technicalOpen} title="이벤트·실행 정보" className="inspection-dialog" onClose={() => setTechnicalOpen(false)}>{technicalOpen && <div className="analyst-disclosure-body">
-        <div className="tabs" role="tablist" aria-label="기술정보"><button type="button" role="tab" aria-selected={technicalTab === "meta"} onClick={() => setTechnicalTab("meta")}>실행 개요</button><button type="button" role="tab" aria-selected={technicalTab === "agent"} onClick={() => setTechnicalTab("agent")}>Agent 실행 이력</button><button type="button" role="tab" aria-selected={technicalTab === "json"} onClick={() => setTechnicalTab("json")}>결과 JSON</button></div>
-        {technicalTab === "meta" && <>
-          <section className="detail-summary">
-            <div><span>연동 시스템</span><strong>{detail.source_system}</strong></div>
-            <div><span>모델</span><strong>{detail.model_profile || "미기록"}</strong></div>
-            <div><span>분석 지침</span><strong>{detail.prompt_version || "미기록"}</strong></div>
-            <div><span>판정 점수<HelpTooltip label="판정 점수">모델의 자기평가에 최종 판정 정책을 적용한 참고값입니다. 실제 정탐 확률이나 정확도가 아닙니다.</HelpTooltip></span><strong>{finalValue(detail, "confidence_score") ?? "미기록"}</strong></div>
-            <div><span>대기 시간</span><strong>{formatDuration(detail.queue_wait_ms)}</strong></div>
-            <div><span>처리 시간</span><strong>{formatDuration(detail.processing_duration_ms)}</strong><small className="ux-muted">처리 시작~종료 · 재시도·복구 대기 포함</small></div>
-            <div><span>접수 경로</span><strong>{channelLabels[detail.ingest_channel] || "기존 미분류"}</strong></div>
-            <div><span>분석가 검토</span><strong>{labels[detail.review_state] || "미기록"}</strong></div>
-          </section>
-          {detail.error_code && <p className="error">실패 코드: {detail.error_code}</p>}
-          <span className="ux-muted">추가 검증<HelpTooltip label="추가 검증">Primary 결과를 전달받지 않고 같은 입력을 별도로 분석하는 Verifier 단계입니다. 이 단계의 판정은 최종 결과와 구분합니다. 구체적인 입출력은 Agent 실행 이력이나 결과 JSON에서 확인하세요.</HelpTooltip></span>
-          <p>{detail.result?.verifier?.executed === true ? "실행됨" : detail.result?.verifier?.executed === false ? "실행하지 않음" : "실행 기록 없음"}</p>
-        </>}
-        {technicalTab === "meta" && <><section className="detail-summary"><div><span>이벤트 ID</span><strong>{detail.event_id}</strong></div><div><span>분석 ID</span><strong>{detail.id}</strong></div><div><span>탐지명</span><strong>{detail.signature || "미기록"}</strong></div><div><span>WAF 조치 / 벤더</span><strong>{detail.waf_action === "D" ? "차단" : detail.waf_action === "A" ? "허용" : "미기록"}</strong><small>{detail.waf_vendor || "미기록"}</small></div><div><span>처리 상태 / 구분</span><Status value={detail.status} /><Purpose value={detail.analysis_purpose} /></div></section><InputSchemaMetadata metadata={detail.input_schema_metadata} /></>}
-        {technicalTab === "agent" && <>{runsError && <div className="error" role="alert"><p>Agent 실행 이력을 불러오지 못했습니다. {runsError}</p><button type="button" className="secondary" disabled={runsLoading} onClick={() => loader.current?.refreshAgent()}>이력 다시 불러오기</button></div>}{runs === null ? (!runsError && <p className="loading" role="status">Agent 실행 이력을 불러오는 중…</p>) : <AgentHistory runs={runs} />}</>}
-        {technicalTab === "json" && <TextInspector label="결과 JSON" value={detail.result} />}
-      </div>}</Dialog>
-      {tab === "result" && <AdditionalChecks detail={detail} />}
-    </div>
-  );
+      {decisionReason && <small className="snapshot-reason">{decisionReason.title_ko}</small>}
+    </InferenceSummary>
+    <DetailTabs label={t("detail")} items={tabItems} value={tab} onChange={setTab} focusRequest={inputTarget}>{key => {
+      if (key === "result") return tab === "result" && <div className="inference-result-content">
+        <section className={`panel decision-card decision-${detail.status === "completed" ? finalValue(detail, "verdict") : "pending"}`}>
+          <h2>{t("detail.summary")}</h2><div className="decision-summary-line"><strong>{analystSummary(detail)}</strong></div>
+          {!isMockAnalysis(detail) && <DecisionIssues detail={detail} />}
+          {notices.map(notice => <small className="analyst-notice" key={notice}>{notice}</small>)}
+        </section>
+        {detail.status === "completed" && detail.result && <ResultView detail={detail} onViewInput={openInput} />}
+        <section className="inference-evaluation">
+          <div className="inference-reference-actions"><h2>{t("detail.reference")}</h2><AnalysisSelectionActions key={id} ids={[id]} single compact onSaved={() => loader.current?.refresh()} /></div>
+          <CompactEvaluationDetail detail={detail} history={labelHistory} historyError={labelHistoryError} />
+          {detail.evaluation?.outcome === "unlabeled" && !labelHistoryError && <p className="ux-muted">등록된 참고 답안이 없습니다.</p>}
+        </section>
+        <AdditionalChecks detail={detail} />
+      </div>;
+      if (key === "agent") return <section className="agent-trace-panel">
+        <p className="ux-muted trace-audit">{t("detail.audit")}</p>
+        {runsError && <div className="error" role="alert"><p>{t("detail.agentError")}</p><button type="button" className="secondary" disabled={runsLoading} onClick={() => loader.current?.refreshAgent()}>{t("retry")}</button></div>}
+        {runs === null ? (!runsError && <p className="loading" role="status">{t("loading")}</p>) : <AgentHistory runs={runs} active={tab === "agent"} />}
+      </section>;
+      if (key === "raw") return rawFailure || (raw ? <RawEventView key={id} event={raw} detail={detail} target={inputTarget} active={tab === "raw"} /> : <p className="panel loading" role="status">{t("loading")}</p>);
+      if (key === "json") return tab === "json" && <section className="panel detail-body"><h2>{t("detail.tab.json")}</h2><p className="ux-muted">{t("detail.jsonNote")}</p><TextInspector label={t("detail.tab.json")} value={detail.result} /></section>;
+      return tab === "report" && <AnalysisReport detail={detail} decoding={raw?.decoding ?? null} mode={reportMode} onModeChange={setReportMode} includeAppendix={reportAppendix} onAppendixChange={setReportAppendix} />;
+    }}</DetailTabs>
+    <Dialog open={technicalOpen} title={t("detail.metadata")} className="inspection-dialog" onClose={() => setTechnicalOpen(false)}>{technicalOpen && <div className="analyst-disclosure-body">
+      <section className="detail-summary">
+        <div><span>회사</span><strong>{detail.company_name || t("detail.missing")}</strong></div>
+        <div><span>출발지 → 목적지</span><strong>{detail.src_ip || "—"}{detail.src_port != null && `:${detail.src_port}`} → {detail.dest_ip || "—"}{detail.dest_port != null && `:${detail.dest_port}`}</strong></div>
+        <div><span>연동 시스템</span><strong>{detail.source_system}</strong></div>
+        <div><span>접수 경로</span><strong>{channelLabels[detail.ingest_channel] || "기존 미분류"}</strong></div>
+        <div><span>분석가 검토</span><strong>{labels[detail.review_state] || "미기록"}</strong></div>
+        <div><span>판정 점수<HelpTooltip label="판정 점수">모델의 자기평가에 최종 판정 정책을 적용한 참고값입니다. 실제 정탐 확률이나 정확도가 아닙니다.</HelpTooltip></span><strong>{finalValue(detail, "confidence_score") ?? "미기록"}</strong></div>
+        <div><span>이벤트 ID</span><strong>{detail.event_id}</strong></div>
+        <div><span>분석 ID</span><strong>{detail.id}</strong></div>
+        <div><span>탐지명</span><strong>{detail.signature || "미기록"}</strong></div>
+        <div><span>WAF 조치 / 벤더</span><strong>{detail.waf_action === "D" ? "차단" : detail.waf_action === "A" ? "허용" : "미기록"}</strong><small>{detail.waf_vendor || "미기록"}</small></div>
+      </section>
+      {detail.error_code && <p className="error">실패 코드: {detail.error_code}</p>}
+      <p className="ux-muted">처리 시간은 처리 시작부터 종료까지이며 재시도·복구 대기를 포함합니다. 단계별 교정 횟수는 Agent 실행 이력에서 확인합니다.</p>
+      <p>추가 검증: {detail.result?.verifier?.executed === true ? "실행됨" : detail.result?.verifier?.executed === false ? "실행하지 않음" : "실행 기록 없음"}</p>
+      <InputSchemaMetadata metadata={detail.input_schema_metadata} />
+    </div>}</Dialog>
+  </div>;
 }
 
-export function ResultView({ detail }) {
+export function ResultView({ detail, onViewInput }) {
   const result = detail.result;
   if (!result || detail.status !== "completed") return <section className="panel detail-body"><h2>분석 상태</h2><p>{analystSummary(detail)}</p></section>;
   const threat = result.threat_analysis;
@@ -525,13 +552,14 @@ export function ResultView({ detail }) {
         {threat ? <dl><dt>{threatCategoryLabel(finalValue(detail, "verdict"))}</dt><dd>{analystText(threat.category)}</dd><dt>분석 위치</dt><dd>{analystFieldLabel(analystText(threat.target))}</dd><dt>분석 내용</dt><dd>{analystText(threat.technique_ko, "저장된 설명은 기술정보에서 확인할 수 있습니다.")}</dd><dt>예상 영향</dt><dd>{analystText(threat.potential_impact_ko)}</dd>{!!obfuscations.length && <><dt>인코딩·난독화</dt><dd>{obfuscations.join(", ")}</dd></>}</dl> : <p>세부 분석 내용이 기록되지 않았습니다.</p>}
         {signature && <div className="signature-context"><h3>탐지 내용과 요청의 연관성</h3><Status value={signature.relation} /><p>{analystText(signature.explanation_ko)}</p></div>}
       </section>
-      {assessmentView(result) ? <AnalystEvidence result={result} /> : <section className="panel result-card evidence-card">
+      {assessmentView(result) ? <AnalystEvidence result={result} onViewInput={onViewInput} /> : <section className="panel result-card evidence-card">
         <h2>판정 근거</h2>
         {!!evidence.length && <p className="muted">{legacyEvidenceNotice}</p>}
         <div className="evidence-list">
           {evidence.map((item, index) => <article key={index}>
             <div className="evidence-heading"><span>근거 {index + 1}</span><strong>{analystFieldLabel(item.field)}</strong>{typeof item.field === "string" && analystFieldLabel(item.field) !== item.field && <small className="evidence-field-path">{item.field}</small>}</div>
             <div className="evidence-section"><span>원문 발췌</span><code>{typeof item.excerpt === "string" ? item.excerpt : "발췌문 미기록"}</code></div>
+            {onViewInput && typeof item.field === "string" && typeof item.excerpt === "string" && item.excerpt && <button type="button" className="text-button evidence-input-link" onClick={() => onViewInput(item)}>입력에서 보기</button>}
             <div className="evidence-section evidence-interpretation"><span>분석 내용</span>{item.interpretations.map((interpretation, interpretationIndex) => <p key={interpretationIndex}>{analystText(interpretation, "저장된 설명은 기술정보에서 확인할 수 있습니다.")}</p>)}</div>
           </article>)}
           {!evidence.length && <p>{decisionExplanation(detail)?.code === "evidence_unverified" ? "원문 대조를 통과한 판정 근거가 남아 있지 않습니다. HTTP 원문에서 직접 확인해 주세요." : "저장된 판정 근거가 없습니다. 이것만으로 공격이 없다고 볼 수는 없습니다."}</p>}
@@ -557,17 +585,17 @@ function TextList({ title, items = [], empty }) {
   return <section className="panel result-card"><h2>{title}</h2>{items.length ? <ul>{items.map((item, index) => <li key={index}>{item}</li>)}</ul> : <p>{empty}</p>}</section>;
 }
 
-export function Settings({ onProductionChange, onViewDataset, tab: controlledTab, onTabChange }) {
+export function Settings({ onProductionChange, onViewDataset, tab: controlledTab, onTabChange, standalone = false }) {
   const [localTab, setLocalTab] = useState("models");
   const tab = controlledTab ?? localTab;
   const setTab = onTabChange || setLocalTab;
-  return <div className="page-stack"><div className="tabs" role="tablist" aria-label="설정 항목">
+  return <div className="page-stack">{!standalone && <div className="tabs" role="tablist" aria-label="설정 항목">
     <button type="button" role="tab" aria-selected={tab === "models"} onClick={() => setTab("models")}>LLM 프로필</button>
     <button type="button" role="tab" aria-selected={tab === "agents"} onClick={() => setTab("agents")}>Agent 설정</button>
     <button type="button" role="tab" aria-selected={tab === "schema"} onClick={() => setTab("schema")}>입력 스키마</button>
     <button type="button" role="tab" aria-selected={tab === "egress"} onClick={() => setTab("egress")}>내부 연결 허용</button>
     <button type="button" role="tab" aria-selected={tab === "keys"} onClick={() => setTab("keys")}>서비스 API Key</button>
-  </div>{tab === "models" ? <ModelSettings onProductionChange={onProductionChange} onConfigureAgents={() => setTab("agents")} onInternalEgress={() => setTab("egress")} onViewDataset={onViewDataset} /> : ["agents", "prompts"].includes(tab) ? <AgentSettings onProductionChange={onProductionChange} onModels={() => setTab("models")} /> : tab === "schema" ? <InputSchemaSettings /> : tab === "egress" ? <InternalEgressSettings /> : <ServiceApiKeys />}</div>;
+  </div>}{tab === "models" ? <ModelSettings onProductionChange={onProductionChange} onConfigureAgents={() => setTab("agents")} onInternalEgress={() => setTab("egress")} onViewDataset={onViewDataset} /> : ["agents", "prompts"].includes(tab) ? <AgentSettings standalone={standalone} onProductionChange={onProductionChange} onModels={() => setTab("models")} /> : tab === "instructions" ? <PromptSettings /> : tab === "concurrency" ? <ConcurrencySettings /> : tab === "schema" ? <InputSchemaSettings /> : tab === "egress" ? <InternalEgressSettings /> : <ServiceApiKeys />}</div>;
 }
 
 export function ModelSettings({ onProductionChange, onInternalEgress, onViewDataset, onConfigureAgents }) {
@@ -577,6 +605,10 @@ export function ModelSettings({ onProductionChange, onInternalEgress, onViewData
   const [profilesLoading, setProfilesLoading] = useState(true); const [profilesError, setProfilesError] = useState(""); const profileRead = useRef(0);
   const [assignment, setAssignment] = useState(emptyAssignmentState); const assignmentController = useRef(null);
   const [tests, setTests] = useState({});
+  const [registrySearch, setRegistrySearch] = useState(""), [registryProvider, setRegistryProvider] = useState(""), [registryValidation, setRegistryValidation] = useState("");
+  const filteredProfiles = profiles.filter(profile => `${profile.name} ${profile.model_name}`.toLowerCase().includes(registrySearch.trim().toLowerCase())
+    && (!registryProvider || providerOf(profile) === registryProvider)
+    && (!registryValidation || (registryValidation === "running" ? ["pending", "running"].includes(tests[profile.id]?.[0]?.status) : (tests[profile.id]?.[0]?.status || "unverified") === registryValidation)));
   const [form, setForm] = useState(newProfileForm);
   const [editingProfile, setEditingProfile] = useState(null);
   const [busy, setBusy] = useState("");
@@ -608,7 +640,8 @@ export function ModelSettings({ onProductionChange, onInternalEgress, onViewData
       onProductionChange?.(next.find((profile) => profile.status === "production")?.name || "미설정");
       const histories = await Promise.all(next.map(async (profile) => [profile.id, await api.modelProfileTests(profile.id)]));
       if (sequence === profileRead.current) setTests(Object.fromEntries(histories));
-    } catch (err) { if (sequence === profileRead.current) { setProfilesLoading(false); setProfilesError("프로필 또는 검증 이력을 조회하지 못했습니다."); } }
+      return { active: histories.some(([, items]) => items.some(test => ["pending", "running"].includes(test.status) || ["waiting", "running"].includes(test.dataset_evaluation?.status))) };
+    } catch (err) { if (sequence === profileRead.current) { setProfilesLoading(false); setProfilesError("프로필 또는 검증 이력을 조회하지 못했습니다."); } return { error: true }; }
   }, [onProductionChange]);
 
   useEffect(() => {
@@ -648,9 +681,12 @@ export function ModelSettings({ onProductionChange, onInternalEgress, onViewData
   }, [loadTargets]);
 
   useEffect(() => {
-    loadProfiles();
-    const timer = setInterval(loadProfiles, 3000);
-    return () => { clearInterval(timer); profileRead.current += 1; };
+    const stop = startVisiblePolling(async () => {
+      const result = await loadProfiles();
+      if (result?.error) throw new Error("profile_lookup_failed");
+      return result?.active;
+    });
+    return () => { stop(); profileRead.current += 1; };
   }, [loadProfiles]);
 
   function edit(profile) {
@@ -703,38 +739,42 @@ export function ModelSettings({ onProductionChange, onInternalEgress, onViewData
       <FullValidationDialog state={fullValidation} controller={fullValidationController.current} />
       <QuickValidationDialog key={`${quickValidation.profile?.id}-${quickValidation.profile?.profile_fingerprint}`} profile={quickValidation.profile} open={quickValidation.open} onClose={() => setQuickValidation(value => ({ ...value, open: false }))} onSubmitted={() => { setQuickValidation(value => ({ ...value, open: false })); setMessage("빠른 테스트를 접수했습니다. 모델 지정은 변경하지 않았습니다."); void loadProfiles(); }} />
       <ModelAssignmentDialog state={assignment} controller={assignmentController.current} />
-      <section className="panel"><div className="panel-head"><div><h2>LLM 프로필</h2><p className="ux-muted">모델을 등록하고 연결·출력을 검증합니다. 역할별 모델 배정은 Agent 설정에서 관리합니다.</p></div><button className="secondary" disabled={Boolean(busy)} onClick={onConfigureAgents}>Agent 설정</button></div></section>
+      <div className="workspace-context"><p className="ux-muted">연결 검증은 이 화면에서, 역할별 배정은 Agent Roles에서 관리합니다.</p><a href="#connect/vllm-targets">vLLM 연결 대상 →</a><button className="secondary" disabled={Boolean(busy)} onClick={onConfigureAgents}>Agent Roles</button></div>
       {message && <p className="notice" role="status">{message}</p>}
       <section className="panel profile-section">
         <div className="panel-head"><div><h2>모델 목록</h2><p className="ux-muted">현재 설정으로 전체 검증을 통과해야 운영·테스트에 지정할 수 있습니다.</p></div><div className="ux-toolbar"><button type="button" className="primary" disabled={Boolean(busy)} onClick={() => { if (editingProfile) resetForm(); setFormOpen(true); }}>모델 추가</button><button type="button" className="secondary" disabled={Boolean(busy)} onClick={loadProfiles}>새로고침</button></div></div>
         {profilesError && <p className="error" role="alert">{profilesError} 최신 상태를 확인하기 전에는 지정할 수 없습니다.</p>}
+        <RegistryFilters search={registrySearch} onSearch={setRegistrySearch} placeholder="프로필명 · 모델명" summary={profilesLoading ? "조회 중…" : `${filteredProfiles.length} / ${profiles.length}개 프로필`} filters={[
+          {label:"공급자 필터", value:registryProvider, onChange:setRegistryProvider, options:[["", "모든 공급자"], ["vllm", "vLLM"], ["openai", "OpenAI"]]},
+          {label:"최근 검증 필터", value:registryValidation, onChange:setRegistryValidation, options:[["", "모든 상태"], ["passed", "통과"], ["failed", "실패"], ["running", "진행 중"], ["unverified", "기록 없음"]]},
+        ]} />
         <DataTable label="LLM 프로필" columns={[
-            { id: "name", header: "이름", width: "22%", render: row => row.cells[0] },
-            { id: "model", header: "모델", width: "25%", render: row => row.cells[1] },
-            { id: "check", header: "최근 검증", width: "20%", render: row => row.cells[2] },
-            { id: "roles", header: "사용 상태", width: "22%", render: row => row.cells[3] },
-            { id: "actions", header: "관리", width: 80, render: row => row.cells[4] }
-          ]} data={profiles.map(profile => {
+            { id: "name", header: "프로필", width: "17%", render: row => row.cells[0] },
+            { id: "model", header: "공급자 / 모델", width: "22%", render: row => row.cells[1] },
+            { id: "context", header: "컨텍스트", width: 88, className: "profile-context", render: row => <span title="프로필에 설정한 입력·출력 합산 토큰 한도">{Number.isSafeInteger(row.context) ? row.context.toLocaleString() : "—"}</span> },
+            { id: "roles", header: "사용 상태", width: "17%", render: row => row.cells[3] },
+            { id: "check", header: "최근 검증", width: "18%", render: row => row.cells[2] },
+            { id: "actions", header: "검증 / 관리", width: 228, render: row => row.cells[4] }
+          ]} data={filteredProfiles.map(profile => {
                 const latest = tests[profile.id]?.[0];
                 const active = ["pending", "running"].includes(latest?.status) || ["waiting", "running"].includes(latest?.dataset_evaluation?.status);
                 const internalTargetIssue = providerOf(profile) === "vllm" ? vllmTargetError(profile.base_url, internalTargets) : "";
                 const assignmentIssue = assignmentBlockReason(profile, { loading: profilesLoading, error: profilesError, targetError: internalTargetIssue, active });
-                return { id: profile.id, cells: [
-                  <><strong>{profile.name}</strong><span className={`provider-badge provider-${providerOf(profile)}`}>{providerLabel(profile)}</span>{internalTargetIssue && <small className="error">연결 허용 확인 필요</small>}{providerOf(profile) === "openai" && !profile.external_data_approved && <small className="error">외부 전송 미승인</small>}</>,
-                  <><span>{profile.model_name}</span></>,
+                const validationBlocked = Boolean(busy) || active || profile.status === "disabled" || Boolean(internalTargetIssue) || (providerOf(profile) === "openai" && !profile.external_data_approved);
+                return { id: profile.id, context: profile.context_window, cells: [
+                  <><strong>{profile.name}</strong>{internalTargetIssue && <small className="error">연결 허용 확인 필요</small>}{providerOf(profile) === "openai" && !profile.external_data_approved && <small className="error">외부 전송 미승인</small>}</>,
+                  <><span>{profile.model_name}</span><span className={`provider-badge provider-${providerOf(profile)}`}>{providerLabel(profile)}</span></>,
                   <>{latest ? <><Status value={latest.status} /><small>{latest.mode} · {latest.completed_at ? new Date(latest.completed_at).toLocaleString("ko-KR") : "진행 중"}</small></> : <span>-</span>}</>,
                   <><div className="profile-role-badges">{profile.status === "production" && <span className="status status-production">Production Primary</span>}{profile.is_test && <span className="status purpose-test">Test Primary</span>}{profile.agent_roles?.map(role => <span className="status" key={role}>{role.startsWith("test") ? "Test" : "Production"} {role.endsWith(".evidence_editor") ? "근거 정리" : "Verifier"}</span>)}</div>{profile.status !== "production" && <Status value={profile.status} />}</>,
-                  <><button type="button" className="secondary" onClick={() => setManagedId(profile.id)}>관리</button><Dialog open={managedId === profile.id} title={`${profile.name} · 모델 관리`} onClose={() => { if (!busy) setManagedId(null); }}><section className="detail-summary"><div><span>연결 주소</span><strong>{profile.base_url}</strong></div><div><span>입력 한도 / 최대 출력</span><strong>{profile.context_window.toLocaleString()} / {profile.max_output_tokens} 토큰</strong></div><div><span>제한 시간 / 검증 동시 요청</span><strong>{profile.timeout_seconds}초 / {profile.test_concurrency}건</strong></div><div><span>API Key</span><strong>{profile.has_api_key ? "저장됨" : "없음"}</strong></div></section><div className="profile-actions">
-                    <button className="secondary small" disabled={Boolean(busy) || active || profile.status === "disabled" || Boolean(internalTargetIssue) || (providerOf(profile) === "openai" && !profile.external_data_approved)} onClick={() => runTest(profile, "quick")}>{busy === `q-${profile.id}` ? "등록 중" : "빠른 테스트"}</button>
-                    <button className="secondary small" disabled={Boolean(busy) || active || profile.status === "disabled" || Boolean(internalTargetIssue) || (providerOf(profile) === "openai" && !profile.external_data_approved)} onClick={() => runTest(profile, "full")}>{busy === `f-${profile.id}` ? "등록 중" : "전체 검증"}</button>
+                  <><div className="profile-row-actions"><button type="button" className="secondary small" disabled={validationBlocked} onClick={() => runTest(profile, "quick")}>빠른 테스트</button><button type="button" className="secondary small" disabled={validationBlocked} onClick={() => runTest(profile, "full")}>전체 검증</button><MoreActions label={`${profile.name} 관리`}><button type="button" onClick={() => setManagedId(profile.id)}>검증 결과·연결정보</button><button type="button" disabled={Boolean(busy) || roleAssigned(profile) || Boolean(profilesError)} onClick={() => edit(profile)}>편집</button></MoreActions></div><Dialog open={managedId === profile.id} title={`${profile.name} · 모델 관리`} onClose={() => { if (!busy) setManagedId(null); }}><section className="detail-summary"><div><span>연결 주소</span><strong>{profile.base_url}</strong></div><div><span>입력 한도 / 최대 출력</span><strong>{profile.context_window.toLocaleString()} / {profile.max_output_tokens} 토큰</strong></div><div><span>제한 시간 / 검증 동시 요청</span><strong>{profile.timeout_seconds}초 / {profile.test_concurrency}건</strong></div><div><span>API Key</span><strong>{profile.has_api_key ? "저장됨" : "없음"}</strong></div></section><div className="profile-actions">
                     <button className="secondary small" disabled={Boolean(busy) || roleAssigned(profile) || Boolean(profilesError)} title={roleAssigned(profile) ? "Agent 배정 중에는 수정할 수 없습니다." : undefined} onClick={() => edit(profile)}>편집</button>
                     <button className="secondary small" disabled={Boolean(busy)} onClick={onConfigureAgents}>Agent 모델 배정</button>
                     {profile.status === "disabled"
                       ? <button className="secondary small" disabled={Boolean(busy) || Boolean(internalTargetIssue)} onClick={() => act(`e-${profile.id}`, () => api.enableModelProfile(profile.id))}>활성화</button>
-                      : <button className="secondary small" disabled={Boolean(busy) || Boolean(profilesError) || Boolean(profile.agent_roles?.length)} onClick={() => openAssignment(profile, "disable")}>비활성화</button>}
-                  </div>{assignmentIssue && <p className="profile-assignment-reason">지정 불가: {assignmentIssue}</p>}{roleAssigned(profile) && <p className="profile-assignment-reason">편집하려면 Agent 설정에서 배정을 해제하세요. 별도 Verifier로 배정된 모델은 해제 후 비활성화할 수 있습니다.</p>}{message && <p className="notice" role="status">{message}</p>}{managedId === profile.id && latest && <TestResult profile={profile} test={latest} onViewDataset={onViewDataset} />}</Dialog></>
+                      : <button className="secondary small" disabled={Boolean(busy) || Boolean(profilesError) || profile.status === "production" || Boolean(profile.agent_roles?.length)} onClick={() => openAssignment(profile, "disable")}>비활성화</button>}
+                  </div>{assignmentIssue && <p className="profile-assignment-reason">지정 불가: {assignmentIssue}</p>}{roleAssigned(profile) && <p className="profile-assignment-reason">배정 중인 프로필은 편집할 수 없습니다. 운영 모델은 새 프로필을 테스트·승격해 교체하고, Test 모델은 Agent Roles에서 배정을 해제하세요.</p>}{message && <p className="notice" role="status">{message}</p>}{managedId === profile.id && latest && <TestResult profile={profile} test={latest} onViewDataset={onViewDataset} />}</Dialog></>
                 ] };
-          })} empty={profilesLoading ? "모델을 불러오는 중…" : profilesError ? "모델 목록을 확인할 수 없습니다." : "등록된 모델이 없습니다."} />
+          })} empty={profilesLoading ? "모델을 불러오는 중…" : profilesError ? "모델 목록을 확인할 수 없습니다." : profiles.length ? "검색 조건에 맞는 모델이 없습니다." : "등록된 모델이 없습니다."} />
       </section>
 
       <Dialog open={formOpen} title={editingId ? "모델 수정" : "모델 추가"} onClose={() => { if (!busy) setFormOpen(false); }}>
@@ -801,6 +841,11 @@ function initialNavigationSnapshot() {
 }
 
 export default function App() {
+  return <ConsolePreferencesProvider><ConsoleApp /></ConsolePreferencesProvider>;
+}
+
+function ConsoleApp() {
+  const { t } = useConsolePreferences();
   const [principal, setPrincipal] = useState(null);
   const [checking, setChecking] = useState(true);
   const [logoutState, setLogoutState] = useState({ busy: false, error: "" });
@@ -810,13 +855,10 @@ export default function App() {
   const setListState = useCallback(update => navigation.remember(current => ({ ...current, listState: typeof update === "function" ? update(current.listState) : update })), [navigation]);
   const setTestResults = useCallback(update => navigation.remember(current => ({ ...current, testResults: typeof update === "function" ? update(current.testResults) : update })), [navigation]);
   const setDays = useCallback(value => navigation.remember(current => ({ ...current, days: value })), [navigation]);
-  const [productionName, setProductionName] = useState("미설정");
-  const [summary, setSummary] = useState(null);
-  const [summaryError, setSummaryError] = useState("");
-  const [theme, setTheme] = useState(() => {
-    try { return localStorage.getItem("waf-console-theme") === "dark" ? "dark" : "light"; }
-    catch { return "light"; }
-  });
+  const [, setProductionName] = useState("미설정");
+  const summaryScope = `${days}:${serviceApiKeyId}`;
+  const [summaryView, setSummaryView] = useState({ scope: "", summary: null, error: "", updatedAt: null });
+  const { summary, error: summaryError, updatedAt } = summaryView.scope === summaryScope ? summaryView : { summary: null, error: "", updatedAt: null };
 
   const onUnauthorized = useCallback(() => { navigation.reset(); setPrincipal(null); }, [navigation]);
   const logoutController = useMemo(() => createLogoutController({ logout: api.logout, onSuccess: onUnauthorized, onChange: setLogoutState }), [onUnauthorized]);
@@ -827,27 +869,15 @@ export default function App() {
   useEffect(() => { checkSession(); }, []);
   useEffect(() => navigation.start(), [navigation]);
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    try { localStorage.setItem("waf-console-theme", theme); } catch { /* Storage can be disabled. */ }
-  }, [theme]);
-  useEffect(() => {
     if (!principal) return undefined;
-    let active = true;
-    let timer;
-    const controller = new AbortController();
-    setSummary(null); setSummaryError("");
-    async function load() {
-      try {
-        const result = await api.dashboard(days, { signal: controller.signal });
-        if (active) { setSummary(result); setSummaryError(""); setProductionName(result.runtime.production_profile?.name || "미설정"); }
-      } catch (err) {
-        if (active) { setSummaryError(err.message); if (err.status === 401) onUnauthorized(); }
-      } finally { if (active) timer = setTimeout(load, 15000); }
-    }
-    load();
-    return () => { active = false; clearTimeout(timer); controller.abort(); };
-  }, [principal, onUnauthorized, days]);
-  if (checking) return <div className="loading full">세션 확인 중…</div>;
+    setSummaryView({ scope: summaryScope, summary: null, error: "", updatedAt: null });
+    return startVisiblePolling(async signal => {
+      const result = await api.dashboard(days, { signal }, serviceApiKeyId);
+      if (!signal.aborted) setSummaryView({ scope: summaryScope, summary: result, error: "", updatedAt: Date.now() });
+      return result.counts.pending > 0 || result.counts.processing > 0;
+    }, { onError: err => { setSummaryView({ scope: summaryScope, summary: null, error: "readError", updatedAt: null }); if (err.status === 401) onUnauthorized(); } });
+  }, [principal, onUnauthorized, days, serviceApiKeyId, summaryScope]);
+  if (checking) return <div className="loading full">{t("sessionLoading")}</div>;
   if (!principal) return <Login onLogin={checkSession} />;
 
   function move(update) { navigation.navigate(update); window.scrollTo(0, 0); }
@@ -870,53 +900,32 @@ export default function App() {
   function filterProduction(filters) { move(current => ({ ...current, resultsPurpose: "production", listState: dashboardListState(filters), page: "analyses" })); }
   function changeResultsScope(purpose) {
     if (purpose === resultsPurpose) return;
-    move(current => ({ ...current, resultsPurpose: purpose, testResults: { ...current.testResults, view: "runs", runId: null }, listState: purpose === "test" ? current.listState : { ...current.listState, offset: 0, draft: { ...current.listState.draft, analysis_purpose: purpose }, applied: { ...current.listState.applied, analysis_purpose: purpose } } }));
+    move(current => ({ ...current, resultsPurpose: purpose, testResults: { ...current.testResults, view: "items", runId: null }, listState: purpose === "test" ? current.listState : { ...current.listState, offset: 0, draft: { ...current.listState.draft, analysis_purpose: purpose }, applied: { ...current.listState.applied, analysis_purpose: purpose } } }));
   }
-  function navigate(value) {
-    move(current => ({ ...current, page: value, ...(value === "datasets" ? { datasetId: null } : {}), ...(value === "analyses" ? { testResults: { ...current.testResults, view: "runs", runId: null } } : {}) }));
-  }
+  function navigate(key) { move(current => consoleDestination(current, key)); }
+  function search(field, query) { const result = consoleSearch(screen, field, query); if (!result.error) move(() => result.state); return result.error; }
   function backFromDetail() {
     const targetPage = detailReturnPage === "testRun" ? "analyses" : detailReturnPage;
     navigation.backTo(candidate => isDetailOrigin(screen, candidate), current => ({ ...current, page: targetPage }));
   }
-  const title = { dashboard: "대시보드", analyses: "분석 결과", test: "테스트 분석", datasets: "데이터 관리", apiDocs: "Production API", settings: "설정", detail: "분석 상세" }[page];
-  const description = {
-    dashboard: "운영 분석 현황과 평가 추이를 확인합니다.",
-    datasets: "검증 문항과 참고 답안을 모아 반복 테스트에 사용합니다.",
-    analyses: resultsPurpose === "test" ? "테스트별 판정 결과와 평가 지표를 확인합니다." : "분석을 검색하고 판정과 근거를 확인합니다.",
-    test: "단건 요청이나 파일을 테스트합니다.",
-    apiDocs: "운영 연동에 필요한 API 사용 방법입니다.",
-    settings: "모델·프롬프트·입력 형식과 접근 권한을 관리합니다.",
-    detail: "판정 결과와 근거, 원문을 확인합니다.",
-  }[page];
   const mode = summaryError ? null : summary?.runtime.agent_mode;
-  return (
-    <div className="app-shell">
-      <a className="skip-link" href="#workspace-content" onClick={event => { event.preventDefault(); const target = document.getElementById("workspace-content"); target?.focus({ preventScroll: true }); target?.scrollIntoView({ block: "start" }); }}>본문으로 이동</a>
-      <aside className="sidebar">
-        <div className="brand"><span className="brand-mark"><Icon name="shield" size={23} /></span><div><strong>WAF AI<span>Console</span></strong><small>SECURITY OPERATIONS</small></div></div>
-        <div className="nav-section-label">분석 공간</div>
-        <nav aria-label="주 메뉴">
-          {[['dashboard','대시보드'],['analyses','분석 결과'],['test','테스트 분석'],['datasets','데이터 관리'],['apiDocs','Production API'],['settings','설정']].map(([value,label]) => <button key={value} aria-current={page === value || (page === "detail" && value === (detailReturnPage === "testRun" ? "analyses" : detailReturnPage)) ? "page" : undefined} onClick={() => navigate(value)}><Icon name={value === "datasets" ? "file" : value} size={19} /><span>{label}</span></button>)}
-        </nav>
-        <div className="model-note"><div className="model-note-heading"><Icon name="server" size={16} /><span>지정된 운영 모델</span></div><strong>{productionName}</strong><span className="sidebar-mode">{mode === "stub" ? "모의 분석" : mode === "moduagent" ? "모델 분석 설정" : "설정 확인 중"}</span></div>
-        <div className="sidebar-footer"><span>INTERNAL WORKSPACE</span><span>v0.2.0</span></div>
-      </aside>
-      <main className="workspace">
-        <header className="app-header"><div><div className="app-heading"><h1>{title}</h1></div><p className="page-description">{description}</p></div><div className="header-actions"><button className="icon-button" aria-label={theme === "light" ? "다크 모드로 전환" : "라이트 모드로 전환"} title={theme === "light" ? "다크 모드" : "라이트 모드"} onClick={() => setTheme(theme === "light" ? "dark" : "light")}><Icon name={theme === "light" ? "moon" : "sun"} size={19} /></button><span className="admin-avatar" aria-hidden="true">A</span><button type="button" className="secondary logout-button" disabled={logoutState.busy} onClick={() => logoutController.submit()}><Icon name="logout" size={16} />{logoutState.busy ? "로그아웃 중…" : "로그아웃"}</button></div></header>
-        <div className="content" id="workspace-content" tabIndex={-1}>
-          {logoutState.error && <div className="error" role="alert">{logoutState.error}</div>}
-          {mode === "stub" && <div className="runtime-banner"><Icon name="test" size={18} /><div><strong>로컬 모의 분석 모드</strong><span>API 설정이 stub입니다. 모의 결과는 실제 LLM의 보안 판정이 아니며, worker의 실제 실행 상태는 별도 확인이 필요합니다.</span></div><span className="runtime-tag">STUB</span></div>}
-          {summaryError && page !== "dashboard" && <div className="error" role="alert">실행 설정을 확인하지 못했습니다. {summaryError}</div>}
-          {page === "dashboard" && <DashboardView onOpen={openDetail} onUnauthorized={onUnauthorized} days={days} onDaysChange={setDays} serviceApiKeyId={serviceApiKeyId} onKeyChange={value => navigation.remember(current => ({ ...current, serviceApiKeyId: value }))} onFilter={filterProduction} Table={AnalysisTable} />}
-          {page === "analyses" && <AnalysisResultsPage purpose={resultsPurpose} onScopeChange={changeResultsScope} state={listState} setState={setListState} testState={testResults} setTestState={setTestResults} onSelectRun={openTestRun} onOpenRunItem={openRunItem} onOpen={openDetail} onUnauthorized={onUnauthorized} onShowTestRuns={backToTests} onShowAllTestItems={showAllTestItems} />}
-          {page === "test" && <TestAnalysisPage onViewTests={viewTests} onOpen={openTest} selectedRunId={null} onSelectRun={openTestRun} agentMode={mode} onConfigureModels={() => move(current => ({ ...current, page: "settings", settingsTab: "agents" }))} />}
-          {page === "apiDocs" && <ProductionApi />}
-          {page === "datasets" && <DataManagement key={screen.datasetId || "list"} id={screen.datasetId} onSelect={id => move(current => ({ ...current, page: "datasets", datasetId: id }))} />}
-          {page === "settings" && <Settings onProductionChange={setProductionName} onViewDataset={viewDataset} tab={settingsTab} onTabChange={tab => move(current => ({ ...current, settingsTab: tab }))} />}
-          {page === "detail" && <Detail key={selectedId} id={selectedId} onBack={backFromDetail} onOpen={id => move(current => ({ ...current, selectedId: id, detailTab: "result" }))} tab={detailTab} onTabChange={tab => navigation.navigate(current => ({ ...current, detailTab: tab }))} backLabel={detailReturnPage === "testRun" ? "테스트 실행 결과" : detailReturnPage === "test" ? "테스트 분석" : detailReturnPage === "dashboard" ? "대시보드" : "분석 결과"} />}
-        </div>
-      </main>
-    </div>
-  );
+  const runtimeProps = { summary, error: summaryError, days, onDaysChange: setDays, serviceApiKeyId,
+    onKeyChange: value => navigation.remember(current => ({ ...current, serviceApiKeyId: value })),
+    updatedAt, onUnauthorized, onNavigate: navigate };
+  return <ConsoleShell screen={screen} principal={principal} healthError={Boolean(summaryError)} onNavigate={navigate} onSearch={search} logoutState={logoutState} onLogout={() => logoutController.submit()}>
+    {logoutState.error && <div className="error" role="alert">{logoutState.error}</div>}
+    {mode === "stub" && <div className="runtime-banner"><Icon name="test" size={18} /><div><strong>{t("stubTitle")}</strong><span>{t("stubNote")}</span></div><span className="runtime-tag">STUB</span></div>}
+    {summaryError && !["dashboard", "quality"].includes(page) && <div className="error" role="alert">{t("readError")}</div>}
+    {page === "dashboard" && <Overview onNavigate={navigate} onOpen={openDetail} />}
+    {page === "quality" && <ProductionEvaluation onOpenRun={openTestRun} referenceProps={runtimeProps} />}
+    {["runtime", "diagnostics"].includes(page) && <RuntimeWorkspace onOpen={openDetail} />}
+    {["deployment", "changes"].includes(page) && <Activity deploymentOnly={page === "deployment"} />}
+    {page === "promote" && <Promotion initialRunId={screen.promoteRunId} onNavigate={navigate} />}
+    {page === "analyses" && <>{resultsPurpose === "test" && testResults.view === "runs" && <div className="v5-list-action">{testResults.runId ? <button className="secondary" onClick={() => move(current => ({ ...current, page: "promote", promoteRunId: testResults.runId }))}>{t("promote")} →</button> : <button className="primary" onClick={() => navigate("run")}>+ {t("run")}</button>}</div>}<AnalysisResultsPage splitNavigation purpose={resultsPurpose} onScopeChange={changeResultsScope} state={listState} setState={setListState} testState={testResults} setTestState={setTestResults} onSelectRun={openTestRun} onOpenRunItem={openRunItem} onOpen={openDetail} onUnauthorized={onUnauthorized} onShowTestRuns={backToTests} onShowAllTestItems={showAllTestItems} /></>}
+    {page === "test" && <TestAnalysisPage onViewTests={viewTests} onOpen={openTest} selectedRunId={null} onSelectRun={openTestRun} agentMode={mode} onConfigureModels={() => navigate("agents")} />}
+    {page === "apiDocs" && <ProductionApi />}
+    {page === "datasets" && <DataManagement key={screen.datasetId || "list"} id={screen.datasetId} onSelect={id => move(current => ({ ...current, page: "datasets", datasetId: id }))} />}
+    {page === "settings" && <Settings standalone onProductionChange={setProductionName} onViewDataset={viewDataset} tab={settingsTab} onTabChange={tab => move(current => ({ ...current, settingsTab: tab }))} />}
+    {page === "detail" && <Detail key={selectedId} id={selectedId} onBack={backFromDetail} onOpen={id => move(current => ({ ...current, selectedId: id, detailTab: "result" }))} tab={detailTab} onTabChange={tab => navigation.navigate(current => ({ ...current, detailTab: tab }))} backLabel={t(detailReturnPage === "testRun" ? "runs" : detailReturnPage === "test" ? "run" : detailReturnPage === "dashboard" ? "status" : "history")} />}
+  </ConsoleShell>;
 }

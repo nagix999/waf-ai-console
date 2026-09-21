@@ -66,7 +66,7 @@ def test_profile_update_enable_test_and_promote_recheck_db(client, registered_vl
     with client.app.state.session_factory() as db:
         db.get(VLLMProfile, profile_id).status = "verified"
         db.commit()
-    assert client.post(f"/api/v1/model-profiles/{profile_id}/promote").status_code == 422
+    assert client.post(f"/api/v1/model-profiles/{profile_id}/promote").json()["detail"] == "production_promotion_required"
     assert client.post(f"/api/v1/model-profiles/{profile_id}/disable").status_code == 200
     assert client.post(f"/api/v1/model-profiles/{profile_id}/enable").status_code == 422
 

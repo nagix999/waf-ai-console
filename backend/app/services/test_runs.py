@@ -15,7 +15,7 @@ from .analysis import AnalysisIngestError
 from .evaluation import evaluation_relation, metadata_from_row, summarize_evaluations
 from .internal_egress import allowed_targets_from_db
 from .prompt_snapshots import load_analysis_prompt, pin_analysis_prompt
-from .input_schemas import InputSchemaError, pin_schema
+from .input_schemas import InputSchemaError, get_schema_version, pin_schema
 from .upload_expected_labels import enqueue_test_upload_row
 from .uploads import UploadFormatError, extract_test_upload_row, normalize_upload_row
 from .vllm_profiles import assignment_block_reason, normalize_and_validate_profile_url, profile_fingerprint, validate_profile_provider_settings
@@ -55,7 +55,7 @@ def read_snapshot(db):
 
 
 def create_run_record(db, crypto, settings, *, name, idempotency_key, request_hash,
-                      kind, actor, filename=None, dataset_hash=None, model_test=None):
+                      kind, actor, filename=None, dataset_hash=None, model_test=None, candidate_configuration=None):
     # Reuse strict public metadata validation without inspecting event contents.
     values = TestRunCreate(name=name, idempotency_key=idempotency_key, event={})
     existing = db.scalar(select(TestRun).where(TestRun.idempotency_key == values.idempotency_key))
@@ -66,6 +66,12 @@ def create_run_record(db, crypto, settings, *, name, idempotency_key, request_ha
     profile = db.get(VLLMProfile, model_test.profile_id) if model_test else db.scalar(
         select(VLLMProfile).where(VLLMProfile.is_test.is_(True)))
     mode = "moduagent" if model_test else settings.agent_mode
+    candidate = candidate_configuration
+    if candidate is not None:
+        if mode != "moduagent" or model_test is not None:
+            raise AnalysisIngestError("candidate_requires_llm_test", 409)
+        from .candidate_configurations import resolve_profiles
+        profile, candidate_verifier, candidate_editor = resolve_profiles(db, crypto, candidate)
     if mode == "moduagent" and profile is None:
         raise AnalysisIngestError("test_model_profile_required", 409)
     metadata = {"verifier_confidence_threshold": settings.verifier_confidence_threshold}
@@ -81,15 +87,15 @@ def create_run_record(db, crypto, settings, *, name, idempotency_key, request_ha
                         profile_fingerprint=profile_fingerprint(profile))
         from .agent_configuration import profile_metadata, select_verifier
         # Candidate qualification deliberately tests the candidate in both roles.
-        verifier = profile if model_test else select_verifier(db, "test", profile)
+        verifier = candidate_verifier if candidate is not None else profile if model_test else select_verifier(db, "test", profile)
         metadata["verifier_profile"] = profile_metadata(verifier)
     else:
         profile = None
         metadata.update(model_profile="stub", llm_called=False)
     temporary = Analysis()
-    pin_analysis_prompt(db, crypto, temporary)
+    pin_analysis_prompt(db, crypto, temporary, version_id=candidate.prompt_policy_version_id if candidate else None)
     from .evidence_editor import capture_editor
-    editor = capture_editor(db, "test", profile) if mode == "moduagent" and not model_test else None
+    editor = candidate_editor if candidate is not None else capture_editor(db, "test", profile) if mode == "moduagent" and not model_test else None
     identifier = str(uuid.uuid4())
     run = TestRun(
         id=identifier, name=values.name, idempotency_key=values.idempotency_key,
@@ -112,9 +118,12 @@ def create_run_record(db, crypto, settings, *, name, idempotency_key, request_ha
             run.input_schema_version_id = model_test.input_schema_version_id
             run.input_schema_snapshot_ciphertext = model_test.input_schema_snapshot_ciphertext
         else:
-            pin_schema(db, crypto, run, selection_origin="test_run")
+            pin_schema(db, crypto, run, version=get_schema_version(db, candidate.input_schema_version_id) if candidate else None,
+                       selection_origin="test_run")
     except InputSchemaError as exc:
         raise AnalysisIngestError(exc.code, exc.status_code) from None
+    from .candidate_configurations import pin_configuration
+    pin_configuration(run, crypto)
     db.add(run)
     db.flush()
     return run, False
@@ -141,6 +150,7 @@ def add_run_items(db, crypto, settings, run, rows, *, ai_visible=None, source_re
         number = start + position + 1
         trusted = trusted_items[position] if trusted_items else {}
         item = TestRunItem(test_run_id=run.id, row_number=number, ingest_status="rejected")
+        item.dataset_item_version_id = trusted.get("dataset_item_version_id")
         try:
             event, expected, metadata = split_test_metadata(raw)
             for key, value in metadata.items():
@@ -197,17 +207,22 @@ def add_run_items(db, crypto, settings, run, rows, *, ai_visible=None, source_re
 
 
 def enqueue_named_run(db, crypto, settings, *, name, idempotency_key, rows, kind, actor,
-                      filename=None, content_hash=None):
+                      filename=None, content_hash=None, candidate_configuration=None):
     try:
         try:
-            serialized = json.dumps({"name": name, "kind": kind, "rows": rows, "filename": filename},
+            document = {"name": name, "kind": kind, "rows": rows, "filename": filename}
+            # Preserve old replay hashes when the optional candidate is absent.
+            if candidate_configuration is not None:
+                document["candidate_configuration"] = candidate_configuration.model_dump(mode="json")
+            serialized = json.dumps(document,
                                     sort_keys=True, ensure_ascii=False, allow_nan=False)
             digest = hashlib.sha256(serialized.encode()).hexdigest()
         except (ValueError, TypeError, RecursionError, UnicodeError):
             raise AnalysisIngestError("invalid_test_document", 422) from None
         write_lock(db)
         run, duplicate = create_run_record(db, crypto, settings, name=name, idempotency_key=idempotency_key,
-            request_hash=digest, kind=kind, actor=actor, filename=filename, dataset_hash=content_hash)
+            request_hash=digest, kind=kind, actor=actor, filename=filename, dataset_hash=content_hash,
+            candidate_configuration=candidate_configuration)
         if not duplicate:
             add_run_items(db, crypto, settings, run, rows)
             db.add(AccessAudit(actor_kind="admin_session", actor_id=actor, action="create_test_run",
@@ -221,7 +236,8 @@ def enqueue_named_run(db, crypto, settings, *, name, idempotency_key, rows, kind
 
 def fixed_reference_relation(run_id, evaluation=None, *, include_retries=True):
     from .test_attempts import test_attempts
-    nodes, current = test_attempts(run_id, before=evaluation.created_at if evaluation else None, include_retries=include_retries)
+    nodes, current = test_attempts(run_id, before=evaluation.created_at if evaluation and evaluation.analysis_ids_json is None else None, include_retries=include_retries,
+        analysis_ids=evaluation.analysis_ids_json if evaluation else None)
     if evaluation is not None:
         labels = select(*(column for column in AnalysisLabel.__table__.columns if column.name != "analysis_id"),
             current.c.analysis_id.label("analysis_id")).join(nodes, nodes.c.analysis_id == AnalysisLabel.analysis_id).join(
@@ -260,13 +276,15 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
     from .test_attempts import EVALUATION_RETRY_AUDIT_ACTION, test_attempts
     # Before this feature, saved evaluations deliberately ignored all retries,
     # including retries already completed at save time. Preserve that meaning.
-    include_retries = evaluation is None or bool(db.scalar(select(AccessAudit.id).where(
+    include_retries = evaluation is None or evaluation.evaluation_kind == "ground_truth" or bool(db.scalar(select(AccessAudit.id).where(
         AccessAudit.action == EVALUATION_RETRY_AUDIT_ACTION,
         AccessAudit.resource_type == "test_evaluation", AccessAudit.resource_id == evaluation.id).limit(1)))
-    _nodes, current = test_attempts(run.id, before=evaluation.created_at if evaluation else None, include_retries=include_retries)
+    _nodes, current = test_attempts(run.id, before=evaluation.created_at if evaluation and evaluation.analysis_ids_json is None else None, include_retries=include_retries,
+        analysis_ids=evaluation.analysis_ids_json if evaluation else None)
     accepted_ids = select(current.c.analysis_id).join(TestRunItem, TestRunItem.id == current.c.item_id).where(
         *cohort, TestRunItem.ingest_status == "accepted")
-    relation = evaluation_relation() if reference_basis == "latest" and evaluation is None else fixed_reference_relation(run.id, evaluation, include_retries=include_retries)
+    official = run.evaluation_mode == "ground_truth"
+    relation = evaluation_relation() if reference_basis == "latest" and evaluation is None and not official else fixed_reference_relation(run.id, evaluation, include_retries=include_retries)
     evaluation_summary = summarize_evaluations(db, relation, [Analysis.id.in_(accepted_ids)])
     counts = dict(db.execute(select(TestRunItem.ingest_status, func.count()).where(
         *cohort).group_by(TestRunItem.ingest_status)).all())
@@ -284,6 +302,7 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
     end = finished or (run.created_at if not processing else datetime.now(UTC))
     utc = lambda value: value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
     elapsed = max(0, int((utc(end) - utc(run.created_at)).total_seconds() * 1000))
+    from .official_evaluations import ground_truth_metadata
     summary = TestRunSummary(
         id=run.id, name=run.name, kind=run.kind, source_system=run.source_system, created_at=run.created_at,
         status=state, total=sum(counts.values()), accepted=counts.get("accepted", 0),
@@ -291,15 +310,25 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
         pending=processing.get("pending", 0), processing=processing.get("processing", 0),
         completed=processing.get("completed", 0), failed=processing.get("failed", 0),
         execution_mode=run.execution_mode, profile_metadata=run.profile_metadata,
+        configuration_snapshot=run.configuration_snapshot_json, configuration_hash=run.configuration_hash,
+        evaluation_mode=run.evaluation_mode, ground_truth=ground_truth_metadata(db, run),
+        official_evaluation_pending=run.official_evaluation_pending if not evaluation else False,
         prompt_version=run.prompt_version, model_test_run_id=run.model_test_run_id,
         prompt_policy_version_id=run.prompt_policy_version_id,
         evaluation_summary=evaluation_summary,
         evaluation_id=evaluation.id if evaluation else None,
         evaluation_revision=evaluation.revision if evaluation else 0,
-        reference_basis="saved" if evaluation else reference_basis,
+        reference_basis="saved" if evaluation else "ground_truth" if official else reference_basis,
         dataset_version_id=run.dataset_version_id, accepting_items=run.accepting_items,
         started_at=started, completed_at=finished, total_elapsed_ms=elapsed,
     )
+    if evaluation and evaluation.evaluation_kind == "ground_truth" and evaluation.summary_json and not any(
+            (difficulty, test_category, difficulty_missing, test_category_missing)):
+        # Unfiltered historical scores/timing are a stored observation, not a
+        # recomputation under future metric definitions or mutable labels.
+        summary = TestRunSummary.model_validate({**evaluation.summary_json,
+            "evaluation_id": evaluation.id, "evaluation_revision": evaluation.revision,
+            "reference_basis": "saved", "official_evaluation_pending": False})
     if not detail:
         return summary
     query = select(TestRunItem, Analysis, current.c.retry_count, relation).join(current, current.c.item_id == TestRunItem.id).outerjoin(Analysis, Analysis.id == current.c.analysis_id).outerjoin(

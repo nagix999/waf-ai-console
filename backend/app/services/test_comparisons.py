@@ -13,7 +13,7 @@ from ..test_comparison_schemas import (
     ComparisonCounts, ComparisonItem, ComparisonPerformance, ComparisonPerformanceSide,
     ComparisonTiming, ComparisonTokenCounter, ComparisonTokens, TestComparisonResponse,
 )
-from .evaluation import COMPARABLE, MATCHES, summarize_evaluations
+from .evaluation import COMPARABLE, MATCHES, summarize_evaluations, summarize_evaluation_rows
 from .test_runs import describe_run, fixed_reference_relation
 from .timing import elapsed_ms
 
@@ -34,7 +34,7 @@ def _cohort(db, run, warnings):
     result = case((func.json_valid(Analysis.result_json) == 1, Analysis.result_json), else_=literal("{}"))
     value = lambda path: func.json_extract(result, path)
     query = select(
-        TestRunItem.event_id, TestRunItem.row_number, TestRunItem.case_name,
+        TestRunItem.event_id, TestRunItem.row_number, TestRunItem.case_name, TestRunItem.dataset_item_version_id,
         TestRunItem.difficulty, TestRunItem.test_category, current.c.analysis_id, current.c.retry_count,
         TestRunItem.label_id.label("fixed_label_id"),
         Analysis.id.label("present_analysis_id"), Analysis.event_id.label("analysis_event_id"),
@@ -56,7 +56,7 @@ def _cohort(db, run, warnings):
         row = dict(found)
         if row["retry_count"]:
             warnings.add("retry_results_included")
-        identifier = row["event_id"] or f"missing-event-id:{row['row_number']}"
+        identifier = row["dataset_item_version_id"] if run.evaluation_mode == "ground_truth" else row["event_id"] or f"missing-event-id:{row['row_number']}"
         if identifier in indexed:
             warnings.add("duplicate_event_rows_ignored")
             continue
@@ -242,6 +242,19 @@ def _run_summary(db, run):
 
 
 def compare_test_runs(db, baseline, candidate, *, limit=25, offset=0, changes_only=False):
+    official = baseline.evaluation_mode == "ground_truth" or candidate.evaluation_mode == "ground_truth"
+    compatible = (baseline.evaluation_mode == candidate.evaluation_mode == "ground_truth"
+        and bool(baseline.dataset_version_id) and baseline.dataset_version_id == candidate.dataset_version_id
+        and bool(baseline.approved_item_version_ids)
+        and bool(baseline.metrics_version) and baseline.metrics_version == candidate.metrics_version
+        and sorted(baseline.approved_item_version_ids) == sorted(candidate.approved_item_version_ids or []))
+    if official and not compatible:
+        return TestComparisonResponse(comparable=False, comparison_block_reason="ground_truth_scope_mismatch",
+            baseline=_run_summary(db, baseline), candidate=_run_summary(db, candidate),
+            baseline_evaluation=summarize_evaluation_rows([]), candidate_evaluation=summarize_evaluation_rows([]),
+            counts=ComparisonCounts(), warnings=[], items=[], total_items=0, limit=limit, offset=offset,
+            changes_only=changes_only, performance=ComparisonPerformance(
+                baseline=ComparisonPerformanceSide(), candidate=ComparisonPerformanceSide()))
     warnings = {"run_source_system_differs", "prompt_budget_may_change_submitted_input",
                 "comparison_is_not_causal_proof", "performance_excludes_noncomparable_analyses",
                 "recorded_tokens_are_not_billing_total"}
@@ -267,7 +280,7 @@ def compare_test_runs(db, baseline, candidate, *, limit=25, offset=0, changes_on
         context = left or right
         left, right = left or {}, right or {}
         reference = left.get("reference_verdict") if left.get("reference_verdict") == right.get("reference_verdict") else None
-        items.append(ComparisonItem(event_id=identifier, case_name=context["case_name"],
+        items.append(ComparisonItem(event_id=context["event_id"] or identifier, pair_id=identifier, case_name=context["case_name"],
             difficulty=context["difficulty"], test_category=context["test_category"],
             baseline_analysis_id=left.get("analysis_id"), candidate_analysis_id=right.get("analysis_id"),
             baseline_verdict=left.get("verdict") if left.get("verdict") in VERDICTS else None,

@@ -1,4 +1,14 @@
-# WAF AI Analysis Console v0.2.0
+# WAF AI Analysis Console v0.3.0
+
+2026-09-21 **Canonical V5 REVIEWED 구현**: 최종 기준은 [`WAF_AI_Console_Astra_Handoff_CANONICAL_V5_REVIEWED/ASTRA_HANDOFF.md`](WAF_AI_Console_Astra_Handoff_CANONICAL_V5_REVIEWED/ASTRA_HANDOFF.md)입니다. 6개 Workspace와 SK 기본 테마로 전환하고, Production 모델·분석 지침·입력 스키마 변경을 **Candidate Test → Approved Ground Truth 공식 평가 → Promote**로 통합했습니다. 기존 분석·암호화 이력·동시 처리·재실행·ReportLab PDF 기능은 유지합니다. 새 DB head는 `0022_production_lifecycle`이며 운영 서비스에 적용하지 않았습니다. [시작점·보존 내역·API/DB 영향·검증 보고서](docs/v0.3.0/CANONICAL_V5_IMPLEMENTATION.md)를 먼저 확인하세요.
+
+아래는 과거 작업 당시 기록입니다. 이전 v0.3.0의 5개 메뉴, Light 기본값, Production 직접 적용을 임시 유지한다는 설명은 **V5에서 대체**되었습니다. 과거 문서나 목업을 현재 구현 기준으로 사용하지 않습니다.
+
+2026-09-17 **최신 로컬 Docker 배포 완료**: 목업 기반 UI와 현재 v0.3.0 개발본을 API·두 worker·frontend에 반영했습니다. UI는 http://127.0.0.1:18080 입니다. DB `0019~0021` 적용 전 백업·리허설을 수행했고 분석 1,214건·암호화 값 20,884개·기존 설정·`moduagent`·포트를 보존했습니다. HTTP 29개와 데스크톱 18개 화면·3개 테마를 확인했습니다. Git 게시·실제 LLM 호출은 하지 않았고 v0.3.0 전체 기능 완성을 뜻하지 않습니다. [검증·백업·남은 범위](docs/Deployment_UI_v030_2026-09-17.md)를 참고하세요. 아래 개발·배포 기록은 각 작업 당시 기준입니다.
+
+2026-09-17 **목업 반영 단계 기록**: `mockup/`과 Markdown 기준으로 런타임 카드·최근 요청, 분석 요약·단계 타임라인, Ground Truth 오른쪽 상세 패널, 후보 평가·비교와 모델 표를 다듬었습니다. 실제 API 값만 표시하며 미수집 지표·알림·비용·리소스 정보를 임의로 만들지 않습니다. [목업 반영 및 검증 범위](docs/v0.3.0/UI_FOUNDATION.md#ui-4차-목업-반영)를 참고하세요. 이 단계에서는 코드만 변경했으며 이후 배포 결과는 위 기록을 따릅니다.
+
+2026-09-17 **v0.3.0 개발 진행 중 · 아직 미배포**: Ground Truth 검토·승인, 테스트 후보 구성 선택, 승인 문항 공식 평가와 평가 기록 자동 저장을 추가했습니다. UI는 5개 메뉴·설정 탐색 분리·Light/SK/Dark·공통 메뉴와 런타임 상태의 KR/EN을 연결했고, 분석 상세를 결과/Agent 이력/입력/결과 JSON/보고서로 나누었습니다. 이어서 데스크톱 중심으로 테스트 결과·비교·Ground Truth 편집을 탭으로 정리하고, 설정의 주요 동작과 더보기 메뉴를 분리했습니다. API 키 표·페이지 이동, 모델 배정 변경 전후 비교와 검증 범위 선택도 정리했습니다. 새 DB 이전 파일 `0019`~`0021`은 가상 DB에서만 검증합니다. 운영 승격·기존 운영 기준 스냅샷·실제 Runtime 관측 API·세부 문구 전체의 영문 전환은 아직 미완료입니다. 승격 기능 완성 전까지 기존 운영 설정 변경은 유지합니다. [구현 계획](docs/v0.3.0/IMPLEMENTATION_PLAN.md), [UI 전환 기록](docs/v0.3.0/UI_FOUNDATION.md), [답안 승인·구성 고정](docs/v0.3.0/GROUND_TRUTH_AND_CANDIDATES.md), [공식 평가 계약](docs/v0.3.0/OFFICIAL_EVALUATIONS.md)을 참고하세요. 아래 배포 기록은 각 작업 당시 기준입니다.
 
 2026-09-16 **LLM 출력 형식 검증 보완**: 짧은 고정 JSON을 요청하고 vLLM 기능 검증 상한을 `min(1024, 프로필 한도)`로 조정했습니다. 토큰 한도 중단과 JSON 형식 오류를 구분하며, 원문 없이 JSON 상태·뒤따른 공백·반복 정보를 표시합니다. 실제 분석 한도·모델 설정·DB·기존 기록은 유지합니다. [동작·제한·운영 확인 순서](docs/LLM_Validation_JSON_2026-09-16.md)를 참고하세요. 실제 Qwen 검증·Docker 재배포는 별도입니다.
 

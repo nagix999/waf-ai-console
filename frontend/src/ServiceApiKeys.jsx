@@ -4,7 +4,11 @@ import { formatDate } from "./analysisView.js";
 import { createServiceKeysController, emptyServiceKeysState } from "./serviceApiKeys.js";
 import HelpTooltip from "./HelpTooltip.jsx";
 import Dialog from "./Dialog.jsx";
+import MoreActions from "./MoreActions.jsx";
+import DataTable from "./DataTable.jsx";
+import Pagination from "./Pagination.jsx";
 import ServiceKeyDelete from "./ServiceKeyDelete.jsx";
+import RegistryFilters from "./RegistryFilters.jsx";
 import "./serviceApiKeys.css";
 
 export function IssuedServiceKey({ issued, onClose }) {
@@ -31,6 +35,10 @@ export function ServiceApiKeysView({ state, controller }) {
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(null);
   const [technical, setTechnical] = useState(null);
+  const [offset, setOffset] = useState(0);
+  const [search, setSearch] = useState(""), [purpose, setPurpose] = useState("");
+  const items = (state.catalog?.items || []).filter(item => (!purpose || (item.purpose || "production") === purpose) && `${item.name} ${item.source_system}`.toLowerCase().includes(search.trim().toLowerCase()));
+  const pageOffset = Math.min(offset, Math.max(0, (Math.ceil(items.length / 10) - 1) * 10));
   const busy = Boolean(state.busy); const blocked = busy || state.loading || state.needsRefresh || !state.catalog;
   const update = field => event => controller?.update(field, event.target.value);
   function scope(scope, checked) { controller?.update("scopes", checked ? [...state.draft.scopes, scope] : state.draft.scopes.filter(value => value !== scope)); }
@@ -40,11 +48,13 @@ export function ServiceApiKeysView({ state, controller }) {
     <Dialog open={Boolean(state.issued)} title="API 키 발급 완료" onClose={() => controller?.closeIssued()} className="service-api-keys service-key-dialog">{state.issued && <IssuedServiceKey key={state.issued.item.id} issued={state.issued} onClose={() => controller?.closeIssued()} />}</Dialog>
     <div className="service-key-layout service-key-list-first">
       <section className="panel service-key-list" aria-label="발급된 서비스 API Key 목록"><div className="panel-head"><h2>발급된 키</h2><span>{state.catalog ? `${state.catalog.items.length}개` : "미조회"}</span></div>
-        {!state.catalog ? <p className="service-key-empty">{state.loading ? "키 목록을 불러오는 중…" : "목록을 확인하지 못했습니다. 새로고침해 주세요."}</p> : !state.catalog.items.length ? <p className="service-key-empty">발급된 서비스 API Key가 없습니다.</p> : state.catalog.items.map(item => <article key={item.id}>
-          <div className="service-key-heading"><strong>{item.name}</strong><span className={`status ${item.revoked_at ? "status-disabled" : "status-completed"}`}>{item.revoked_at ? "사용 중지" : "사용 가능"}</span></div>
-          <dl><dt>용도</dt><dd>{item.purpose === "test" ? "Test · 테스트 분석" : "Production · 운영 분석"}</dd><dt>연동 시스템</dt><dd>{item.source_system}</dd><dt>권한</dt><dd>{item.scopes.map(value => value === "ingest" ? "분석 접수·조회" : "분석가 판정 등록").join(" · ")}</dd><dt>최근 인증</dt><dd>{item.last_used_at ? formatDate(item.last_used_at) : "사용 기록 없음"}</dd></dl>
-          <div className="service-key-actions"><button type="button" className="secondary small" disabled={blocked || Boolean(item.revoked_at)} onClick={() => { if (state.editing?.id !== item.id) controller?.edit(item); setEditing(true); }} aria-label={`${item.name} 이름 변경`}>이름 변경</button><button type="button" className="secondary small" onClick={() => setTechnical(item)}>기술정보</button><button type="button" className="secondary small" disabled={blocked} onClick={() => setDeleting(item)} aria-label={`${item.name} 삭제`}>삭제</button></div>
-        </article>)}
+        <RegistryFilters search={search} onSearch={value => { setSearch(value); setOffset(0); }} placeholder="키 이름 · 연동 시스템" filters={[{label:"용도 필터", value:purpose, onChange:value => { setPurpose(value); setOffset(0); }, options:[["", "모든 용도"], ["production", "Production"], ["test", "Test"]]}]} />
+        {!state.catalog ? <p className="service-key-empty">{state.loading ? "키 목록을 불러오는 중…" : "목록을 확인하지 못했습니다. 새로고침해 주세요."}</p> : <><DataTable label="발급된 API 키" data={items.slice(pageOffset, pageOffset + 10)} columns={[
+          { id: "name", header: "키 이름 / 용도", render: item => <><strong>{item.name}</strong><small>{item.purpose === "test" ? "Test · 테스트 분석" : "Production · 운영 분석"}</small>{item.revoked_at && <span className="status status-disabled">사용 중지</span>}</> },
+          { id: "source", header: "연동 시스템 / 권한", render: item => <>{item.source_system}<small>{item.scopes.map(value => value === "ingest" ? "분석 접수·조회" : "분석가 판정 등록").join(" · ")}</small></> },
+          { id: "used", header: "최근 인증", render: item => item.last_used_at ? formatDate(item.last_used_at) : "사용 기록 없음" },
+          { id: "actions", header: "관리", width: 190, render: item => <div className="row-actions"><button type="button" className="secondary small" disabled={blocked || Boolean(item.revoked_at)} onClick={() => { if (state.editing?.id !== item.id) controller?.edit(item); setEditing(true); }} aria-label={`${item.name} 이름 변경`}>이름 변경</button><MoreActions label={`${item.name} 관리`}><button type="button" onClick={() => setTechnical(item)}>기술정보</button><button type="button" disabled={blocked} onClick={() => setDeleting(item)} aria-label={`${item.name} 삭제`}>삭제</button></MoreActions></div> },
+        ]} empty="발급된 서비스 API Key가 없습니다." />{items.length > 10 && <Pagination label="API 키 목록 페이지" total={items.length} offset={pageOffset} limit={10} onOffsetChange={setOffset} disabled={busy} unit="개" />}</>}
         {state.needsRefresh && state.catalog && <p className="service-key-empty">마지막 조회 목록입니다. 변경 전 최신 목록을 다시 확인하세요.</p>}
       </section>
     </div>

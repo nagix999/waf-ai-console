@@ -1,0 +1,45 @@
+.inference-detail { min-width: 0; }
+.inference-toolbar { align-items: flex-start; flex-wrap: wrap; gap: 12px; }
+.inference-toolbar > .ux-toolbar { margin-left: auto; justify-content: flex-end; }
+.inference-overview { display: grid; grid-template-columns: minmax(0, 1.85fr) minmax(0, 1fr); gap: 18px; }
+.inference-execution, .inference-result-snapshot { padding: 22px; min-width: 0; }
+.inference-overview h2 { font-size: 15px; margin: 0; }
+.inference-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px 20px; margin: 18px 0 0; }
+.inference-facts > div { min-width: 0; }
+.inference-facts dt { color: var(--muted); font-size: 12px; margin-bottom: 5px; }
+.inference-facts dd { margin: 0; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.inference-record-note { font-size: 12px; margin: 16px 0 0; }
+.inference-result-snapshot { display: flex; flex-direction: column; gap: 16px; }
+.inference-result-snapshot .snapshot-verdict { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.inference-result-snapshot .snapshot-context { margin: auto 0 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; line-height: 1.8; }
+.detail-tabs { flex-wrap: nowrap; overflow-x: auto; margin-bottom: 0; }
+.detail-tabs button { flex-shrink: 0; white-space: nowrap; }
+.inference-detail [role="tabpanel"] { min-width: 0; }
+.inference-detail [role="tabpanel"][hidden] { display: none; }
+.inference-result-content { display: grid; gap: 20px; }
+.inference-evaluation { border-top: 1px solid var(--line); padding-top: 18px; }
+.inference-reference-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+.inference-reference-actions h2 { font-size: 15px; margin: 0; }
+.inference-detail .inspection-agent-grid { grid-template-columns: minmax(220px, 300px) minmax(0, 1fr); }
+.inference-detail .step-timing small:first-of-type { width: auto; }
+.evidence-input-link { margin-top: 8px; font-size: 12px; }
+.raw-event-view .input-jump { border-left: 3px solid var(--accent); padding: 12px 16px; margin: 14px 0; background: var(--bg); overflow-wrap: anywhere; }
+.raw-event-view .input-jump p { margin: 0 0 8px; }
+.raw-event-view .input-jump p:last-child { margin-bottom: 0; }
+.raw-event-view .input-jump code { white-space: pre-wrap; }
+.raw-event-view .input-fields-grid { display: grid; gap: 20px; }
+.raw-event-view .input-fields-grid h3 { margin-bottom: 10px; }
+.inspection-repair-summary { display: flex; flex-wrap: wrap; gap: 12px 24px; margin: 14px 0; }
+.inspection-repair-summary > div { min-width: 120px; }
+.inspection-repair-summary dt { color: var(--muted); font-size: 12px; }
+.inspection-repair-summary dd { margin: 5px 0 0; font-size: 13px; }
+@media (max-width: 1000px) {
+  .inference-overview { grid-template-columns: minmax(0, 1fr); }
+  .inference-detail .inspection-agent-grid { grid-template-columns: 220px minmax(0, 1fr); }
+}
+@media (max-width: 700px) {
+  .inference-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .inference-detail .inspection-agent-grid { grid-template-columns: minmax(0, 1fr); }
+  .inference-toolbar > .ux-toolbar { gap: 8px; }
+  .inference-execution, .inference-result-snapshot { padding: 18px; }
+}

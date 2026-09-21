@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api.js";
 import { Icon } from "./Icon.jsx";
 import Dialog from "./Dialog.jsx";
+import MoreActions from "./MoreActions.jsx";
 import {
   MAX_POLICY_CHARS, createPromptDraft, createPromptSettingsController, emptyPromptSettingsState,
   promptCharacterCount, promptLineDiff, validatePromptDraft, visiblePromptText,
@@ -60,7 +61,6 @@ export default function PromptSettings() {
   const blocked = busy || state.loading || state.needsRefresh || !catalog;
   const errors = draft ? validatePromptDraft(draft, limit) : [];
   const characterCount = promptCharacterCount(draft?.policy_text || "");
-  const isRollback = selected && active && selected.version_number < active.version_number;
 
   function clone(source) {
     if (draft) { setDraftOpen(true); return; }
@@ -80,9 +80,9 @@ export default function PromptSettings() {
 
   return <div className="prompt-settings">
     <section className="panel prompt-overview">
-      <div className="prompt-heading"><div><h2>공통 판정 지침</h2><p>운영·테스트의 Primary와 Verifier에 같은 판정·작성 지침을 적용합니다. 역할별 고정 규칙은 유지합니다.</p></div>
+      <div className="prompt-heading"><div><h2>판정 지침</h2><p>저장된 버전을 후보 테스트에 선택하세요. 공식 평가 후 승격해야 운영에 적용됩니다.</p></div>
         <button type="button" className="secondary" disabled={busy || state.loading} onClick={() => controller.current?.refresh()}>새로고침</button></div>
-      <div className="prompt-active"><span className="prompt-tag prompt-tag-active">공통 적용 중</span><strong>{catalog ? versionName(active) : "조회 중…"}</strong><span className="prompt-tag prompt-tag-warning">모델 품질 미검증</span></div>
+      <div className="prompt-active"><span className="prompt-tag prompt-tag-active">Production 적용 중</span><strong>{catalog ? versionName(active) : "조회 중…"}</strong></div>
     </section>
 
     {state.error && <div className="error" role="alert">{state.error}</div>}
@@ -101,20 +101,12 @@ export default function PromptSettings() {
       <div className="prompt-workspace">
         {state.selectedError && <div className="error" role="alert">{state.selectedError}<button type="button" className="secondary" onClick={() => controller.current?.select(state.selectedId)}>상세 다시 조회</button></div>}
         {state.selectedLoading ? <section className="panel prompt-empty" role="status">선택한 버전을 불러오는 중…</section> : selected && <section className="panel prompt-detail">
-          <div className="prompt-heading"><div><h2>{versionName(selected)}</h2><p>저장된 원본 · 읽기 전용</p></div><span className="prompt-tag prompt-tag-warning">미검증</span></div>
+          <div className="prompt-heading"><div><h2>{versionName(selected)}</h2><p>저장된 원본 · 읽기 전용</p></div></div>
           <p className="prompt-change-note">{selected.change_note}</p>
           <pre className="prompt-policy-text" aria-label="저장된 판정 지침">{visiblePromptText(selected.policy_text)}</pre>
           <div className="prompt-actions"><button type="button" className="secondary" disabled={blocked} onClick={() => clone(selected)}><Icon name="copy" size={16} />{draft ? "작성 중인 버전 열기" : "새 버전 작성"}</button>
-            <button type="button" className="primary" disabled={blocked || selected.id === catalog?.active_version_id || Boolean(draft)} onClick={() => controller.current?.beginActivation()}>{selected.id === catalog?.active_version_id ? "공통 적용 중" : isRollback ? "이 버전으로 복귀" : "공통 적용"}</button><button type="button" className="secondary" onClick={() => setView("compare")}>변경 비교</button><button type="button" className="text-button" onClick={() => setView("technical")}>기술정보</button></div>
+            <a href="#evaluate/tests/new">후보 테스트 만들기 →</a><MoreActions label="지침 버전 작업"><button type="button" className="secondary" onClick={() => setView("compare")}>변경 비교</button><button type="button" className="text-button" onClick={() => setView("technical")}>기술정보</button></MoreActions></div>
         </section>}
-
-        <Dialog open={Boolean(state.confirmation)} title="공통 프롬프트 적용" onClose={() => { if (!busy) controller.current?.cancelActivation(); }} className="prompt-settings prompt-dialog">{state.confirmation && <section className="prompt-confirmation" aria-labelledby="prompt-activation-heading">
-          <h3 id="prompt-activation-heading">{versionName(state.confirmation)}</h3><p>Production과 Test의 새 접수에 함께 적용합니다.</p>
-          <p>이후 새로 접수되는 분석에 사용되며 이미 접수된 대기·진행 중 분석과 기존 결과는 바뀌지 않습니다. 복귀도 선택한 저장 버전을 다시 활성화하는 작업입니다.</p>
-          <p>지침 길이와 모델의 컨텍스트 설정에 따라 입력 예산이 부족할 수 있습니다. 저장·공통 적용은 실제 모델의 품질이나 입력 한도 검증이 아닙니다.</p>
-          <label className="prompt-acknowledgement"><input type="checkbox" checked={state.acknowledged} disabled={busy} onChange={(event) => controller.current?.acknowledge(event.target.checked)} /><span>모델 품질이 미검증임을 이해했고 운영·테스트의 적용 범위를 확인했습니다.</span></label>
-          {state.error && <p className="error" role="alert">{state.error}</p>}<div className="prompt-actions"><button type="button" className="primary" disabled={blocked || !state.acknowledged} onClick={() => controller.current?.activate()}>{state.busy === "activate" ? "적용 중…" : "공통 적용 확인"}</button><button type="button" className="secondary" disabled={busy} onClick={() => controller.current?.cancelActivation()}>취소</button></div>
-        </section>}</Dialog>
 
         <Dialog open={draftOpen && Boolean(draft)} title="새 프롬프트 버전 작성" onClose={() => { if (!busy) setDraftOpen(false); }} className="prompt-settings prompt-dialog">{draft && <form className="prompt-editor" onSubmit={save} noValidate>
           <p className="prompt-privacy">실제 원문·Cookie·API 키·개인정보·정답·과거 분석가 판정을 넣지 마세요.</p>

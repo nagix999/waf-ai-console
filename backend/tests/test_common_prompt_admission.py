@@ -52,10 +52,10 @@ def save_policy(client, text="SHARED_NEW_SYNTHETIC_POLICY"):
 
 def activate(client, version_id):
     current = client.get(POLICIES).json()
-    response = client.post(f"{POLICIES}/{version_id}/activate", json={
-        "expected_revision": current["revision"], "acknowledge_unverified": True,
-    })
-    assert response.status_code == 200, response.text
+    from app.services.prompt_policies import activate_policy_version
+    with client.app.state.session_factory() as db:
+        activate_policy_version(db, client.app.state.crypto, version_id, current["revision"])
+        db.commit()
 
 
 def submit(client, event, *, kind="direct", key=None, expected=False, overrides=None, headers=None):
@@ -223,7 +223,8 @@ def test_different_llm_roles_execute_identical_frozen_prompts_after_activation(c
 
 
 @pytest.mark.parametrize("corruption", ["ciphertext", "missing", "changed_instructions"])
-def test_common_snapshot_corruption_stops_before_model_call(client, registered_vllm_target, event_payload, monkeypatch, corruption):
+@pytest.mark.parametrize("configuration_pinned", [False, True], ids=["legacy", "candidate"])
+def test_common_snapshot_corruption_stops_before_model_call(client, registered_vllm_target, event_payload, monkeypatch, corruption, configuration_pinned):
     login(client)
     install_profiles(client)
     client.app.state.settings.agent_mode = "moduagent"
@@ -236,6 +237,13 @@ def test_common_snapshot_corruption_stops_before_model_call(client, registered_v
 
     monkeypatch.setattr(worker, "execute_structured_agent", execute)
     with client.app.state.session_factory() as db:
+        named_run = db.get(NamedRun, run["id"])
+        assert named_run.configuration_hash and named_run.configuration_snapshot_json
+        if not configuration_pinned:
+            # Pre-0020 runs have no candidate configuration, but their saved
+            # prompt must still be checked before any model invocation.
+            named_run.configuration_hash = None
+            named_run.configuration_snapshot_json = None
         row = db.get(Analysis, run["items"][0]["analysis_id"])
         if corruption == "changed_instructions":
             altered = load_analysis_prompt(row, client.app.state.crypto).model_copy(
@@ -244,7 +252,9 @@ def test_common_snapshot_corruption_stops_before_model_call(client, registered_v
         else:
             row.prompt_snapshot_ciphertext = None if corruption == "missing" else "SYNTHETIC_PRIVATE_BAD_CIPHER"
         db.commit()
-        with pytest.raises(PromptSnapshotError, match="^prompt_snapshot_invalid$"):
+        error_type = AnalysisIngestError if configuration_pinned else PromptSnapshotError
+        error_code = "candidate_configuration_invalid" if configuration_pinned else "prompt_snapshot_invalid"
+        with pytest.raises(error_type, match=f"^{error_code}$"):
             worker.process_moduagent(db, client.app.state.crypto, row, "", 0.75)
     assert calls == []
 

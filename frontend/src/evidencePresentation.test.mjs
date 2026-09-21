@@ -50,6 +50,7 @@ test("hold-reference drilldown separates final attack and normal predictions", (
 
 test("editor selection needs a verified profile and acknowledges external transfer", () => {
   const catalog = { state_token: "a".repeat(64), profiles: [{ id: "local", provider: "vllm", can_assign: true }, { id: "remote", provider: "openai", can_assign: true }], assignments: { production: { primary_profile_id: "local", verifier_profile_id: null, evidence_editor_enabled: true, evidence_editor_profile_id: "remote" }, test: { primary_profile_id: null, verifier_profile_id: null } } };
+  catalog.assignments.test = { ...catalog.assignments.production };
   assert.equal(selectionIssue(catalog, catalog.assignments), "");
   assert.equal(hasExternalRole(catalog, catalog.assignments), true);
   catalog.profiles[1].can_assign = false;

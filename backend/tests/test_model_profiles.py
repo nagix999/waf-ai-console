@@ -73,8 +73,8 @@ def test_full_test_is_required_before_production_promotion(client):
     assert test_run.status_code == 202
     mark_full_test_passed(client, profile["id"])
     promoted = client.post(f"/api/v1/model-profiles/{profile['id']}/promote")
-    assert promoted.status_code == 200
-    assert promoted.json()["status"] == "production"
+    assert promoted.status_code == 409
+    assert promoted.json()["detail"] == "production_promotion_required"
 
 
 def test_profile_update_invalidates_previous_verification(client):
@@ -99,9 +99,10 @@ def test_promoting_another_profile_demotes_previous_production(client):
         client.post(f"/api/v1/model-profiles/{profile['id']}/tests", json={"mode": "full"})
         mark_full_test_passed(client, profile["id"])
         promoted = client.post(f"/api/v1/model-profiles/{profile['id']}/promote")
-        assert promoted.status_code == 200
+        assert promoted.status_code == 409
+        assert promoted.json()["detail"] == "production_promotion_required"
 
     profiles = client.get("/api/v1/model-profiles").json()
     production = [profile for profile in profiles if profile["status"] == "production"]
-    assert [profile["id"] for profile in production] == [second["id"]]
+    assert production == []  # Verification alone never changes Production.
     assert next(profile for profile in profiles if profile["id"] == first["id"])["status"] == "verified"

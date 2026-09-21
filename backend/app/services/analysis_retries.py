@@ -257,6 +257,10 @@ def enqueue_retry(db, crypto, settings, analysis_id, request, actor, *, commit=T
                    execution_snapshot_ciphertext=crypto.encrypt_text(snapshot.model_dump_json()),
                    model_profile=_profile.name, status="pending")
     db.add(row)
+    from .test_runs import analysis_test_run
+    run = analysis_test_run(db, original) if original.analysis_purpose == "test" else None
+    if run and run.evaluation_mode == "ground_truth":
+        run.official_evaluation_pending = True
     db.add(AccessAudit(actor_kind="admin_session", actor_id=actor, action="retry_failed_analysis",
                        resource_type="analysis", resource_id=row.id))
     if commit:

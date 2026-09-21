@@ -1,0 +1,8 @@
+.candidate-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin: 0; }
+.candidate-summary dt { color: var(--muted, #667085); font-size: .82rem; margin-bottom: 5px; }
+.candidate-summary dd { margin: 0; overflow-wrap: anywhere; font-weight: 600; }
+.candidate-configuration .panel-head p { margin: 6px 0 0; }
+.dataset-picker { display: grid; gap: 8px; max-height: 260px; overflow: auto; }
+.dataset-picker button { text-align: left; display: grid; gap: 4px; }
+.dataset-picker button[aria-pressed="true"] { outline: 2px solid var(--primary, #2563eb); outline-offset: -2px; }
+.dataset-picker small { color: var(--muted, #667085); }

@@ -192,6 +192,10 @@ def test_old_editor_snapshot_keeps_old_contract_and_scope(client, event_payload,
         old = saved.model_copy(update={"version": legacy.VERSION, "instructions": legacy.INSTRUCTIONS,
                                       "instructions_hash": legacy.instructions_hash(legacy.INSTRUCTIONS)})
         run.evidence_editor_snapshot_ciphertext = client.app.state.crypto.encrypt_text(old.model_dump_json())
+        # Historical runs predate candidate fingerprints. Leaving a new
+        # fingerprint here would test tampering, not legacy compatibility.
+        run.configuration_snapshot_json = None
+        run.configuration_hash = None
         db.commit()
     calls = install_evidence_calls(monkeypatch) if duplicate_evidence else install_calls(monkeypatch)
     with client.app.state.session_factory() as db:

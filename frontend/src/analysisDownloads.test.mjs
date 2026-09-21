@@ -83,15 +83,15 @@ test("file saving uses a bounded fixed filename, cleans up the link and revokes 
 test("non-completed downloads are disabled and concise scope help retains excerpt, audit and limit warnings", () => {
   for (const status of ["pending", "processing", "failed"]) {
     const html = renderToStaticMarkup(createElement(Downloads, { id, status }));
-    assert.equal((html.match(/disabled=""/g) || []).length, 2);
-    assert.match(html, /분석이 완료되면/); assert.match(html, /근거 발췌 포함/);
-    assert.match(html, /aria-label="다운로드 범위 설명"/); assert.doesNotMatch(html, /<details|role="tooltip"/);
+    assert.equal((html.match(/disabled=""/g) || []).length, 1);
+    assert.match(html, /분석이 완료되면/); assert.match(html, /aria-label="보고서 다운로드"/);
+    assert.doesNotMatch(html, /<details|role="tooltip"/);
   }
   const html = renderToStaticMarkup(createElement(Downloads, { id, status: "completed" }));
   assert.doesNotMatch(html, /disabled=""|https:\/\//);
-  assert.match(html, /PDF 다운로드/); assert.match(html, /Excel 다운로드/);
+  assert.match(html, /aria-expanded="false"/); assert.doesNotMatch(html, /PDF 다운로드|Excel 다운로드/);
   let prepared;
-  function CaptureDownload() { prepared = Downloads({ id, status: "completed" }); return null; }
+  function CaptureDownload() { prepared = module.exports.DownloadScope(); return null; }
   renderToStaticMarkup(createElement(CaptureDownload));
   function findHelp(node) {
     if (Array.isArray(node)) return node.map(findHelp).find(Boolean);

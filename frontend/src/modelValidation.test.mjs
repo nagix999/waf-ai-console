@@ -83,14 +83,14 @@ const module = { exports: {} }; runInNewContext(bundled, { module, exports: modu
 const { FullValidationContent, DatasetEvaluation } = module.exports;
 const render = (Component, props) => renderToStaticMarkup(createElement(Component, props));
 
-test("full-validation UI exposes exactly three choices with selected-profile and OpenAI cost notices", () => {
+test("full-validation UI uses two radios and one execution action with selected-profile and OpenAI cost notices", () => {
   const html = render(FullValidationContent, { profile: profile({ provider: "openai", name: '<script>SYNTHETIC</script>' }), busy: false, error: "", onCancel() {}, onSubmit() {} });
-  assert.equal((html.match(/<button(?![^>]*metric-help-trigger)/g) || []).length, 3); assert.match(html, />취소<\/button>/); assert.match(html, />연결·기능 검증만<\/button>/); assert.match(html, />150건 판정 평가도 실행<\/button>/);
-  assert.match(html, /선택한 프로필로 검증/); assert.doesNotMatch(html, /현재 Production이 아니라/); assert.match(html, /Production·Test 지정을 바꾸지/); assert.match(html, /150회를 넘을 수/); assert.match(html, /OpenAI 외부 API로 전송/); assert.match(html, /API 비용/); assert.match(html, /150건 판정 평가 설명/); assert.doesNotMatch(html, /<script>/); assert.match(html, /&lt;script&gt;SYNTHETIC/);
+  assert.equal((html.match(/<button(?![^>]*metric-help-trigger)/g) || []).length, 2); assert.match(html, />취소<\/button>/); assert.match(html, />검증 실행<\/button>/); assert.equal((html.match(/type="radio"/g) || []).length, 2); assert.match(html, /checked=""/);
+  assert.match(html, /선택한 프로필로 검증/); assert.doesNotMatch(html, /현재 Production이 아니라/); assert.match(html, /Production·Test 지정을 바꾸지/); assert.match(html, /150회를 넘을 수/); assert.match(html, /OpenAI 외부 API로 전송/); assert.match(html, /API 비용/); assert.match(html, /공식 평가나 자동 승격에 사용하지 않습니다/); assert.doesNotMatch(html, /<script>/); assert.match(html, /&lt;script&gt;SYNTHETIC/);
   assert.doesNotMatch(html, /검증 대상 설명|연결·기능 검증 설명/); assert.match(html, /Test 지정 여부와 관계없이/); assert.match(html, /공통 활성 프롬프트를 사용합니다/);
-  assert.match(html, /연결·기본 응답·구조화 출력·시스템 지침·큰 입력·동시 요청/); assert.match(html, /판정 품질은 보증하지 않습니다/);
+  assert.match(html, /연결, 출력 형식, 지침 준수와 동시 요청/); assert.match(html, /판정 품질 평가는 아닙니다/);
   assert.doesNotMatch(render(FullValidationContent, { profile: profile(), busy: false }), /OpenAI를 선택했습니다/);
-  const reconfirm = render(FullValidationContent, { profile: profile(), busy: false, needsReconfirm: true }); assert.equal((reconfirm.match(/disabled=""/g) || []).length, 2); assert.match(reconfirm, /class="secondary">취소<\/button>/);
+  const reconfirm = render(FullValidationContent, { profile: profile(), busy: false, needsReconfirm: true }); assert.equal((reconfirm.match(/disabled=""/g) || []).length, 1); assert.match(reconfirm, /class="secondary">취소<\/button>/);
 });
 
 test("dataset result UI separates completed, failed, held and expected-abstention outcomes and preserves missing metadata", () => {

@@ -6,10 +6,11 @@ import { initialListState } from "./analysisView.js";
 const id = "10000000-0000-4000-8000-000000000001";
 const initial = () => ({ page: "dashboard", resultsPurpose: "", listState: initialListState(), testResults: { view: "runs", runId: null, filters: {} }, settingsTab: "models", detailTab: "result" });
 
-test("safe screen, settings, result and run routes round trip", () => {
-  for (const hash of ["#dashboard", "#production-api", "#test", "#analyses", "#analyses/production", "#analyses/test", "#analyses/test/items",
-    ...["models", "agents", "schema", "egress", "keys"].map(tab => `#settings/${tab}`),
-    `#test-runs/${id}`, `#analyses/${id}`, `#analyses/${id}/raw`, `#analyses/${id}/report`]) {
+test("canonical workspace routes round trip", () => {
+  for (const hash of ["#overview", "#connect/production-api", "#evaluate/tests/new", "#operate/inference", "#evaluate/tests", "#promote", "#operate/runtime", "#operate/activity",
+    ...["llm-profiles", "agent-roles", "instructions"].map(tab => `#configure/${tab}`),
+    ...["input-schema", "api-keys", "vllm-targets"].map(tab => `#connect/${tab}`),
+    `#evaluate/tests/${id}`, ...["result", "agent-trace", "input", "result-json", "report"].map(tab => `#operate/inference/${id}/${tab}`)]) {
     const route = readAppHash(hash);
     assert.ok(route, hash);
     assert.equal(writeAppHash(applyAppRoute(initial(), route)), hash);
@@ -17,7 +18,7 @@ test("safe screen, settings, result and run routes round trip", () => {
 });
 
 test("unknown, malformed and non-UUID fragments cannot become API identifiers", () => {
-  for (const hash of ["#workspace-content", "#unknown", "#analyses/../../admin", "#analyses/%2f", "#test-runs/secret", `#analyses/${id}/agent`, "#settings/__proto__", "#analyses?payload=secret", `#analyses/${id}/raw/extra`]) {
+  for (const hash of ["#workspace-content", "#unknown", "#analyses/../../admin", "#analyses/%2f", "#test-runs/secret", `#analyses/${id}/unknown`, "#settings/__proto__", "#analyses?payload=secret", `#analyses/${id}/raw/extra`]) {
     assert.equal(readAppHash(hash), null);
   }
   assert.deepEqual(readAppHash(""), { page: "dashboard" });
@@ -27,9 +28,9 @@ test("unknown, malformed and non-UUID fragments cannot become API identifiers", 
 test("URL serialization ignores searches, drafts, source fields and arbitrary metadata", () => {
   const state = { ...initial(), page: "analyses", resultsPurpose: "test", secret: "not-in-url", testResults: { view: "items", runId: null, filters: { q: "not-in-url" }, items: { source_system: "not-in-url" } } };
   state.listState.draft.q = "not-in-url";
-  assert.equal(writeAppHash(state), "#analyses/test/items");
-  assert.equal(writeAppHash({ ...state, page: "detail", selectedId: "not-in-url" }), "#analyses");
-  assert.equal(writeAppHash({ ...state, page: "settings", settingsTab: "not-in-url" }), "#settings/models");
+  assert.equal(writeAppHash(state), "#operate/inference");
+  assert.equal(writeAppHash({ ...state, page: "detail", selectedId: "not-in-url" }), "#operate/inference");
+  assert.equal(writeAppHash({ ...state, page: "settings", settingsTab: "not-in-url" }), "#configure/llm-profiles");
 });
 
 test("direct URL restoration uses the exact scope without mixing Test and Production", () => {

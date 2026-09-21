@@ -234,8 +234,8 @@ def test_actions_revalidate_stored_profile_fail_closed(client, changes, code, ac
     else:
         kwargs = {}
     response = client.post(f"/api/v1/model-profiles/{profile['id']}/{action}", **kwargs)
-    assert response.status_code == 422
-    assert response.json() == {"detail": code}
+    assert response.status_code == (409 if action == "promote" else 422)
+    assert response.json() == {"detail": "production_promotion_required" if action == "promote" else code}
     assert snapshot(client, profile["id"]) == before
     with client.app.state.session_factory() as db:
         assert db.query(VLLMTestRun).count() == 0
@@ -250,7 +250,9 @@ def test_global_production_gate_and_immutability_across_providers(client):
         assert client.post(path + "/promote").status_code == 409
         assert client.post(path + "/tests", json={"mode": "full"}).status_code == 202
         mark_full_test_passed(client, profile["id"])
-        assert client.post(path + "/promote").status_code == 200
+        assert client.post(path + "/promote").json()["detail"] == "production_promotion_required"
+        from legacy_state_helpers import seed_production
+        seed_production(client, profile)
         assert client.put(path, json={"name": "immutable"}).json() == {"detail": "production_profile_is_immutable"}
     profiles = client.get("/api/v1/model-profiles").json()
     assert [p["id"] for p in profiles if p["status"] == "production"] == [second["id"]]

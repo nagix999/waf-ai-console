@@ -5,6 +5,7 @@ Each job owns its Session and lease. No Session/ORM object crosses threads.
 import logging
 import signal
 import uuid
+from time import monotonic
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import timedelta
@@ -87,6 +88,12 @@ def run_analysis(session_factory, crypto, settings, identifier, owner, attempt):
             current = db.get(Analysis, identifier)
             if current is not None:
                 worker.mark_failed(db, current, exc)
+    # Evaluation storage failure must never rewrite a completed analysis.
+    try:
+        from .official_evaluations import finalize_for_analysis
+        finalize_for_analysis(session_factory, identifier)
+    except Exception as exc:
+        logger.error("evaluation save failed error_type=%s", type(exc).__name__)
 
 
 def run_model_test(session_factory, crypto, settings, identifier, owner):
@@ -118,11 +125,27 @@ def serve(session_factory, crypto, settings, worker_id, *, stop=None, install_si
         for signum in (signal.SIGINT, signal.SIGTERM):
             previous[signum] = signal.signal(signum, lambda *_: stop.set())
     jobs, model_job, turn = set(), None, 0
+    next_evaluation_check, evaluation_cursor = 0, None
+    next_runtime_heartbeat = 0
     capacity = MAX_ANALYSES_PER_PURPOSE * 2
     try:
         # The extra slot isolates candidate qualification from ordinary tests.
         with ThreadPoolExecutor(max_workers=capacity + 1, thread_name_prefix="waf-analysis") as pool:
             while not stop.is_set():
+                if monotonic() >= next_runtime_heartbeat:
+                    try:
+                        from .runtime_status import heartbeat
+                        heartbeat(session_factory, worker_id, settings.worker_role)
+                    except Exception as exc:
+                        logger.error("runtime heartbeat failed error_type=%s", type(exc).__name__)
+                    next_runtime_heartbeat = monotonic() + 15
+                if settings.worker_role in {"analysis", "both"} and monotonic() >= next_evaluation_check:
+                    try:
+                        from .official_evaluations import recover_pending_evaluations
+                        evaluation_cursor = recover_pending_evaluations(session_factory, after=evaluation_cursor)
+                    except Exception as exc:
+                        logger.error("evaluation recovery failed error_type=%s", type(exc).__name__)
+                    next_evaluation_check = monotonic() + 15
                 for job in list(jobs):
                     if job.done():
                         jobs.remove(job)

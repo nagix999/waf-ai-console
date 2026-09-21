@@ -29,6 +29,11 @@ AdminPrincipal = Annotated[Principal, Depends(require_scope("admin"))]
 
 
 def audit(db: Session, principal: Principal, action: str, resource_id: str) -> None:
+    if action == "create_input_schema":
+        from ..services.change_events import record_change, metadata
+        record_change(db, category="integration", actor=principal.username or "unknown", action=action,
+            resource_type="input_schema", resource_id=resource_id,
+            after=metadata(db.get(InputSchemaVersion, resource_id), ("name", "version_number", "content_hash")))
     db.add(AccessAudit(actor_kind=principal.kind, actor_id=principal.username or "unknown", action=action,
                        resource_type="input_schema_version", resource_id=resource_id))
 
@@ -132,18 +137,4 @@ def validate_schema(version_id: str, payload: InputSchemaValidate, request: Requ
 
 @router.post("/{version_id}/activate", response_model=InputSchemaActivationResponse)
 def activate_schema(version_id: str, payload: InputSchemaActivate, request: Request, db: DbSession, principal: AdminPrincipal):
-    try:
-        version = get_schema_version(db, version_id)
-        try:
-            subject = serializer(request).loads(payload.validation_token, max_age=VALIDATION_TOKEN_SECONDS)
-        except BadData:
-            raise InputSchemaError("input_schema_sample_validation_required", 422) from None
-        if subject != token_subject(request, principal, version, payload.expected_revision):
-            raise InputSchemaError("input_schema_sample_validation_required", 422)
-        state = activate_schema_version(db, request.app.state.crypto, version_id, payload.expected_revision, principal.username or "unknown")
-        result = InputSchemaActivationResponse(active_version_id=state.active_version_id, revision=state.revision)
-        audit(db, principal, "activate_input_schema", version_id)
-        db.commit()
-        return result
-    except InputSchemaError as exc:
-        raise api_error(db, exc) from None
+    raise HTTPException(409, "production_promotion_required")

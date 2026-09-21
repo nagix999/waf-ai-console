@@ -12,6 +12,7 @@ from ..models import AccessAudit, ModelProfileStatus, ModelTestMode, ModelTestSt
 from ..schemas import ModelProfileAssignment, VLLMProfileCreate, VLLMProfileResponse, VLLMProfileUpdate, VLLMTestCreate, VLLMTestRunResponse
 from ..security import Principal, require_scope
 from ..services.analysis import AnalysisIngestError
+from ..services.change_events import record_change, profile_metadata
 from ..services.internal_egress import InternalEgressError, allowed_targets_from_db, lock_egress_mutation
 from ..services.vllm_profiles import (
     TargetNotAllowedError,
@@ -36,7 +37,10 @@ def begin_test_read_snapshot(db: Session) -> None:
         connection.exec_driver_sql("BEGIN")
 
 
-def audit(db: Session, principal: Principal, action: str, profile_id: str) -> None:
+def audit(db: Session, principal: Principal, action: str, profile_id: str, before=None) -> None:
+    if action in {"create_vllm_profile", "update_vllm_profile", "disable_vllm_profile", "enable_vllm_profile", "assign_test_llm_profile", "unassign_test_llm_profile"}:
+        record_change(db, category="configuration", actor=principal.username or "unknown", action=action,
+            resource_type="llm_profile", resource_id=profile_id, before=before, after=profile_metadata(db.get(VLLMProfile, profile_id)))
     db.add(
         AccessAudit(
             actor_kind=principal.kind,
@@ -136,6 +140,7 @@ def update_profile(
     if profile.is_test:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="test_profile_is_immutable")
     changes = payload.model_dump(exclude_unset=True, mode="json")
+    before = profile_metadata(profile)
     provider = changes.get("provider", profile.provider)
     provider_changed = provider != profile.provider
     if provider_changed:
@@ -168,7 +173,7 @@ def update_profile(
     if profile.status != ModelProfileStatus.disabled.value:
         profile.status = ModelProfileStatus.draft.value
     profile.last_verified_at = None
-    audit(db, principal, "update_vllm_profile", profile.id)
+    audit(db, principal, "update_vllm_profile", profile.id, before)
     try:
         db.commit()
     except IntegrityError as exc:
@@ -182,12 +187,15 @@ def update_profile(
 def disable_profile(profile_id: str, db: DbSession, principal: AdminPrincipal) -> VLLMProfileResponse:
     lock_egress_mutation(db)
     profile = get_profile_or_404(db, profile_id)
+    if profile.status == ModelProfileStatus.production.value:
+        raise HTTPException(409, "production_promotion_required")
     from ..services.agent_configuration import verifier_roles
     if verifier_roles(db, profile_id):
         raise HTTPException(409, "agent_profile_is_assigned")
+    before = profile_metadata(profile)
     profile.status = ModelProfileStatus.disabled.value
     profile.is_test = False
-    audit(db, principal, "disable_vllm_profile", profile.id)
+    audit(db, principal, "disable_vllm_profile", profile.id, before)
     db.commit()
     db.refresh(profile)
     return to_profile_response(profile, db)
@@ -200,10 +208,11 @@ def enable_profile(profile_id: str, request: Request, db: DbSession, principal: 
     if profile.status != ModelProfileStatus.disabled.value:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="model_profile_is_not_disabled")
     validate_profile_for_request(profile, request, db)
+    before = profile_metadata(profile)
     profile.status = ModelProfileStatus.draft.value
     profile.is_test = False
     profile.last_verified_at = None
-    audit(db, principal, "enable_vllm_profile", profile.id)
+    audit(db, principal, "enable_vllm_profile", profile.id, before)
     db.commit()
     db.refresh(profile)
     return to_profile_response(profile, db)
@@ -298,34 +307,7 @@ def get_test(profile_id: str, test_id: str, db: DbSession, _principal: AdminPrin
 @router.post("/{profile_id}/promote", response_model=VLLMProfileResponse)
 def promote_profile(profile_id: str, request: Request, db: DbSession, principal: AdminPrincipal,
                     payload: ModelProfileAssignment | None = Body(default=None)) -> VLLMProfileResponse:
-    lock_egress_mutation(db)
-    profile = get_profile_or_404(db, profile_id)
-    if profile.status not in {ModelProfileStatus.verified.value, ModelProfileStatus.production.value}:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="only_verified_profile_can_be_promoted")
-    if payload is not None and payload.expected_profile_fingerprint != profile_fingerprint(profile):
-        raise HTTPException(409, "model_profile_changed_reconfirm")
-    validate_profile_for_request(profile, request, db)
-    reason = assignment_block_reason(db, profile)
-    if reason:
-        raise HTTPException(409, reason)
-    current = db.scalar(
-        select(VLLMProfile).where(
-            VLLMProfile.status == ModelProfileStatus.production.value,
-            VLLMProfile.id != profile.id,
-        )
-    )
-    if current:
-        current.status = ModelProfileStatus.verified.value
-        db.flush()
-    profile.status = ModelProfileStatus.production.value
-    audit(db, principal, "promote_vllm_profile", profile.id)
-    try:
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="production_profile_changed_concurrently") from exc
-    db.refresh(profile)
-    return to_profile_response(profile, db)
+    raise HTTPException(409, "production_promotion_required")
 
 
 @router.post("/{profile_id}/assign-test", response_model=VLLMProfileResponse)
@@ -341,10 +323,13 @@ def assign_test_profile(profile_id: str, payload: ModelProfileAssignment, reques
         raise HTTPException(409, reason)
     current = db.scalar(select(VLLMProfile).where(VLLMProfile.is_test.is_(True), VLLMProfile.id != profile.id))
     if current:
+        previous = profile_metadata(current)
         current.is_test = False
         db.flush()
+        audit(db, principal, "unassign_test_llm_profile", current.id, before=previous)
+    before = profile_metadata(profile)
     profile.is_test = True
-    audit(db, principal, "assign_test_llm_profile", profile.id)
+    audit(db, principal, "assign_test_llm_profile", profile.id, before=before)
     try:
         db.commit()
     except IntegrityError:
@@ -363,8 +348,9 @@ def unassign_test_profile(profile_id: str, payload: ModelProfileAssignment,
         raise HTTPException(409, "model_profile_changed_reconfirm")
     # Removal remains possible even after egress/credentials are revoked.
     # A stale removal of another profile never clears the current Test role.
+    before = profile_metadata(profile)
     profile.is_test = False
-    audit(db, principal, "unassign_test_llm_profile", profile.id)
+    audit(db, principal, "unassign_test_llm_profile", profile.id, before=before)
     db.commit()
     db.refresh(profile)
     return to_profile_response(profile, db)

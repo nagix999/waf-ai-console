@@ -24,6 +24,12 @@ AdminPrincipal = Annotated[Principal, Depends(require_scope("admin"))]
 
 
 def audit(db: Session, principal: Principal, action: str, resource_id: str) -> None:
+    if action == "create_prompt_policy":
+        from ..services.change_events import record_change, metadata
+        from ..models import PromptPolicyVersion
+        record_change(db, category="configuration", actor=principal.username or "unknown", action=action,
+            resource_type="analysis_instructions", resource_id=resource_id,
+            after=metadata(db.get(PromptPolicyVersion, resource_id), ("name", "version_number", "content_hash")))
     db.add(AccessAudit(
         actor_kind=principal.kind,
         actor_id=principal.username or "unknown",
@@ -89,11 +95,4 @@ def create_policy(payload: PromptPolicyCreate, request: Request, db: DbSession, 
 def activate_policy(
     version_id: str, payload: PromptPolicyActivate, request: Request, db: DbSession, principal: AdminPrincipal,
 ) -> PromptPolicyActivationResponse:
-    try:
-        state = activate_policy_version(db, request.app.state.crypto, version_id, payload.expected_revision)
-        result = PromptPolicyActivationResponse(active_version_id=state.active_version_id, revision=state.revision)
-        audit(db, principal, "activate_prompt_policy", version_id)
-        db.commit()
-        return result
-    except PromptPolicyError as exc:
-        raise api_error(db, exc) from None
+    raise HTTPException(409, "production_promotion_required")

@@ -1,5 +1,12 @@
 export const initialTestComparisonState = () => ({ open: false, queryText: "", query: { q: "", limit: 10, offset: 0 }, baselineId: "", limit: 25, offset: 0, changes_only: false });
 
+// A displayed difference, not a pass/fail judgement. Missing is never zero.
+export function comparisonDelta(before, after, percentage = true) {
+  if (!Number.isFinite(before) || !Number.isFinite(after)) return "—";
+  const value = Math.round((after - before) * (percentage ? 1000 : 1)) / (percentage ? 10 : 1);
+  return `${value > 0 ? "+" : value < 0 ? "−" : ""}${percentage ? Math.abs(value).toFixed(1) : Math.abs(value)}${percentage ? " %p" : ""}`;
+}
+
 export function testComparisonChange(state, action) {
   if (action.type === "open") return { ...state, open: action.value };
   if (action.type === "draft") return { ...state, queryText: action.value };

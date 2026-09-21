@@ -317,7 +317,8 @@ def test_test_api_pins_verified_test_model_and_rejects_production_fallback(clien
     headers = key(client)
     login(client)
     production = create_verified(client, "production-fixture")
-    assert role(client, production, "promote").status_code == 200
+    from legacy_state_helpers import seed_production
+    seed_production(client, production)
     client.app.state.settings.agent_mode = "moduagent"
     client.post("/api/v1/auth/logout")
     assert client.post("/api/v1/analyses", json=event_payload, headers=headers).status_code == 409

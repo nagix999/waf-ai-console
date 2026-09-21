@@ -165,7 +165,8 @@ test("settings offers schema management without displacing existing model, promp
   const schema = render(components.default);
   assert.match(schema, /<h2>입력 스키마<\/h2>/); assert.match(schema, /적용 이력/); assert.doesNotMatch(schema, /입력 스키마 설명|<textarea|버전 ID|필드 정의 지문/);
   const source = readFileSync(new URL("./InputSchemaSettings.jsx", import.meta.url), "utf8");
-  assert.match(source, /LLM 입력에는 추가하지 않습니다/); assert.match(source, /기존 분석·접수된 테스트는 변경하지 않습니다/); assert.match(source, /닫기 · 초안 유지/);
+  assert.match(source, /LLM 입력에는 추가하지 않습니다/); assert.match(source, /후보 테스트 → 공식 평가 → 승격/); assert.match(source, /닫기 · 초안 유지/);
+  assert.doesNotMatch(source, /controller\.current\?\.activate\(/);
   for (const label of ["null 허용", "샘플 검증", "스키마 편집 범위", "필드 정의 한도"]) assert.ok(source.includes(`<HelpTooltip label="${label}"`), label);
   assert.doesNotMatch(source, /<HelpTooltip label="(?:입력 스키마|필드 변경 비교)"/);
   assert.match(source, /공개 API 문서와 실행 이력/); assert.match(source, /비밀값·실제 로그·개인정보를 넣지/);

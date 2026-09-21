@@ -23,6 +23,13 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  productionConfiguration: (options = {}) => request("/api/v1/admin/production-configurations", { ...options, cache: "no-store" }),
+  productionEvaluations: (options = {}) => request("/api/v1/admin/production-configurations/evaluations", { ...options, cache: "no-store" }),
+  promotionPreflight: (id, options = {}) => request(`/api/v1/admin/production-configurations/preflight/${encodeURIComponent(id)}`, { ...options, cache: "no-store" }),
+  promoteConfiguration: payload => request("/api/v1/admin/production-configurations/promote", { method: "POST", body: JSON.stringify(payload), cache: "no-store" }),
+  runtimeStatus: (window = "24h", options = {}, filters = {}) => request(`/api/v1/admin/runtime/status?${new URLSearchParams({ window, ...filters })}`, { ...options, cache: "no-store" }),
+  activity: (query = {}, options = {}) => request(`/api/v1/admin/activity?${new URLSearchParams(query)}`, { ...options, cache: "no-store" }),
+  deployment: (options = {}) => request("/api/v1/admin/runtime/deployment", { ...options, cache: "no-store" }),
   validationDatasets: (query = {}, options = {}) => request(`/api/v1/validation-datasets?${new URLSearchParams(query)}`, { ...options, cache: "no-store" }),
   validationDataset: (id, query = {}, options = {}) => request(`/api/v1/validation-datasets/${encodeURIComponent(id)}?${new URLSearchParams(query)}`, { ...options, cache: "no-store" }),
   createValidationDataset: payload => request("/api/v1/validation-datasets", { method: "POST", body: JSON.stringify(payload) }),
@@ -31,6 +38,7 @@ export const api = {
   datasetItem: (id, item, version) => request(`/api/v1/validation-datasets/${encodeURIComponent(id)}/items/${encodeURIComponent(item)}${version ? `?version_id=${encodeURIComponent(version)}` : ""}`, { cache: "no-store" }),
   saveDatasetItem: (id, item, payload) => request(`/api/v1/validation-datasets/${encodeURIComponent(id)}/items${item ? `/${encodeURIComponent(item)}` : ""}`, { method: item ? "PUT" : "POST", body: JSON.stringify(payload) }),
   deleteDatasetItem: (id, item, revision) => request(`/api/v1/validation-datasets/${encodeURIComponent(id)}/items/${encodeURIComponent(item)}`, { method: "DELETE", body: JSON.stringify({ expected_revision: revision }) }),
+  reviewDatasetItem: (id, item, payload) => request(`/api/v1/validation-datasets/${encodeURIComponent(id)}/items/${encodeURIComponent(item)}/reviews`, { method: "POST", body: JSON.stringify(payload) }),
   importDatasetAnalyses: (id, payload) => request(`/api/v1/validation-datasets/${encodeURIComponent(id)}/imports`, { method: "POST", body: JSON.stringify(payload) }),
   runValidationDataset: (id, payload) => request(`/api/v1/validation-datasets/${encodeURIComponent(id)}/runs`, { method: "POST", body: JSON.stringify(payload) }),
   referenceSelection: ids => request("/api/v1/evaluation-labels/selection", { method: "POST", body: JSON.stringify({ analysis_ids: ids }) }),
@@ -38,6 +46,7 @@ export const api = {
   testEvaluations: id => request(`/api/v1/test-runs/${encodeURIComponent(id)}/evaluations`, { cache: "no-store" }),
   rescoreTest: (id, key) => request(`/api/v1/test-runs/${encodeURIComponent(id)}/evaluations`, { method: "POST", body: JSON.stringify({ idempotency_key: key }) }),
   agentSettings: (options = {}) => request("/api/v1/admin/agent-settings", { ...options, cache: "no-store" }),
+  searchValidationDatasets: (payload, options = {}) => request("/api/v1/validation-datasets/search", { ...options, method: "POST", body: JSON.stringify(payload), cache: "no-store" }),
   concurrencySettings: (options = {}) => request("/api/v1/admin/agent-settings/concurrency", { ...options, cache: "no-store" }),
   updateConcurrencySettings: payload => request("/api/v1/admin/agent-settings/concurrency", { method: "PUT", body: JSON.stringify(payload), cache: "no-store" }),
   updateAgentSettings: payload => request("/api/v1/admin/agent-settings", { method: "PUT", body: JSON.stringify(payload), cache: "no-store" }),
@@ -75,8 +84,9 @@ export const api = {
   retryTestFailures: (id, payload) => request(`/api/v1/test-runs/${encodeURIComponent(id)}/retry-failed`, { method: "POST", body: JSON.stringify(payload), cache: "no-store" }),
   compareTestRuns: (id, query, options = {}) => request(`/api/v1/test-runs/${encodeURIComponent(id)}/comparison?${new URLSearchParams(query)}`, { ...options, cache: "no-store" }),
   createTestRun: (payload) => request("/api/v1/test-runs", { method: "POST", body: JSON.stringify(payload) }),
-  uploadTestRun: (file, name, idempotencyKey) => {
+  uploadTestRun: (file, name, idempotencyKey, candidateConfiguration) => {
     const body = new FormData(); body.append("name", name); body.append("idempotency_key", idempotencyKey); body.append("file", file);
+    if (candidateConfiguration) body.append("candidate_configuration", JSON.stringify(candidateConfiguration));
     return request("/api/v1/test-runs/uploads", { method: "POST", body });
   },
   modelProfiles: (options = {}) => request("/api/v1/model-profiles", options),

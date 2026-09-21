@@ -59,6 +59,8 @@ def dataset_summary(db, row, version=None):
     items = version_items(db, version)
     return {"id": row.id, "name": version.name, "description": version.description, "revision": version.revision,
         "version_id": version.id, "total": len(items), "labeled": sum(item.reference_verdict is not None for item in items),
+        "review_counts": {status: sum(item.review_status == status for item in items)
+                          for status in ("draft", "reviewed", "approved")},
         "internal_only": any(item.internal_only for item in items), "created_at": utc_datetime(row.created_at)}
 
 
@@ -74,7 +76,9 @@ def create_dataset(db, payload, actor):
 
 def item_summary(item):
     return {**{key: getattr(item, key) for key in ("id", "item_id", "revision", "reference_verdict", "difficulty",
-        "test_category", "case_name", "internal_only", "original_analysis_id", "original_analysis_deleted")}, "created_at": utc_datetime(item.created_at)}
+        "test_category", "case_name", "internal_only", "original_analysis_id", "original_analysis_deleted",
+        "review_status", "created_by", "source_kind", "source_ref", "source_label_id", "source_created_by",
+        "ai_visible")}, "created_at": utc_datetime(item.created_at)}
 
 
 def read_item(db, crypto, dataset_id, item_id, actor, version_id=None):
@@ -121,8 +125,12 @@ def new_item(db, crypto, row, event, schema, *, actor, old=None, original=None, 
         revision=old.revision + 1 if old else 1, event_ciphertext=crypto.encrypt_text(json.dumps(event, ensure_ascii=False)),
         schema_snapshot_ciphertext=schema, encryption_key_version=crypto.key_version,
         input_hash=input_digest(event), reference_verdict=metadata.get("reference_verdict"),
-        source_kind=metadata.get("source_kind", "reference"),
-        ai_visible=metadata.get("ai_visible", True),
+        review_status="draft",
+        source_kind=metadata.get("source_kind", old.source_kind if old else "reference"),
+        source_ref=old.source_ref if old else metadata.get("source_ref"),
+        source_label_id=old.source_label_id if old else metadata.get("source_label_id"),
+        source_created_by=old.source_created_by if old else metadata.get("source_created_by"),
+        ai_visible=metadata.get("ai_visible", old.ai_visible if old else True),
         comment_ciphertext=crypto.encrypt_text(metadata.get("comment", "")),
         difficulty=metadata.get("difficulty"), test_category=metadata.get("test_category"), case_name=metadata.get("case_name"),
         internal_only=bool((old and old.internal_only) or (original and (
@@ -152,6 +160,38 @@ def write_item(db, crypto, settings, identifier, payload, actor, item_id=None):
     if old is None:
         ids.append(entry.id)
     save_version(db, row, ids, actor)
+    db.commit()
+    return {"item": item_summary(entry), "revision": row.revision}
+
+
+def review_item(db, identifier, item_id, payload, actor):
+    """Review creates immutable revisions; it never rewrites inputs or labels."""
+    write_lock(db)
+    row, version = dataset(db, identifier, payload.expected_revision)
+    items = version_items(db, version)
+    old = next((item for item in items if item.item_id == item_id), None)
+    if old is None:
+        raise AnalysisIngestError("dataset_item_not_found", 404)
+    status = payload.review_status
+    if status == old.review_status:
+        return {"item": item_summary(old), "revision": row.revision}
+    allowed = {"draft": {"reviewed"}, "reviewed": {"draft", "approved"}, "approved": {"draft"}}
+    if status not in allowed[old.review_status]:
+        raise AnalysisIngestError("dataset_review_transition_invalid", 409)
+    if status != "draft" and old.reference_verdict is None:
+        raise AnalysisIngestError("dataset_review_verdict_required", 422)
+    # Copy ciphertext unchanged, including its original key version. Review
+    # does not silently revalidate/rewrite the case against today's schema.
+    entry = ValidationDatasetItem(**{key: getattr(old, key) for key in (
+        "dataset_id", "item_id", "event_ciphertext", "schema_snapshot_ciphertext", "encryption_key_version",
+        "input_hash", "reference_verdict", "source_kind", "source_ref", "source_label_id", "source_created_by",
+        "ai_visible", "comment_ciphertext", "difficulty", "test_category", "case_name", "internal_only",
+        "original_analysis_id", "original_analysis_deleted")},
+        revision=old.revision + 1, review_status=status, created_by=actor)
+    db.add(entry)
+    db.flush()
+    save_version(db, row, [entry.id if item.id == old.id else item.id for item in items], actor)
+    audit(db, actor, f"review_dataset_item_{status}", "validation_dataset_item", entry.id)
     db.commit()
     return {"item": item_summary(entry), "revision": row.revision}
 
@@ -196,6 +236,9 @@ def import_analyses(db, crypto, settings, identifier, payload, actor):
                                                        TestRunItem.ingest_status == "accepted"))
         entry = new_item(db, crypto, row, event, schema, actor=actor, original=original,
             reference_verdict=expected, source_kind=reference.source_kind if reference else "reference",
+            source_ref=reference.source_ref if reference else None,
+            source_label_id=reference.id if reference else None,
+            source_created_by=reference.created_by if reference else None,
             ai_visible=reference.ai_visible if reference else None,
             comment=crypto.decrypt_text(reference.comment_ciphertext) if reference and reference.comment_ciphertext else "",
             **{key: getattr(source_item, key, None) for key in ("difficulty", "test_category", "case_name")})
@@ -226,7 +269,12 @@ def execute_dataset(db, crypto, settings, identifier, payload, actor):
     # Check a replay before the latest revision: a retry of an accepted request
     # must return its original run even if the dataset has since been edited.
     key = digest(["dataset-run", actor, identifier, payload.idempotency_key])
-    request_hash = digest([identifier, payload.expected_revision, payload.name])
+    request_parts = [identifier, payload.expected_revision, payload.name]
+    if payload.candidate_configuration is not None:
+        request_parts.append(payload.candidate_configuration.model_dump(mode="json"))
+    if payload.evaluation_mode == "ground_truth":
+        request_parts.append({"evaluation_mode": "ground_truth"})
+    request_hash = digest(request_parts)
     existing = db.scalar(select(TestRun).where(TestRun.idempotency_key == key))
     if existing:
         if existing.request_hash != request_hash:
@@ -234,11 +282,24 @@ def execute_dataset(db, crypto, settings, identifier, payload, actor):
         return existing
     row, version = dataset(db, identifier, payload.expected_revision)
     entries = version_items(db, version)
+    if payload.evaluation_mode == "ground_truth":
+        if settings.agent_mode != "moduagent":
+            raise AnalysisIngestError("official_evaluation_requires_llm", 409)
+        entries = [entry for entry in entries if entry.review_status == "approved"]
+        if not entries:
+            raise AnalysisIngestError("approved_ground_truth_required", 422)
     if not entries:
         raise AnalysisIngestError("dataset_empty", 422)
     run, _ = create_run_record(db, crypto, settings, name=(payload.name or "").strip() or str(uuid.uuid4()),
-        idempotency_key=key, request_hash=request_hash, kind="dataset", actor=actor, dataset_hash=digest(version.item_version_ids))
+        idempotency_key=key, request_hash=request_hash, kind="dataset", actor=actor, dataset_hash=digest([entry.id for entry in entries]),
+        candidate_configuration=payload.candidate_configuration)
     run.dataset_version_id = version.id
+    run.evaluation_mode = payload.evaluation_mode
+    if payload.evaluation_mode == "ground_truth":
+        run.approved_item_version_ids = [entry.id for entry in entries]
+        from .official_evaluations import METRICS_VERSION
+        run.metrics_version = METRICS_VERSION
+        run.official_evaluation_pending = True
     if any(entry.internal_only for entry in entries):
         require_internal_profiles(db, crypto, run)
     rows, trusted = [], []
@@ -251,6 +312,7 @@ def execute_dataset(db, crypto, settings, identifier, payload, actor):
             event["expected_verdict"] = entry.reference_verdict
         rows.append(event)
         trusted.append({"source_kind": entry.source_kind, "ai_visible": entry.ai_visible,
+            "dataset_item_version_id": entry.id,
             "internal_only": entry.internal_only, "source_system": f"waf-internal-dataset-{run.id}-{entry.item_id}",
             "comment": crypto.decrypt_text(entry.comment_ciphertext) if entry.comment_ciphertext else ""})
     add_run_items(db, crypto, settings, run, rows, trusted_items=trusted, source_ref="validation-dataset")

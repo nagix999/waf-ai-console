@@ -5,7 +5,7 @@ from ..models import Analysis, TestRunItem
 EVALUATION_RETRY_AUDIT_ACTION = "rescore_test_with_retries_v1"
 
 
-def test_attempts(run_id=None, *, before=None, include_retries=True):
+def test_attempts(run_id=None, *, before=None, include_retries=True, analysis_ids=None):
     seed = select(TestRunItem.id.label("item_id"), TestRunItem.test_run_id,
                   TestRunItem.analysis_id.label("original_analysis_id"),
                   TestRunItem.analysis_id.label("analysis_id"), literal(0).label("retry_count"))
@@ -19,8 +19,11 @@ def test_attempts(run_id=None, *, before=None, include_retries=True):
         children = children.where(Analysis.created_at <= before)
     if include_retries:
         nodes = nodes.union_all(children)
-    ranked = select(nodes, func.row_number().over(partition_by=nodes.c.item_id,
-        order_by=nodes.c.retry_count.desc()).label("position")).subquery()
+    candidates = select(nodes, func.row_number().over(partition_by=nodes.c.item_id,
+        order_by=nodes.c.retry_count.desc()).label("position"))
+    if analysis_ids is not None:
+        candidates = candidates.where(nodes.c.analysis_id.in_(analysis_ids) | nodes.c.analysis_id.is_(None))
+    ranked = candidates.subquery()
     current = select(*(ranked.c[name] for name in nodes.c.keys())).where(ranked.c.position == 1).subquery()
     return nodes, current
 

@@ -130,15 +130,15 @@ def test_immutable_versions_activation_and_reversion(client, event_payload):
     assert validate["valid"] and validate["expires_in_seconds"] == 300
     activation = {"expected_revision": 1, "validation_token": validate["validation_token"]}
     response = client.post(PREFIX + f"/{version['id']}/activate", json=activation)
-    assert response.status_code == 200, response.text
-    assert response.json() == {"active_version_id": version["id"], "revision": 2}
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"] == "production_promotion_required"
     assert client.post(PREFIX + f"/{version['id']}/activate", json=activation).status_code == 409
     # Reverting is a new activation, not deleting newer history.
     token = client.post(PREFIX + f"/{DEFAULT_VERSION_ID}/validate", json={"event": event_payload}).json()["validation_token"]
-    assert client.post(PREFIX + f"/{DEFAULT_VERSION_ID}/activate", json={"expected_revision": 2, "validation_token": token}).json()["revision"] == 3
+    assert client.post(PREFIX + f"/{DEFAULT_VERSION_ID}/activate", json={"expected_revision": 2, "validation_token": token}).json()["detail"] == "production_promotion_required"
     assert len(client.get(PREFIX).json()["items"]) == 2
     history = client.get(PREFIX + "/activation-history").json()["items"]
-    assert [item["revision"] for item in history] == [3, 2, 1]
+    assert [item["revision"] for item in history] == [1]
     assert client.get(PREFIX + "/" + version["id"]).json() == version
 
 
@@ -161,22 +161,22 @@ def to_plain(row):
     return {column.name: str(getattr(row, column.name)) for column in row.__table__.columns}
 
 
-def test_validation_token_bound_to_version_session_and_expiration(client, event_payload, monkeypatch):
+def test_validation_token_never_authorizes_direct_production_activation(client, event_payload, monkeypatch):
     login(client)
     client.get(PREFIX)
     checked = client.post(PREFIX + f"/{DEFAULT_VERSION_ID}/validate", json={"event": event_payload}).json()
     version2 = client.post(PREFIX, json=payload()).json()["id"]
     body = {"expected_revision": 1, "validation_token": checked["validation_token"]}
-    assert client.post(PREFIX + f"/{version2}/activate", json=body).status_code == 422
+    assert client.post(PREFIX + f"/{version2}/activate", json=body).json()["detail"] == "production_promotion_required"
     # Reuse the already-running app without entering/disposal of its lifespan.
     other = TestClient(client.app, headers={"Origin": "http://testserver"})
     login(other)
-    assert other.post(PREFIX + f"/{DEFAULT_VERSION_ID}/activate", json=body).status_code == 422
+    assert other.post(PREFIX + f"/{DEFAULT_VERSION_ID}/activate", json=body).json()["detail"] == "production_promotion_required"
     other.close()
     from itsdangerous.timed import TimestampSigner
     timestamp = TimestampSigner.get_timestamp
     monkeypatch.setattr(TimestampSigner, "get_timestamp", lambda self: timestamp(self) + 301)
-    assert client.post(PREFIX + f"/{DEFAULT_VERSION_ID}/activate", json=body).status_code == 422
+    assert client.post(PREFIX + f"/{DEFAULT_VERSION_ID}/activate", json=body).json()["detail"] == "production_promotion_required"
 
 
 def test_snapshot_pins_metadata_not_event_and_legacy_default(client):

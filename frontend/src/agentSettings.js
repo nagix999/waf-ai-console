@@ -7,7 +7,7 @@ export function validAgentCatalog(value) {
 }
 export function selectionIssue(catalog, draft) {
   if (!validAgentCatalog(catalog) || !draft) return "설정을 먼저 조회하세요.";
-  for (const purpose of ["production", "test"]) {
+  for (const purpose of ["test"]) {
     const roles = draft[purpose];
     if ((roles.verifier_profile_id || roles.evidence_editor_enabled) && !roles.primary_profile_id) return "Primary 모델을 먼저 지정하세요.";
     for (const id of [roles.primary_profile_id, roles.verifier_profile_id, roles.evidence_editor_profile_id]) {
@@ -17,7 +17,7 @@ export function selectionIssue(catalog, draft) {
   return "";
 }
 export function hasExternalRole(catalog, draft) {
-  return Object.values(draft || {}).some(roles => [roles.primary_profile_id, roles.verifier_profile_id, roles.evidence_editor_enabled ? roles.evidence_editor_profile_id : null].some(id => catalog?.profiles.some(p => p.id === id && p.provider === "openai")));
+  return draft?.test && [draft.test.primary_profile_id, draft.test.verifier_profile_id, draft.test.evidence_editor_enabled ? draft.test.evidence_editor_profile_id : null].some(id => catalog?.profiles.some(p => p.id === id && p.provider === "openai"));
 }
 export function createAgentSettingsController({ api, onChange, onCommitted }) {
   let state = emptyAgentSettingsState(); let disposed = false; let sequence = 0;
@@ -38,7 +38,7 @@ export function createAgentSettingsController({ api, onChange, onCommitted }) {
     publish({ busy: true, error: "", notice: "" });
     try {
       const catalog = await api.updateAgentSettings({ expected_state_token: state.catalog.state_token,
-        ...state.draft, external_transfer_acknowledged: acknowledged === true });
+        test: state.draft.test, external_transfer_acknowledged: acknowledged === true });
       if (disposed) return false;
       if (!validAgentCatalog(catalog)) throw new Error("invalid_agent_configuration_response");
       publish({ catalog, draft: structuredClone(catalog.assignments), busy: false, notice: "모델 배정을 저장했습니다. LLM은 호출하지 않았습니다." });
@@ -55,7 +55,7 @@ export function createAgentSettingsController({ api, onChange, onCommitted }) {
   return { refresh, save, getState: () => state, dispose() { disposed = true; sequence++; },
     change(purpose, role, id) {
       if (state.busy || state.loading || state.needsRefresh || !state.draft
-        || !["production", "test"].includes(purpose) || !["primary_profile_id", "verifier_profile_id", "evidence_editor_profile_id", "evidence_editor_enabled"].includes(role)) return;
+        || purpose !== "test" || !["primary_profile_id", "verifier_profile_id", "evidence_editor_profile_id", "evidence_editor_enabled"].includes(role)) return;
       publish({ draft: { ...state.draft, [purpose]: { ...state.draft[purpose], [role]: role === "evidence_editor_enabled" ? id === true : id || null,
         ...(role === "evidence_editor_enabled" && id !== true ? { evidence_editor_profile_id: null } : {}) } }, notice: "", error: "" });
     } };

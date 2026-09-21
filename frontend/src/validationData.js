@@ -1,7 +1,16 @@
 export const answerNames = { true_positive: "정탐", false_positive: "오탐", inconclusive: "보류" };
+export const reviewNames = { draft: "미검토", reviewed: "검토 완료", approved: "승인됨" };
+
+export function reviewActions(status) {
+  const actions = { draft: ["reviewed"], reviewed: ["approved", "draft"], approved: ["draft"] };
+  return Object.hasOwn(actions, status) ? actions[status] : [];
+}
 
 export function validationDataError(error) {
   const messages = {
+    approved_ground_truth_required: "승인된 답안이 없습니다. 데이터 관리에서 문항을 검토·승인하세요.",
+    official_evaluation_requires_llm: "공식 평가는 실제 LLM 실행 모드에서만 가능합니다.",
+    official_ground_truth_fixed: "공식 평가 답안은 접수 당시 승인 버전으로 고정되어 있습니다.",
     dataset_changed_reload: "데이터셋이 변경되었습니다. 새로고침 후 다시 선택하세요.",
     reference_changed_reload: "선택한 분석의 답안이 변경되었습니다. 다시 확인한 뒤 저장하세요.",
     dataset_duplicate_input: "같은 입력의 문항이 이미 있습니다. 기존 문항을 수정하세요.",
@@ -12,6 +21,9 @@ export function validationDataError(error) {
     dataset_empty: "먼저 문항을 추가하세요.",
     dataset_item_limit: "한 데이터셋에는 최대 5,000건을 저장할 수 있습니다.",
     dataset_not_found: "데이터셋을 찾을 수 없습니다. 목록을 새로고침하세요.",
+    dataset_item_not_found: "문항을 찾을 수 없습니다. 데이터셋을 새로고침하세요.",
+    dataset_review_verdict_required: "답안을 저장한 뒤 검토를 완료하세요. 보류도 답안으로 선택할 수 있습니다.",
+    dataset_review_transition_invalid: "미검토 → 검토 완료 → 승인 순서로 진행하세요. 수정이 필요하면 미검토로 되돌릴 수 있습니다.",
     test_must_finish_before_rescoring: "모든 문항의 처리가 끝나야 재평가할 수 있습니다. API 테스트는 접수도 닫아 주세요.",
     test_model_profile_required: "설정에서 전체 검증을 통과한 Test 모델을 지정하세요.",
     test_run_idempotency_conflict: "같은 접수 요청의 내용이 변경되었습니다. 실행 이력을 확인하세요.",

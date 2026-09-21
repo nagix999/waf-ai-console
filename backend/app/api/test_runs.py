@@ -15,6 +15,7 @@ from ..validation_data_schemas import EvaluationCreate
 from ..services.manual_references import create_evaluation, evaluation_record
 from ..security import Principal, require_scope
 from ..test_run_schemas import TestRunCreate, TestRunDetail, TestRunList
+from ..candidate_schemas import CandidateConfiguration
 from ..services.analysis import AnalysisIngestError
 from ..services.prompt_policies import PromptPolicyError
 from ..services.prompt_snapshots import PromptSnapshotError
@@ -52,17 +53,22 @@ def create_test_run(payload: TestRunCreate, request: Request, db: DbSession, pri
                 raise HTTPException(422, "duplicate_test_metadata_location")
             row[field] = value
     run, _ = submit(db, request, principal, name=payload.name,
-        idempotency_key=payload.idempotency_key, rows=[row], kind="direct")
+        idempotency_key=payload.idempotency_key, rows=[row], kind="direct", candidate_configuration=payload.candidate_configuration)
     return describe_run(db, run)
 
 
 @router.post("/uploads", response_model=TestRunDetail, status_code=202)
 async def upload_test_run(request: Request, db: DbSession, principal: Admin,
-                          name: str = Form(...), idempotency_key: str = Form(...), file: UploadFile = File(...)):
+                          name: str = Form(...), idempotency_key: str = Form(...), file: UploadFile = File(...),
+                          candidate_configuration: str | None = Form(None, max_length=4096)):
     # Multipart ignores unknown controls by default. Explicitly reject prompt
     # overrides rather than silently accepting a request we will not honor.
     if {"prompt_policy_version_id", "fixed_rules_version", "prompt_template"}.intersection(await request.form()):
         raise HTTPException(422, "test_prompt_selection_not_supported")
+    try:
+        candidate = CandidateConfiguration.model_validate_json(candidate_configuration) if candidate_configuration is not None else None
+    except (ValueError, TypeError):
+        raise HTTPException(422, "invalid_candidate_configuration") from None
     content = await file.read(request.app.state.settings.upload_max_bytes + 1)
     if len(content) > request.app.state.settings.upload_max_bytes:
         raise HTTPException(413, "upload_too_large")
@@ -74,7 +80,7 @@ async def upload_test_run(request: Request, db: DbSession, principal: Admin,
         raise HTTPException(422, "invalid_test_document") from None
     filename = (file.filename or "").replace("\\", "/").rsplit("/", 1)[-1][:255]
     run, _ = submit(db, request, principal, name=name, idempotency_key=idempotency_key,
-        rows=rows, kind="upload", filename=filename, content_hash=hashlib.sha256(content).hexdigest())
+        rows=rows, kind="upload", filename=filename, content_hash=hashlib.sha256(content).hexdigest(), candidate_configuration=candidate)
     return describe_run(db, run)
 
 
