@@ -1,6 +1,7 @@
 """Input names controlled by the server, never editable schema fields."""
 
 SERVER_CONTROL_FIELDS = frozenset({
+    "initial_verdict", "initial_probability", "initial_model_version", "initial_assessment", "test_purpose",
     "source_system", "analysis_purpose", "ingest_channel", "analysis_scope", "purpose",
     "verdict", "severity", "status", "result", "result_json", "confidence_score",
     "summary_ko", "event_fingerprint", "id", "analysis_id", "prompt_version", "model_profile",

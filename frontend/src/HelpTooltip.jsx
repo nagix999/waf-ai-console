@@ -1,10 +1,12 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import "./ux.css";
+import { useConsolePreferences } from "./consolePreferences.jsx";
 
 // Help is available by pointer, keyboard and touch. Actions belong in a dialog,
 // not in a tooltip: the tooltip itself deliberately has no focusable children.
 export default function HelpTooltip({ label, children, previewText }) {
+  const { locale } = useConsolePreferences();
   const id = useId(); const [open, setOpen] = useState(false); const [position, setPosition] = useState(null);
   const trigger = useRef(null); const tooltip = useRef(null); const closing = useRef(null);
   const show = () => { clearTimeout(closing.current); setOpen(true); };
@@ -25,5 +27,5 @@ export default function HelpTooltip({ label, children, previewText }) {
     place(); window.addEventListener("resize", place); window.addEventListener("scroll", place, true); document.addEventListener("keydown", dismiss); document.addEventListener("pointerdown", dismiss);
     return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); document.removeEventListener("keydown", dismiss); document.removeEventListener("pointerdown", dismiss); };
   }, [open]);
-  return <span className={previewText === undefined ? "metric-help" : "summary-preview"} onMouseEnter={show} onMouseLeave={leave}><button ref={trigger} type="button" className={previewText === undefined ? "metric-help-trigger" : "summary-preview-trigger"} aria-label={`${label} ${previewText === undefined ? "설명" : "전체 보기"}`} aria-describedby={open ? id : undefined} onFocus={show} onBlur={hide} onClick={show} onKeyDown={event => { if (event.key === "Escape" && open) { event.preventDefault(); hide(); event.stopPropagation(); } }}>{previewText ?? "?"}</button>{open && createPortal(<span ref={tooltip} className="metric-help-tooltip" style={{ ...(position || {}), visibility: position ? "visible" : "hidden" }} id={id} role="tooltip" onMouseEnter={show} onMouseLeave={leave}>{children}</span>, trigger.current?.closest("dialog[open]") || document.body)}</span>;
+  return <span className={previewText === undefined ? "metric-help" : "summary-preview"} onMouseEnter={show} onMouseLeave={leave}><button ref={trigger} type="button" className={previewText === undefined ? "metric-help-trigger" : "summary-preview-trigger"} aria-label={`${label} ${locale === "en" ? previewText === undefined ? "help" : "full text" : previewText === undefined ? "설명" : "전체 보기"}`} aria-describedby={open ? id : undefined} onFocus={show} onBlur={hide} onClick={show} onKeyDown={event => { if (event.key === "Escape" && open) { event.preventDefault(); hide(); event.stopPropagation(); } }}>{previewText ?? "?"}</button>{open && createPortal(<span ref={tooltip} className="metric-help-tooltip" style={{ ...(position || {}), visibility: position ? "visible" : "hidden" }} id={id} role="tooltip" onMouseEnter={show} onMouseLeave={leave}>{children}</span>, trigger.current?.closest("dialog[open]") || document.body)}</span>;
 }

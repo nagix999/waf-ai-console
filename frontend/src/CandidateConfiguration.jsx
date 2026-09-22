@@ -1,55 +1,51 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "./api.js";
-import Dialog from "./Dialog.jsx";
-import { Icon } from "./Icon.jsx";
-import { candidateIssue, candidateUsesExternal, defaultCandidate } from "./candidateConfiguration.js";
+import { candidateIssue, candidateUsesExternal, candidatePrefill } from "./candidateConfiguration.js";
+import { useConsolePreferences } from "./consolePreferences.jsx";
 import "./candidateConfiguration.css";
 
-export default function CandidateConfiguration({ agentMode, busy, onChange, onConfigure }) {
-  const [catalog, setCatalog] = useState(null), [value, setValue] = useState(null), [draft, setDraft] = useState(null);
-  const [loading, setLoading] = useState(true), [error, setError] = useState(""), [reload, setReload] = useState(0);
-  const [open, setOpen] = useState(false);
-  const stub = agentMode === "stub";
+const noop = () => {};
+
+export default function CandidateConfiguration({ agentMode, busy, onChange = noop, initialConfiguration, editDefaults = false, onSaved }) {
+  const { locale, t } = useConsolePreferences(), w = (ko, en) => locale === "en" ? en : ko;
+  const [catalog, setCatalog] = useState(null), [value, setValue] = useState(null), [defaults, setDefaults] = useState(null);
+  const [loading, setLoading] = useState(true), [error, setError] = useState(""), [reload, setReload] = useState(0), [saving, setSaving] = useState(false);
+  const savePending = useRef(false);
   useEffect(() => {
-    const controller = new AbortController();
-    if (stub) { onChange({ configuration: null, blocked: "후보 테스트는 moduagent 실행 모드에서 사용할 수 있습니다.", external: false }); setLoading(false); return () => controller.abort(); }
-    setLoading(true); setError(""); setCatalog(null); setValue(null);
-    onChange({ configuration: null, blocked: "실행 구성을 불러오는 중입니다.", external: false });
-    Promise.all([api.agentSettings({ signal: controller.signal }), api.promptPolicies({ signal: controller.signal }), api.inputSchemas({ signal: controller.signal })]).then(([agents, prompts, schemas]) => {
+    const controller = new AbortController(); setLoading(true); setError("");
+    Promise.all([api.agentSettings({ signal: controller.signal }), api.promptPolicies({ signal: controller.signal }), api.inputSchemas({ signal: controller.signal }), api.testDefaults({ signal: controller.signal })]).then(([agents, prompts, schemas, saved]) => {
       if (controller.signal.aborted) return;
-      const nextCatalog = { agents, prompts, schemas }, next = defaultCandidate(agents, prompts, schemas);
-      setCatalog(nextCatalog); setValue(next); setLoading(false);
-      onChange({ configuration: next, blocked: candidateIssue(nextCatalog, next), external: candidateUsesExternal(nextCatalog, next) });
-    }).catch(() => { if (!controller.signal.aborted) { const message = "실행 구성을 불러오지 못했습니다. 다시 조회하세요."; setError(message); setLoading(false); onChange({ configuration: null, blocked: message, external: false }); } });
+      setCatalog({ agents, prompts, schemas }); setDefaults(saved);
+      // undefined means a new Test. null means the source Test has no snapshot:
+      // never silently replace a missing source configuration with today's defaults.
+      setValue(candidatePrefill(initialConfiguration, saved.candidate_configuration)); setLoading(false);
+    }).catch(() => { if (!controller.signal.aborted) { setError("load"); setLoading(false); } });
     return () => controller.abort();
-  }, [stub, reload, onChange]);
-  if (stub) return <p className="notice">현재 모의 실행 모드입니다. 후보 구성으로 테스트하려면 서버를 moduagent 모드로 실행하세요. 이전 모의 결과는 이력에서 확인할 수 있으며 기존 API 모의 실행은 유지됩니다.</p>;
-  const profileName = id => catalog?.agents.profiles.find(item => item.id === id)?.name || "미지정";
-  const versionName = (items, id) => { const item = items?.find(row => row.id === id); return item ? `v${item.version_number} · ${item.name}` : "미지정"; };
-  const apply = () => { if (busy || candidateIssue(catalog, draft)) return; setValue(draft); onChange({ configuration: draft, blocked: "", external: candidateUsesExternal(catalog, draft) }); setOpen(false); };
-  const change = (field, next) => setDraft(previous => ({ ...previous, [field]: next, ...(field === "evidence_editor_enabled" && !next ? { evidence_editor_profile_id: null } : {}) }));
+  }, [reload, initialConfiguration]);
+  const issue = candidateIssue(catalog, value);
+  useEffect(() => { onChange({ configuration: value, blocked: loading || error ? "configuration_unavailable" : agentMode === "stub" ? "candidate_requires_llm_test" : issue, external: candidateUsesExternal(catalog, value) }); }, [catalog, value, loading, error, issue, onChange, agentMode]);
+  function change(key, next) { setValue(old => ({ ...old, [key]: next, ...(key === "evidence_editor_enabled" && !next ? { evidence_editor_profile_id: null } : {}) })); }
+  async function save() {
+    if (savePending.current || busy || issue || !defaults) return;
+    savePending.current = true;
+    setSaving(true); setError("");
+    try { const result = await api.saveTestDefaults({ expected_revision: defaults.revision, candidate_configuration: value }); setDefaults(result); onSaved?.(); }
+    catch (err) { setError(err.status === 409 ? "stale" : "save"); }
+    finally { savePending.current = false; setSaving(false); }
+  }
   const profiles = catalog?.agents.profiles || [];
-  const modelSelect = (field, label, optional = false) => <label>{label}<select value={draft?.[field] || ""} onChange={event => change(field, event.target.value || null)}>
-    <option value="">{optional ? "1차 판정과 동일" : "모델 선택"}</option>{profiles.map(profile => <option key={profile.id} value={profile.id} disabled={!profile.can_assign}>{profile.name} · {profile.provider}{profile.can_assign ? "" : " · 검증 필요"}</option>)}</select></label>;
+  const model = (key, label, optional) => <label>{label}<select disabled={busy || saving} value={value?.[key] || ""} onChange={e => change(key, e.target.value || null)}><option value="">{optional ? w("주 분석 모델과 동일", "Same as Primary") : w("모델 선택", "Select model")}</option>{value?.[key] && !profiles.some(p => p.id === value[key]) && <option value={value[key]} disabled>{w("이전 모델을 사용할 수 없음", "Source model unavailable")}</option>}{profiles.map(p => <option key={p.id} value={p.id} disabled={!p.can_assign}>{p.name} · {p.provider}{p.can_assign ? "" : w(" · 검증 필요", " · Validation required")}</option>)}</select></label>;
   return <section className="panel candidate-configuration" aria-busy={loading}>
-    <div className="panel-head"><div className="candidate-title"><span className="candidate-icon"><Icon name="layers" size={28} /></span><div><h2>실행 구성</h2><p className="ux-muted">이번 테스트에만 적용합니다. 운영 설정은 바뀌지 않습니다.</p></div></div><button type="button" className="secondary" disabled={busy || loading || !catalog} onClick={() => { setDraft({ ...value }); setOpen(true); }}>구성 변경</button></div>
-    {loading ? <p role="status">구성을 불러오는 중…</p> : value && <dl className="candidate-summary">
-      <div><dt>1차 판정</dt><dd>{profileName(value.primary_profile_id)}</dd></div><div><dt>추가 검증</dt><dd>{profileName(value.verifier_profile_id || value.primary_profile_id)}</dd></div>
-      <div><dt>근거 정리</dt><dd>{value.evidence_editor_enabled ? profileName(value.evidence_editor_profile_id || value.primary_profile_id) : "사용 안 함"}</dd></div>
-      <div><dt>지침</dt><dd>{versionName(catalog.prompts.items, value.prompt_policy_version_id)}</dd></div><div><dt>입력 스키마</dt><dd>{versionName(catalog.schemas.items, value.input_schema_version_id)}</dd></div>
-    </dl>}
-    {(error || (!loading && candidateIssue(catalog, value))) && <p role="alert" className="error">{error || candidateIssue(catalog, value)}</p>}
-    {candidateUsesExternal(catalog, value) && <p className="notice">OpenAI 사용 · HTTP 원문과 Cookie가 외부로 전송되며 호출 비용이 발생할 수 있습니다.</p>}
-    <div className="action-row"><button type="button" className="text-button" disabled={busy || loading} onClick={() => setReload(n => n + 1)}>기본 구성 다시 불러오기</button>{onConfigure && <button type="button" className="text-button" disabled={busy} onClick={onConfigure}>모델 설정</button>}<a href="#configure/instructions">분석 지침 →</a><a href="#connect/input-schema">입력 스키마 →</a></div>
-    <Dialog open={open} title="테스트 실행 구성" onClose={() => setOpen(false)}>
-      <div className="data-form">{modelSelect("primary_profile_id", "1차 판정 · Primary")}{modelSelect("verifier_profile_id", "추가 검증 · Verifier", true)}
-        <label className="comparison-checkbox"><input type="checkbox" checked={draft?.evidence_editor_enabled || false} onChange={event => change("evidence_editor_enabled", event.target.checked)} />근거 정리 사용</label>
-        {draft?.evidence_editor_enabled && modelSelect("evidence_editor_profile_id", "근거 정리 모델", true)}
-        {[["prompt_policy_version_id", "지침 버전", catalog?.prompts], ["input_schema_version_id", "입력 스키마 버전", catalog?.schemas]].map(([field, label, versions]) => <label key={field}>{label}<select value={draft?.[field] || ""} onChange={event => change(field, event.target.value)}><option value="">버전 선택</option>{versions?.items.map(item => <option key={item.id} value={item.id}>v{item.version_number} · {item.name}{item.id === versions.active_version_id ? " · 운영 중" : ""}</option>)}</select></label>)}
-        <p className="ux-muted">저장된 다른 버전도 선택할 수 있습니다. 운영에 적용하거나 기본 모델 배정을 바꾸지 않습니다.</p>
-        {candidateIssue(catalog, draft) && <p className="error">{candidateIssue(catalog, draft)}</p>}
-        <button type="button" className="primary" disabled={busy || Boolean(candidateIssue(catalog, draft))} onClick={apply}>이번 테스트에 적용</button>
-      </div>
-    </Dialog>
+    <div className="panel-head"><div>{!editDefaults && <h2>{w("2. 테스트 설정", "2. Test Configuration")}</h2>}<p className="ux-muted">{editDefaults ? w("새 테스트의 초기값만 바꿉니다. 운영과 기존 테스트는 바뀌지 않습니다.", "Changes New Test prefill only. Production and existing Tests are unchanged.") : initialConfiguration !== undefined ? w("이전 테스트 설정에서 불러옴", "Loaded from the source Test") : w("기본 테스트 설정에서 불러옴", "Loaded from Default Test Configuration")}</p></div></div>
+    {loading ? <p role="status">{t("loading")}</p> : catalog && value && <div className="data-form r5-configuration-form">
+      {model("primary_profile_id", t("primary"))}{model("verifier_profile_id", t("verifier"), true)}
+      <label className="checkbox-row"><input type="checkbox" checked={value.evidence_editor_enabled} disabled={busy || saving} onChange={e => change("evidence_editor_enabled", e.target.checked)} />{t("editor")}</label>
+      {value.evidence_editor_enabled && model("evidence_editor_profile_id", t("editor"), true)}
+      {[["prompt_policy_version_id", "instructions", catalog.prompts], ["input_schema_version_id", "schema", catalog.schemas]].map(([key, label, versions]) => <label key={key}>{t(label)}<select disabled={busy || saving} value={value[key] || ""} onChange={e => change(key, e.target.value)}><option value="">{w("버전 선택", "Select version")}</option>{value[key] && !versions.items.some(v => v.id === value[key]) && <option value={value[key]} disabled>{w("이전 버전을 사용할 수 없음", "Source version unavailable")}</option>}{versions.items.map(v => <option key={v.id} value={v.id}>v{v.version_number} · {v.name}</option>)}</select></label>)}
+    </div>}
+    {issue && !loading && <p className="notice">{w("모델 검증 상태와 지침·입력 스키마 선택을 확인하세요.", "Check model validation and select instructions and input schema.")}</p>}
+    {error && <p role="alert" className="error">{error === "stale" ? w("기본 설정이 변경됐습니다. 다시 불러와 확인하세요.", "Defaults changed. Reload and review.") : w("설정을 읽거나 저장하지 못했습니다.", "Could not read or save the configuration.")}</p>}
+    {candidateUsesExternal(catalog, value) && <p className="notice">{w("OpenAI 사용 시 HTTP 원문·Cookie가 외부로 전송되며 비용이 발생할 수 있습니다.", "OpenAI sends raw HTTP and cookies externally and may incur charges.")}</p>}
+    <div className="action-row"><button type="button" className="text-button" disabled={loading || busy || saving} onClick={() => setReload(n => n + 1)}>{t("retry")}</button><a href="#configure/instructions">{t("instructions")} →</a><a href="#configure/input-schema">{t("schema")} →</a>{editDefaults && <button type="button" className="primary" disabled={loading || saving || Boolean(issue)} onClick={save}>{saving ? w("저장 중…", "Saving…") : w("기본 설정 저장", "Save defaults")}</button>}</div>
   </section>;
 }

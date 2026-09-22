@@ -8,8 +8,9 @@ const initial = () => ({ page: "dashboard", resultsPurpose: "", listState: initi
 
 test("canonical workspace routes round trip", () => {
   for (const hash of ["#overview", "#connect/production-api", "#evaluate/tests/new", "#operate/inference", "#evaluate/tests", `#promotion/${id}`, `#evaluate/tests/${id}/case/${id}`, "#operate/runtime", "#operate/activity",
-    ...["llm-profiles", "agent-roles", "instructions"].map(tab => `#configure/${tab}`),
-    ...["input-schema", "api-keys", "vllm-targets"].map(tab => `#connect/${tab}`),
+    ...["llm-profiles", "agent-roles", "instructions", "input-schema"].map(tab => `#configure/${tab}`),
+    ...["api-keys", "vllm-targets"].map(tab => `#connect/${tab}`),
+    ...["result", "agent-trace", "input", "result-json", "report"].map(tab => `#evaluate/tests/${id}/case/${id}/${tab}`),
     `#evaluate/tests/${id}`, ...["result", "agent-trace", "input", "result-json", "report"].map(tab => `#operate/inference/${id}/${tab}`)]) {
     const route = readAppHash(hash);
     assert.ok(route, hash);
@@ -34,7 +35,7 @@ test("unknown, malformed and non-UUID fragments cannot become API identifiers", 
 test("URL serialization ignores searches, drafts, source fields and arbitrary metadata", () => {
   const state = { ...initial(), page: "analyses", resultsPurpose: "test", secret: "not-in-url", testResults: { view: "items", runId: null, filters: { q: "not-in-url" }, items: { source_system: "not-in-url" } } };
   state.listState.draft.q = "not-in-url";
-  assert.equal(writeAppHash(state), "#operate/inference");
+  assert.equal(writeAppHash(state), "#evaluate/tests/items");
   assert.equal(writeAppHash({ ...state, page: "detail", selectedId: "not-in-url" }), "#operate/inference");
   assert.equal(writeAppHash({ ...state, page: "settings", settingsTab: "not-in-url" }), "#configure/llm-profiles");
 });

@@ -176,11 +176,11 @@ test("run detail filters preserve population scope during row and page changes a
 test("test list supports preserved controlled search, default navigation guidance and custom headings as inert text", () => {
   const controlled = { queryText: "draft <script>", query: { q: "applied <script>", limit: 10, offset: 20 } };
   const html = render(TestRunHistory, { state: controlled, onStateChange() {}, onSelect() {} });
-  assert.match(html, /<h2>테스트 목록<\/h2>/); assert.match(html, /최신 참고 답안으로 계산한 점수/); assert.match(html, /value="draft &lt;script&gt;"/); assert.match(html, /applied &lt;script&gt;/); assert.doesNotMatch(html, /<script/);
+  assert.match(html, /<h2>테스트 목록<\/h2>/); assert.match(html, /테스트 설정과 평가 기준을 함께 확인/); assert.match(html, /value="draft &lt;script&gt;"/); assert.match(html, /applied &lt;script&gt;/); assert.doesNotMatch(html, /<script/);
   const custom = render(TestRunHistory, { title: "<img> 제목", description: "<script> 설명", onSelect() {} });
   assert.match(custom, /&lt;img&gt; 제목/); assert.match(custom, /&lt;script&gt; 설명/); assert.doesNotMatch(custom, /<img|<script/);
   const detail = render(TestRunDetail, { id: "synthetic-run", filters: { ...initialTestRunFilters(), offset: 50 }, onFiltersChange() {}, onBack() {}, onOpen() {} });
-  assert.match(detail, /← 테스트 목록/);
+  assert.match(detail, /← 테스트/);
   assert.match(render(TestRunDetail, { id: "synthetic-run", backLabel: "직전 테스트 목록", onBack() {}, onOpen() {} }), /← 직전 테스트 목록/);
 });
 
@@ -205,7 +205,9 @@ test("test and case navigation uses immutable IDs even when names repeat and leg
   const rows = TestRunRows({ items: [{ ...base, id: "first-run" }, { ...base, id: "second-run" }], onSelect: id => selected.push(id) });
   buttons(rows).filter(button => button.props.children === "같은 테스트명").forEach(button => button.props.onClick());
   assert.deepEqual(selected, ["first-run", "second-run"]);
-  const cases = TestRunItemRows({ items: [{ id: "item-id", analysis_id: "analysis-id", case_name: "문항명", row_number: 1 }], onOpen: id => opened.push(id) });
+  let cases;
+  function CaptureRows() { cases = TestRunItemRows({ items: [{ id: "item-id", analysis_id: "analysis-id", case_name: "문항명", row_number: 1 }], onOpen: id => opened.push(id) }); return null; }
+  render(CaptureRows);
   buttons(cases).find(button => button.props.children === "문항명").props.onClick(); assert.deepEqual(opened, ["analysis-id"]);
   const empty = TestRunHistoryEmpty({ query: { q: "", offset: 0 }, onViewAnalyses: () => legacy++ });
   buttons(empty).find(button => button.props.children === "개별 테스트 분석 보기 →").props.onClick(); assert.equal(legacy, 1);

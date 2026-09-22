@@ -49,7 +49,7 @@ def test_atomic_promotion_and_legacy_write_boundaries(client, event_payload, can
         assert db.scalar(select(func.count()).select_from(ChangeEvent).where(ChangeEvent.category == "promotion")) == 1
 
 
-@pytest.mark.parametrize("change", ["fingerprint", "disabled", "missing_evaluation", "snapshot", "incomplete"])
+@pytest.mark.parametrize("change", ["fingerprint", "disabled", "missing_evaluation", "snapshot", "incomplete", "legacy_purpose"])
 def test_rejects_invalid_qualification_without_partial_mutations(client, event_payload, candidate, change):
     from app.models import TestRun, TestEvaluation, Analysis
     run = qualified(client, event_payload, candidate)
@@ -65,6 +65,8 @@ def test_rejects_invalid_qualification_without_partial_mutations(client, event_p
                 db.delete(record)
         elif change == "snapshot":
             saved.configuration_hash = "a" * 64
+        elif change == "legacy_purpose":
+            saved.test_purpose = "legacy_unknown"
         else:
             db.get(Analysis, run["items"][0]["analysis_id"]).status = "processing"
         db.commit()

@@ -33,7 +33,9 @@ def review_state(analysis: Analysis) -> str:
 
 
 def to_summary(analysis: Analysis) -> AnalysisSummary:
+    from .initial_assessment import describe
     return AnalysisSummary(
+        initial_assessment=describe(analysis),
         id=analysis.id,
         source_system=analysis.source_system,
         analysis_purpose=analysis.analysis_purpose,
@@ -103,6 +105,7 @@ def enqueue_analysis(
     schema_snapshot: dict | None = None,
     prompt_snapshot: PromptSnapshot | None = None,
     service_api_key_id: str | None = None,
+    initial_assessment: dict | None = None,
 ) -> tuple[Analysis, bool]:
     """Enqueue an event; commit=False leaves the entire transaction to its caller."""
     if service_api_key_id is not None:
@@ -127,6 +130,8 @@ def enqueue_analysis(
     )
     if existing:
         check_duplicate(existing, crypto, fingerprint, analysis_purpose)
+        from .initial_assessment import check_duplicate as check_initial
+        check_initial(existing, initial_assessment)
         attach_evaluations(db, [existing])
         return existing, True
 
@@ -149,6 +154,7 @@ def enqueue_analysis(
         encryption_key_version=crypto.key_version,
         extra_fields=payload.extra_values(),
         service_api_key_id=service_api_key_id,
+        **(initial_assessment or {}),
     )
     # Pin the complete instructions with the new event. Duplicate submissions
     # above retain the original version and do not acquire the current policy.
@@ -208,6 +214,8 @@ def enqueue_analysis(
         if existing is None:
             raise
         check_duplicate(existing, crypto, fingerprint, analysis_purpose)
+        from .initial_assessment import check_duplicate as check_initial
+        check_initial(existing, initial_assessment)
         attach_evaluations(db, [existing])
         return existing, True
     db.refresh(row)

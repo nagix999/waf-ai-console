@@ -17,6 +17,7 @@ from .change_events import record_change
 from .input_schemas import pin_schema, validate_event
 from .manual_references import audit, latest_reference, utc_datetime
 from .test_runs import MAX_TEST_ITEMS, write_lock
+from collections import Counter
 
 COPY_FIELDS = ("dataset_id", "item_id", "event_ciphertext", "schema_snapshot_ciphertext",
     "encryption_key_version", "input_hash", "reference_verdict", "source_kind", "source_ref",
@@ -36,7 +37,8 @@ def content_hash(item, crypto):
     return legacy.digest({"event": json.loads(crypto.decrypt_text(item.event_ciphertext)),
         "comment": crypto.decrypt_text(item.comment_ciphertext) if item.comment_ciphertext else "",
         **{key: getattr(item, key) for key in EDIT_FIELDS},
-        "source_kind": item.source_kind, "source_ref": item.source_ref, "internal_only": item.internal_only})
+        "source_kind": item.source_kind, "source_ref": item.source_ref, "internal_only": item.internal_only,
+        "reference_origin": item.reference_origin, "reference_origin_ref_id": item.reference_origin_ref_id})
 
 
 def validate(item, crypto):
@@ -44,7 +46,7 @@ def validate(item, crypto):
     # answers. Keep that issue until the analyst explicitly saves the case.
     issues = [issue for issue in (item.validation_issues_json or []) if issue.get("code") == "reference_conflict"]
     if item.reference_verdict not in {"true_positive", "false_positive", "inconclusive"}:
-        issues.append({"code": "reference_verdict_required"})
+        issues.append({"code": "reference_verdict_missing"})
     try:
         event = json.loads(crypto.decrypt_text(item.event_ciphertext))
         AnalysisInput.model_validate(event)
@@ -62,7 +64,10 @@ def validate(item, crypto):
 def from_snapshot(old, crypto, metadata=None):
     item = Item(**{key: getattr(old, key) for key in COPY_FIELDS}, id=str(uuid.uuid4()),
         created_by=old.created_by, created_at=old.created_at, updated_at=old.created_at,
-        excluded=False, tags=(metadata or {}).get("tags", []))
+        excluded=False, tags=(metadata or {}).get("tags", []),
+        reference_origin=(metadata or {}).get("reference_origin", "reference_label" if old.source_label_id else "none"),
+        reference_origin_ref_id=(metadata or {}).get("reference_origin_ref_id", old.source_label_id),
+        provenance_json=(metadata or {}).get("provenance", {}))
     validate(item, crypto)
     return item
 
@@ -110,7 +115,8 @@ def item_summary(item, change):
     return {"id": item.item_id, "item_id": item.item_id, "change": change,
         "state": "excluded" if item.excluded else item.validation_state,
         "issues": item.validation_issues_json, "updated_at": utc_datetime(item.updated_at),
-        **{key: getattr(item, key) for key in (*EDIT_FIELDS, "source_kind", "internal_only", "original_analysis_id")},
+        **{key: getattr(item, key) for key in (*EDIT_FIELDS, "source_kind", "internal_only", "original_analysis_id", "reference_origin", "reference_origin_ref_id")},
+        "provenance": item.provenance_json or {},
         "original_analysis_deleted": bool(item.original_analysis_deleted or
             (item.source_label_id and not item.original_analysis_id))}
 
@@ -147,6 +153,7 @@ def document(db, identifier, crypto, query=None):
     return {"id": row.id, "name": row.name, "description": row.description, "revision": row.revision,
         "working_revision": state.working_revision if state else 0, "counts": counts, "changes": changes,
         "working_changes_count": sum(changes[k] for k in ("added", "changed", "removed")),
+        "included_reference_origin_counts": dict(Counter(i.reference_origin for i in items if not i.excluded and i.validation_state == "ready")),
         "total": len(items), "filtered_total": len(listing), "items": listing[offset:offset + limit],
         "limit": limit, "offset": offset, "latest_published_revision_id": published.id if published else None,
         "published_revisions": [{"id": v.id, "revision": v.revision, "total": len(v.item_version_ids),
@@ -181,6 +188,9 @@ def write_item(db, identifier, payload, crypto, settings, actor, case_id=None):
     if case_id and not item:
         raise AnalysisIngestError("dataset_item_not_found", 404)
     event = payload.event
+    from .initial_assessment import FIELDS
+    if set(FIELDS).intersection(event) or isinstance(event.get("extra_fields"), dict) and set(FIELDS).intersection(event["extra_fields"]):
+        raise AnalysisIngestError("initial_assessment_not_allowed", 422)
     try:
         encoded = json.dumps(event, ensure_ascii=False, allow_nan=False)
         fingerprint = legacy.input_digest(event)
@@ -204,6 +214,9 @@ def write_item(db, identifier, payload, crypto, settings, actor, case_id=None):
     item.encryption_key_version = crypto.key_version
     item.input_hash = fingerprint
     item.comment_ciphertext = crypto.encrypt_text(payload.comment)
+    if item.reference_verdict != payload.reference_verdict or not item.reference_origin:
+        item.reference_origin = "manual" if payload.reference_verdict is not None else "none"
+        item.reference_origin_ref_id = None
     for key in EDIT_FIELDS:
         setattr(item, key, getattr(payload, key))
     item.updated_at = utcnow()
@@ -270,10 +283,13 @@ def publish(db, identifier, payload, crypto, actor):
     if len(included) != len(items) and not payload.acknowledge_exclusions:
         raise AnalysisIngestError("ground_truth_exclusion_ack_required", 409)
     previous = latest_published(db, identifier)
-    cases = {item.item_id: {"content_hash": item.content_hash, "tags": item.tags} for item in included}
+    cases = {item.item_id: {"content_hash": item.content_hash, "tags": item.tags,
+        "reference_origin": item.reference_origin, "reference_origin_ref_id": item.reference_origin_ref_id,
+        "provenance": item.provenance_json or {}} for item in included}
     metadata = {"working_total_at_publish": len(items), "included_ready_count": len(included),
         "needs_attention_count": attention, "excluded_count": excluded, "inclusion_rate": len(included) / len(items),
-        "working_revision_at_publish": state.working_revision, "cases": cases}
+        "working_revision_at_publish": state.working_revision, "cases": cases,
+        "included_reference_origin_counts": dict(Counter(i.reference_origin for i in included))}
     if previous and previous.publish_metadata == metadata:
         db.commit()
         return {"id": previous.id, "revision": previous.revision, "metadata": {k: v for k, v in metadata.items() if k != "cases"}}
@@ -343,6 +359,7 @@ def import_analyses(db, identifier, payload, crypto, settings, actor):
         item = Item(dataset_id=row.id, item_id=str(uuid.uuid4()), event_ciphertext=crypto.encrypt_text(json.dumps(event, ensure_ascii=False)),
             schema_snapshot_ciphertext=original.input_schema_snapshot_ciphertext or target.input_schema_snapshot_ciphertext,
             encryption_key_version=crypto.key_version, input_hash=fingerprint, reference_verdict=verdict,
+            reference_origin="reference_label" if reference else "none", reference_origin_ref_id=reference.id if reference else None,
             source_kind=reference.source_kind if reference else "reference", source_ref=reference.source_ref if reference else None,
             source_label_id=reference.id if reference else None, source_created_by=reference.created_by if reference else None,
             ai_visible=reference.ai_visible if reference else None, internal_only=bool(internal),

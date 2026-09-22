@@ -80,7 +80,7 @@ export default function PromptSettings() {
 
   return <div className="prompt-settings">
     <section className="panel prompt-overview">
-      <div className="prompt-heading"><div><h2>판정 지침</h2><p>저장된 버전을 후보 테스트에 선택하세요. 공식 평가 후 승격해야 운영에 적용됩니다.</p></div>
+      <div className="prompt-heading"><div><h2>분석 지침</h2><p>저장한 지침으로 공식 테스트를 진행하고 운영 반영 검토를 거쳐 적용하세요.</p></div>
         <button type="button" className="secondary" disabled={busy || state.loading} onClick={() => controller.current?.refresh()}>새로고침</button></div>
       <div className="prompt-active"><span className="prompt-tag prompt-tag-active">Production 적용 중</span><strong>{catalog ? versionName(active) : "조회 중…"}</strong></div>
     </section>
@@ -105,7 +105,7 @@ export default function PromptSettings() {
           <p className="prompt-change-note">{selected.change_note}</p>
           <pre className="prompt-policy-text" aria-label="저장된 판정 지침">{visiblePromptText(selected.policy_text)}</pre>
           <div className="prompt-actions"><button type="button" className="secondary" disabled={blocked} onClick={() => clone(selected)}><Icon name="copy" size={16} />{draft ? "작성 중인 버전 열기" : "새 버전 작성"}</button>
-            <a href="#evaluate/tests/new">후보 테스트 만들기 →</a><MoreActions label="지침 버전 작업"><button type="button" className="secondary" onClick={() => setView("compare")}>변경 비교</button><button type="button" className="text-button" onClick={() => setView("technical")}>기술정보</button></MoreActions></div>
+            <a href="#evaluate/tests/new">공식 테스트 만들기 →</a><MoreActions label="지침 버전 작업"><button type="button" className="secondary" onClick={() => setView("compare")}>변경 비교</button><button type="button" className="text-button" onClick={() => setView("technical")}>기술정보</button></MoreActions></div>
         </section>}
 
         <Dialog open={draftOpen && Boolean(draft)} title="새 프롬프트 버전 작성" onClose={() => { if (!busy) setDraftOpen(false); }} className="prompt-settings prompt-dialog">{draft && <form className="prompt-editor" onSubmit={save} noValidate>

@@ -1,3 +1,9 @@
+export function candidatePrefill(source, saved) {
+  const empty = { primary_profile_id: "", verifier_profile_id: null, evidence_editor_enabled: false,
+    evidence_editor_profile_id: null, prompt_policy_version_id: "", input_schema_version_id: "" };
+  return { ...(source === undefined ? saved || empty : source || empty) };
+}
+
 export function defaultCandidate(agents, prompts, schemas) {
   const roles = agents?.assignments?.test;
   if (!roles || !Array.isArray(agents.profiles) || !Array.isArray(prompts?.items) || !Array.isArray(schemas?.items)) throw new Error("invalid_candidate_catalog");
@@ -10,7 +16,7 @@ export function defaultCandidate(agents, prompts, schemas) {
 export function candidateIssue(catalog, value) {
   if (!catalog || !value) return "실행 구성을 불러오는 중입니다.";
   const profiles = catalog.agents.profiles;
-  if (!value.primary_profile_id) return "구성 변경에서 1차 판정 모델을 선택하세요.";
+  if (!value.primary_profile_id) return "주 분석 모델을 선택하세요.";
   const ids = [value.primary_profile_id, value.verifier_profile_id || value.primary_profile_id,
     ...(value.evidence_editor_enabled ? [value.evidence_editor_profile_id || value.primary_profile_id] : [])];
   if (ids.some(id => !profiles.some(profile => profile.id === id && profile.can_assign === true))) return "현재 설정으로 전체 검증을 통과한 모델을 선택하세요.";

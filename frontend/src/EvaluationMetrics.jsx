@@ -4,9 +4,12 @@ import HelpTooltip from "./HelpTooltip.jsx";
 import Dialog from "./Dialog.jsx";
 import { extraMetrics, mainMetrics, matrixCells, metricHelp, metricText } from "./evaluationMetrics.js";
 import "./evaluationMetrics.css";
+import { useConsolePreferences } from "./consolePreferences.jsx";
+import { metricHelpEnglish, metricLabelsEnglish } from "./evaluationMetricEnglish.js";
 
 export function MetricHelp({ metric, label }) {
-  return <HelpTooltip label={label}>{metricHelp[metric]}</HelpTooltip>;
+  const { locale } = useConsolePreferences();
+  return <HelpTooltip label={label}>{locale === "en" ? metricHelpEnglish[metric] : metricHelp[metric]}</HelpTooltip>;
 }
 
 export function MetricCards({ metrics, compact = false }) {
@@ -14,8 +17,9 @@ export function MetricCards({ metrics, compact = false }) {
 }
 
 export function AdditionalMetrics({ metrics }) {
+  const { locale } = useConsolePreferences(), w = (ko, en) => locale === "en" ? en : ko;
   const [open, setOpen] = useState(false);
-  return <><button type="button" className="secondary" onClick={() => setOpen(true)}>추가 지표</button><Dialog open={open} title="추가 평가 지표" onClose={() => setOpen(false)}><div className="quality-additional"><dl>{extraMetrics.map(([key, label]) => <div key={key}><dt>{label}<MetricHelp metric={key} label={label} /></dt><dd>{metricText(metrics?.[key], key)}</dd></div>)}</dl><p className="evaluation-footnote">계산에 필요한 표본이 없으면 —로 표시합니다.</p></div></Dialog></>;
+  return <><button type="button" className="secondary" onClick={() => setOpen(true)}>{w("추가 지표", "Additional metrics")}</button><Dialog open={open} title={w("추가 평가 지표", "Additional metrics")} onClose={() => setOpen(false)}><div className="quality-additional"><dl>{extraMetrics.map(([key, label]) => <div key={key}><dt>{locale === "en" ? metricLabelsEnglish[key] || label : label}<MetricHelp metric={key} label={locale === "en" ? metricLabelsEnglish[key] || label : label} /></dt><dd>{Number.isFinite(metrics?.[key]) ? metricText(metrics[key], key) : "—"}</dd></div>)}</dl><p className="evaluation-footnote">{w("계산에 필요한 표본이 없으면 —로 표시합니다.", "A dash means the required sample is unavailable.")}</p></div></Dialog></>;
 }
 
 export function ConfusionMatrix({ matrix, onCell, selectedCell }) {

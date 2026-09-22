@@ -43,6 +43,7 @@ def enqueue_with_expected_label(
     analysis_purpose: str = "test",
     service_api_key_id: str | None = None,
     actor_kind: str = "admin_session",
+    initial_assessment: dict | None = None,
 ) -> tuple[Analysis, bool, str | None]:
     """Return (analysis, duplicate, 'attached'/'unchanged'/None).
 
@@ -66,6 +67,7 @@ def enqueue_with_expected_label(
             schema_snapshot=schema_snapshot,
             prompt_snapshot=prompt_snapshot,
             service_api_key_id=service_api_key_id,
+            initial_assessment=initial_assessment,
         )
         label_state = None
         if expected_verdict is not None:

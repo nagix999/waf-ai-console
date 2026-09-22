@@ -100,7 +100,9 @@ def preflight(db, crypto, settings, identifier):
     current = current_configuration(db, crypto, settings)
     checks = []
     def check(code, passed):
-        checks.append({"code": code, "passed": bool(passed)})
+        remedies = {"tested_profiles_still_valid": "open_llm_profile", "tested_instructions_still_current": "open_instructions"}
+        checks.append({"code": code, "passed": bool(passed), "remediation": None if passed else
+            {"kind": remedies.get(code, "rerun_test"), "resource_id": None if code in remedies else run.id}})
     try:
         snapshot = verify_configuration(run, crypto)
     except (ValueError, AnalysisIngestError):
@@ -109,7 +111,8 @@ def preflight(db, crypto, settings, identifier):
     summary = describe_run(db, run, detail=False, reference_basis="initial")
     check("candidate_completed_without_failures", summary.status == "completed" and summary.failed == 0
           and summary.rejected == 0 and summary.completed > 0 and not run.accepting_items)
-    check("official_approved_evaluation", run.evaluation_mode == "ground_truth" and not run.official_evaluation_pending)
+    check("official_approved_evaluation", run.test_purpose == "official_evaluation"
+          and run.evaluation_mode == "ground_truth" and not run.official_evaluation_pending)
     evaluation = db.scalar(select(TestEvaluation).where(TestEvaluation.test_run_id == run.id,
         TestEvaluation.evaluation_kind == "ground_truth").order_by(TestEvaluation.revision.desc()).limit(1))
     version = db.get(ValidationDatasetVersion, run.dataset_version_id) if run.dataset_version_id else None

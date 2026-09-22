@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WAF AI Console 사용 흐름</title>
+<style>
+:root{--bg:#f7f8fa;--panel:#fff;--text:#172033;--muted:#6f7888;--line:#e3e7ed;--accent:#202936;--soft:#eef3f7;}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Noto Sans KR",sans-serif}
+main{max-width:840px;margin:auto;padding:40px 20px 56px}
+h1{font-size:28px;margin:0 0 8px} .intro{color:var(--muted);margin:0 0 28px}
+.flow{display:grid;gap:8px} .step{display:grid;grid-template-columns:44px 1fr;gap:14px;align-items:start;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}
+.num{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--soft);font-weight:800}
+strong{font-size:16px} p{margin:6px 0 0;color:var(--muted);font-size:13px;line-height:1.55}
+.arrow{text-align:center;color:#98a1ad;font-size:20px;line-height:20px}
+.loop{margin-top:26px;border-left:3px solid #7c8796;padding:12px 16px;background:#fff;border-radius:0 12px 12px 0;font-weight:700}
+@media(max-width:480px){main{padding:24px 14px}h1{font-size:23px}.step{padding:15px}}
+</style>
+</head>
+<body><main>
+<h1>WAF AI Console 사용 흐름</h1>
+<p class="intro">사용자가 기억해야 하는 흐름은 이 정도면 충분합니다.</p>
+<div class="flow"><div class="step"><div class="num">1</div><div><strong>정답 데이터 준비</strong><p>평가 기준이 되는 데이터를 준비하고 공식 버전을 만듭니다.</p></div></div><div class="arrow">↓</div>
+<div class="step"><div class="num">2</div><div><strong>테스트</strong><p>기본 설정을 불러와 공식 테스트 또는 개발 테스트를 실행합니다.</p></div></div><div class="arrow">↓</div>
+<div class="step"><div class="num">3</div><div><strong>결과 확인</strong><p>불일치, 보류, 실패 문항을 중심으로 확인합니다.</p></div></div><div class="arrow">↓</div>
+<div class="step"><div class="num">4</div><div><strong>수정</strong><p>필요한 경우 설정이나 정답 데이터를 수정합니다.</p></div></div><div class="arrow">↓</div>
+<div class="step"><div class="num">5</div><div><strong>운영 반영 검토</strong><p>현재 운영 설정과 테스트한 설정을 비교하고 적용 전 점검을 확인합니다.</p></div></div><div class="arrow">↓</div>
+<div class="step"><div class="num">6</div><div><strong>운영에 반영</strong><p>검증한 설정을 그대로 운영에 반영합니다.</p></div></div><div class="arrow">↓</div>
+<div class="step"><div class="num">7</div><div><strong>운영 확인</strong><p>실제 분석 이력과 실행 상태를 확인합니다.</p></div></div></div>
+<div class="loop">↺ 문제가 있으면 다시 테스트</div>
+</main></body></html>

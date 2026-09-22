@@ -27,6 +27,7 @@ class TestRunCreate(BaseModel):
 
 
 class TestRunItemResponse(BaseModel):
+    ground_truth_source: dict[str, Any] | None = None
     id: str
     row_number: int
     analysis_id: str | None
@@ -45,6 +46,7 @@ class TestRunItemResponse(BaseModel):
 
 
 class TestRunSummary(UTCResponse):
+    test_purpose: Literal["official_evaluation", "development", "legacy_unknown"] = "legacy_unknown"
     id: str
     name: str
     kind: str

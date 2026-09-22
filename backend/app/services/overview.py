@@ -41,8 +41,13 @@ def overview_document(db, crypto, settings):
             trend.append(official_document(record))
             seen_configs.add(record.configuration_hash)
     actions = []
-    if working and working["counts"]["needs_attention"]:
-        actions.append({"kind": "ground_truth", "count": working["counts"]["needs_attention"], "dataset_id": working["id"]})
+    attention = []
+    for dataset in db.scalars(select(ValidationDataset).where(ValidationDataset.deleted_at.is_(None))):
+        data = document(db, dataset.id, crypto)
+        if data["counts"]["needs_attention"]:
+            attention.append({"dataset_id": dataset.id, "name": dataset.name, "count": data["counts"]["needs_attention"]})
+    if attention:
+        actions.append({"kind": "ground_truth", "count": sum(v["count"] for v in attention), "datasets": attention})
     failed_tests = db.scalar(select(func.count()).select_from(failed_test_ids().subquery()))
     if failed_tests:
         actions.append({"kind": "failed_tests", "count": failed_tests})
@@ -62,6 +67,21 @@ def overview_document(db, crypto, settings):
         if review["eligible"]:
             actions.append({"kind": "promotion", "test_run_id": record.test_run_id, "name": review["candidate_name"]})
             break
-    return {"production": current, "evaluation": official_document(latest), "comparison_key": comparison_key,
+    from .setup_status import document as setup_document
+    setup = setup_document(db, crypto, settings)
+    if setup["production_state"] == "promoted":
+        if setup["production_api_credentials"] != "ready":
+            actions.append({"kind": "production_credentials"})
+        if setup["production_api_traffic"]["status"] == "not_observed":
+            actions.append({"kind": "production_traffic"})
+    for record in recent:
+        run = db.get(TestRun, record["test_run_id"])
+        record.update(name=run.name, configuration_snapshot=run.configuration_snapshot_json,
+            profile_metadata=run.profile_metadata, prompt_policy_version_id=run.prompt_policy_version_id,
+            input_schema_version_id=run.input_schema_version_id)
+    return {"production": current, "setup": setup,
+        "ground_truth_needs_attention_total": sum(v["count"] for v in attention),
+        "ground_truth_needs_attention_dataset_count": len(attention), "ground_truth_needs_attention_datasets": attention,
+        "evaluation": official_document(latest), "comparison_key": comparison_key,
         "trend": list(reversed(trend)), "ground_truth_working_draft": working,
         "recent_comparable_tests": recent, "actions": actions, "updated_at": utcnow()}

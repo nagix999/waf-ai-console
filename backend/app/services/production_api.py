@@ -23,8 +23,9 @@ def request_contract(event_schema):
     from ..schemas import AnalysisRequest
     definition = deepcopy(event_schema)
     definition["title"] = "AnalysisRequest"
-    definition["properties"]["expected_verdict"] = AnalysisRequest.model_json_schema()["properties"]["expected_verdict"]
-    definition["propertyNames"]["not"]["enum"].remove("expected_verdict")
+    for name in ("expected_verdict", "initial_verdict", "initial_probability", "initial_model_version"):
+        definition["properties"][name] = AnalysisRequest.model_json_schema()["properties"][name]
+        definition["propertyNames"]["not"]["enum"].remove(name)
     return definition
 
 
@@ -45,6 +46,7 @@ def markdown_contract(metadata, fields, json_schema, payload_max_bytes):
         lines.append(f"| `{field.name}` | {field.type} | {'O' if field.required else 'X'} | {'O' if field.nullable else 'X'} | {cell(field.description)} |")
     # Escaped fence markers prevent a field description from ending the block.
     lines.extend(["", "`expected_verdict`는 선택 요청 항목이며 위 입력 스키마 필드가 아닙니다. Test·Production 모두 참고 답안으로 별도 저장하고 LLM에는 전달하지 않습니다."])
+    lines.extend(["", "1차 판정은 Production 서비스 키의 `POST /api/v1/analyses`에서만 받습니다. `initial_verdict`(true_positive/false_positive)와 `initial_probability`(유한수 0~1)는 함께 제공하고, `initial_model_version`은 선택입니다. 확률은 1차 판정 클래스의 신뢰도이며 심층 판정 신뢰도와 같은 척도가 아닙니다. Agent 입력·정답에는 사용하지 않습니다. Test·파일·정답 데이터·사용자 스키마에서는 거부합니다. 동일 이벤트 재접수에서 추가·제거·변경하면 `409 initial_assessment_conflict`입니다."])
     definition = json.dumps(request_contract(json_schema), ensure_ascii=False, indent=2).replace("`", "\\u0060").replace("<", "\\u003c")
     lines.extend(["", "필드별 길이·범위·허용값·하위 구조의 현재 제한:", "", "```json", definition, "```", ""])
     return before + "\n".join(lines) + after

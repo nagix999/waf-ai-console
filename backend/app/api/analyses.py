@@ -97,6 +97,11 @@ async def create_analysis(
     wait_seconds: int = Query(default=0, ge=0, le=60, description="응답에서 분석 완료를 기다릴 시간(초). 테스트명이나 실행 시간 제한이 아닙니다."),
     test_run_id: str | None = Query(default=None, max_length=36, description="Test 키 전용. POST /api/v1/test-sessions 응답의 id를 전달합니다. 테스트명·임의 ID는 사용할 수 없으며 생략하면 테스트를 자동 생성합니다."),
 ) -> AnalysisDetail:
+    from ..services.initial_assessment import FIELDS
+    if set(FIELDS).intersection(payload.model_fields_set) and not (
+        principal.kind == "service_api_key" and principal.purpose == "production"
+    ):
+        raise HTTPException(422, "initial_assessment_production_service_only")
     if principal.purpose == "test":
         if set(request.query_params) - {"wait_seconds", "test_run_id"}:
             raise HTTPException(422, "unsupported_query_parameter")
@@ -173,6 +178,7 @@ async def submit_analysis(
             analysis_purpose=purpose, ingest_channel=channel,
             payload_max_bytes=request.app.state.settings.payload_max_bytes,
             service_api_key_id=principal.service_api_key_id,
+            initial_assessment={key: getattr(payload, key) for key in ("initial_verdict", "initial_probability", "initial_model_version")},
         )
     except AnalysisIngestError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.issues or exc.code) from None

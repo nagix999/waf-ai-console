@@ -312,6 +312,7 @@ def execute_dataset(db, crypto, settings, identifier, payload, actor):
         candidate_configuration=payload.candidate_configuration)
     run.dataset_version_id = version.id
     run.evaluation_mode = payload.evaluation_mode
+    run.test_purpose = "official_evaluation" if payload.evaluation_mode == "ground_truth" else "development"
     if payload.evaluation_mode == "ground_truth":
         run.approved_item_version_ids = [entry.id for entry in entries]
         from .official_evaluations import METRICS_VERSION

@@ -1,6 +1,8 @@
 # WAF AI Analysis Console v0.3.0
 
-2026-09-21 **Canonical R3 SOLO 구현**: 최종 기준은 [`WAF_AI_Console_Astra_Handoff_CANONICAL_V5_REVIEWED_R3_SOLO/ASTRA_HANDOFF.md`](WAF_AI_Console_Astra_Handoff_CANONICAL_V5_REVIEWED_R3_SOLO/ASTRA_HANDOFF.md)입니다. 메뉴는 **Overview → Evaluate → Configure → Operate → Connect**이며, 승격은 자격을 갖춘 테스트에서 여는 별도 화면입니다. Ground Truth는 **작업 초안 → 리비전 발행 → 공식 평가**로 관리합니다. Production의 Primary·Verifier·Evidence Editor·분석 지침·입력 스키마는 공식 평가와 관리자 승격으로만 변경합니다. 기존 Backend·암호화·동시 처리·재실행·ReportLab PDF 기능은 유지합니다. 새 DB head는 `0023_ground_truth_working`이며 실행 중인 서비스에는 아직 적용하지 않았습니다. [R3 변경·API/DB·검증 보고서](docs/v0.3.0/CANONICAL_R3_SOLO_IMPLEMENTATION.md)를 확인하세요.
+2026-09-22 **Canonical R5 FINAL COMPLETE**: 현재 기준은 [`WAF_AI_Console_Astra_Handoff_CANONICAL_V5_REVIEWED_R5_FINAL_COMPLETE/ASTRA_HANDOFF.md`](WAF_AI_Console_Astra_Handoff_CANONICAL_V5_REVIEWED_R5_FINAL_COMPLETE/ASTRA_HANDOFF.md)와 같은 폴더의 `UI_TERMINOLOGY.md`입니다. `main`의 `ee4797b`에서 기존 기능을 보존하며 구현했습니다. 메뉴는 **홈 → 평가 → 설정 → 운영 → 연동**이며 운영의 다섯 구성요소는 **공식 테스트 → 운영 반영 검토 → 운영에 반영**으로만 변경합니다. 기본 테스트 설정, 정답 데이터 가져오기 미리보기, 답안 출처, 첫 운영 가이드, 테스트 평가 상세, 1차·심층 판정 비교를 연결했습니다. DB head는 `0024_r5_contract`입니다. **이 작업에서는 운영 DB 변경·재배포·Git 게시·실제 LLM 호출을 하지 않았습니다.** 검증 범위와 남은 제한은 [R5 구현·API/DB·검증 보고서](docs/v0.3.0/CANONICAL_R5_FINAL_IMPLEMENTATION.md)를 확인하세요.
+
+2026-09-21 **R3 SOLO 구현 당시 기록**: [R3 변경·API/DB·검증 보고서](docs/v0.3.0/CANONICAL_R3_SOLO_IMPLEMENTATION.md)는 이전 구현 이력입니다. 현재 설계 기준은 위 R5이며, 기존 Backend·암호화·동시 처리·재실행·ReportLab PDF 기능은 보존합니다.
 
 아래는 과거 작업 당시 기록입니다. 이전 V5/R2의 6개 메뉴·별도 Promote 메뉴·문항별 Draft/Reviewed/Approved 흐름은 **R3에서 대체**되었습니다. 이전 설계·목업은 현재 구현 기준이 아닙니다. 과거 이력과 유효한 기능은 보존합니다.
 

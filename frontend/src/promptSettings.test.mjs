@@ -265,7 +265,7 @@ test("timeouts end a request, do not retry writes, and dispose cancels pending r
 test("UI source renders plain text and exposes no mutation of saved or fixed instructions", async () => {
   const source = await readFile(new URL("./PromptSettings.jsx", import.meta.url), "utf8");
   assert.doesNotMatch(source, /dangerouslySetInnerHTML|ReactMarkdown|runModelProfileTest|createAnalysis|localStorage|sessionStorage/);
-  for (const phrase of ["시스템 규칙 · 읽기 전용", "정답", "후보 테스트 만들기", "새 버전 작성", "공식 평가 후 승격", "컨텍스트가 부족", "닫기 · 초안 유지"]) assert.ok(source.includes(phrase), phrase);
+  for (const phrase of ["시스템 규칙 · 읽기 전용", "정답", "공식 테스트 만들기", "새 버전 작성", "운영 반영 검토", "컨텍스트가 부족", "닫기 · 초안 유지"]) assert.ok(source.includes(phrase), phrase);
   assert.doesNotMatch(source, /beginActivation\(|controller\.current\?\.activate\(/);
   assert.match(source, /<Dialog open=\{view === "technical"/); assert.match(source, /긴 지침은 로그 입력 공간을 줄입니다/);
   assert.match(source, /컨텍스트가 부족하면 모델을 호출할 수 없습니다/); assert.doesNotMatch(source, /<HelpTooltip/);

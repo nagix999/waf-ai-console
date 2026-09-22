@@ -17,11 +17,12 @@ export function useAnalysisSelection(items, scope) {
     header: <input type="checkbox" aria-label="현재 페이지 전체 선택" aria-checked={ids.length > 0 && ids.length < available.length ? "mixed" : ids.length > 0} ref={element => { if (element) element.indeterminate = ids.length > 0 && ids.length < available.length; }} checked={available.length > 0 && ids.length === available.length} disabled={!available.length} onChange={event => setState({ scope, ids: event.target.checked ? available : [] })} /> };
 }
 
-export default function AnalysisSelectionActions({ ids, onSaved, single = false, onClear, allowReferences = true, compact = false }) {
+export default function AnalysisSelectionActions({ ids, onSaved, single = false, onClear, allowReferences = true, compact = false, allowDataset = true, onAddDataset }) {
   const [dialog, setDialog] = useState(null), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   async function open(kind) {
     if (busy || !ids.length) return;
+    if (kind === "dataset" && onAddDataset) { onAddDataset(); return; }
     setBusy(true); setError(""); setNotice("");
     try {
       const selected = [...ids];
@@ -67,7 +68,7 @@ export default function AnalysisSelectionActions({ ids, onSaved, single = false,
     catch (err) { setError(validationDataError(err)); } finally { setBusy(false); }
   }
   return <div className="selection-actions">
-    {compact ? <ConsolePopover label="답안·데이터 관리" trigger={busy ? "조회 중…" : "답안·데이터 관리 ▾"} disabled={busy || !ids.length}>{close => <>{allowReferences && <button type="button" onClick={() => { close(); open("reference"); }}>참고 답안 입력</button>}<button type="button" onClick={() => { close(); open("dataset"); }}>데이터셋에 추가</button></>}</ConsolePopover> : (single || ids.length > 0) && <div className="ux-toolbar">{!single && <span>{ids.length}건 선택 · 현재 페이지</span>}{allowReferences && <button type="button" className="secondary" disabled={busy || !ids.length} onClick={() => open("reference")}>참고 답안 {single ? "입력" : "일괄 입력"}</button>}<button type="button" className="secondary" disabled={busy || !ids.length} onClick={() => open("dataset")}>데이터셋에 추가</button>{ids.length > 0 && onClear && <button type="button" className="text-button" onClick={onClear}>선택 해제</button>}</div>}
+    {compact ? <ConsolePopover label="답안·데이터 관리" trigger={busy ? "조회 중…" : "답안·데이터 관리 ▾"} disabled={busy || !ids.length}>{close => <>{allowReferences && <button type="button" onClick={() => { close(); open("reference"); }}>참고 답안 입력</button>}{allowDataset && <button type="button" onClick={() => { close(); open("dataset"); }}>데이터셋에 추가</button>}</>}</ConsolePopover> : (single || ids.length > 0) && <div className="ux-toolbar">{!single && <span>{ids.length}건 선택 · 현재 페이지</span>}{allowReferences && <button type="button" className="secondary" disabled={busy || !ids.length} onClick={() => open("reference")}>참고 답안 {single ? "입력" : "일괄 입력"}</button>}{allowDataset && <button type="button" className="secondary" disabled={busy || !ids.length} onClick={() => open("dataset")}>데이터셋에 추가</button>}{ids.length > 0 && onClear && <button type="button" className="text-button" onClick={onClear}>선택 해제</button>}</div>}
     {notice && <p role="status" className="notice">{notice}</p>}{error && !dialog && <p role="alert" className="error">{error}</p>}
     <Dialog open={Boolean(dialog)} title={dialog?.kind === "reference" ? "참고 답안 입력" : "데이터셋에 추가"} onClose={() => { if (!busy) { setDialog(null); setError(""); } }}>
       {dialog && <form onSubmit={save} className="data-form"><p>{dialog.selected.length}건 선택</p>

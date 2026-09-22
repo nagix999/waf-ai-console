@@ -31,7 +31,7 @@ def test_fresh_upgrade_is_empty_and_repeatable_and_downgrade_preserves_parents(t
     engine = build_engine(url)
     try:
         with engine.begin() as connection:
-            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0023_ground_truth_working"
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0024_r5_contract"
             for table in ("test_runs", "test_run_items", "analyses", "analysis_labels", "vllm_test_runs"):
                 assert connection.scalar(text(f"SELECT COUNT(*) FROM {table}")) == 0
             with Operations.context(MigrationContext.configure(connection)):

@@ -42,7 +42,7 @@ test("analysis results Test tab starts with named runs, not individual result/ev
   assert.match(html, /aria-selected="true">테스트<\/button>/);
   assert.match(html, /테스트 목록/);
   assert.match(html, /테스트명 검색/);
-  assert.match(html, /최신 참고 답안으로 계산한 점수/);
+  assert.match(html, /테스트 설정과 평가 기준을 함께 확인/);
   assert.match(html, /테스트 문항 전체 보기/);
   assert.match(html, /테스트명 없이 저장된 이전 결과/);
   assert.doesNotMatch(html, /\banalysis-data-table\b|analysis-evaluation-overview|name="source_system"/);
@@ -76,7 +76,7 @@ test("individual Test fallback includes named and previous items with latest-ref
   const options = props();
   options.testState.view = "items";
   const html = render(options);
-  assert.match(html, /← 테스트 목록/);
+  assert.match(html, /← 테스트/);
   assert.match(html, /이름 있는 실행과 실행 묶음이 없는 이전 결과를 함께 조회/);
   assert.match(html, /최신 참고 답안 기준/);
   assert.match(html, /<table class="[^"]*\banalysis-data-table\b/);
@@ -92,7 +92,7 @@ test("selected Test execution uses the shared detail within analysis results", (
   const before = JSON.stringify(options.testState);
   const html = render(options);
   assert.match(html, /class="page-stack test-run-detail"/);
-  assert.match(html, /← 테스트 목록/);
+  assert.match(html, /← 테스트/);
   assert.match(html, /실행 정보를 불러오는 중/);
   assert.doesNotMatch(html, /테스트명 검색|\banalysis-data-table\b/);
   assert.equal(JSON.stringify(options.testState), before);
@@ -120,7 +120,7 @@ test("older dataset links retain source-limited item queries instead of silently
   const html = render(options);
   assert.match(html, /waf-internal-model-test-synthetic/);
   assert.match(html, /적용된 검색 조건/);
-  assert.match(html, /← 테스트 목록/);
+  assert.match(html, /← 테스트/);
   assert.doesNotMatch(html, /테스트명 검색/);
   assert.equal(analysisQuery(options.testState.items.applied, 25, 0).source_system, "waf-internal-model-test-synthetic");
 });

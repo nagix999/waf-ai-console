@@ -37,6 +37,10 @@ class AnalysisInput(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def reject_server_fields(cls, value: Any) -> Any:
+        if isinstance(value, dict) and isinstance(value.get("extra_fields"), dict) and {
+            "initial_verdict", "initial_probability", "initial_model_version"
+        }.intersection(value["extra_fields"]):
+            raise ValueError("initial_assessment_not_allowed")
         if isinstance(value, dict) and LABEL_FIELDS.intersection(value):
             raise ValueError("evaluation_labels_require_separate_attachment")
         if isinstance(value, dict) and SERVER_CONTROL_FIELDS.intersection(value):
@@ -54,21 +58,33 @@ class AnalysisInput(BaseModel):
 
 class AnalysisRequest(AnalysisInput):
     """HTTP admission metadata, never an agent/event input."""
+    initial_verdict: Literal["true_positive", "false_positive"] | None = None
+    initial_probability: float | None = Field(default=None, ge=0, le=1, allow_inf_nan=False, strict=True)
+    initial_model_version: str | None = Field(default=None, min_length=1, max_length=255)
     expected_verdict: Literal["true_positive", "false_positive", "inconclusive"] | None = Field(
         default=None, description="Optional reference answer. Stored separately; never sent to the LLM.")
 
     @model_validator(mode="before")
     @classmethod
     def reject_server_fields(cls, value: Any) -> Any:
-        event = {key: item for key, item in value.items() if key != "expected_verdict"} if isinstance(value, dict) else value
+        event = {key: item for key, item in value.items() if key not in {"expected_verdict", "initial_verdict", "initial_probability", "initial_model_version"}} if isinstance(value, dict) else value
         AnalysisInput.reject_server_fields(event)
         return value
 
     def event_input(self) -> AnalysisInput:
-        return AnalysisInput.model_validate(self.model_dump(mode="json", exclude={"expected_verdict"}, exclude_unset=True))
+        return AnalysisInput.model_validate(self.model_dump(mode="json", exclude={"expected_verdict", "initial_verdict", "initial_probability", "initial_model_version"}, exclude_unset=True))
+
+    @model_validator(mode="after")
+    def initial_pair(self):
+        if (self.initial_verdict is None) != (self.initial_probability is None):
+            raise ValueError("initial_assessment_pair_required")
+        if self.initial_model_version is not None and self.initial_verdict is None:
+            raise ValueError("initial_assessment_pair_required")
+        return self
 
 
 class AnalysisSummary(UTCResponse):
+    initial_assessment: dict[str, Any] | None = None
     id: str
     source_system: str
     analysis_purpose: AnalysisPurpose

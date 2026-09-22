@@ -39,11 +39,11 @@ def errors(db):
 
 
 @router.get("")
-def listing(db: DbSession, _principal: Admin, limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0)):
+def listing(request: Request, db: DbSession, _principal: Admin, limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0)):
     read_snapshot(db)
     query = select(ValidationDataset).where(ValidationDataset.deleted_at.is_(None))
     total = db.scalar(select(func.count()).select_from(query.subquery()))
-    return {"items": [service.dataset_summary(db, row) for row in db.scalars(query
+    return {"items": [dataset_metadata(db, row, request.app.state.crypto) for row in db.scalars(query
         .order_by(ValidationDataset.created_at.desc(), ValidationDataset.id).limit(limit).offset(offset))], "total": total}
 
 
@@ -54,16 +54,25 @@ def create(payload: DatasetCreate, db: DbSession, principal: Admin):
 
 
 @router.post("/search")
-def search(payload: DatasetSearch, db: DbSession, _principal: Admin):
+def search(payload: DatasetSearch, request: Request, db: DbSession, _principal: Admin):
     # Search text stays out of access-log URLs and browser history.
     read_snapshot(db)
     query = select(ValidationDataset).where(ValidationDataset.deleted_at.is_(None))
     if payload.query.strip():
         query = query.where(ValidationDataset.name.contains(payload.query.strip(), autoescape=True))
     total = db.scalar(select(func.count()).select_from(query.subquery()))
-    return {"items": [service.dataset_summary(db, row) for row in db.scalars(query
+    return {"items": [dataset_metadata(db, row, request.app.state.crypto) for row in db.scalars(query
         .order_by(ValidationDataset.created_at.desc(), ValidationDataset.id).limit(payload.limit).offset(payload.offset))],
         "total": total, "limit": payload.limit, "offset": payload.offset}
+
+
+def dataset_metadata(db, row, crypto):
+    summary = service.dataset_summary(db, row)
+    data = working.document(db, row.id, crypto)
+    latest = data["published_revisions"][0] if data["published_revisions"] else None
+    return {**summary, "latest_published_revision": latest, "published_case_count": latest["total"] if latest else 0,
+        "working_revision": data["working_revision"], "working_change_count": data["working_changes_count"],
+        **{f"{key}_count": value for key, value in data["counts"].items()}}
 
 
 @router.get("/{identifier}")
@@ -134,6 +143,7 @@ def working_import(identifier: str, payload: WorkingImport, request: Request, db
 
 
 @router.post("/{identifier}/working/items/{case_id}/revert")
+@router.post("/{identifier}/working/items/{case_id}/restore")
 def working_revert(identifier: str, case_id: str, payload: WorkingRevision, request: Request, db: DbSession, principal: Admin):
     with errors(db):
         return working.restore(db, identifier, payload, request.app.state.crypto, principal.username or "admin", case_id)

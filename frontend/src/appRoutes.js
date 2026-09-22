@@ -8,16 +8,21 @@ const canonical = {
   "#overview": "#dashboard", "#configure/llm-profiles": "#settings/models",
   "#configure/agent-roles": "#settings/agents", "#configure/instructions": "#settings/instructions",
   "#evaluate/tests": "#analyses/test", "#evaluate/tests/new": "#test",
+  "#evaluate/tests/items": "#analyses/test/items",
   "#evaluate/ground-truth": "#datasets", "#evaluate/production-evaluation": "#runtime/quality",
   "#operate/inference": "#analyses", "#operate/activity": "#runtime/changes",
   "#operate/activity/deployment": "#runtime/deployment", "#connect/production-api": "#production-api",
-  "#connect/api-keys": "#settings/keys", "#connect/input-schema": "#settings/schema", "#connect/vllm-targets": "#settings/egress",
+  "#connect/api-keys": "#settings/keys", "#configure/input-schema": "#settings/schema", "#connect/input-schema": "#settings/schema", "#connect/vllm-targets": "#settings/egress",
 };
 
 export function readAppHash(hash) {
+  const ungrouped = typeof hash === "string" && hash.match(/^#evaluate\/tests\/items\/([^/]+)\/(result|agent-trace|input|result-json|report)$/);
+  if (ungrouped && uuid.test(ungrouped[1])) return { page: "detail", purpose: "test", id: ungrouped[1].toLowerCase(), tab: { result: "result", "agent-trace": "agent", input: "raw", "result-json": "json", report: "report" }[ungrouped[2]] };
   if (hash === "#promote") return { page: "analyses", purpose: "test", view: "runs" };
   const promotion = typeof hash === "string" && hash.match(/^#promotion\/([^/]+)$/);
   if (promotion && uuid.test(promotion[1])) return { page: "promote", promoteRunId: promotion[1].toLowerCase() };
+  const fullCase = typeof hash === "string" && hash.match(/^#evaluate\/tests\/([^/]+)\/case\/([^/]+)\/(result|agent-trace|input|result-json|report)$/);
+  if (fullCase && uuid.test(fullCase[1]) && uuid.test(fullCase[2])) return { page: "detail", runId: fullCase[1].toLowerCase(), id: fullCase[2].toLowerCase(), tab: { result: "result", "agent-trace": "agent", input: "raw", "result-json": "json", report: "report" }[fullCase[3]] };
   const caseRoute = typeof hash === "string" && hash.match(/^#evaluate\/tests\/([^/]+)\/case\/([^/]+)$/);
   if (caseRoute && uuid.test(caseRoute[1]) && uuid.test(caseRoute[2])) return { page: "analyses", purpose: "test", view: "runs", runId: caseRoute[1].toLowerCase(), caseId: caseRoute[2].toLowerCase() };
   if (hash === "#operate/runtime") return { page: "runtime" };
@@ -38,7 +43,7 @@ export function readAppHash(hash) {
   if (hash === "#production-api") return { page: "apiDocs" };
   if (hash === "#test") return { page: "test" };
   if (hash === "#datasets") return { page: "datasets", datasetId: null };
-  if (hash === "#analyses" || hash === "#analyses/all") return { page: "analyses", purpose: "" };
+  if (hash === "#analyses" || hash === "#analyses/all") return { page: "analyses", purpose: "production" };
   if (hash === "#analyses/production") return { page: "analyses", purpose: "production" };
   if (hash === "#analyses/test") return { page: "analyses", purpose: "test", view: "runs" };
   if (hash === "#analyses/test/items") return { page: "analyses", purpose: "test", view: "items" };
@@ -64,6 +69,8 @@ export function writeAppHash(state) {
   if (["runtime", "diagnostics"].includes(state.page) || state.page === "settings" && state.settingsTab === "concurrency") return "#operate/runtime";
   if (state.page === "detail" && uuid.test(state.selectedId || "")) {
     const tabs = { result: "result", agent: "agent-trace", raw: "input", json: "result-json", report: "report" };
+    if (state.resultsPurpose === "test" && uuid.test(state.testResults?.runId || "")) return `#evaluate/tests/${state.testResults.runId}/case/${state.selectedId.toLowerCase()}/${tabs[state.detailTab] || "result"}`;
+    if (state.resultsPurpose === "test") return `#evaluate/tests/items/${state.selectedId.toLowerCase()}/${tabs[state.detailTab] || "result"}`;
     return `#operate/inference/${state.selectedId.toLowerCase()}/${tabs[state.detailTab] || "result"}`;
   }
   if (legacy.startsWith("#test-runs/")) return legacy.replace("#test-runs/", "#evaluate/tests/");
@@ -102,6 +109,15 @@ export function applyAppRoute(state, route) {
     next.selectedId = route.id;
     next.detailTab = route.tab;
     next.detailReturnPage = "analyses";
+    if (route.purpose === "test" && !route.runId) {
+      next.resultsPurpose = "test";
+      next.testResults = { ...state.testResults, view: "items", runId: null, caseId: null };
+    }
+    if (route.runId) {
+      next.resultsPurpose = "test";
+      next.detailReturnPage = "testRun";
+      next.testResults = { ...state.testResults, view: "runs", runId: route.runId, caseId: route.id };
+    }
   }
   if (route.page === "analyses") {
     next.resultsPurpose = route.purpose;

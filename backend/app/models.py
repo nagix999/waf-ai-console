@@ -119,6 +119,9 @@ class Analysis(Base):
     severity: Mapped[str | None] = mapped_column(String(16))
     threat_category: Mapped[str | None] = mapped_column(String(120))
     confidence_score: Mapped[float | None] = mapped_column(Float)
+    initial_verdict: Mapped[str | None] = mapped_column(String(32))
+    initial_probability: Mapped[float | None] = mapped_column(Float)
+    initial_model_version: Mapped[str | None] = mapped_column(String(255))
     summary_ko: Mapped[str | None] = mapped_column(Text)
     result_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     input_truncated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -435,6 +438,31 @@ class VLLMTestRun(Base):
     profile: Mapped[VLLMProfile] = relationship(back_populates="test_runs")
 
 
+class TestConfigurationDefaults(Base):
+    __tablename__ = "test_configuration_defaults"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    primary_profile_id: Mapped[str] = mapped_column(ForeignKey("vllm_profiles.id", ondelete="RESTRICT"), nullable=False)
+    verifier_profile_id: Mapped[str | None] = mapped_column(ForeignKey("vllm_profiles.id", ondelete="RESTRICT"))
+    evidence_editor_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    evidence_editor_profile_id: Mapped[str | None] = mapped_column(ForeignKey("vllm_profiles.id", ondelete="RESTRICT"))
+    prompt_policy_version_id: Mapped[str] = mapped_column(ForeignKey("prompt_policy_versions.id", ondelete="RESTRICT"), nullable=False)
+    input_schema_version_id: Mapped[str] = mapped_column(ForeignKey("input_schema_versions.id", ondelete="RESTRICT"), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class GroundTruthImportPreview(Base):
+    __tablename__ = "ground_truth_import_previews"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    test_run_id: Mapped[str] = mapped_column(ForeignKey("test_runs.id", ondelete="RESTRICT"), nullable=False)
+    actor: Mapped[str] = mapped_column(String(255), nullable=False)
+    manifest_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    idempotency_key: Mapped[str | None] = mapped_column(String(120), unique=True)
+    result_json: Mapped[dict | None] = mapped_column(JSON)
+
+
 class TestRun(Base):
     """Named, immutable submission boundary; analyses remain the work queue."""
     __tablename__ = "test_runs"
@@ -445,6 +473,7 @@ class TestRun(Base):
     idempotency_key: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    test_purpose: Mapped[str] = mapped_column(String(32), default="development", server_default="legacy_unknown", nullable=False)
     source_system: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
     filename: Mapped[str | None] = mapped_column(String(255))
     dataset_hash: Mapped[str | None] = mapped_column(String(64))
@@ -599,6 +628,9 @@ class ValidationDatasetWorkingItem(Base):
     input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     reference_verdict: Mapped[str | None] = mapped_column(String(32))
+    reference_origin: Mapped[str] = mapped_column(String(32), default="none", server_default="none", nullable=False)
+    reference_origin_ref_id: Mapped[str | None] = mapped_column(String(36))
+    provenance_json: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}", nullable=False)
     excluded: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     validation_state: Mapped[str] = mapped_column(String(24), default="needs_attention", nullable=False)
     validation_issues_json: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)

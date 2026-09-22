@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..models import AccessAudit, Analysis, AnalysisLabel, TestEvaluation, TestRun, TestRunItem, VLLMProfile
+from ..models import AccessAudit, Analysis, AnalysisLabel, TestEvaluation, TestRun, TestRunItem, VLLMProfile, ValidationDatasetItem
 from ..schemas import AnalysisInput
 from ..test_run_schemas import TestRunCreate, TestRunDetail, TestRunItemResponse, TestRunSummary
 from .analysis import AnalysisIngestError
@@ -322,7 +322,7 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
         completed=processing.get("completed", 0), failed=processing.get("failed", 0),
         execution_mode=run.execution_mode, profile_metadata=run.profile_metadata,
         configuration_snapshot=run.configuration_snapshot_json, configuration_hash=run.configuration_hash,
-        evaluation_mode=run.evaluation_mode, ground_truth=ground_truth,
+        evaluation_mode=run.evaluation_mode, ground_truth=ground_truth, test_purpose=run.test_purpose,
         official_evaluation_pending=run.official_evaluation_pending if not evaluation else False,
         prompt_version=run.prompt_version, model_test_run_id=run.model_test_run_id,
         prompt_policy_version_id=run.prompt_policy_version_id,
@@ -361,6 +361,10 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
         item, analysis = row[0], row[1]
         metadata = metadata_from_row(row._mapping) if analysis else None
         items.append(TestRunItemResponse(
+            ground_truth_source={"dataset_id": ground_truth["dataset_id"],
+                "dataset_revision_id": run.dataset_version_id, "item_version_id": item.dataset_item_version_id,
+                "stable_case_id": db.get(ValidationDatasetItem, item.dataset_item_version_id).item_id}
+                if ground_truth and item.dataset_item_version_id else None,
             **{key: getattr(item, key) for key in ("id", "row_number", "event_id", "difficulty",
                 "test_category", "case_name", "ingest_status")},
             analysis_id=analysis.id if analysis else None, original_analysis_id=item.analysis_id,

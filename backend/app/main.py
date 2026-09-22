@@ -27,6 +27,7 @@ from .api.input_schemas import router as input_schemas_router
 from .api.production_api import router as production_api_router
 from .api.production_configurations import router as production_configurations_router
 from .api.runtime import router as runtime_router
+from .api.test_defaults import router as test_defaults_router
 from .config import Settings, get_settings
 from .browser_security import BrowserSecurityMiddleware
 from .database import Base, build_engine, build_session_factory
@@ -118,6 +119,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
     app.include_router(production_api_router, prefix="/api/v1")
     app.include_router(production_configurations_router, prefix="/api/v1")
     app.include_router(runtime_router, prefix="/api/v1")
+    app.include_router(test_defaults_router, prefix="/api/v1")
 
     def live_openapi():
         # Cache only the static route contracts, never the active definition.

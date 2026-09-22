@@ -27,6 +27,7 @@ class AnalysisFilters(BaseModel):
     sort_order: Literal["asc", "desc"] = "desc"
     service_api_key_id: str | None = Field(default=None, min_length=1, max_length=36)
     include_retries: bool = False
+    initial_comparison: Literal["match", "different", "final_inconclusive", "unavailable"] | None = None
     analysis_purpose: AnalysisPurpose | None = None
     ingest_channel: IngestChannel | None = None
     test_run_id: str | None = Field(default=None, min_length=1, max_length=36)
@@ -88,6 +89,9 @@ def contains_text(column, value: str):
 
 def analysis_conditions(filters: AnalysisFilters, source_system: str | None, evaluation):
     conditions = []
+    if filters.initial_comparison is not None:
+        from .initial_assessment import sql_comparison
+        conditions.append(sql_comparison() == filters.initial_comparison)
     from .test_attempts import test_attempts
     nodes, current = test_attempts(filters.test_run_id)
     if not filters.include_retries:

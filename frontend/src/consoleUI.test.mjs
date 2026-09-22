@@ -101,10 +101,12 @@ test("visible polling pauses in background, resumes without overlap, aborts and 
   stop(); assert.equal(signal.aborted, true); assert.equal(handlers.size, 0); resolve(false);
 });
 
-test("new navigation removes nested settings tabs but preserves Production assignment controls", () => {
+test("R5 navigation uses read-only Production roles and keeps Tests separate", () => {
   const { Settings, AnalysisResultsPage } = load("./App.jsx");
   const agent = renderToStaticMarkup(createElement(Settings, { standalone: true, tab: "agents" }));
-  assert.doesNotMatch(agent, /aria-label="설정 항목"|aria-label="Agent 설정 구분"/); assert.match(agent, /역할별 모델/);
+  assert.doesNotMatch(agent, /aria-label="설정 항목"|aria-label="Agent 설정 구분"/); assert.match(agent, /운영 Agent 역할/);
+  assert.match(agent, /공식 테스트와 운영 반영 검토/);
+  assert.doesNotMatch(agent, /<select|역할 저장/);
   const run = renderToStaticMarkup(createElement(AnalysisResultsPage, { splitNavigation: true, purpose: "test", testState: { view: "runs", runId: null }, setTestState: () => {} }));
   assert.doesNotMatch(run, /aria-label="분석 구분"/); assert.match(run, /테스트 목록/);
 });

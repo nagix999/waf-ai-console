@@ -6,7 +6,7 @@ export const searchFields = [
 ];
 
 export const emptyFilters = {
-  analysis_purpose: "", ingest_channel: "", q: "", search_field: "all",
+  analysis_purpose: "", initial_comparison: "", ingest_channel: "", q: "", search_field: "all",
   status: "", verdict: "", severity: "", waf_vendor: "", waf_action: "",
   review_state: "", model_profile: "", input_truncated: "", src_port: "", dest_port: "",
   confidence_min: "", confidence_max: "", created_from: "", created_to: "",
@@ -49,6 +49,7 @@ export function analysisElapsedTime(item) {
 }
 
 const filterLabels = {
+  initial_comparison: "1차·심층 판정 비교",
   analysis_purpose: "분석 구분", ingest_channel: "유입 경로", q: "검색어", status: "처리 상태", verdict: "판정", severity: "심각도",
   waf_vendor: "WAF 벤더", waf_action: "WAF 조치", review_state: "분석가 리뷰", model_profile: "모델 프로필", input_truncated: "입력 잘림",
   src_port: "출발지 포트", dest_port: "목적지 포트", confidence_min: "최소 신뢰도", confidence_max: "최대 신뢰도",

@@ -3,9 +3,9 @@ import { initialListState } from "./analysisView.js";
 export const consoleGroups = [
   { key: "overview", icon: "dashboard", items: ["status"] },
   { key: "evaluate", icon: "test", items: ["runs", "groundTruth", "quality"] },
-  { key: "configure", icon: "settings", items: ["profiles", "agents", "instructions"] },
+  { key: "configure", icon: "settings", items: ["profiles", "agents", "instructions", "schema"] },
   { key: "operate", icon: "analyses", items: ["runtime", "history", "changes"] },
-  { key: "connect", icon: "server", items: ["api", "keys", "schema", "targets"] },
+  { key: "connect", icon: "server", items: ["api", "keys", "targets"] },
 ];
 const settings = { profiles: "models", agents: "agents", instructions: "instructions", concurrency: "concurrency", keys: "keys", schema: "schema", targets: "egress" };
 export function consoleDestination(state, key) {
@@ -14,15 +14,15 @@ export function consoleDestination(state, key) {
   if (Object.hasOwn(settings, key)) return { ...state, page: "settings", settingsTab: settings[key] };
   if (["quality", "diagnostics", "deployment", "changes"].includes(key)) return { ...state, page: key };
   if (key === "runs") return { ...state, page: "analyses", resultsPurpose: "test", testResults: { ...state.testResults, view: "runs", runId: null } };
-  if (key === "history") return { ...state, page: "analyses", testResults: { ...state.testResults, view: "items", runId: null } };
+  if (key === "history") return { ...state, page: "analyses", resultsPurpose: "production", listState: { ...state.listState, draft: { ...state.listState.draft, analysis_purpose: "production" }, applied: { ...state.listState.applied, analysis_purpose: "production" } }, testResults: { ...state.testResults, view: "items", runId: null } };
   if (key === "groundTruth") return { ...state, page: "datasets", datasetId: null };
   return { ...state, page: { status: "dashboard", run: "test", api: "apiDocs" }[key] || state.page };
 }
 export function consoleLocation(state) {
   if (state.page === "promote") return { item: null, group: null, title: "promote" };
   let item;
-  if (state.page === "detail") item = state.detailReturnPage === "testRun" ? "runs" : state.detailReturnPage === "test" ? "run" : "history";
-  else if (state.page === "analyses") item = state.resultsPurpose === "test" && state.testResults?.view !== "items" ? "runs" : "history";
+  if (state.page === "detail") item = state.resultsPurpose === "test" || state.detailReturnPage === "testRun" ? "runs" : state.detailReturnPage === "test" ? "run" : "history";
+  else if (state.page === "analyses") item = state.resultsPurpose === "test" ? "runs" : "history";
   else if (state.page === "settings") item = Object.keys(settings).find(key => settings[key] === state.settingsTab) || "profiles";
   else item = { dashboard: "status", test: "run", apiDocs: "api", datasets: "groundTruth" }[state.page] || state.page;
   const parent = item === "run" ? "runs" : item === "deployment" ? "changes" : ["diagnostics", "concurrency"].includes(item) ? "runtime" : item;

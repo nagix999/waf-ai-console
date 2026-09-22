@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WAF AI Console workflow</title>
+<style>
+:root{--bg:#f7f8fa;--panel:#fff;--text:#172033;--muted:#6f7888;--line:#e3e7ed;--accent:#202936;--soft:#eef3f7;}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Noto Sans KR",sans-serif}
+main{max-width:840px;margin:auto;padding:40px 20px 56px}
+h1{font-size:28px;margin:0 0 8px} .intro{color:var(--muted);margin:0 0 28px}
+.flow{display:grid;gap:8px} .step{display:grid;grid-template-columns:44px 1fr;gap:14px;align-items:start;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px}
+.num{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:var(--soft);font-weight:800}
+strong{font-size:16px} p{margin:6px 0 0;color:var(--muted);font-size:13px;line-height:1.55}
+.arrow{text-align:center;color:#98a1ad;font-size:20px;line-height:20px}
+.loop{margin-top:26px;border-left:3px solid #7c8796;padding:12px 16px;background:#fff;border-radius:0 12px 12px 0;font-weight:700}
+@media(max-width:480px){main{padding:24px 14px}h1{font-size:23px}.step{padding:15px}}
+</style>
+</head>
+<body><main>
+<h1>WAF AI Console workflow</h1>
+<p class="intro">This is the only lifecycle users need to remember.</p>
+<div class="flow"><div class="step"><div class="num">1</div><div><strong>Prepare Ground Truth</strong><p>Prepare reference cases and publish a version for evaluation.</p></div></div><div class="arrow">↓</div>
+<div class="step"><div class="num">2</div><div><strong>Run a Test</strong><p>Load defaults and run an Official or Development Test.</p></div></div><div class="arrow">↓</div>
+<div class="step"><div class="num">3</div><div><strong>Review Results</strong><p>Focus on mismatches, inconclusive cases, and failures.</p></div></div><div class="arrow">↓</div>
+<div class="step"><div class="num">4</div><div><strong>Fix What Is Needed</strong><p>Update configuration or Ground Truth when necessary.</p></div></div><div class="arrow">↓</div>
+<div class="step"><div class="num">5</div><div><strong>Production Review</strong><p>Compare current Production with the tested configuration and review readiness.</p></div></div><div class="arrow">↓</div>
+<div class="step"><div class="num">6</div><div><strong>Apply to Production</strong><p>Apply the exact tested configuration to Production.</p></div></div><div class="arrow">↓</div>
+<div class="step"><div class="num">7</div><div><strong>Observe Production</strong><p>Review inference history and runtime status.</p></div></div></div>
+<div class="loop">↺ If something needs improvement, run another test</div>
+</main></body></html>

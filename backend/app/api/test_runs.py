@@ -2,7 +2,7 @@
 import hashlib
 from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from pydantic import ValidationError
+from pydantic import ValidationError, BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
@@ -28,6 +28,37 @@ from ..services.vllm_profiles import TargetNotAllowedError
 router = APIRouter(prefix="/test-runs", tags=["test-runs"])
 Admin = Annotated[Principal, Depends(require_scope("admin"))]
 DbSession = Annotated[Session, Depends(get_db)]
+
+
+class GroundTruthImportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    target: Literal["create_new_dataset", "append_to_existing_dataset"]
+    dataset_id: str | None = Field(default=None, max_length=36)
+    expected_working_revision: int | None = Field(default=None, ge=0)
+    new_dataset_name: str | None = Field(default=None, min_length=1, max_length=120)
+    test_run_item_ids: list[str] | None = Field(default=None, min_length=1, max_length=5000)
+
+
+class GroundTruthImportConfirm(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    preview_token: str = Field(min_length=36, max_length=36)
+    idempotency_key: str = Field(min_length=8, max_length=120, pattern=r"^[A-Za-z0-9_.:-]+$")
+
+
+@router.post("/{run_id}/ground-truth-import/preview")
+def import_preview(run_id: str, payload: GroundTruthImportRequest, request: Request, db: DbSession, principal: Admin):
+    from ..services.test_ground_truth_import import preview
+    from .validation_datasets import errors
+    with errors(db):
+        return preview(db, request.app.state.crypto, payload, run_id, principal.username or "admin")
+
+
+@router.post("/{run_id}/ground-truth-import/confirm")
+def import_confirm(run_id: str, payload: GroundTruthImportConfirm, request: Request, db: DbSession, principal: Admin):
+    from ..services.test_ground_truth_import import confirm
+    from .validation_datasets import errors
+    with errors(db):
+        return confirm(db, request.app.state.crypto, payload, run_id, principal.username or "admin")
 
 
 def submit(db, request, principal, **kwargs):
@@ -141,6 +172,14 @@ def evaluations(run_id: str, db: DbSession, _principal: Admin):
         raise HTTPException(404, "test_run_not_found")
     return {"items": [evaluation_record(row) for row in db.scalars(select(TestEvaluation)
         .where(TestEvaluation.test_run_id == run_id).order_by(TestEvaluation.revision.desc()))]}
+
+
+@router.get("/{run_id}/clone-template")
+def clone_template(run_id: str, request: Request, db: DbSession, _principal: Admin):
+    from ..services.test_defaults import clone_template as template
+    from .validation_datasets import errors
+    with errors(db):
+        return template(db, request.app.state.crypto, run_id)
 
 
 @router.get("/{run_id}/retry-eligibility")
