@@ -10,6 +10,8 @@
 .test-run-scope h3 { margin-top: 0; font-size: 14px; }.test-run-cases .filter-grid { margin: 16px 0; }.test-name-field { margin: 16px 0; }
 .test-run-detail .panel-head-inline { flex-wrap: wrap; gap: 12px; }
 .test-run-detail { grid-template-columns: minmax(0, 1fr); }
+.test-run-table-expanded { min-width:1580px; }
+.r3-test-metrics { display:flex; flex-wrap:wrap; gap:4px 12px; white-space:normal; }
 .test-run-detail .dataset-version-bar { min-width: 0; }
 .test-run-header h2 { overflow-wrap: anywhere; }
 .test-run-detail .panel-head-inline .back { flex-shrink: 0; white-space: nowrap; }

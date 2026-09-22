@@ -1,3 +1,4 @@
+import NavigationAction from "./NavigationAction.jsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api.js";
 import { Icon } from "./Icon.jsx";
@@ -105,7 +106,7 @@ export default function PromptSettings() {
           <p className="prompt-change-note">{selected.change_note}</p>
           <pre className="prompt-policy-text" aria-label="저장된 판정 지침">{visiblePromptText(selected.policy_text)}</pre>
           <div className="prompt-actions"><button type="button" className="secondary" disabled={blocked} onClick={() => clone(selected)}><Icon name="copy" size={16} />{draft ? "작성 중인 버전 열기" : "새 버전 작성"}</button>
-            <a href="#evaluate/tests/new">공식 테스트 만들기 →</a><MoreActions label="지침 버전 작업"><button type="button" className="secondary" onClick={() => setView("compare")}>변경 비교</button><button type="button" className="text-button" onClick={() => setView("technical")}>기술정보</button></MoreActions></div>
+            <NavigationAction href="#evaluate/tests/new">공식 테스트 만들기</NavigationAction><MoreActions label="지침 버전 작업"><button type="button" className="secondary" onClick={() => setView("compare")}>변경 비교</button><button type="button" className="text-button" onClick={() => setView("technical")}>기술정보</button></MoreActions></div>
         </section>}
 
         <Dialog open={draftOpen && Boolean(draft)} title="새 프롬프트 버전 작성" onClose={() => { if (!busy) setDraftOpen(false); }} className="prompt-settings prompt-dialog">{draft && <form className="prompt-editor" onSubmit={save} noValidate>

@@ -1,3 +1,4 @@
+import NavigationAction from "./NavigationAction.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { api } from "./api.js";
 import { decisionExplanation, provisionalAnalysisNotice, threatCategoryLabel } from "./decisionExplanation.js";
@@ -195,14 +196,14 @@ export function initialTestResultsState() {
 }
 
 // Test-run searches and item filters never become Production analysis filters.
-export function AnalysisResultsPage({ purpose, onScopeChange, state, setState, testState, setTestState, onSelectRun, onOpenRunItem, onOpen, onUnauthorized, onShowTestRuns, onShowAllTestItems, onCaseChange, onPromote, onClone, onGroundTruth, splitNavigation = false }) {
+export function AnalysisResultsPage({ purpose, onScopeChange, state, setState, testState, setTestState, onSelectRun, onOpenRunItem, onOpen, onUnauthorized, onShowTestRuns, onShowAllTestItems, onCaseChange, onPromote, onClone, onGroundTruth, splitNavigation = false, actions }) {
   const setPart = key => update => setTestState(current => ({ ...current, [key]: typeof update === "function" ? update(current[key]) : update }));
   const showRuns = onShowTestRuns || (() => setTestState(current => ({ ...current, view: "runs", runId: null })));
   const showAllTestItems = onShowAllTestItems || (() => setTestState(current => ({ ...current, view: "items", runId: null, items: initialListState("test") })));
   if (purpose !== "test") return <AnalysisList purpose="production" key="production" state={state} setState={setState} onOpen={onOpen} onUnauthorized={onUnauthorized} />;
   if (!testState.runId && testState.view === "items") return <AnalysisList key="test-items" state={testState.items} setState={setPart("items")} onScopeChange={onScopeChange} onShowTestRuns={showRuns} onOpen={onOpen} onUnauthorized={onUnauthorized} />;
   return <div className="page-stack test-results-page">
-    <div className="analysis-list-toolbar">{!splitNavigation && <AnalysisScopeTabs purpose="test" onChange={onScopeChange} />}{!testState.runId && <button type="button" className="secondary" onClick={showAllTestItems}>테스트 문항 전체 보기</button>}</div>
+    <div className="analysis-list-toolbar">{!splitNavigation && <AnalysisScopeTabs purpose="test" onChange={onScopeChange} />}{!testState.runId && <NavigationAction onClick={showAllTestItems}>테스트 문항 전체 보기</NavigationAction>}{actions && <div className="v5-list-action">{actions}</div>}</div>
     {testState.runId
       ? <TestRunDetail key={testState.runId} id={testState.runId} caseId={testState.caseId} onCaseChange={onCaseChange} onPromote={onPromote} onClone={onClone} onGroundTruth={onGroundTruth} filters={testState.filters} onFiltersChange={setPart("filters")} onBack={showRuns} onOpen={onOpenRunItem} onUnauthorized={onUnauthorized} />
       : <TestRunHistory state={testState.history} onStateChange={setPart("history")} onSelect={onSelectRun} onViewAnalyses={showAllTestItems} onUnauthorized={onUnauthorized} />}
@@ -312,7 +313,7 @@ export function AnalysisList({ state, setState, onOpen, onUnauthorized, onScopeC
       {!!activeTags.length && <div className="applied-filter-tags" aria-label="적용된 검색 조건"><span>적용 중</span>{activeTags.map((tag) => <button type="button" className="filter-tag" key={tag.key} title={`${tag.label}: ${tag.value}`} aria-label={`${tag.label}: ${tag.value} 조건 해제`} onClick={() => tag.key === "analysis_purpose" && onScopeChange ? scope("") : setState((current) => removeAppliedFilter(current, tag.key))}><span>{tag.label}: {tag.value}</span><span aria-hidden="true">×</span></button>)}</div>}
     </form>
     {error && <div className="error" role="alert">{error}</div>}
-    {purpose === "production" && <div className="panel"><SelectFilter label={w("1차·심층 판정 비교", "Initial vs Deep Assessment")} name="initial_comparison" value={state.draft.initial_comparison || ""} onChange={event => { const value = event.target.value; setState(current => ({ ...current, offset: 0, draft: { ...current.draft, initial_comparison: value }, applied: { ...current.applied, initial_comparison: value } })); }} options={[["match", w("일치", "Match")], ["different", w("판정 다름", "Different")], ["final_inconclusive", w("심층 판정 보류", "Deep Assessment inconclusive")], ["unavailable", w("1차 판정 없음", "No Initial Assessment")]]} /></div>}
+    {purpose === "production" && <div className="panel initial-comparison-filter"><SelectFilter label={w("1차·심층 판정 비교", "Initial vs Deep Assessment")} name="initial_comparison" value={state.draft.initial_comparison || ""} onChange={event => { const value = event.target.value; setState(current => ({ ...current, offset: 0, draft: { ...current.draft, initial_comparison: value }, applied: { ...current.applied, initial_comparison: value } })); }} options={[["match", w("일치", "Match")], ["different", w("판정 다름", "Different")], ["final_inconclusive", w("심층 판정 보류", "Deep Assessment inconclusive")], ["unavailable", w("1차 판정 없음", "No Initial Assessment")]]} /></div>}
     <EvaluationOverview summary={data.evaluation_summary} loading={loading} error={error} />
     <AnalysisSelectionActions ids={selection.ids} onClear={selection.clear} onSaved={() => setLabelRefresh(value => value + 1)} />
     <AnalysisTable items={data.items} total={data.total} loading={loading} onOpen={onOpen} purpose={state.applied.analysis_purpose} selection={selection} sorting={serverSorting(query.sort_by, query.sort_order)} onSortingChange={update => setState(current => ({ ...current, ...changedSort(update, serverSorting(query.sort_by, query.sort_order)) }))} />
@@ -611,6 +612,7 @@ export function Settings({ onProductionChange, onViewDataset, tab: controlledTab
 }
 
 export function ModelSettings({ onProductionChange, onInternalEgress, onViewDataset, onConfigureAgents }) {
+  const w = useR5Words();
   const [formOpen, setFormOpen] = useState(false);
   const [managedId, setManagedId] = useState(null);
   const [profiles, setProfiles] = useState([]);
@@ -751,7 +753,7 @@ export function ModelSettings({ onProductionChange, onInternalEgress, onViewData
       <FullValidationDialog state={fullValidation} controller={fullValidationController.current} />
       <QuickValidationDialog key={`${quickValidation.profile?.id}-${quickValidation.profile?.profile_fingerprint}`} profile={quickValidation.profile} open={quickValidation.open} onClose={() => setQuickValidation(value => ({ ...value, open: false }))} onSubmitted={() => { setQuickValidation(value => ({ ...value, open: false })); setMessage("빠른 테스트를 접수했습니다. 모델 지정은 변경하지 않았습니다."); void loadProfiles(); }} />
       <ModelAssignmentDialog state={assignment} controller={assignmentController.current} />
-      <div className="workspace-context"><p className="ux-muted">연결 검증은 이 화면에서, 역할별 배정은 Agent Roles에서 관리합니다.</p><a href="#connect/vllm-targets">vLLM 연결 대상 →</a><button className="secondary" disabled={Boolean(busy)} onClick={onConfigureAgents}>Agent Roles</button></div>
+      <div className="workspace-context"><p className="ux-muted">{w("여기서 모델 연결을 검증합니다. 운영 배정은 공식 테스트와 운영 반영 검토를 거칩니다.", "Validate model connections here. Production assignments require an Official Test and Production Review.")}</p><NavigationAction href="#connect/vllm-targets">{w("vLLM 연결", "vLLM Targets")}</NavigationAction><NavigationAction disabled={Boolean(busy)} onClick={onConfigureAgents}>{w("Agent 역할", "Agent Roles")}</NavigationAction></div>
       {message && <p className="notice" role="status">{message}</p>}
       <section className="panel profile-section">
         <div className="panel-head"><div><h2>모델 목록</h2><p className="ux-muted">현재 설정으로 전체 검증을 통과해야 운영·테스트에 지정할 수 있습니다.</p></div><div className="ux-toolbar"><button type="button" className="primary" disabled={Boolean(busy)} onClick={() => { if (editingProfile) resetForm(); setFormOpen(true); }}>모델 추가</button><button type="button" className="secondary" disabled={Boolean(busy)} onClick={loadProfiles}>새로고침</button></div></div>
@@ -784,14 +786,14 @@ export function ModelSettings({ onProductionChange, onInternalEgress, onViewData
                     {profile.status === "disabled"
                       ? <button className="secondary small" disabled={Boolean(busy) || Boolean(internalTargetIssue)} onClick={() => act(`e-${profile.id}`, () => api.enableModelProfile(profile.id))}>활성화</button>
                       : <button className="secondary small" disabled={Boolean(busy) || Boolean(profilesError) || profile.status === "production" || Boolean(profile.agent_roles?.length)} onClick={() => openAssignment(profile, "disable")}>비활성화</button>}
-                  </div>{assignmentIssue && <p className="profile-assignment-reason">지정 불가: {assignmentIssue}</p>}{roleAssigned(profile) && <p className="profile-assignment-reason">배정 중인 프로필은 편집할 수 없습니다. 운영 모델은 새 프로필을 테스트·승격해 교체하고, Test 모델은 Agent Roles에서 배정을 해제하세요.</p>}{message && <p className="notice" role="status">{message}</p>}{managedId === profile.id && latest && <TestResult profile={profile} test={latest} onViewDataset={onViewDataset} />}</Dialog></>
+                  </div>{assignmentIssue && <p className="profile-assignment-reason">지정 불가: {assignmentIssue}</p>}{roleAssigned(profile) && <p className="profile-assignment-reason">사용 중인 프로필은 편집할 수 없습니다. 새 프로필을 검증한 뒤 기본 테스트 설정에서 선택하세요. 운영 모델 교체에는 공식 테스트와 운영 반영 검토가 필요합니다.</p>}{message && <p className="notice" role="status">{message}</p>}{managedId === profile.id && latest && <TestResult profile={profile} test={latest} onViewDataset={onViewDataset} />}</Dialog></>
                 ] };
           })} empty={profilesLoading ? "모델을 불러오는 중…" : profilesError ? "모델 목록을 확인할 수 없습니다." : profiles.length ? "검색 조건에 맞는 모델이 없습니다." : "등록된 모델이 없습니다."} />
       </section>
 
       <Dialog open={formOpen} title={editingId ? "모델 수정" : "모델 추가"} onClose={() => { if (!busy) setFormOpen(false); }}>
       <form className="panel form-panel profile-form" onSubmit={save}>
-        <div className="panel-head"><div><h2>{editingId ? "LLM 프로필 편집" : "LLM 프로필 추가"}</h2><small>등록·수정만으로 모델을 호출하지 않습니다. 전체 검증과 Production·Test 지정은 별도 작업입니다.</small></div>{editingId && <button type="button" className="secondary small" disabled={Boolean(busy)} onClick={resetForm}>취소</button>}</div>
+        <div className="panel-head"><p className="ux-muted">{w("등록·수정만으로 모델을 호출하지 않습니다. 검증과 운영 반영은 별도 작업입니다.", "Saving a profile does not call the model. Validation and applying to Production are separate actions.")}</p>{editingId && <button type="button" className="secondary small" disabled={Boolean(busy)} onClick={resetForm}>취소</button>}</div>
         {editingAssigned && <p className="error" role="alert">편집 중인 프로필이 Production 또는 Test로 지정되었습니다. 지정 중에는 수정할 수 없습니다.</p>}
         {message && <p className="notice" role="status">{message}</p>}
         <fieldset className="profile-fields" disabled={Boolean(busy) || editingAssigned}>
@@ -941,7 +943,7 @@ function ConsoleApp() {
     {["runtime", "diagnostics"].includes(page) && <RuntimeWorkspace onOpen={openDetail} />}
     {["deployment", "changes"].includes(page) && <Activity deploymentOnly={page === "deployment"} />}
     {page === "promote" && <Promotion onOpenTest={() => openTestRun(screen.promoteRunId)} fromHome={screen.promotionOrigin === "dashboard"} initialRunId={screen.promoteRunId} onNavigate={navigate} onBack={() => screen.promotionOrigin === "dashboard" ? navigate("status") : openTestRun(screen.promoteRunId)} />}
-    {page === "analyses" && <>{resultsPurpose === "test" && testResults.view === "runs" && !testResults.runId && <div className="v5-list-action"><TestDefaults agentMode={mode} /><button className="primary" onClick={() => navigate("run")}>+ {t("run")}</button></div>}<AnalysisResultsPage onClone={id => move(current => ({ ...current, page: "test", cloneRunId: id }))} onGroundTruth={(id, caseId) => move(current => ({ ...current, page: "datasets", datasetId: id, groundTruthCaseId: caseId, groundTruthState: undefined }))} onCaseChange={caseId => caseId ? navigation.navigate(current => ({ ...current, testResults: { ...current.testResults, caseId } })) : navigation.backTo(current => current.page === "analyses" && current.testResults.runId === testResults.runId && !current.testResults.caseId, current => ({ ...current, testResults: { ...current.testResults, caseId: null } }))} onPromote={id => move(current => ({ ...current, page: "promote", promoteRunId: id, promotionOrigin: "test" }))} splitNavigation purpose={resultsPurpose} onScopeChange={changeResultsScope} state={listState} setState={setListState} testState={testResults} setTestState={setTestResults} onSelectRun={openTestRun} onOpenRunItem={openRunItem} onOpen={openDetail} onUnauthorized={onUnauthorized} onShowTestRuns={backToTests} onShowAllTestItems={showAllTestItems} /></>}
+    {page === "analyses" && <><AnalysisResultsPage actions={resultsPurpose === "test" && testResults.view === "runs" && !testResults.runId ? <><TestDefaults agentMode={mode} /><button className="primary" onClick={() => navigate("run")}>+ {t("run")}</button></> : null} onClone={id => move(current => ({ ...current, page: "test", cloneRunId: id }))} onGroundTruth={(id, caseId) => move(current => ({ ...current, page: "datasets", datasetId: id, groundTruthCaseId: caseId, groundTruthState: undefined }))} onCaseChange={caseId => caseId ? navigation.navigate(current => ({ ...current, testResults: { ...current.testResults, caseId } })) : navigation.backTo(current => current.page === "analyses" && current.testResults.runId === testResults.runId && !current.testResults.caseId, current => ({ ...current, testResults: { ...current.testResults, caseId: null } }))} onPromote={id => move(current => ({ ...current, page: "promote", promoteRunId: id, promotionOrigin: "test" }))} splitNavigation purpose={resultsPurpose} onScopeChange={changeResultsScope} state={listState} setState={setListState} testState={testResults} setTestState={setTestResults} onSelectRun={openTestRun} onOpenRunItem={openRunItem} onOpen={openDetail} onUnauthorized={onUnauthorized} onShowTestRuns={backToTests} onShowAllTestItems={showAllTestItems} /></>}
     {page === "test" && <TestAnalysisPage key={screen.cloneRunId || "new"} cloneRunId={screen.cloneRunId} onViewTests={viewTests} onOpen={openTest} selectedRunId={null} onSelectRun={openTestRun} agentMode={mode} onConfigureModels={() => navigate("agents")} />}
     {page === "apiDocs" && <ProductionApi />}
     {page === "datasets" && <GroundTruthWorkspace initialCaseId={screen.groundTruthCaseId} id={screen.datasetId} initialState={screen.groundTruthState} onSelect={id => navigation.remember(current => ({ ...current, page: "datasets", datasetId: id, groundTruthCaseId: undefined, groundTruthState: undefined }))} />}

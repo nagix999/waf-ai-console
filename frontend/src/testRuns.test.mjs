@@ -210,7 +210,9 @@ test("test and case navigation uses immutable IDs even when names repeat and leg
   render(CaptureRows);
   buttons(cases).find(button => button.props.children === "문항명").props.onClick(); assert.deepEqual(opened, ["analysis-id"]);
   const empty = TestRunHistoryEmpty({ query: { q: "", offset: 0 }, onViewAnalyses: () => legacy++ });
-  buttons(empty).find(button => button.props.children === "개별 테스트 분석 보기 →").props.onClick(); assert.equal(legacy, 1);
+  const navigation = empty.props.children.find(child => child?.props?.children === "개별 테스트 분석 보기");
+  assert.ok(navigation, "The legacy list remains reachable through the shared navigation action");
+  navigation.props.onClick(); assert.equal(legacy, 1);
 });
 
 const deferredRead = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };

@@ -1,3 +1,4 @@
+import NavigationAction from "./NavigationAction.jsx";
 import { Table } from "./DataTable.jsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api.js";
@@ -131,7 +132,7 @@ export default function ProductionApi() {
     {loading && <p className="loading" role="status">현재 운영 스키마로 정의서를 불러오는 중…</p>}
     {error && <div className="error" role="alert">현재 입력 스키마를 확인하지 못했습니다. 과거 정의서를 현재 기준으로 표시하지 않습니다. 새로고침해 다시 확인하세요.</div>}
     {downloadError && <p className="error" role="alert">{downloadError}</p>}
-    {reference && <div className="api-source-note">입력 스키마 v{reference.input_schema.version_number}<a href="#configure/input-schema">스키마 보기 →</a><button type="button" className="text-button" onClick={() => setTechnical(true)}>기술정보</button></div>}
+    {reference && <div className="api-source-note">입력 스키마 v{reference.input_schema.version_number}<NavigationAction href="#configure/input-schema">스키마 보기</NavigationAction><button type="button" className="text-button" onClick={() => setTechnical(true)}>기술정보</button></div>}
     <div className="api-doc-notice"><Icon name="shield" size={18} /><p>Swagger의 <strong>Try it out</strong>은 실제 API를 호출합니다. 로그인 중에는 API Key보다 관리자 권한이 우선하므로 호출할 API를 확인하세요.</p></div>
     {reference && <div className="api-doc-layout">
       <div className="api-doc-index panel">

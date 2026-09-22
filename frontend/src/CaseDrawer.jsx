@@ -1,3 +1,4 @@
+import NavigationAction from "./NavigationAction.jsx";
 import { useEffect, useState } from "react";
 import { api } from "./api.js";
 import Dialog from "./Dialog.jsx";
@@ -17,7 +18,7 @@ export default function CaseDrawer({ id, onClose, onOpen, groundTruthSource, onG
   const verdict = detail && finalValue(detail, "verdict");
   const names = { true_positive: w("정탐", "True positive"), false_positive: w("오탐", "False positive"), inconclusive: w("보류", "Inconclusive"), failed: w("실행 실패", "Failed"), pending: w("대기", "Pending"), processing: w("분석 중", "Processing"), completed: w("완료", "Completed") };
   return <Dialog open={Boolean(id)} title={w("문항 결과", "Case result")} className="r3-case-drawer" onClose={onClose}>
-    <div className="ux-toolbar"><button className="text-button" onClick={() => onOpen(id)}>{w("크게 보기", "Open full analysis")} ↗</button>{groundTruthSource && onGroundTruth && <button className="text-button" onClick={() => onGroundTruth(groundTruthSource.dataset_id, groundTruthSource.stable_case_id)}>{w("정답 데이터에서 열기", "Open in Ground Truth")} →</button>}</div>
+    <div className="ux-toolbar"><button className="text-button" onClick={() => onOpen(id)}>{w("크게 보기", "Open full analysis")} ↗</button>{groundTruthSource && onGroundTruth && <NavigationAction onClick={() => onGroundTruth(groundTruthSource.dataset_id, groundTruthSource.stable_case_id)}>{w("정답 데이터에서 열기", "Open in Ground Truth")}</NavigationAction>}</div>
     {onImport && <button className="text-button" onClick={onImport}>{w("이 사례를 정답 데이터에 추가", "Add This Case to Ground Truth")}</button>}
     {error && <p className="error" role="alert">{w("결과를 조회하지 못했습니다. 다시 열어 주세요.", "Could not load the result. Please reopen it.")}</p>}
     {!detail && !error && <p role="status">{w("조회 중…", "Loading…")}</p>}

@@ -1,3 +1,4 @@
+import NavigationAction from "./NavigationAction.jsx";
 import { Table } from "./DataTable.jsx";
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api.js";
@@ -73,7 +74,7 @@ export default function AgentSettings({ onModels, onProductionChange, standalone
       })}<label className="checkbox-row"><input type="checkbox" checked={draft[purpose].evidence_editor_enabled === true} onChange={event => controller.current?.change(purpose, "evidence_editor_enabled", event.target.checked)} />근거·확인사항 정리 사용</label>
       <label>정리 모델<select disabled={!draft[purpose].evidence_editor_enabled} value={draft[purpose].evidence_editor_profile_id || ""} onChange={event => controller.current?.change(purpose, "evidence_editor_profile_id", event.target.value)}><option value="">Primary와 동일</option>{catalog.profiles.map(p => <option key={p.id} value={p.id} disabled={!p.can_assign}>{p.name}{!p.can_assign ? " · 검증 필요" : ""}</option>)}</select></label>
       <small className="ux-muted">중복 설명을 정리하며 판정은 바꾸지 않습니다. 최대 1회 호출하고, 실패하면 원래 근거를 표시합니다.</small>
-      </fieldset>)}</div><p className="ux-muted">Production은 후보 구성으로 테스트하고 발행된 Ground Truth로 공식 평가한 뒤 승격합니다. Test 기본값 저장은 운영과 기존 결과를 변경하지 않습니다.</p><div className="ux-toolbar"><a href="#evaluate/tests/new">후보 테스트 만들기 →</a><a href="#evaluate/tests">공식 평가 테스트 보기 →</a><a href="#operate/runtime">동시 처리 설정 →</a></div>
+      </fieldset>)}</div><p className="ux-muted">Production은 후보 구성으로 테스트하고 발행된 Ground Truth로 공식 평가한 뒤 승격합니다. Test 기본값 저장은 운영과 기존 결과를 변경하지 않습니다.</p><div className="ux-toolbar"><NavigationAction href="#evaluate/tests/new">후보 테스트 만들기</NavigationAction><NavigationAction href="#evaluate/tests">공식 평가 테스트 보기</NavigationAction><NavigationAction href="#operate/runtime">동시 처리 설정</NavigationAction></div>
       {issue && <p className="notice">{issue}</p>}<button className="primary" disabled={disabled || Boolean(issue) || !changed} onClick={() => { setAcknowledged(false); setConfirm(true); }}>Test 기본값 저장</button></>}
     </section></div>
     <div hidden={section !== "instructions"}>{instructionsVisited && <PromptSettings />}</div>{section === "diagnostics" && <Diagnostics />}

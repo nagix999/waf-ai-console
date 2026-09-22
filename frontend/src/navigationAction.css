@@ -1,0 +1,12 @@
+:root[data-theme] .navigation-action:is(button,a) {
+  display:inline-flex; align-items:center; justify-content:space-between; gap:10px;
+  min-height:34px; width:fit-content; max-width:100%; justify-self:start; padding:6px 10px; border:1px solid color-mix(in srgb,var(--accent) 20%,var(--line));
+  border-radius:8px; background:color-mix(in srgb,var(--accent-soft) 65%,var(--panel));
+  color:var(--accent); font-size:12px; font-weight:600; line-height:1.5; text-align:left;
+  text-decoration:none; white-space:normal; vertical-align:middle; cursor:pointer;
+}
+.navigation-action > span:first-child { min-width:0; overflow-wrap:anywhere; }
+.navigation-action-arrow { flex:0 0 auto; font-size:16px; line-height:1; }
+:root[data-theme] .navigation-action:is(button,a):hover:not(:disabled) { color:var(--accent-hover); background:var(--accent-soft); border-color:var(--accent); }
+:root[data-theme] .navigation-action:is(button,a):focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+.navigation-action:disabled { cursor:not-allowed; opacity:.48; }

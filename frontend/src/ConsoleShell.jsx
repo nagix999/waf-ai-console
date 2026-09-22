@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Icon } from "./Icon.jsx";
 import Dialog from "./Dialog.jsx";
 import { useConsolePreferences } from "./consolePreferences.jsx";
@@ -7,19 +8,33 @@ import packageInfo from "../package.json";
 
 // A disclosure, not an ARIA menu: its native buttons retain normal Tab order.
 export function ConsolePopover({ label, trigger, children, className = "", disabled = false }) {
-  const [open, setOpen] = useState(false); const ref = useRef(null); const button = useRef(null); const id = useId();
+  const [open, setOpen] = useState(false); const ref = useRef(null); const button = useRef(null); const content = useRef(null); const id = useId();
+  const [position, setPosition] = useState({ left: 8, top: 8 });
+  // A portal keeps row actions usable inside horizontally scrolling tables.
+  // Within a modal it stays in that dialog, retaining native focus containment.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const anchor = button.current?.getBoundingClientRect(), popup = content.current?.getBoundingClientRect();
+      if (!anchor || !popup) return;
+      setPosition({ left: Math.max(8, Math.min(anchor.right - popup.width, innerWidth - popup.width - 8)),
+        top: Math.max(8, Math.min(anchor.bottom + 8 + popup.height > innerHeight ? anchor.top - popup.height - 8 : anchor.bottom + 8, innerHeight - popup.height - 8)) });
+    };
+    place(); window.addEventListener("resize", place); window.addEventListener("scroll", place, true);
+    return () => { window.removeEventListener("resize", place); window.removeEventListener("scroll", place, true); };
+  }, [open]);
   useEffect(() => {
     if (!open) return;
-    ref.current?.querySelector(".console-popover-content button:not(:disabled)")?.focus();
-    const outside = event => { if (!ref.current?.contains(event.target)) setOpen(false); };
+    content.current?.querySelector("button:not(:disabled)")?.focus();
+    const outside = event => { if (!ref.current?.contains(event.target) && !content.current?.contains(event.target)) setOpen(false); };
     const escape = event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setOpen(false); button.current?.focus(); } };
-    document.addEventListener("pointerdown", outside); document.addEventListener("keydown", escape);
-    return () => { document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape); };
+    document.addEventListener("pointerdown", outside); document.addEventListener("focusin", outside); document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("pointerdown", outside); document.removeEventListener("focusin", outside); document.removeEventListener("keydown", escape); };
   }, [open]);
   const close = () => { setOpen(false); button.current?.focus(); };
-  return <div className={`console-popover ${className}`} ref={ref} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}>
+  return <div className={`console-popover ${className}`} ref={ref}>
     <button ref={button} className="console-control" type="button" disabled={disabled} aria-label={label} aria-expanded={open} aria-controls={id} onClick={() => setOpen(value => !value)}>{trigger}</button>
-    {open && <div className="console-popover-content" id={id} aria-label={label}>{children(close)}</div>}
+    {open && createPortal(<div ref={content} className={`console-popover-content console-floating-popover ${className ? `${className}-content` : ""}`} style={position} id={id} aria-label={label}>{children(close)}</div>, ref.current?.closest("dialog") || document.body)}
   </div>;
 }
 

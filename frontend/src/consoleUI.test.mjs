@@ -110,3 +110,15 @@ test("R5 navigation uses read-only Production roles and keeps Tests separate", (
   const run = renderToStaticMarkup(createElement(AnalysisResultsPage, { splitNavigation: true, purpose: "test", testState: { view: "runs", runId: null }, setTestState: () => {} }));
   assert.doesNotMatch(run, /aria-label="분석 구분"/); assert.match(run, /테스트 목록/);
 });
+
+test("navigation actions preserve native links, non-submitting buttons, disabled state and escaped labels", () => {
+  const NavigationAction = load("./NavigationAction.jsx").default;
+  const link = renderToStaticMarkup(createElement(NavigationAction, { href: "#operate/runtime" }, "실행 상태"));
+  assert.match(link, /<a href="#operate\/runtime"/); assert.match(link, /navigation-action-arrow/);
+  assert.doesNotMatch(link, /role="button"|type="button"/);
+  const button = renderToStaticMarkup(createElement(NavigationAction, { disabled: true, "aria-label": "Open source Test" }, "<unsafe>"));
+  assert.match(button, /<button type="button" disabled=""/); assert.match(button, /aria-label="Open source Test"/);
+  assert.match(button, /&lt;unsafe&gt;/); assert.doesNotMatch(button, /<unsafe>/);
+  let calls = 0; const action = NavigationAction({ onClick: () => calls++, children: "평가 상세" });
+  action.props.onClick(); assert.equal(calls, 1);
+});

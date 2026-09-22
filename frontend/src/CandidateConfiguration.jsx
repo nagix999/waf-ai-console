@@ -1,3 +1,4 @@
+import NavigationAction from "./NavigationAction.jsx";
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api.js";
 import { candidateIssue, candidateUsesExternal, candidatePrefill } from "./candidateConfiguration.js";
@@ -46,6 +47,6 @@ export default function CandidateConfiguration({ agentMode, busy, onChange = noo
     {issue && !loading && <p className="notice">{w("모델 검증 상태와 지침·입력 스키마 선택을 확인하세요.", "Check model validation and select instructions and input schema.")}</p>}
     {error && <p role="alert" className="error">{error === "stale" ? w("기본 설정이 변경됐습니다. 다시 불러와 확인하세요.", "Defaults changed. Reload and review.") : w("설정을 읽거나 저장하지 못했습니다.", "Could not read or save the configuration.")}</p>}
     {candidateUsesExternal(catalog, value) && <p className="notice">{w("OpenAI 사용 시 HTTP 원문·Cookie가 외부로 전송되며 비용이 발생할 수 있습니다.", "OpenAI sends raw HTTP and cookies externally and may incur charges.")}</p>}
-    <div className="action-row"><button type="button" className="text-button" disabled={loading || busy || saving} onClick={() => setReload(n => n + 1)}>{t("retry")}</button><a href="#configure/instructions">{t("instructions")} →</a><a href="#configure/input-schema">{t("schema")} →</a>{editDefaults && <button type="button" className="primary" disabled={loading || saving || Boolean(issue)} onClick={save}>{saving ? w("저장 중…", "Saving…") : w("기본 설정 저장", "Save defaults")}</button>}</div>
+    <div className="action-row"><button type="button" className="text-button" disabled={loading || busy || saving} onClick={() => setReload(n => n + 1)}>{t("retry")}</button><NavigationAction href="#configure/instructions">{t("instructions")}</NavigationAction><NavigationAction href="#configure/input-schema">{t("schema")}</NavigationAction>{editDefaults && <button type="button" className="primary" disabled={loading || saving || Boolean(issue)} onClick={save}>{saving ? w("저장 중…", "Saving…") : w("기본 설정 저장", "Save defaults")}</button>}</div>
   </section>;
 }
