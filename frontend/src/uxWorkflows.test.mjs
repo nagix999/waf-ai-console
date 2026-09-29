@@ -43,7 +43,7 @@ test("rerun payload requires explicit confirmation and backend error text never 
   assert.deepEqual(retryPayload("request-1234", true), { idempotency_key: "request-1234", cost_acknowledged: true });
   assert.ok(!retryError("<img src=x onerror=alert(1)>").includes("<img"));
   assert.match(retryError("retry_original_profile_changed"), /같은 조건/);
-  assert.match(retryError("retry_event_reference_contamination"), /답안/);
+  assert.match(retryError("retry_event_reference_contamination"), /참고 판정/);
 });
 
 test("key dashboard and rerun API bindings preserve scope, cache and explicit writes", async () => {

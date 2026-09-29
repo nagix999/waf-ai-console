@@ -34,8 +34,8 @@ export default function DatasetRevisionBrowser({ datasetId, versions }) {
     {error && <p role="alert" className="error">{error}</p>}
     {data && <><DataTable label={w("리비전 문항", "Revision cases")} data={data.items} columns={[
       { id: "name", header: w("문항", "Case"), render: row => <button className="text-button" onClick={() => setSelected(row)}>{row.case_name || w("이름 없는 문항", "Untitled case")}</button> },
-      { id: "answer", header: w("답안", "Answer"), render: row => verdict[row.reference_verdict] || "—" },
-      { id: "source", header: w("출처", "Source"), render: row => row.internal_only ? w("내부 운영", "Internal Production") : row.source_kind === "synthetic_expected" ? w("기대 답안", "Expected answer") : w("참고 답안", "Reference answer") },
+      { id: "answer", header: w("기대 판정", "Expected Verdict"), render: row => verdict[row.reference_verdict] || "—" },
+      { id: "source", header: w("출처", "Source"), render: row => row.internal_only ? w("내부 운영", "Internal Production") : row.source_kind === "synthetic_expected" ? w("기대 판정", "Expected answer") : w("참고 판정", "Reference answer") },
     ]} /><Pagination total={data.filtered_total} offset={offset} limit={25} onOffsetChange={setOffset} /></>}
     {item && <div className="r3-history-detail"><h3>{item.case_name || w("문항 상세", "Case details")}</h3><p>{verdict[item.reference_verdict] || "—"} · {item.comment || w("메모 없음", "No note")}</p><TextInspector label={w("당시 입력", "Saved input")} value={item.event} /><TextInspector label={w("당시 필드 정의", "Saved field definitions")} value={item.field_metadata || item.input_schema} /></div>}
   </section>;

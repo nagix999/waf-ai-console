@@ -26,8 +26,8 @@ test("official and reference overviews identify their basis without implying Pro
   const Overview = load("./EvaluationOverview.jsx").default;
   const summary = { total: 3, binary_evaluable: 2, binary_decided: 1, metrics: { accuracy: 1, coverage: .5 } };
   const official = render(Overview, { summary, evaluationMode: "ground_truth" });
-  assert.match(official, /공식 평가 지표/); assert.match(official, /실행 시 고정한 승인 답안 기준/); assert.match(official, /운영 전체 정확도는 아닙니다/);
-  const reference = render(Overview, { summary }); assert.match(reference, /참고 답안 표본/); assert.doesNotMatch(reference, /공식 평가 지표/);
+  assert.match(official, /공식 평가 지표/); assert.match(official, /실행 시 고정한 승인 기대 판정 기준/); assert.match(official, /운영 전체 정확도는 아닙니다/);
+  const reference = render(Overview, { summary }); assert.match(reference, /참고 판정 표본/); assert.doesNotMatch(reference, /공식 평가 지표/);
   const missing = render(Overview, { summary: { metrics: {} } }); assert.match(missing, /확정 —건/); assert.doesNotMatch(missing, /확정 0건/);
 });
 

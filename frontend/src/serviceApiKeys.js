@@ -122,7 +122,7 @@ export function createServiceKeysController({ api, onChange }) {
     try {
       await api.deleteServiceApiKey(item.id, item.purpose === "test" ? undefined : options);
       if (disposed) return false;
-      publish({ catalog: { items: state.catalog.items.filter(value => value.id !== item.id) }, notice: options.delete_analyses ? "API 키와 해당 키로 접수한 분석을 삭제했습니다. 감사 이력과 검증 데이터셋 사본은 보존됩니다." : "API 키를 삭제했습니다. 분석 결과와 감사 이력은 보존됩니다.", ...(state.issued?.item.id === item.id ? { issued: null } : {}), ...(state.editing?.id === item.id ? { editing: null, editName: "" } : {}) });
+      publish({ catalog: { items: state.catalog.items.filter(value => value.id !== item.id) }, notice: options.delete_analyses ? "API 키와 해당 키로 접수한 분석을 삭제했습니다. 감사 이력과 평가 데이터셋 사본은 보존됩니다." : "API 키를 삭제했습니다. 분석 결과와 감사 이력은 보존됩니다.", ...(state.issued?.item.id === item.id ? { issued: null } : {}), ...(state.editing?.id === item.id ? { editing: null, editName: "" } : {}) });
       await refresh(); return true;
     } catch (error) {
       if (!disposed) { publish({ error: serviceKeyError(error), needsRefresh: true }); await refresh({ preserveError: true }); }

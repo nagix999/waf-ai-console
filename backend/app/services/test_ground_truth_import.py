@@ -12,17 +12,18 @@ from . import ground_truth_working as working, validation_datasets as legacy
 from .analysis import AnalysisIngestError
 from .change_events import record_change
 from .manual_references import utc_datetime
-from .test_runs import MAX_TEST_ITEMS, describe_run, write_lock
+from .test_runs import MAX_TEST_ITEMS, write_lock
 from .input_schemas import pin_schema
 
 
 def source(db, crypto, run_id, selected_ids=None):
-    run = db.get(TestRun, run_id)
+    # Both preview and confirm hold the writer lock. Refresh an identity-map
+    # entry too: admission closure, not model completion, fixes membership.
+    run = db.get(TestRun, run_id, populate_existing=True)
     if run is None:
         raise AnalysisIngestError("test_run_not_found", 404)
-    status = describe_run(db, run, detail=False).status
-    if run.accepting_items or status not in {"completed", "failed"}:
-        raise AnalysisIngestError("test_must_finish_before_import", 409)
+    if run.accepting_items:
+        raise AnalysisIngestError("test_ingestion_open", 409)
     version = db.get(ValidationDatasetVersion, run.dataset_version_id) if run.dataset_version_id else None
     result = []
     for item in db.scalars(select(TestRunItem).where(TestRunItem.test_run_id == run.id).order_by(TestRunItem.row_number)):
@@ -126,7 +127,7 @@ def confirm(db, crypto, payload, run_id, actor):
         raise AnalysisIngestError("ground_truth_import_source_changed", 409)
     target = manifest["target"]
     if target["target"] == "create_new_dataset":
-        dataset = ValidationDataset(name=((target.get("new_dataset_name") or "").strip() or f"{run.name} Ground Truth")[:120],
+        dataset = ValidationDataset(name=((target.get("new_dataset_name") or "").strip() or run.name)[:120],
             description="", revision=1, created_by=actor)
         db.add(dataset)
         db.flush()

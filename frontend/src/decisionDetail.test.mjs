@@ -105,7 +105,7 @@ test("context separates collector score from final decision and reference label"
   const detail = fixture(); detail.initial_assessment = { verdict: "true_positive", probability: .72, comparison: "final_inconclusive" };
   const html = render(DecisionContext, { detail });
   assert.match(html, /수집기 점수 72.0%/); assert.match(html, /같은 확률 척도가 아닙니다/);
-  assert.match(html, /참고 라벨/); assert.doesNotMatch(html, /saved-model/);
+  assert.match(html, /참고 판정/); assert.doesNotMatch(html, /saved-model/);
   assert.equal((html.match(/%/g) || []).length, 1);
 });
 test("execution starts with summary, not a full debugger; legacy JSON can start expanded", () => {

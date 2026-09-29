@@ -15,7 +15,7 @@ export function Table({ className = "", children, ...props }) {
 // Data is already filtered/paged by the API. Sorting is controlled by the
 // caller and must trigger a server query; never reorder just the loaded page.
 // Column renderers are plain render callbacks (no hooks), not component types.
-export default function DataTable({ data, columns, getRowId = rowId, rowClassName,
+export default function DataTable({ data, columns, getRowId = rowId, rowClassName, onRowClick,
   sorting = noSorting, onSortingChange, label, headerGroups, className = "", empty = "표시할 항목이 없습니다." }) {
   const definitions = useMemo(() => columns.map(column => ({
     id: column.id, accessorFn: row => row[column.id], header: column.header,
@@ -37,7 +37,7 @@ export default function DataTable({ data, columns, getRowId = rowId, rowClassNam
           </button> : header.column.columnDef.header}
         </th>;
       })}</tr>)}</thead>
-      <tbody>{table.getRowModel().rows.map(row => <tr key={row.id} className={rowClassName?.(row.original)}>
+      <tbody>{table.getRowModel().rows.map(row => <tr key={row.id} className={rowClassName?.(row.original)} onClick={onRowClick ? event => { if (!event.target.closest("button,a,input,select,textarea,[role=button]")) onRowClick(row.original); } : undefined} style={onRowClick ? { cursor: "pointer" } : undefined}>
         {row.getAllCells().map(cell => <td key={cell.id} className={cell.column.columnDef.meta.className}>
           {cell.column.columnDef.meta.render ? cell.column.columnDef.meta.render(row.original, row.index) : String(cell.getValue() ?? "—")}
         </td>)}

@@ -27,9 +27,9 @@ test("selection is deduplicated, page-scoped and excludes rejected rows", () => 
   assert.deepEqual(selectedPageIds(["a"], []), []);
 });
 
-test("datasets use a flat route while legacy UUID links restore in-page selection", () => {
+test("datasets have list and detail routes while preserving legacy UUID links", () => {
   const id = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
-  assert.equal(writeAppHash({ page: "datasets", datasetId: id }), "#evaluate/ground-truth");
+  assert.equal(writeAppHash({ page: "datasets", datasetId: id }), `#evaluate/ground-truth/${id}`);
   assert.deepEqual(readAppHash(`#datasets/${id}`), { page: "datasets", datasetId: id });
   assert.equal(applyAppRoute({ datasetId: id }, readAppHash("#datasets")).datasetId, null);
   assert.equal(readAppHash("#datasets/SECRET_PAYLOAD"), null);
@@ -54,9 +54,9 @@ test("analyst error messages are bounded and unknown server content is not echoe
 test("bulk controls are hidden until selection, with both actions available after selection", () => {
   const Actions = component("./AnalysisSelection.jsx");
   const empty = renderToStaticMarkup(createElement(Actions, { ids: [] }));
-  assert.doesNotMatch(empty, /참고 답안 일괄 입력|데이터셋에 추가|<button/);
+  assert.doesNotMatch(empty, /참고 판정 일괄 입력|평가 데이터셋에 추가|<button/);
   const single = renderToStaticMarkup(createElement(Actions, { ids: ["fixture"], single: true }));
-  assert.match(single, /참고 답안 입력/); assert.doesNotMatch(single, /일괄 입력/);
+  assert.match(single, /참고 판정 입력/); assert.doesNotMatch(single, /일괄 입력/);
 });
 
 test("Test key creation sends purpose once and metadata preserves it without secrets", async () => {
@@ -98,7 +98,7 @@ test("report evidence groups have distinct presentation and full paragraph width
   assert.doesNotMatch(html, /dangerouslySetInnerHTML|<script/);
 });
 
-test("Ground Truth states are distinct from answers and direct approval is not offered", () => {
+test("Evaluation Dataset states are distinct from answers and direct approval is not offered", () => {
   assert.deepEqual(reviewActions("draft"), ["reviewed"]);
   assert.deepEqual(reviewActions("reviewed"), ["approved", "draft"]);
   assert.deepEqual(reviewActions("approved"), ["draft"]);
@@ -106,7 +106,7 @@ test("Ground Truth states are distinct from answers and direct approval is not o
   const Review = component("./GroundTruthReview.jsx");
   const render = props => renderToStaticMarkup(createElement(Review, { item: { id: "item", review_status: "draft", reference_verdict: "inconclusive", revision: 1 }, ...props }));
   const draft = render({});
-  assert.match(draft, /미검토/); assert.match(draft, /답안: 보류/); assert.match(draft, />검토 완료<\/button>/);
+  assert.match(draft, /미검토/); assert.match(draft, /기대 판정: 보류/); assert.match(draft, />검토 완료<\/button>/);
   assert.doesNotMatch(draft, />승인<\/button>/);
   assert.match(render({ dirty: true }), /먼저 변경 내용을 저장/);
   assert.match(render({ dirty: true }), /disabled/);
@@ -124,6 +124,6 @@ test("review API sends optimistic revision and explicit status only in the body"
     assert.equal(calls[0].url, "/api/v1/validation-datasets/dataset/items/item/reviews");
     assert.equal(calls[0].options.method, "POST");
     assert.deepEqual(JSON.parse(calls[0].options.body), { expected_revision: 7, review_status: "approved" });
-    assert.match(validationDataError({ message: "dataset_review_verdict_required" }), /보류도 답안/);
+    assert.match(validationDataError({ message: "dataset_review_verdict_required" }), /보류도 기대 판정/);
   } finally { globalThis.fetch = previous; }
 });

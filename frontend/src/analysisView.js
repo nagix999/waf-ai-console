@@ -57,8 +57,8 @@ const filterLabels = {
   src_port: "출발지 포트", dest_port: "목적지 포트", confidence_min: "최소 신뢰도", confidence_max: "최대 신뢰도",
   created_from: "접수 시작", created_to: "접수 종료", event_id: "이벤트 ID", company_name: "회사명", source_system: "연동 시스템",
   src_ip: "출발지 IP", dest_ip: "목적지 IP", signature: "탐지명", event_name: "이벤트명", threat_category: "위협 유형",
-  label_presence: "참고 답안", evaluation_outcome: "답안 비교", reference_label: "참고 판정", label_source_kind: "답안 종류",
-  label_source_ref: "답안 출처 / 버전", label_ai_visible: "답안 작성 시 AI 열람",
+  label_presence: "참고 판정", evaluation_outcome: "기대 판정 비교", reference_label: "참고 판정", label_source_kind: "기대 판정 종류",
+  label_source_ref: "기대 판정 출처 / 버전", label_ai_visible: "기대 판정 작성 시 AI 열람",
   test_run_id: "테스트 실행 ID", test_difficulty: "테스트 난이도", test_category: "테스트 유형", service_api_key_id: "연동 키",
 };
 

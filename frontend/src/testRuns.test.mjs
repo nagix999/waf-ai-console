@@ -44,7 +44,7 @@ test("metric formatting preserves undefined, zero, perfect and negative MCC dist
 });
 
 test("every quality metric has an accessible help button and meaningful directional documentation", () => {
-  for (const [key, label] of [...mainMetrics, ...extraMetrics, ["label_coverage", "참고 답안 연결률"]]) {
+  for (const [key, label] of [...mainMetrics, ...extraMetrics, ["label_coverage", "참고 판정 연결률"]]) {
     assert.ok(metricHelp[key].length > 80, `${key} missing substantive help`);
     const html = render(MetricHelp, { metric: key, label });
     assert.ok(html.includes(`aria-label="${label} 설명"`)); assert.match(html, /type="button"/); assert.match(html, />\?<\/button>/);
@@ -103,7 +103,7 @@ test("test and production quality summary retain provenance and all exclusion an
   for (const scopeLabel of ["프로덕션", "선택한 테스트 실행·난이도·유형"]) {
     const html = render(EvaluationSummary, { summary, scopeLabel });
     assert.ok(html.includes(scopeLabel)); assert.match(html, /전체 13건 · 현재 페이지 한정 아님/); assert.match(html, /확정 판정 기준/);
-    assert.match(html, /답안 없음/); assert.match(html, /제외·보류 내역/); assert.match(html, /출처별 지표/);
+    assert.match(html, /기대 판정 없음/); assert.match(html, /제외·보류 내역/); assert.match(html, /출처별 지표/);
     let tree;
     function CaptureSummary() { tree = EvaluationSummary({ summary, scopeLabel }); return null; }
     render(CaptureSummary);
@@ -113,15 +113,15 @@ test("test and production quality summary retain provenance and all exclusion an
     const exclusions = renderToStaticMarkup(excluded.props.children);
     assert.match(exclusions, /진행 중 1 · 실행 실패 1 · 중지 0 · 모의 실행 1/); assert.match(exclusions, /정답 포함 입력/);
     assert.match(exclusions, /기대 보류 일치 1건/); assert.match(exclusions, /일치율 분모에서 제외/);
-    const sources = nodes.find(node => node.props?.title === "답안 출처별 지표");
+    const sources = nodes.find(node => node.props?.title === "기대 판정 출처별 지표");
     assert.equal(sources.props.open, false);
     const provenance = renderToStaticMarkup(sources.props.children);
-    assert.match(provenance, /답안 출처·AI 열람 여부별 표본입니다/); assert.match(provenance, /서로 다른 그룹을 하나의 독립 정확도로 해석하지 마세요/);
-    assert.doesNotMatch(provenance, /답안 출처·AI 열람 여부별 비교 설명/); assert.match(provenance, /미탐 방향 1 · 과탐 방향 0 · 모델 보류 2건/);
+    assert.match(provenance, /기대 판정 출처·AI 열람 여부별 표본입니다/); assert.match(provenance, /서로 다른 그룹을 하나의 독립 정확도로 해석하지 마세요/);
+    assert.doesNotMatch(provenance, /기대 판정 출처·AI 열람 여부별 비교 설명/); assert.match(provenance, /미탐 방향 1 · 과탐 방향 0 · 모델 보류 2건/);
     const scopeHelp = nodes.find(node => node.props?.label === "평가 기준");
     assert.match(scopeHelp.props.children, /프로덕션 전체 품질로 일반화하지/);
     assert.match(scopeHelp.props.children, /일치율 = 기준과 같은 최종 판정/);
-    assert.match(scopeHelp.props.children, /서로 다른 답안 출처가 섞인 경우 출처별 지표/);
+    assert.match(scopeHelp.props.children, /서로 다른 기대 판정 출처가 섞인 경우 출처별 지표/);
     assert.equal(nodes.filter(node => node.props?.label === "평가 범위").length, 0);
   }
   assert.equal(JSON.stringify(summary), before);

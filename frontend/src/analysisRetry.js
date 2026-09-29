@@ -13,7 +13,7 @@ export function retryError(code) {
     retry_original_profile_not_verified: "당시 모델 설정에 대한 검증이 유효하지 않습니다.",
     retry_original_profile_target_not_allowed: "당시 모델의 연결 주소 또는 외부 전송 승인을 확인하세요.",
     retry_event_unavailable: "당시 입력을 복원할 수 없습니다.",
-    retry_event_reference_contamination: "입력에 참고 답안 정보가 섞여 있어 재실행할 수 없습니다. 관리자에게 입력 이력 확인을 요청하세요.",
+    retry_event_reference_contamination: "입력에 참고 판정 정보가 섞여 있어 재실행할 수 없습니다. 관리자에게 입력 이력 확인을 요청하세요.",
     retry_event_fingerprint_mismatch: "저장된 입력이 최초 접수 내용과 일치하지 않아 재실행을 중단했습니다.",
     retry_storage_unavailable: "재실행 정보를 저장하거나 조회하지 못했습니다. 잠시 후 조건을 다시 확인하세요.",
     retry_already_created: "이미 재실행한 결과가 있습니다.",

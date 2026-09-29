@@ -1,0 +1,26 @@
+.evaluation-dataset-catalog { padding: 22px; min-width: 0; }
+.dataset-catalog-toolbar { display: flex; align-items: end; flex-wrap: wrap; gap: 16px; margin-bottom: 12px; }
+.dataset-catalog-toolbar label { flex: 1 1 300px; }
+.dataset-catalog-toolbar > button { flex-shrink: 0; }
+.evaluation-dataset-table { min-width: 820px; }
+.evaluation-dataset-table td { vertical-align: middle; }
+.evaluation-dataset-table small { display: block; margin-top: 6px; }
+.dataset-open { text-align: left; overflow-wrap: anywhere; font-weight: 650; }
+.dataset-description { color: var(--muted); margin-top: 6px; max-width: 34em; line-height: 1.55; overflow-wrap: anywhere; }
+.dataset-description .summary-preview-trigger { color: var(--muted); }
+.dataset-production-use { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.dataset-production-badge { border: 1px solid var(--accent); border-radius: 7px; padding: 5px 9px; background: var(--accent-soft); color: var(--accent-hover, var(--accent)); font-size: .8rem; font-weight: 650; line-height: 1.4; }
+.evaluation-dataset-table .dataset-current-evaluation td { background: var(--accent-soft); }
+.evaluation-dataset-table .dataset-current-evaluation td:first-child { box-shadow: inset 3px 0 var(--accent); }
+.dataset-needs-attention { color: var(--warn); }
+.evaluation-dataset-table .dataset-change-count { text-align: right; font-variant-numeric: tabular-nums; }
+.dataset-detail-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.dataset-detail-toolbar .back { margin-right: auto; }
+.dataset-draft-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.dataset-draft-heading h2 { margin: 0; overflow-wrap: anywhere; }
+.dataset-detail-summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; padding: 22px; }
+.dataset-detail-summary dl { display: flex; flex-wrap: wrap; gap: 24px; margin: 0; }
+.dataset-detail-summary dt { color: var(--muted); margin-bottom: 8px; }
+.dataset-detail-summary dd { margin: 0; line-height: 1.7; }
+@media (max-width: 900px) { .dataset-detail-summary { grid-template-columns: 1fr; } }
+@media (max-width: 680px) { .evaluation-dataset-catalog,.dataset-detail-summary { padding: 16px; } }

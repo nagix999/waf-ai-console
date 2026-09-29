@@ -73,7 +73,7 @@ test("dataset navigation filters exact internal source and test purpose, preserv
 });
 
 test("upload automatic label counts and error messages never imply completed analysis or independent accuracy", () => {
-  assert.equal(uploadLabelNotice(null), ""); assert.equal(uploadLabelNotice({ accepted: 1 }), ""); assert.match(uploadLabelNotice({ label_attached: 2, label_unchanged: 1 }), /기대 답안 연결 2건 · 기존 답안과 동일 1건/); assert.match(uploadLabelNotice({ label_attached: 0, label_unchanged: 0 }), /분석이 완료되면/);
+  assert.equal(uploadLabelNotice(null), ""); assert.equal(uploadLabelNotice({ accepted: 1 }), ""); assert.match(uploadLabelNotice({ label_attached: 2, label_unchanged: 1 }), /기대 판정 연결 2건 · 기존 기대 판정과 동일 1건/); assert.match(uploadLabelNotice({ label_attached: 0, label_unchanged: 0 }), /분석이 완료되면/);
   assert.match(expectedVerdictUploadError({ message: "expected_verdict_conflict" }), /덮어쓰지 않고/); assert.match(expectedVerdictUploadError({ code: "invalid_expected_verdict" }), /true_positive/); assert.equal(expectedVerdictUploadError({ message: "toString" }), "");
   assert.equal(datasetEvaluationStatus("completed"), "판정 평가 처리 완료"); assert.equal(datasetEvaluationStatus("toString"), "판정 평가 상태 미확인");
 });
@@ -96,11 +96,11 @@ test("full-validation UI uses two radios and one execution action with selected-
 test("dataset result UI separates completed, failed, held and expected-abstention outcomes and preserves missing metadata", () => {
   const summary = { total: 150, labeled: 150, evaluable: 147, matches: 140, outcomes: { false_negative: 2, false_positive: 1, abstained: 3, expected_abstention_match: 5, expected_abstention_mismatch: 1, failed: 3 }, source_groups: [{ source_kind: "synthetic_expected", ai_visible: false, matches: 140, evaluable: 147, binary_decided: 130, binary_evaluable: 140, false_negatives: 2, false_positives: 1, abstained: 3, expected_abstention_matches: 5, expected_abstention_mismatches: 1 }] };
   const testRun = { include_dataset: true, dataset_evaluation: { dataset_version: "waf-dummy-v1", source_system: "waf-internal-model-test-synthetic", status: "completed", total: 150, pending: 0, processing: 0, completed: 147, failed: 3, summary } };
-  const html = render(DatasetEvaluation, { test: testRun, onViewDataset() {} }); assert.match(html, /처리 종료 150 \/ 150건/); assert.match(html, /분석 완료 <strong>147건/); assert.match(html, /실행 실패 <strong>3건/); assert.match(html, /150건 분석 결과 보기/); assert.match(html, /참고 답안 비교 집계/); assert.match(html, /일치율로 자동 승격하지/); assert.doesNotMatch(html, /<details/);
+  const html = render(DatasetEvaluation, { test: testRun, onViewDataset() {} }); assert.match(html, /처리 종료 150 \/ 150건/); assert.match(html, /분석 완료 <strong>147건/); assert.match(html, /실행 실패 <strong>3건/); assert.match(html, /150건 분석 결과 보기/); assert.match(html, /참고 판정 비교 집계/); assert.match(html, /일치율로 자동 승격하지/); assert.doesNotMatch(html, /<details/);
   let tree;
   function CaptureDataset() { tree = DatasetEvaluation({ test: testRun, onViewDataset() {} }); return null; }
   render(CaptureDataset);
-  const dialog = tree.props.children.find(child => child?.props?.title === "150건 참고 답안 비교 집계");
+  const dialog = tree.props.children.find(child => child?.props?.title === "150건 참고 판정 비교 집계");
   assert.equal(dialog.props.open, false); assert.equal(dialog.props.children.props.summary, summary);
   const content = renderToStaticMarkup(dialog.props.children);
   assert.match(content, /전체 150건/); assert.match(content, /출처별 지표/); assert.match(content, /제외·보류 내역/);
@@ -112,7 +112,7 @@ test("dataset result UI separates completed, failed, held and expected-abstentio
     if (!node || typeof node !== "object") return [];
     return [node, ...descendants(node.props?.children)];
   }
-  const sources = descendants(summaryTree).find(node => node.props?.title === "답안 출처별 지표");
+  const sources = descendants(summaryTree).find(node => node.props?.title === "기대 판정 출처별 지표");
   assert.equal(sources.props.open, false);
   const provenance = renderToStaticMarkup(sources.props.children);
   assert.match(provenance, /미탐 방향 2 · 과탐 방향 1 · 모델 보류 3건/); assert.match(provenance, /기대 보류 일치 5 · 불일치 1건/);

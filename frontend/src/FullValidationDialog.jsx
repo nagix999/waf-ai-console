@@ -43,12 +43,12 @@ export function DatasetEvaluation({ test, onViewDataset }) {
   const finished = dataset.completed + dataset.failed;
   const canView = Boolean(datasetListState(dataset.source_system)) && dataset.total > 0;
   return <section className="dataset-evaluation" aria-label="150건 테스트 판정 평가"><div className="dataset-evaluation-heading"><div><h3>{test.name || "150건 테스트 판정 평가"}</h3><p>{dataset.dataset_version} · {datasetEvaluationStatus(dataset.status)}</p></div>{(test.test_run_id || canView) && <button type="button" className="secondary" onClick={() => onViewDataset?.(dataset.source_system, test.test_run_id)}>150건 분석 결과 보기</button>}</div>
-    <p>선택한 프로필로 실행한 결과입니다. 기대 답안 비교는 기능 검증의 통과·실패 및 Production 승격과 구분합니다.</p>
+    <p>선택한 프로필로 실행한 결과입니다. 기대 판정 비교는 기능 검증의 통과·실패 및 Production 승격과 구분합니다.</p>
     <div className="dataset-progress"><progress aria-label="판정 평가 처리 진행률" max={dataset.total || 150} value={finished} /><span>처리 종료 {finished} / {dataset.total}건</span></div>
     <div className="dataset-counts">{[["대기", dataset.pending], ["분석 중", dataset.processing], ["분석 완료", dataset.completed], ["실행 실패", dataset.failed]].map(([label, count]) => <span key={label}>{label} <strong>{count}건</strong></span>)}</div>
     {dataset.status === "skipped" && <p className="validation-help">기능 검증 등 선행 조건을 충족하지 못해 판정 평가를 실행하지 않았습니다.</p>}
     {dataset.status === "failed" && <p className="validation-help">실행 실패를 오답으로 세지 않습니다. 완료된 분석이 있으면 해당 결과는 별도로 확인할 수 있습니다.</p>}
-    <button type="button" className="secondary" onClick={() => setSummaryOpen(true)}>참고 답안 비교 집계</button><Dialog open={summaryOpen} title="150건 참고 답안 비교 집계" onClose={() => setSummaryOpen(false)}><EvaluationSummary summary={dataset.summary} /></Dialog>
+    <button type="button" className="secondary" onClick={() => setSummaryOpen(true)}>참고 판정 비교 집계</button><Dialog open={summaryOpen} title="150건 참고 판정 비교 집계" onClose={() => setSummaryOpen(false)}><EvaluationSummary summary={dataset.summary} /></Dialog>
     <p className="validation-help">기대값은 테스트 시나리오 기준입니다. 모델 보류·기대 보류·미탐 방향·과탐 방향과 실행 실패를 구분하며 일치율로 자동 승격하지 않습니다.</p>
   </section>;
 }

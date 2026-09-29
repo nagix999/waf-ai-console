@@ -30,7 +30,7 @@ test("report IDs exist only when the explicit technical appendix is requested", 
   const base = buildAnalysisReport(detail), extended = buildAnalysisReport(detail, { includeAppendix: true });
   assert.doesNotMatch(base, /HIDDEN|분석 ID|이벤트 ID/);
   assert.match(extended, /분석 ID/); assert.match(extended, /이벤트 ID/);
-  assert.match(extended, /## 부록 · 참고 답안 평가/);
+  assert.match(extended, /## 부록 · 참고 판정 평가/);
   assert.equal(JSON.stringify(detail), before);
 });
 

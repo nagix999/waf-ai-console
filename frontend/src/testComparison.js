@@ -29,10 +29,10 @@ export const comparisonExclusions = {
   baseline_missing: "기준 실행에 문항 없음", candidate_missing: "후보 실행에 문항 없음",
   analysis_missing: "분석 이력 없음", item_identity_mismatch: "문항과 분석 식별 정보 불일치",
   fingerprint_missing: "입력 지문 미기록", input_mismatch: "접수한 이벤트 내용이 다름",
-  reference_missing: "접수 당시 참고 답안 없음", reference_mismatch: "접수 당시 참고 답안 또는 출처 조건이 다름",
+  reference_missing: "접수 당시 참고 판정 없음", reference_mismatch: "접수 당시 참고 판정 또는 출처 조건이 다름",
   both_not_evaluable: "양쪽 모두 평가 제외", baseline_not_evaluable: "기준 실행 평가 제외", candidate_not_evaluable: "후보 실행 평가 제외",
 };
-export const comparisonChanges = { improved: "답안 일치로 변경", regressed: "답안 불일치로 변경", changed: "판정 변경", unchanged: "판정 유지", not_comparable: "비교 제외" };
+export const comparisonChanges = { improved: "기대 판정 일치로 변경", regressed: "기대 판정 불일치로 변경", changed: "판정 변경", unchanged: "판정 유지", not_comparable: "비교 제외" };
 export const comparisonWarnings = {
   run_source_system_differs: "테스트마다 연동 시스템 식별값이 달라 실제 모델 입력의 메타데이터도 같지 않을 수 있습니다.",
   prompt_budget_may_change_submitted_input: "프롬프트 길이에 따라 입력 예산과 모델에 전달된 원문 범위가 달라질 수 있습니다.",
@@ -40,7 +40,7 @@ export const comparisonWarnings = {
   performance_excludes_noncomparable_analyses: "시간·토큰은 비교 가능한 문항의 기록된 모든 시도 기준입니다. 제외 문항은 포함하지 않습니다.",
   recorded_tokens_are_not_billing_total: "기록된 토큰 합계는 실제 청구량이나 전체 실행의 비용이 아닙니다.",
   duplicate_event_rows_ignored: "중복 이벤트 식별자 행은 중복 집계하지 않았습니다.",
-  reference_source_ref_different: "참고 답안의 출처 식별 정보가 다릅니다. 답안의 동일성을 확인하세요.",
+  reference_source_ref_different: "참고 판정의 출처 식별 정보가 다릅니다. 기대 판정의 동일성을 확인하세요.",
   case_metadata_different: "문항명·난이도·유형 중 다른 정보가 있습니다. 문항 표는 기준 실행 정보를 우선 표시합니다.",
   model_configuration_unknown: "모델 설정 기록이 부족해 같은 조건인지 확인할 수 없습니다.",
   model_configuration_different: "모델 또는 실행 설정이 달라 프롬프트만의 비교가 아닙니다.",

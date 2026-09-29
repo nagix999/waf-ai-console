@@ -113,7 +113,7 @@ export function buildAnalysisReport(input, { decoding = null, includeAppendix = 
     "저장된 자동 분석 결과를 정리한 보고서입니다. 보고서 조회로 새 분석이 실행되지는 않습니다.",
   ];
   // Always end with the analyst's next steps, including when the optional
-  // execution/답안 appendix is included. No generic checklist for every result.
+  // execution/기대 판정 appendix is included. No generic checklist for every result.
   const finishReport = () => {
     if (followUp.visible) {
       for (const section of followUp.sections || []) {
@@ -245,16 +245,16 @@ export function buildAnalysisReport(input, { decoding = null, includeAppendix = 
   if (!includeAppendix) return finishReport();
   const evaluation = isRecord(detail.evaluation) ? detail.evaluation : null;
   const reference = isRecord(evaluation?.reference_label) ? evaluation.reference_label : null;
-  report.push("## 부록 · 참고 답안 평가", table([
-    ["참고 답안", reference ? (referenceVerdicts[reference.verdict] || "미기록") : "답안 없음"],
-    ["답안 비교 결과", evaluationOutcomeText(evaluation)],
-    ...(evaluation?.outcome === "expected_abstention_mismatch" && reference?.verdict === "inconclusive" && ["true_positive", "false_positive"].includes(finalValue("verdict")) ? [["보류 답안의 확정 방향", finalValue("verdict") === "true_positive" ? "보류 답안 → 정탐 확정" : "보류 답안 → 오탐 확정"]] : []),
-    ["답안 출처", reference ? referenceSourceText(reference) : "해당 없음"],
-    ["답안 출처 / 버전", reference?.source_ref ?? "해당 없음"],
-    ["답안 작성 시 AI 결과 열람", reference ? referenceVisibilityText(reference.ai_visible) : "해당 없음"],
-    ["답안 버전", reference?.revision ?? "해당 없음"],
-    ["답안 연결 시각 (UTC)", reference?.created_at ?? "해당 없음"],
-  ]), evaluationExplanation(evaluation), "이 기능에서 연결한 답안은 AI 입력이나 학습에 사용하지 않습니다. 기대 답안·AI 지원 판정은 검증된 운영 정답이 아니며, 리뷰 등록 상태는 답안 일치 여부와 별개입니다.");
+  report.push("## 부록 · 참고 판정 평가", table([
+    ["참고 판정", reference ? (referenceVerdicts[reference.verdict] || "미기록") : "기대 판정 없음"],
+    ["기대 판정 비교 결과", evaluationOutcomeText(evaluation)],
+    ...(evaluation?.outcome === "expected_abstention_mismatch" && reference?.verdict === "inconclusive" && ["true_positive", "false_positive"].includes(finalValue("verdict")) ? [["보류 기대 판정의 확정 방향", finalValue("verdict") === "true_positive" ? "보류 기대 판정 → 정탐 확정" : "보류 기대 판정 → 오탐 확정"]] : []),
+    ["기대 판정 출처", reference ? referenceSourceText(reference) : "해당 없음"],
+    ["기대 판정 출처 / 버전", reference?.source_ref ?? "해당 없음"],
+    ["기대 판정 작성 시 AI 결과 열람", reference ? referenceVisibilityText(reference.ai_visible) : "해당 없음"],
+    ["기대 판정 버전", reference?.revision ?? "해당 없음"],
+    ["기대 판정 연결 시각 (UTC)", reference?.created_at ?? "해당 없음"],
+  ]), evaluationExplanation(evaluation), "이 기능에서 연결한 기대 판정은 AI 입력이나 학습에 사용하지 않습니다. 기대 판정·AI 지원 판정은 검증된 운영 정답이 아니며, 리뷰 등록 상태는 기대 판정 일치 여부와 별개입니다.");
 
   report.push("## 부록 · 독립 검증");
   if (!verifier) report.push("독립 검증 실행 정보가 저장되지 않았습니다. 이전 결과의 정보 부재를 미실행이나 성공으로 추정하지 않습니다.");

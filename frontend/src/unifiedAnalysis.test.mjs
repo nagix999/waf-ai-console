@@ -40,7 +40,7 @@ test("unified list has exactly six stable columns without a WAF column or altern
   const html = table([fixture("complete")]);
   assert.equal((html.match(/<th\b/g) || []).length, 6);
   const headers = [...html.matchAll(/<th\b[^>]*>([^<]+)<\/th>/g)].map(match => match[1]);
-  assert.deepEqual(headers, ["판정 / 심각도", "이벤트 / 요약", "회사 / 연결", "참고 답안 비교", "전체 소요 시간", "접수 시각"]);
+  assert.deepEqual(headers, ["판정 / 심각도", "이벤트 / 요약", "회사 / 연결", "참고 판정 비교", "전체 소요 시간", "접수 시각"]);
   assert.doesNotMatch(html, /NEVER_SHOW_WAF_VENDOR_COLUMN|Deny|status-completed|분석 보기|평가 보기/);
   assert.match(html, /class="sr-only">분석 완료/);
   assert.match(html, /unified-event-title[^>]*>분석 상세 보기/);
@@ -174,10 +174,10 @@ test("actual list exposes basic comparison and quality overview while retaining 
   assert.doesNotMatch(html, /name="label_presence"/);
   assert.match(html, /name="evaluation_outcome"/);
   assert.match(html, /aria-label="적용된 검색 조건"/);
-  assert.match(html, /답안 출처 \/ 버전: synthetic-reference 조건 해제/);
+  assert.match(html, /기대 판정 출처 \/ 버전: synthetic-reference 조건 해제/);
   assert.match(html, /aria-controls="analysis-label-attachment"/);
   assert.match(html, /<section class="panel evaluation-overview" aria-label="평가 지표">/);
-  assert.match(html, /답안 표본 기준 · 운영 전체 정확도는 아닙니다/);
+  assert.match(html, /참고 판정 표본 기준 · 운영 전체 정확도는 아닙니다/);
   assert.doesNotMatch(html, /aria-label="평가 범위 설명"/);
   assert.match(html, /aria-expanded="false" aria-controls="advanced-filters"/);
   assert.doesNotMatch(html, /목록 표시 방식|분석 보기|평가 보기/);

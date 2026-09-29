@@ -64,7 +64,7 @@ export function readAppHash(hash) {
 export function writeAppHash(state) {
   const legacy = writeLegacyHash(state);
   if (state.page === "promote") return uuid.test(state.promoteRunId || "") ? `#promotion/${state.promoteRunId}` : "#evaluate/tests";
-  if (state.page === "datasets") return "#evaluate/ground-truth";
+  if (state.page === "datasets") return uuid.test(state.datasetId || "") ? `#evaluate/ground-truth/${state.datasetId.toLowerCase()}` : "#evaluate/ground-truth";
   if (state.page === "analyses" && state.resultsPurpose === "test" && state.testResults?.view === "runs" && uuid.test(state.testResults?.runId || "") && uuid.test(state.testResults?.caseId || "")) return `#evaluate/tests/${state.testResults.runId}/case/${state.testResults.caseId}`;
   if (["runtime", "diagnostics"].includes(state.page) || state.page === "settings" && state.settingsTab === "concurrency") return "#operate/runtime";
   if (state.page === "detail" && uuid.test(state.selectedId || "")) {

@@ -18,9 +18,10 @@ test("canonical workspace routes round trip", () => {
   }
 });
 
-test("legacy promotion selects no candidate, datasets stay flat, contextual promotion has no sidebar", () => {
+test("legacy promotion selects no candidate; dataset list and detail have distinct URLs", () => {
   assert.equal(writeAppHash(applyAppRoute(initial(), readAppHash("#promote"))), "#evaluate/tests");
-  assert.equal(writeAppHash({ ...initial(), page: "datasets", datasetId: id }), "#evaluate/ground-truth");
+  assert.equal(writeAppHash({ ...initial(), page: "datasets", datasetId: id }), `#evaluate/ground-truth/${id}`);
+  assert.equal(writeAppHash({ ...initial(), page: "datasets", datasetId: null }), "#evaluate/ground-truth");
   assert.equal(readAppHash("#promotion/secret"), null);
 });
 

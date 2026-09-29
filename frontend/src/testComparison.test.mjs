@@ -40,13 +40,13 @@ test("comparison starts folded without choosing a baseline or issuing an executi
   const html = render(Comparison, { candidateId: "candidate", onOpen() {} });
   assert.match(html, /다른 테스트와 비교/); assert.doesNotMatch(html, /<details[^>]+open=|비교하는 중|분석 시작|프롬프트.*적용/);
   const open = render(Comparison, { candidateId: "candidate", state: { ...initialTestComparisonState(), open: true }, embedded: true, onStateChange() {}, onOpen() {} });
-  assert.match(open, /비교 기준을 선택하면/); assert.match(open, /같은 입력·답안의 저장된 결과만 비교/); assert.match(open, /모델·지침 변경만의 효과를 입증하는 실험은 아닙니다/); assert.doesNotMatch(open, /비교 실행 설명|두 실행의 동일 문항을 비교하는 중|<details/);
+  assert.match(open, /비교 기준을 선택하면/); assert.match(open, /같은 입력·기대 판정의 저장된 결과만 비교/); assert.match(open, /모델·지침 변경만의 효과를 입증하는 실험은 아닙니다/); assert.doesNotMatch(open, /비교 실행 설명|두 실행의 동일 문항을 비교하는 중|<details/);
 });
 
 test("comparison display uses whole paired cohort metrics even when changed-only page is empty", () => {
   const data = dataFixture(); const html = render(TestComparisonResult, { data, state: { ...initialTestComparisonState(), changes_only: true }, onChange() {}, onOpen() {}, onRefresh() {} });
   assert.match(html, /공통 접수 12쌍/); assert.match(html, /평가 가능한 10쌍/); assert.match(html, /75.0%/); assert.match(html, /미탐 방향/); assert.match(html, /기대 보류 일치/);
-  assert.match(html, /답안 일치로 변경 2건/); assert.match(html, /답안 불일치로 변경 1건/); assert.match(html, /접수 당시 참고 답안 없음: 2건/);
+  assert.match(html, /기대 판정 일치로 변경 2건/); assert.match(html, /기대 판정 불일치로 변경 1건/); assert.match(html, /접수 당시 참고 판정 없음: 2건/);
   assert.match(html, /전체 비교 분모를 바꾸지 않습니다/); assert.match(html, /난이도·유형 필터는 이 비교에 적용되지 않습니다/);
   assert.match(html, /비교 조건 설명/); assert.match(html, /해당하는 비교 문항이 없습니다/);
   let tree; function Capture() { tree = TestComparisonResult({ data, state: { ...initialTestComparisonState(), changes_only: true }, onChange() {}, onOpen() {}, onRefresh() {} }); return null; } render(Capture);

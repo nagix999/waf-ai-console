@@ -19,8 +19,8 @@ export function EvaluationTrend({ trend = [] }) {
     <div className="trend-body">{segments.length ? <svg className="evaluation-trend" viewBox="0 0 600 160" role="img" aria-label={`${labels[metric]} 일별 추이. 정확한 값은 일별 수치에서 확인할 수 있습니다.`}>
       {[0, 0.5, 1].map(value => <g key={value}><line x1="36" x2="586" y1={10 + (1 - value) * 130} y2={10 + (1 - value) * 130} className="trend-grid" /><text x="0" y={14 + (1 - value) * 130}>{value * 100}%</text></g>)}
       {segments.map((points, index) => <g key={index}><polyline fill="none" points={points.map(p => `${p.x},${p.y}`).join(" ")} />{points.map(point => <circle key={point.date} cx={point.x} cy={point.y} r="3"><title>{point.date}: {metricText(point.value)}</title></circle>)}</g>)}
-    </svg> : <p className="trend-empty">평가 가능한 답안이 연결되면 그래프가 표시됩니다.</p>}
-    <p className="ux-muted">답안 표본의 일별 지표 · 끊긴 구간은 계산할 표본 없음</p><div className="trend-foot"><span>{trend[0]?.date || "—"} ~ {trend.at(-1)?.date || "—"} · UTC</span><button className="text-button" type="button" onClick={() => setTableOpen(true)}>일별 수치</button></div></div>
+    </svg> : <p className="trend-empty">평가 가능한 기대 판정이 연결되면 그래프가 표시됩니다.</p>}
+    <p className="ux-muted">기대 판정 표본의 일별 지표 · 끊긴 구간은 계산할 표본 없음</p><div className="trend-foot"><span>{trend[0]?.date || "—"} ~ {trend.at(-1)?.date || "—"} · UTC</span><button className="text-button" type="button" onClick={() => setTableOpen(true)}>일별 수치</button></div></div>
     <Dialog open={tableOpen} title="일별 평가 수치" onClose={() => setTableOpen(false)}><div className="table-wrap"><Table><thead><tr><th>접수일 (UTC)</th><th>전체 / 평가 / 확정</th><th>{labels[metric]}</th></tr></thead><tbody>{trend.map(day => <tr key={day.date}><td>{day.date}</td><td>{day.total} / {day.evaluation_summary?.binary_evaluable ?? 0} / {day.evaluation_summary?.binary_decided ?? 0}</td><td>{metricText(day.evaluation_summary?.metrics?.[metric])}</td></tr>)}</tbody></Table></div></Dialog>
   </section>;
 }

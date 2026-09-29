@@ -22,7 +22,7 @@ export default function TestGroundTruthImport({ runId, open, onClose, onOpenData
     const controller = new AbortController();
     const timer = setTimeout(() => api.searchValidationDatasets({ query, offset: catalogOffset, limit: 20 }, { signal: controller.signal })
       .then(value => { if (!controller.signal.aborted) setCatalog(value); })
-      .catch(() => { if (!controller.signal.aborted) setError(w("데이터셋을 불러오지 못했습니다.", "Could not load datasets.")); }), 180);
+      .catch(() => { if (!controller.signal.aborted) setError(w("평가 데이터셋을 불러오지 못했습니다.", "Could not load datasets.")); }), 180);
     return () => { clearTimeout(timer); controller.abort(); };
   }, [open, target, query, catalogOffset]);
   useEffect(() => {
@@ -51,27 +51,28 @@ export default function TestGroundTruthImport({ runId, open, onClose, onOpenData
   }
   function changeCatalog(value) { setCatalog(null); setDatasetId(""); resetPreview(); setCatalogOffset(value); }
   const entries = preview?.items.filter(row => !category || row.category === category) || [];
-  return <Dialog open={open} title={w("테스트 사례를 정답 데이터에 추가", "Add Test Cases to Ground Truth")} onClose={() => { if (!inFlight.current) onClose(); }}>
+  return <Dialog open={open} title={w("테스트 문항을 평가 데이터셋에 복사", "Copy Test Cases to Evaluation Dataset")} onClose={() => { if (!inFlight.current) onClose(); }}>
     <div className="data-form" aria-busy={busy}>
-      <p className="v5-context">{w("공식 버전의 정답, 없으면 접수 당시 참고 라벨을 가져옵니다. 심층 판정은 정답으로 사용하지 않습니다. 미리보기 후 ‘편집 중 데이터에 추가’를 눌러야 문항이 저장됩니다. 공식 버전 발행은 별도입니다.", "Uses Published Ground Truth, then the fixed Reference Label, never Deep Assessment. Preview first; cases are saved only with Add to Draft. Publishing remains a separate action.")}</p>
-      {result ? <section ref={feedback} tabIndex={-1} aria-label={w("저장 결과", "Save result")}><h3 role="status">{w("편집 중 데이터에 추가했습니다.", "Cases added to Draft.")}</h3><p>{w(`추가 ${result.added} · 중복 ${result.duplicates} · 충돌 ${result.conflicts}`, `Added ${result.added} · duplicates ${result.duplicates} · conflicts ${result.conflicts}`)}</p><button className="primary" onClick={() => { onClose(); onOpenDataset?.(result.dataset_id); }}>{w("정답 데이터 열기", "Open Ground Truth")}</button></section> : <>
+      <p className="v5-context">{w("테스트의 요청 입력과 기존 기대 판정을 평가 데이터셋 초안으로 복사합니다. AI 심층 판정은 기대 판정으로 사용하지 않습니다. 기대 판정이 없는 문항은 확인 필요 상태로 추가됩니다.", "Copy request inputs and existing expected verdicts into an Evaluation Dataset draft. Deep Assessment is never used as the expected verdict. Cases without an expected verdict are marked Needs attention.")}</p>
+      <p className="v5-context">{w("모델 처리 완료 여부와 관계없이 공식 버전의 기대 판정, 없으면 접수 당시 참고 판정만 복사합니다. 미리보기 후 ‘초안에 추가’를 눌러 저장하세요. 공식 버전 만들기는 별도입니다.", "Model processing does not need to finish. We copy the Published Version's expected verdict, or the Reference Verdict fixed at admission. Preview, then Add to Draft to save. Publishing is a separate action.")}</p>
+      {result ? <section ref={feedback} tabIndex={-1} aria-label={w("저장 결과", "Save result")}><h3 role="status">{w("초안에 추가했습니다.", "Cases added to Draft.")}</h3><p>{w(`추가 ${result.added} · 중복 ${result.duplicates} · 충돌 ${result.conflicts}`, `Added ${result.added} · duplicates ${result.duplicates} · conflicts ${result.conflicts}`)}</p><button className="primary" onClick={() => { onClose(); onOpenDataset?.(result.dataset_id); }}>{w("평가 데이터셋 열기", "Open Evaluation Dataset")}</button></section> : <>
         <form className="data-form" onSubmit={inspect}>
-          <label>{w("저장 위치", "Destination")}<select aria-label={w("저장 위치", "Destination")} value={target} disabled={busy} onChange={e => { setTarget(e.target.value); resetPreview(); }}><option value="create_new_dataset">{w("새 데이터셋 만들기", "Create new dataset")}</option><option value="append_to_existing_dataset">{w("기존 데이터셋에 추가", "Append to existing dataset")}</option></select></label>
-          {target === "create_new_dataset" ? <label>{w("데이터셋 이름", "Dataset name")}<input maxLength={120} value={name} disabled={busy} placeholder={w("비워두면 테스트명 사용", "Defaults to Test name")} onChange={e => { setName(e.target.value); resetPreview(); }} /></label> : <>
-            <label>{w("데이터셋 검색", "Find dataset")}<input disabled={busy} value={query} onChange={e => { setQuery(e.target.value); changeCatalog(0); }} /></label>
-            <label>{w("데이터셋", "Dataset")}<select aria-label={w("데이터셋", "Dataset")} required value={datasetId} disabled={busy || !catalog} onChange={e => { setDatasetId(e.target.value); resetPreview(); }}><option value="">{w("선택하세요", "Choose dataset")}</option>{catalog?.items.map(row => <option key={row.id} value={row.id}>{row.name} · {row.total} {w("문항", "cases")}</option>)}</select></label>
-            {catalog && <Pagination total={catalog.total} limit={20} offset={catalogOffset} onOffsetChange={changeCatalog} disabled={busy} label={w("데이터셋 페이지", "Dataset pages")} />}
+          <label>{w("저장 위치", "Destination")}<select aria-label={w("저장 위치", "Destination")} value={target} disabled={busy} onChange={e => { setTarget(e.target.value); resetPreview(); }}><option value="create_new_dataset">{w("새 평가 데이터셋 만들기", "Create new Evaluation Dataset")}</option><option value="append_to_existing_dataset">{w("기존 평가 데이터셋에 추가", "Add to existing Evaluation Dataset")}</option></select></label>
+          {target === "create_new_dataset" ? <label>{w("평가 데이터셋 이름", "Evaluation Dataset name")}<input maxLength={120} value={name} disabled={busy} placeholder={w("비워두면 테스트명 사용", "Defaults to Test name")} onChange={e => { setName(e.target.value); resetPreview(); }} /></label> : <>
+            <label>{w("평가 데이터셋 검색", "Find Evaluation Dataset")}<input disabled={busy} value={query} onChange={e => { setQuery(e.target.value); changeCatalog(0); }} /></label>
+            <label>{w("평가 데이터셋", "Evaluation Dataset")}<select aria-label={w("평가 데이터셋", "Evaluation Dataset")} required value={datasetId} disabled={busy || !catalog} onChange={e => { setDatasetId(e.target.value); resetPreview(); }}><option value="">{w("선택하세요", "Choose dataset")}</option>{catalog?.items.map(row => <option key={row.id} value={row.id}>{row.name} · {row.total} {w("문항", "cases")}</option>)}</select></label>
+            {catalog && <Pagination total={catalog.total} limit={20} offset={catalogOffset} onOffsetChange={changeCatalog} disabled={busy} label={w("평가 데이터셋 페이지", "Dataset pages")} />}
           </>}
           <button className="secondary" disabled={busy || target === "append_to_existing_dataset" && !datasetId}>{phase === "preview" ? w("미리보기 준비 중…", "Preparing preview…") : w("미리보기", "Preview")}</button>
         </form>
         {preview && <section className="data-form" ref={error ? null : feedback} tabIndex={-1} aria-label={w("가져오기 미리보기", "Import preview result")}>
           <h3>{w(`미리보기 · 전체 ${preview.source_total}문항`, `Preview · ${preview.source_total} cases`)}</h3>
-          <div className="r5-import-summary">{Object.entries(importCounts(preview)).map(([key, count]) => <span key={key}>{w(...importCategories[key])}<strong>{count}</strong></span>)}</div>
+          <div className="r5-import-summary">{Object.entries(importCounts(preview)).map(([key, count]) => <span key={key}>{w(...importCategories[key])}<strong>{count}</strong></span>)}</div><p className="v5-context">{w("각 문항은 아래 구분 중 하나에만 집계됩니다.", "Each case is counted in exactly one category.")}</p>
           <label>{w("문항 구분", "Category")}<select aria-label={w("문항 구분", "Category")} value={category} disabled={busy} onChange={e => { setCategory(e.target.value); setOffset(0); }}><option value="">{w("전체", "All")}</option>{Object.entries(importCategories).map(([key, label]) => <option key={key} value={key}>{w(...label)}</option>)}</select></label>
           <DataTable className="r5-import-preview-table" label={w("가져올 문항 미리보기", "Import preview")} data={entries.slice(offset, offset + 10)} getRowId={row => row.test_run_item_id} columns={[{ id: "name", header: w("문항", "Case"), render: row => row.case_name || `${w("문항", "Case")} ${row.row_number}` }, { id: "category", header: w("상태", "Status"), render: row => importCategories[row.category] ? w(...importCategories[row.category]) : "—" }]} />
           <Pagination total={entries.length} limit={10} offset={offset} onOffsetChange={setOffset} disabled={busy} label={w("미리보기 페이지", "Preview pages")} />
-          <p className="v5-context">{w("충돌한 기존 답안은 덮어쓰지 않고 확인 필요로 표시합니다. 답안 없는 신규 문항도 확인 필요로 추가합니다.", "Conflicts do not overwrite existing answers. Conflicts and new cases without references need attention.")}</p>
-          <button className="primary" disabled={busy || !preview.importable} onClick={confirm}>{phase === "confirm" ? w("저장 중…", "Saving…") : w("편집 중 데이터에 추가", "Add to Draft")}</button>
+          <p className="v5-context">{w("충돌한 기존 기대 판정은 덮어쓰지 않고 확인 필요로 표시합니다. 기대 판정 없는 신규 문항도 확인 필요로 추가합니다.", "Conflicts do not overwrite existing answers. Conflicts and new cases without references need attention.")}</p>
+          <button className="primary" disabled={busy || !preview.importable} onClick={confirm}>{phase === "confirm" ? w("저장 중…", "Saving…") : w("초안에 추가", "Add to Draft")}</button>
         </section>}
       </>}
       {error && <p ref={feedback} tabIndex={-1} className="error" role="alert">{error}</p>}

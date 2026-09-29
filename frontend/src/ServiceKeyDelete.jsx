@@ -33,7 +33,7 @@ export default function ServiceKeyDelete({ item, controller, busy, blocked, erro
       </fieldset>
       {preview.active_analyses > 0 && <p className="notice">대기·처리 중 {preview.active_analyses}건 · 완료 후 분석을 삭제할 수 있습니다.</p>}
       {preview.blocked_references && <p className="notice">기존 테스트 또는 다른 키의 분석에서 참조 중인 결과가 있어 분석을 함께 삭제할 수 없습니다.</p>}
-      {removeAnalyses && <p className="service-key-warning">이 키로 접수한 분석 {preview.analyses.toLocaleString()}건의 결과·HTTP 원문·Agent 실행 이력·참고 답안·리뷰가 삭제됩니다. 되돌릴 수 없습니다. 감사 이력과 검증 데이터셋 사본{preview.dataset_copies ? ` ${preview.dataset_copies.toLocaleString()}개 버전` : ""}은 보존됩니다. 다른 키의 분석은 삭제하지 않습니다.</p>}
+      {removeAnalyses && <p className="service-key-warning">이 키로 접수한 분석 {preview.analyses.toLocaleString()}건의 결과·HTTP 원문·Agent 실행 이력·참고 판정·리뷰가 삭제됩니다. 되돌릴 수 없습니다. 감사 이력과 평가 데이터셋 사본{preview.dataset_copies ? ` ${preview.dataset_copies.toLocaleString()}개 버전` : ""}은 보존됩니다. 다른 키의 분석은 삭제하지 않습니다.</p>}
       {!removeAnalyses && <p className="ux-muted">분석 결과와 감사 이력은 그대로 남습니다.</p>}
       <label>확인을 위해 키 이름을 입력하세요<input value={name} onChange={event => setName(event.target.value)} disabled={busy} autoComplete="off" spellCheck={false} maxLength={120} placeholder={keyName} /></label></>}
       <button type="button" className="text-button" disabled={busy} onClick={() => setReload(value => value + 1)}>대상 새로고침</button>

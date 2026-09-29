@@ -62,13 +62,13 @@ export function datasetEvaluationStatus(status) {
 
 export function uploadLabelNotice(result) {
   if (!Number.isInteger(result?.label_attached) || !Number.isInteger(result?.label_unchanged)) return "";
-  return `기대 답안 연결 ${result.label_attached}건 · 기존 답안과 동일 ${result.label_unchanged}건. 분석이 완료되면 최종 판정과 비교합니다.`;
+  return `기대 판정 연결 ${result.label_attached}건 · 기존 기대 판정과 동일 ${result.label_unchanged}건. 분석이 완료되면 최종 판정과 비교합니다.`;
 }
 
 export function expectedVerdictUploadError(item) {
   const code = typeof item?.message === "string" ? item.message : item?.code;
   const messages = {
-    expected_verdict_conflict: "기존 분석에 연결된 답안과 expected_verdict가 다릅니다. 기존 답안을 덮어쓰지 않고 이 행을 거부했습니다.",
+    expected_verdict_conflict: "기존 분석에 연결된 기대 판정과 expected_verdict가 다릅니다. 기존 기대 판정을 덮어쓰지 않고 이 행을 거부했습니다.",
     invalid_expected_verdict: "expected_verdict는 true_positive, false_positive, inconclusive 중 하나여야 합니다.",
   };
   return Object.hasOwn(messages, code) ? `${messages[code]} (${code})` : "";

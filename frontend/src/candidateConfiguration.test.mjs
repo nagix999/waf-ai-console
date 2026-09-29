@@ -52,10 +52,10 @@ test("comparison UI independently checks official membership and metric versions
 test("official result view only offers frozen evaluations; manual answer action is hidden", () => {
   const Reevaluation = component("./TestReevaluation.jsx");
   const html = renderToStaticMarkup(createElement(Reevaluation, { run: { id: "run", evaluation_mode: "ground_truth", official_evaluation_pending: true } }));
-  assert.match(html, /공식 평가 기록/); assert.match(html, /당시 답안 고정/); assert.doesNotMatch(html, /평가 기록 저장<|최신 답안/);
+  assert.match(html, /공식 평가 기록/); assert.match(html, /당시 기대 판정 고정/); assert.doesNotMatch(html, /평가 기록 저장<|최신 기대 판정/);
   const Actions = component("./AnalysisSelection.jsx");
   const actions = renderToStaticMarkup(createElement(Actions, { ids: ["fixture"], allowReferences: false }));
-  assert.match(actions, /데이터셋에 추가/); assert.doesNotMatch(actions, /참고 답안 일괄 입력/);
+  assert.match(actions, /평가 데이터셋에 추가/); assert.doesNotMatch(actions, /참고 판정 일괄 입력/);
 });
 
 test("single, upload and dataset requests carry selected configuration outside events", async () => {

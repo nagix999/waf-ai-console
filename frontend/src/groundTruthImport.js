@@ -1,7 +1,7 @@
 export const importCategories = {
-  new: ["신규 · 답안 있음", "New · with reference"],
-  missing_reference: ["신규 · 답안 없음", "New · without reference"],
-  duplicate: ["중복", "Duplicate"], reference_conflict: ["답안 충돌", "Reference conflict"],
+  new: ["신규 · 기대 판정 있음", "New · expected verdict set"],
+  missing_reference: ["신규 · 기대 판정 없음", "New · no expected verdict"],
+  duplicate: ["중복", "Duplicate"], reference_conflict: ["판정 충돌", "Verdict conflict"],
   unavailable: ["가져올 수 없음", "Unavailable"],
 };
 export function importCounts(preview) {
@@ -11,18 +11,19 @@ export function importCounts(preview) {
     reference_conflict: preview.reference_conflict_count, unavailable: preview.unavailable_count };
 }
 const messages = {
+  test_ingestion_open: ["문항 접수가 진행 중입니다. 접수를 닫은 뒤 복사하세요. 모델 처리가 끝날 때까지 기다릴 필요는 없습니다.", "Case ingestion is still open. Close ingestion before copying; model processing does not need to finish."],
   test_must_finish_before_import: ["테스트 처리가 끝나야 가져올 수 있습니다. API 테스트는 접수도 닫아 주세요.", "Finish the Test first. Close ingestion for an API Test as well."],
   test_run_not_found: ["테스트를 찾을 수 없습니다. 테스트 목록을 확인하세요.", "Test not found. Check the Test list."],
   test_import_membership_mismatch: ["선택한 문항이 이 테스트에 없습니다. 문항을 다시 선택하세요.", "A selected case is not in this Test. Select the cases again."],
-  ground_truth_target_required: ["추가할 데이터셋을 선택하세요.", "Choose a destination dataset."],
+  ground_truth_target_required: ["추가할 평가 데이터셋을 선택하세요.", "Choose a destination dataset."],
   invalid_ground_truth_target: ["저장 위치를 다시 선택하세요.", "Select the destination again."],
-  dataset_not_found: ["데이터셋을 찾을 수 없습니다. 다시 검색하세요.", "Dataset not found. Search again."],
-  dataset_item_limit: ["한 데이터셋에는 최대 5,000문항을 저장할 수 있습니다. 다른 데이터셋을 선택하세요.", "A dataset holds up to 5,000 cases. Choose another dataset."],
-  ground_truth_working_changed: ["데이터셋 초안이 변경됐습니다. 다시 미리보기하세요.", "The dataset Draft changed. Preview again."],
+  dataset_not_found: ["평가 데이터셋을 찾을 수 없습니다. 다시 검색하세요.", "Dataset not found. Search again."],
+  dataset_item_limit: ["한 평가 데이터셋에는 최대 5,000문항을 저장할 수 있습니다. 다른 평가 데이터셋을 선택하세요.", "A dataset holds up to 5,000 cases. Choose another dataset."],
+  ground_truth_working_changed: ["평가 데이터셋 초안이 변경됐습니다. 다시 미리보기하세요.", "The dataset Draft changed. Preview again."],
   ground_truth_preview_not_found: ["미리보기 기록을 찾을 수 없습니다. 다시 미리보기하세요.", "Preview not found. Preview again."],
   ground_truth_preview_expired: ["미리보기가 만료됐습니다. 다시 미리보기하세요.", "The preview expired. Preview again."],
   ground_truth_import_source_changed: ["원본 테스트 자료가 변경됐습니다. 다시 미리보기하세요.", "The source Test data changed. Preview again."],
-  ground_truth_import_already_confirmed: ["이미 저장한 미리보기입니다. 데이터셋을 확인하세요.", "This preview has already been saved. Check the dataset."],
+  ground_truth_import_already_confirmed: ["이미 저장한 미리보기입니다. 평가 데이터셋을 확인하세요.", "This preview has already been saved. Check the dataset."],
   ground_truth_import_idempotency_conflict: ["저장 요청이 이미 사용됐습니다. 다시 미리보기하세요.", "This save request has already been used. Preview again."],
 };
 export function importError(error, phase) {

@@ -87,7 +87,7 @@ test("runtime loading and failure states never fabricate zero requests or health
   const failed = renderToStaticMarkup(createElement(RuntimeStatus, { ...props, error: "private-error" }));
   assert.match(failed, /정보를 불러오지 못했습니다/); assert.doesNotMatch(failed, /private-error|접수된 요청이 없습니다/);
   const quality = renderToStaticMarkup(createElement(RuntimeQuality, props));
-  assert.match(quality, /공식 평가가 아직 연결되지/); assert.match(quality, /운영 참고 답안 비교/);
+  assert.match(quality, /공식 평가가 아직 연결되지/); assert.match(quality, /운영 참고 판정 비교/);
 });
 
 test("visible polling pauses in background, resumes without overlap, aborts and cleans up", async () => {

@@ -27,15 +27,15 @@ test("compact list comparison renders one criterion with a short status and expl
   const html = render(CompactReferenceComparison, { evaluation: fixture().evaluation });
   assert.match(html, /기준 <strong>정탐<\/strong>/);
   assert.match(html, />일치<\/span>/);
-  assert.match(html, /기대 답안 · AI 열람 미확인/);
-  assert.doesNotMatch(html, /맞음|틀림|정확도|>AI 최종|답안 비교 설명/);
+  assert.match(html, /기대 판정 · AI 열람 미확인/);
+  assert.doesNotMatch(html, /맞음|틀림|정확도|>AI 최종|기대 판정 비교 설명/);
 });
 
 test("ordinary comparison states do not repeat obvious help in list and detail views", () => {
   for (const outcome of ["match", "false_negative", "false_positive", "pending"]) {
     const detail = fixture(outcome);
     for (const html of [render(CompactReferenceComparison, { evaluation: detail.evaluation }), render(CompactEvaluationDetail, { detail, history: [] }), render(EvaluationDetail, { detail, history: [] })]) {
-      assert.doesNotMatch(html, /답안 비교 설명|평가 제외 사유 설명|help-trigger/);
+      assert.doesNotMatch(html, /기대 판정 비교 설명|평가 제외 사유 설명|help-trigger/);
     }
   }
 });
@@ -44,25 +44,25 @@ test("abstentions and unavailable metadata retain contextual comparison help", (
   for (const outcome of ["abstained", "expected_abstention_match", "expected_abstention_mismatch", "unknown-outcome"]) {
     const detail = fixture(outcome);
     for (const html of [render(CompactReferenceComparison, { evaluation: detail.evaluation }), render(CompactEvaluationDetail, { detail, history: [] }), render(EvaluationDetail, { detail, history: [] })]) {
-      assert.match(html, /aria-label="답안 비교 설명"/);
+      assert.match(html, /aria-label="기대 판정 비교 설명"/);
     }
   }
-  assert.match(render(CompactReferenceComparison, {}), /aria-label="답안 비교 설명"/);
+  assert.match(render(CompactReferenceComparison, {}), /aria-label="기대 판정 비교 설명"/);
 });
 
 test("unlabeled list entries alone use a dash and missing evaluation remains visible", () => {
   const unlabeled = render(CompactReferenceComparison, { evaluation: { outcome: "unlabeled", reference_label: null } });
-  assert.match(unlabeled, /aria-label="참고 답안 없음">—/);
+  assert.match(unlabeled, /aria-label="참고 판정 없음">—/);
   assert.doesNotMatch(unlabeled, /evaluation-badge/);
   for (const evaluation of [undefined, null, {}]) {
     const html = render(CompactReferenceComparison, { evaluation });
     assert.match(html, /평가 정보 없음/);
-    assert.doesNotMatch(html, /참고 답안 없음/);
+    assert.doesNotMatch(html, /참고 판정 없음/);
   }
 });
 
 test("exclusion reasons use help, remain distinct, and are not guessed from equal displayed verdicts", () => {
-  const reasons = { failed: /실행 실패/, stub: /실제 LLM 판정이 아니므로/, unknown_provenance: /실제 모델 실행 여부/, input_contaminated: /답안 관련 키/ };
+  const reasons = { failed: /실행 실패/, stub: /실제 LLM 판정이 아니므로/, unknown_provenance: /실제 모델 실행 여부/, input_contaminated: /기대 판정 관련 키/ };
   for (const [outcome, reason] of Object.entries(reasons)) {
     const detail = fixture(outcome);
     const html = render(CompactReferenceComparison, { evaluation: detail.evaluation, detail });
@@ -86,12 +86,12 @@ test("detail comparison does not repeat the AI verdict or read intermediate resu
   Object.defineProperty(detail, "result", { get() { throw new Error("Do not read Agent results for reference comparison"); } });
   Object.defineProperty(detail, "verdict", { get() { throw new Error("Do not repeat the main verdict summary"); } });
   const html = render(CompactEvaluationDetail, { detail, history: [] });
-  assert.match(html, /참고 답안/);
+  assert.match(html, /참고 판정/);
   assert.match(html, /<strong>정탐<\/strong>/);
   assert.match(html, />다름<\/span>/);
   assert.match(html, /미탐 방향/);
   assert.match(html, />연결 이력<\/button>/);
-  assert.doesNotMatch(html, /aria-label="답안 비교 설명"/);
+  assert.doesNotMatch(html, /aria-label="기대 판정 비교 설명"/);
   assert.doesNotMatch(html, /<details|synthetic-v1/);
   assert.doesNotMatch(html.split("<details")[0], /AI 최종|↔/);
   assert.doesNotMatch(html, /open=""/);
@@ -115,20 +115,20 @@ test("history preserves all versions while identities stay behind explicit row d
   assert.match(html, /지원 판정/);
   assert.match(html, /<td>1<\/td>/);
   assert.match(html, /<td>2<\/td>/);
-  assert.match(html, /aria-label="답안 버전 1 상세"/);
-  assert.match(html, /aria-label="답안 버전 2 상세"/);
+  assert.match(html, /aria-label="기대 판정 버전 1 상세"/);
+  assert.match(html, /aria-label="기대 판정 버전 2 상세"/);
   assert.doesNotMatch(html, /synthetic-1|synthetic.invalid|&lt;script/);
   assert.doesNotMatch(html, /<img\b|<script\b|href=/);
   assert.equal(JSON.stringify({ detail, history }), before);
 });
 
 test("history loading, malformed data, empty history and refresh failure are distinct", () => {
-  for (const [history, pattern] of [[null, /이력을 불러오는 중/], [undefined, /이력을 불러오는 중/], [{}, /이력 정보를 확인할 수 없습니다/], [[], /연결된 답안 이력이 없습니다/]]) {
+  for (const [history, pattern] of [[null, /이력을 불러오는 중/], [undefined, /이력을 불러오는 중/], [{}, /이력 정보를 확인할 수 없습니다/], [[], /연결된 기대 판정 이력이 없습니다/]]) {
     assert.match(render(LabelHistoryRows, { history }), pattern);
   }
   const html = render(LabelHistoryRows, { history: [], historyError: "<script>UNSAFE_ERROR_MESSAGE</script>" });
   assert.match(html, /마지막 조회 결과/);
-  assert.doesNotMatch(html, /연결된 답안 이력이 없습니다|UNSAFE_ERROR_MESSAGE|script/);
+  assert.doesNotMatch(html, /연결된 기대 판정 이력이 없습니다|UNSAFE_ERROR_MESSAGE|script/);
 });
 
 test("controlled attachment can be opened by its parent without changing the dedicated form", () => {
@@ -137,9 +137,9 @@ test("controlled attachment can be opened by its parent without changing the ded
   const standalone = render(LabelAttachment, { onAttached() {} });
   assert.equal(closed, "", "controlled dialog content is not part of server-rendered page");
   assert.equal(opened, "", "native dialog mounts only in a browser");
-  assert.match(standalone, />참고 답안 연결<\/button>/);
+  assert.match(standalone, />참고 판정 연결<\/button>/);
   for (const html of [closed, opened, standalone]) {
-    assert.doesNotMatch(html, /<details|<input|답안 연결 확정/);
+    assert.doesNotMatch(html, /<details|<input|기대 판정 연결 확정/);
   }
   assert.deepEqual(JSON.parse(JSON.stringify(initialLabelAttachmentForm())), { source_system: "", source_kind: "synthetic_expected", source_ref: "", ai_visible: "" });
   assert.equal(initialLabelAttachmentForm("exact-server-source").source_system, "exact-server-source");

@@ -59,7 +59,7 @@ test("all and Production scopes retain the individual list, reference metrics an
     const html = render(options);
     assert.match(html, /<table class="[^"]*\banalysis-data-table\b/);
     assert.match(html, /aria-label="평가 지표"/);
-    assert.match(html, /답안 표본 기준 · 운영 전체 정확도는 아닙니다/);
+    assert.match(html, /참고 판정 표본 기준 · 운영 전체 정확도는 아닙니다/);
     assert.doesNotMatch(html, /aria-label="평가 범위 설명"/);
     assert.doesNotMatch(html, /name="label_presence"/);
     assert.match(html, /name="evaluation_outcome"/);
@@ -78,7 +78,7 @@ test("individual Test fallback includes named and previous items with latest-ref
   const html = render(options);
   assert.match(html, /← 테스트/);
   assert.match(html, /이름 있는 실행과 실행 묶음이 없는 이전 결과를 함께 조회/);
-  assert.match(html, /최신 참고 답안 기준/);
+  assert.match(html, /최신 참고 판정 기준/);
   assert.match(html, /<table class="[^"]*\banalysis-data-table\b/);
   assert.match(html, /aria-label="평가 지표"/);
   assert.doesNotMatch(html, /테스트명 검색/);
