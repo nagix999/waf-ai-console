@@ -148,7 +148,8 @@ def test_worker_groups_followups_only_once_without_changing_verdict_or_originals
     login_admin(client)
     primary, other = create_verified(client, "followup-primary"), create_verified(client, "followup-editor")
     assert configure(client, primary, other).status_code == 200
-    created = client.post("/api/v1/analyses", json=event_payload).json()
+    # TP+A may retain impact checks; TP+D suppression has its own policy tests.
+    created = client.post("/api/v1/analyses", json={**event_payload, "waf_action": "A"}).json()
     calls = install_calls(monkeypatch, mode)
     if mode == "budget":
         monkeypatch.setattr(legacy, "input_fits", lambda *args: False)

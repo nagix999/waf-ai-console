@@ -1,4 +1,4 @@
-"""Static safeguards for the shared, compact v2.13 instructions.
+"""Static safeguards for the shared, bounded v2.14 instructions.
 
 These checks establish text/contract boundaries, not model obedience, tokenizer
 savings or an improvement in verdict quality on any particular serving model.
@@ -20,19 +20,19 @@ from app.agent.prompts import (
 
 
 def test_shared_revision_and_default_exports_are_consistent():
-    assert PROMPT_VERSION == "waf-judgment-v2.13"
-    assert FIXED_RULES_VERSION == "waf-system-v2.13"
+    assert PROMPT_VERSION == "waf-judgment-v2.14"
+    assert FIXED_RULES_VERSION == "waf-system-v2.14"
     assert build_role_instructions(DEFAULT_POLICY_TEXT) == (
         PRIMARY_INSTRUCTIONS,
         VERIFIER_INSTRUCTIONS,
     )
 
 
-def test_instruction_and_default_policy_length_decrease_in_chars_and_utf8_bytes():
-    # Recorded pre-change v2.5 sizes. Deliberately do not call these token counts
-    # or imply a token/latency/quality benefit without deployment measurement.
-    assert 0 < len(FIXED_INSTRUCTIONS) < 4136
-    assert 0 < len(FIXED_INSTRUCTIONS.encode("utf-8")) < 8237
+def test_instruction_and_default_policy_length_remain_bounded():
+    # v2.14 adds explicit final-follow-up rules to v2.13 (4113 chars / 8232 bytes).
+    # These are NOT tokenizer measurements or claims of a quality improvement.
+    assert 0 < len(FIXED_INSTRUCTIONS) < 4300
+    assert 0 < len(FIXED_INSTRUCTIONS.encode("utf-8")) < 8500
     assert 0 < len(DEFAULT_POLICY_TEXT) < 696
     assert 0 < len(DEFAULT_POLICY_TEXT.encode("utf-8")) < 1567
 
@@ -119,7 +119,9 @@ def test_instruction_and_default_policy_length_decrease_in_chars_and_utf8_bytes(
             "추가 확인은 마지막에 분리",
             "보류는 구분에 필요한 1~3개",
             "확정은 기본 빈 배열",
-            "영향·대응/튜닝 안전성에 유용할 때만 선택적 1~2개",
+            "일반 SOC 체크리스트를 채우지 않는다",
+            "true_positive + waf_action=D에서는 impact_followup을 작성하지 않는다",
+            "tuning_recommendation.recommended=true일 때만",
             "요약을 확인 지시로 대체하지 않는다",
             "source_ko=확인 자료/담당자",
             "check_ko=확인할 값/처리 경로",

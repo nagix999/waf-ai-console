@@ -30,11 +30,11 @@ for (const verdict of ["true_positive", "false_positive", "inconclusive"]) test(
   assert.deepEqual(conditions.sections.map(section => section.key), verdict === "inconclusive" ? ["conditions", "impact", "tuning"] : ["impact", "tuning"]);
   const html = renderToStaticMarkup(createElement(module.exports.DecisionConditions, { detail: value }));
   const report = buildAnalysisReport(value);
-  for (const text of ["후속 확인 · 선택사항", "튜닝 검증 · 선택사항"]) { assert.ok(html.includes(text)); assert.ok(report.includes(text)); }
+  for (const text of ["영향·대응 확인", "튜닝 전 검증"]) { assert.ok(html.includes(text)); assert.ok(report.includes(text)); }
   if (verdict === "inconclusive") {
-    assert.ok(report.indexOf("## 판정 확정에 필요한 조건") < report.indexOf("## 후속 확인 · 선택사항"));
+    assert.ok(report.indexOf("## 판정에 필요한 확인") < report.indexOf("## 영향·대응 확인"));
     assert.ok(!conditions.sections[0].items.some(item => /피해|회귀/.test(item.title)));
-  } else { assert.doesNotMatch(html, /판정 확정에 필요한 조건/); assert.doesNotMatch(report, /판정 확정에 필요한 조건/); }
+  } else { assert.doesNotMatch(html, /판정에 필요한 확인/); assert.doesNotMatch(report, /판정에 필요한 확인/); }
   assert.doesNotMatch(html+report, /LEGACY_NO_NEW_FALLBACK/);
   assert.equal(JSON.stringify(value), before);
 });
@@ -48,11 +48,34 @@ test("structured signature shows observed comparison details, never a new free s
   assert.doesNotMatch(html, /기존 분석 설명/);
 });
 
+test("v2.14 final empty checks stay hidden in UI and report despite preserved role checks", () => {
+  const value = detail("true_positive");
+  value.result.policy = { fixed_rules_version: "waf-system-v2.14" };
+  value.result.primary = { analyst_checks: structuredClone(value.result.analyst_guidance.checks) };
+  value.result.verifier = { output: structuredClone(value.result.primary) };
+  value.result.analyst_guidance.checks = [];
+  value.result.analyst_checks = [];
+  const before = JSON.stringify(value);
+  assert.equal(renderToStaticMarkup(createElement(module.exports.DecisionConditions, { detail: value })), "");
+  assert.doesNotMatch(buildAnalysisReport(value), /## 영향·대응 확인|## 튜닝 전 검증|같은 대상의 후속 피해/);
+  assert.equal(JSON.stringify(value), before);
+});
+
+test("historical v2.13 denied attacks retain recorded checks; hold impact never claims a final verdict", () => {
+  const value = detail("true_positive");
+  value.result.policy = { fixed_rules_version: "waf-system-v2.13" };
+  assert.deepEqual(decisionConditions(value).sections.map(s => s.key), ["impact", "tuning"]);
+  assert.match(decisionConditions(value).sections[0].introduction, /판정은 이미 확정되었습니다/);
+  const held = decisionConditions(detail());
+  assert.doesNotMatch(held.sections.find(s => s.key === "impact").introduction, /판정은 이미 확정되었습니다/);
+});
+
 test("new empty checks neither use legacy suggestions nor invent a missing condition", () => {
   const value = detail();
   value.result.analyst_guidance.checks = [];
   assert.deepEqual(analystGuidance(value).checks, []);
-  assert.equal(decisionConditions(value).sections[0].items.length, 0);
+  assert.deepEqual(decisionConditions(value).sections, []);
+  assert.equal(decisionConditions(value).visible, false);
   delete value.result.analyst_guidance;
   assert.deepEqual(analystGuidance(value).checks, []);
 });

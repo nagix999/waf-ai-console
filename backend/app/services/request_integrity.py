@@ -9,7 +9,7 @@ import re
 
 INTEGRITY_VERSION = "request-integrity-v2"
 LEGACY_INTEGRITY_VERSION = "request-integrity-v1"
-INTEGRITY_V2_RULES_VERSIONS = frozenset({"waf-system-v2.12", "waf-system-v2.13"})
+INTEGRITY_V2_RULES_VERSIONS = frozenset({"waf-system-v2.12", "waf-system-v2.13", "waf-system-v2.14"})
 INTEGRITY_RULES_VERSIONS = frozenset({"waf-system-v2.9", "waf-system-v2.10", "waf-system-v2.11"}) | INTEGRITY_V2_RULES_VERSIONS
 MAX_PAYLOAD_CHARS = 262144
 MAX_HEAD_CHARS = 32768

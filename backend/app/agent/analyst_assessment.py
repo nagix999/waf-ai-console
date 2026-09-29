@@ -6,7 +6,7 @@ step history; rejected citations and disconnected issues do not enter this view.
 """
 
 VERSION = "analyst-assessment-v1"
-RULES_VERSIONS = frozenset({"waf-system-v2.10", "waf-system-v2.11", "waf-system-v2.12", "waf-system-v2.13"})
+RULES_VERSIONS = frozenset({"waf-system-v2.10", "waf-system-v2.11", "waf-system-v2.12", "waf-system-v2.13", "waf-system-v2.14"})
 
 
 def build_analyst_assessment(primary, verifier=None):

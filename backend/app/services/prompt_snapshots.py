@@ -138,8 +138,8 @@ def approved_production_prompt(db, crypto):
             run = db.get(TestRun, record.source_test_run_id)
             snapshot = load_analysis_prompt(run, crypto)
         else:
-            from ..agent import legacy_prompts_v212, prompts
-            rules = {module.FIXED_RULES_VERSION: module for module in (legacy_prompts_v212, prompts)}[expected["fixed_rules_version"]]
+            from ..agent import legacy_prompts_v212, legacy_prompts_v213, prompts
+            rules = {module.FIXED_RULES_VERSION: module for module in (legacy_prompts_v212, legacy_prompts_v213, prompts)}[expected["fixed_rules_version"]]
             snapshot = _build_snapshot(get_policy_version(db, expected["policy_version_id"]), crypto, rules=rules)
         actual = {key: getattr(snapshot, key) for key in expected}
         if actual != expected or get_active_policy(db, crypto).id != snapshot.policy_version_id:

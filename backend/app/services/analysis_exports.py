@@ -154,7 +154,7 @@ def build_report(detail: dict, *, generated_at: datetime | None = None) -> Analy
     view = assessment_view(result)
     section("판정 요약", [
         ("최종 판정", VERDICTS[verdict]), ("심각도", severity), ("심각도 기준", SEVERITY_MEANING), ("요약", summary),
-        *([("보류 구분", decision["title_ko"])] if decision else []),
+        *([("보류 구분", decision["title_ko"]), ("검토 안내", decision["action_ko"])] if decision else []),
         ("안내", "자동 분석 결과입니다. 공격 시도와 실제 피해 발생을 구분하고 최종 판단은 분석가가 검토합니다."),
     ])
     review = hold_review(detail, decision)
@@ -293,15 +293,16 @@ def build_report(detail: dict, *, generated_at: datetime | None = None) -> Analy
         ("출력 한도", f"본문 UTF-8 {MAX_REPORT_BYTES:,}바이트·{MAX_REPORT_ROWS:,}항목·PDF {MAX_PDF_PAGES}페이지·파일 10 MiB. 초과하면 부분 파일을 만들지 않습니다.")])
     # New purposes are never inferred from prose or the WAF action.
     if semantic:
-        for purpose, title in (("decision_condition", "판정 확정에 필요한 조건"),
-                               ("impact_followup", "후속 확인 · 선택사항"),
-                               ("tuning_validation", "튜닝 검증 · 선택사항")):
+        for purpose, title in (("decision_condition", "판정에 필요한 확인"),
+                               ("impact_followup", "영향·대응 확인"),
+                               ("tuning_validation", "튜닝 전 검증")):
             selected = [row for row in checks if row[3] == purpose]
             conditions = [issue for issue in (view["issues"] if view else []) if issue["missing_condition_ko"]] if purpose == "decision_condition" and verdict == "inconclusive" else []
-            if not selected and not conditions and not (purpose == "decision_condition" and verdict == "inconclusive"):
+            if not selected and not conditions:
                 continue
             rows = [("안내", "정책 검토 제안과 함께 확인하세요. WAF 설정은 자동 변경하지 않습니다." if purpose == "tuning_validation" else
-                "현재 판정의 필수 조건이 아닌 선택적 영향·대응 확인입니다." if purpose == "impact_followup" else
+                ("판정에 필요한 확인과는 별개로, 영향 범위나 대응 필요성을 확인할 때 참고하세요." if verdict == "inconclusive" else
+                 "판정은 이미 확정되었습니다. 아래 항목은 영향 범위나 대응 필요성을 확인할 때 참고하세요.") if purpose == "impact_followup" else
                 decision["action_ko"] if decision else "기록된 조건과 원문 근거를 함께 검토하세요.")]
             if detail.get("waf_action") in WAF_OBSERVATIONS:
                 rows.append(("WAF 관측", WAF_OBSERVATIONS[detail["waf_action"]]))
@@ -311,11 +312,9 @@ def build_report(detail: dict, *, generated_at: datetime | None = None) -> Analy
                 rows.append(("관련 근거", " · ".join(map(str, issue["evidence_numbers"]))))
             for index, (source, check, why, _) in enumerate(selected, 1):
                 rows += [(f"확인 {index} · 자료", source), ("확인 내용", check), ("확인 목적", why)]
-            if not selected and not conditions:
-                rows.append(("안내", "구체적인 확인 자료는 기록되지 않았습니다."))
             section(title, rows)
     # Legacy follow-up stays last; explicit [] on decisive verdicts stays empty.
-    elif verdict == "inconclusive" or checks:
+    elif checks or review["issues"]:
         check_rows = [("안내", decision["action_ko"] if decision else "현재 판정과 별개로 영향 범위·후속 대응에 유용한 선택적 확인입니다.")]
         if detail.get("waf_action") in WAF_OBSERVATIONS:
             check_rows.append(("WAF 관측", WAF_OBSERVATIONS[detail["waf_action"]]))
@@ -326,13 +325,11 @@ def build_report(detail: dict, *, generated_at: datetime | None = None) -> Analy
             if issue["point_ko"] != title:
                 check_rows.append(("검토 내용", issue["point_ko"]))
             check_rows.append(("관련 근거", " · ".join(map(str, issue["evidence_numbers"]))))
-        if not checks and (not decision or decision["code"] in {"model_abstained", "reason_unrecorded", "assessment_pending"}):
-            check_rows.append(("확인 사항", "구체적인 확인 자료는 기록되지 않았습니다."))
         for index, (source, check, why, _) in enumerate(checks, 1):
             check_rows += [(f"확인 {index} · 자료", source), ("확인 내용", check), ("확인 목적", why)]
         if checks:
             check_rows.append(("주의", "안내한 자료를 시스템이 이미 조회했다는 뜻이 아니며 확인 결과를 미리 단정하지 않습니다."))
-        section("판정 확정에 필요한 조건" if verdict == "inconclusive" else "후속 확인 · 선택사항", check_rows)
+        section("판정에 필요한 확인" if verdict == "inconclusive" else "영향·대응 확인", check_rows)
     return AnalysisReport(_text(detail.get("id")), tuple(sections))
 
 

@@ -78,7 +78,7 @@ test("identical issue/check text is shown once with source, purpose and evidence
   assert.deepEqual(conditions.items[0].evidence_numbers, [1, 2]);
   const html = render(DecisionConditions, { detail });
   assert.equal(html.split("셸 실행 여부").length - 1, 1);
-  for (const text of ["확정에 필요한 조건", "처리 규격", "실행 문맥 확인", "값을 사용하는 위치", "관련 근거"]) assert.ok(html.includes(text), text);
+  for (const text of ["판정에 필요한 확인", "처리 규격", "실행 문맥 확인", "값을 사용하는 위치", "관련 근거"]) assert.ok(html.includes(text), text);
 });
 test("different follow-up sources are retained, no approximate semantic deduplication", () => {
   const detail = fixture();
@@ -93,7 +93,7 @@ test("no empty follow-up is invented for decisive results; no missing-data claim
   assert.equal(decisionConditions(detail).visible, false);
   detail.result.verdict = "inconclusive";
   const html = render(DecisionConditions, { detail });
-  assert.match(html, /구체적인 확인 자료는 기록되지 않았습니다/);
+  assert.equal(html, "");
 });
 test("technical interpretation and limitations are collapsed but retained", () => {
   const html = render(TechnicalInterpretation, { detail: fixture() });
@@ -124,8 +124,8 @@ for (const verdict of ["true_positive", "false_positive", "inconclusive"]) for (
   const before = JSON.stringify(detail), html = render(DecisionConditions, { detail });
   const report = decodeReportText(buildAnalysisReport(detail));
   assert.match(html, action === "D" ? /차단으로 기록됐습니다/ : /허용으로 기록됐습니다/);
-  assert.ok(html.includes(verdict === "inconclusive" ? "판정 확정에 필요한 조건" : "후속 확인 · 선택사항"));
-  assert.ok(report.includes(verdict === "inconclusive" ? "판정 확정에 필요한 조건" : "후속 확인 · 선택사항"));
+  assert.ok(html.includes(verdict === "inconclusive" ? "판정에 필요한 확인" : "영향·대응 확인"));
+  assert.ok(report.includes(verdict === "inconclusive" ? "판정에 필요한 확인" : "영향·대응 확인"));
   assert.doesNotMatch(html, /공격 시도가 있었는지 확인|200 응답인지 확인 후/);
   if (verdict !== "inconclusive") {
     assert.doesNotMatch(html, /셸 실행 여부|값을 사용하는 위치/);

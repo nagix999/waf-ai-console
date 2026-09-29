@@ -32,7 +32,7 @@ def test_context_rules_require_both_benign_and_attack_explanations():
         assert fragment in FIXED_INSTRUCTIONS
     # v2.13 adds relation/purpose contracts; bound growth without discarding
     # existing context safeguards. Characters, not tokenizer tokens.
-    assert len(PRIMARY_INSTRUCTIONS) <= 4500
+    assert len(PRIMARY_INSTRUCTIONS) <= 4650
     assert FIXED_RULES_VERSION in SELECTION_RULES_VERSIONS
     assert "waf-system-v2.7" in SELECTION_RULES_VERSIONS
     assert "waf-system-v2.6" not in SELECTION_RULES_VERSIONS

@@ -150,7 +150,7 @@ export function buildAnalysisReport(input, { decoding = null, includeAppendix = 
     ["판정", named(finalValue("verdict"), { true_positive: "정탐", false_positive: "오탐", inconclusive: "판단 보류" })],
     ["위협 심각도", severity === "NONE" ? "해당 없음" : severity === "UNKNOWN" ? "미확정" : severity],
     ["심각도 기준", severityMeaning[0]],
-    ...(decision ? [["보류 구분", decision.title_ko]] : []),
+    ...(decision ? [["보류 구분", decision.title_ko], ["검토 안내", decision.action_ko]] : []),
     ["입력 잘림", named(finalValue("input_truncated"), { true: "있음", false: "없음" })],
   ]), escapeText(guidance.summary_ko));
   if (inconclusive) report.push(provisionalAnalysisNotice);

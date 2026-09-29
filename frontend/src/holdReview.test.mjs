@@ -28,7 +28,7 @@ test("UI and Markdown fill empty hold checks from linked conditions, never read 
     assert.deepEqual(decisionIssues(detail), review.issues);
     const report = decodeReportText(buildAnalysisReport(detail));
     for (const check of review.checks) for (const value of Object.values(check)) assert.ok(report.includes(value), value);
-    assert.ok(report.indexOf("## 판정 확정에 필요한 조건") > report.indexOf("## 판정 근거"));
+    assert.ok(report.indexOf("## 판정에 필요한 확인") > report.indexOf("## 판정 근거"));
   }
 });
 

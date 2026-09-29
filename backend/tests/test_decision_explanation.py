@@ -36,7 +36,8 @@ def test_pdf_excel_use_final_cause_without_inventing_work_or_mutating_result(rea
     assert explanation["action_ko"] in text
     assert GENERIC_CHECK["check_ko"] not in text
     assert ("자동 분석 해석이 서로 달랐습니다." if reason == "verdict_disagreement" else "검토한 유형") in text
-    assert report.sections[-1].title == "판정 확정에 필요한 조건"
+    assert not any(section.title == "판정에 필요한 확인" for section in report.sections)
+    assert ("검토 안내", explanation["action_ko"]) in report.sections[0].rows
     assert "WAF 정책 검토" not in [section.title for section in report.sections]
     assert "PRIMARY-MUST-NOT-EXPORT" not in text
     assert "VERIFIER-MUST-NOT-EXPORT" not in text

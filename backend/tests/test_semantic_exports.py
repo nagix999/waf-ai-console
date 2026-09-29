@@ -23,8 +23,8 @@ def test_new_export_separates_purposes_and_keeps_signature_details(action, verdi
     before = copy.deepcopy(detail)
     report = build_report(detail)
     titles = [s.title for s in report.sections]
-    assert ("판정 확정에 필요한 조건" in titles) == (verdict == "inconclusive")
-    assert titles[-2:] == ["후속 확인 · 선택사항", "튜닝 검증 · 선택사항"]
+    assert ("판정에 필요한 확인" in titles) == (verdict == "inconclusive")
+    assert titles[-2:] == ["영향·대응 확인", "튜닝 전 검증"]
     assert ("차단으로 기록" if action == "D" else "허용으로 기록") in report_text(report)
     assert "탐지 설명은 SQL이지만 요청에는 HTML 실행 구문이 있습니다." in report_text(report)
     assert "DO-NOT-INVENT" not in report_text(report)
@@ -51,3 +51,16 @@ def test_pdf_disagreement_includes_only_role_verdicts_not_intermediate_text():
     assert "PRIMARY-MUST-NOT-EXPORT" not in serialized
     assert "VERIFIER-MUST-NOT-EXPORT" not in serialized
     assert "RAW-PAYLOAD-MUST-NOT-EXPORT" not in serialized
+
+
+def test_suppressed_final_checks_are_absent_from_xlsx_and_shared_pdf_input():
+    detail = detail_fixture()
+    detail["result"]["signature_assessment"] = signature()
+    detail["result"]["analyst_checks"] = []
+    detail["result"]["analyst_guidance"]["checks"] = []
+    detail["result"]["primary"]["analyst_checks"] = [{**check("impact_followup"), "check_ko": "SUPPRESSED_CHECK_CANARY"}]
+    report = build_report(detail)
+    assert not any(s.title in {"영향·대응 확인", "튜닝 전 검증", "판정에 필요한 확인"} for s in report.sections)
+    assert "SUPPRESSED_CHECK_CANARY" not in report_text(report)
+    assert "SUPPRESSED_CHECK_CANARY" not in json.dumps(pdf_document(detail), default=str)
+    assert all("SUPPRESSED_CHECK_CANARY" not in (node.text or "") for cell in xlsx_cells(render_xlsx(report)) for node in cell.iter())

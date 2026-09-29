@@ -20,6 +20,8 @@ from .agent.evidence import EvidenceSourceResolver
 from .agent.executor import AgentCallResult, execute_structured_agent
 from .agent.input_builder import build_agent_input
 from .agent.input_integrity import affected_normal_findings, apply_integrity_guard
+from .agent.followup_policy import apply_final_followup_policy
+from .agent.prompts import SEMANTIC_RULES_VERSIONS
 from .agent.policy import (
     VerifierPolicyContext,
     finalize_with_verifier,
@@ -938,7 +940,7 @@ def _process_moduagent_steps(
     ) as step:
         from .agent.analyst_assessment import RULES_VERSIONS as ASSESSMENT_RULES_VERSIONS, build_analyst_assessment
         assessment_enabled = prompt.fixed_rules_version in ASSESSMENT_RULES_VERSIONS
-        semantic_enabled = prompt.fixed_rules_version == "waf-system-v2.13"
+        semantic_enabled = prompt.fixed_rules_version in SEMANTIC_RULES_VERSIONS
         primary = _execute_grounded_agent(
                 analysis=analysis, raw_payload=raw_payload, parsed=parsed, input_truncated=agent_input.input_truncated,
                 submitted_payload_spans=agent_input.retained_payload_spans,
@@ -1034,8 +1036,12 @@ def _process_moduagent_steps(
             output, integrity_metadata = apply_integrity_guard(
                 finalization.output, agent_input.request_integrity, raw_payload, parsed)
             finalization = replace(finalization, output=output)
-        final_output = finalization.output
+        final_output, followup_metadata = apply_final_followup_policy(
+            finalization.output, analysis.waf_action, prompt.fixed_rules_version)
+        finalization = replace(finalization, output=final_output)
         diagnostics = decision_diagnostics(primary, verifier, finalization, parsed, agent_input.input_truncated)
+        if followup_metadata is not None:
+            diagnostics["followup_policy"] = followup_metadata
         if integrity_metadata is not None:
             diagnostics["request_integrity"] = integrity_metadata
             if integrity_metadata["issue_codes"]:

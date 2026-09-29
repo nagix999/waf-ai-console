@@ -31,12 +31,12 @@ def test_exports_include_both_sides_and_issue_but_no_raw_snapshots():
     value["result"]["primary"] = {"secret": "NOT_EXPORTED"}
     report = build_report(value)
     text = str(report)
-    for label in ["공격 해석", "정상 해석", "참고 내용", "판정 확정에 필요한 조건", "관련 근거", "확인 내용", "로그 발췌", "판단 이유"]:
+    for label in ["공격 해석", "정상 해석", "참고 내용", "판정에 필요한 확인", "관련 근거", "확인 내용", "로그 발췌", "판단 이유"]:
         assert label in text
     for item in CASES[0]["expected"]["evidence"]:
         assert item["interpretation_ko"] in text
     assert "NOT_EXPORTED" not in text and "연결할 수 없는 쟁점" not in text
-    assert report.sections[-1].title == "판정 확정에 필요한 조건"
+    assert report.sections[-1].title == "판정에 필요한 확인"
     assert render_xlsx(report).startswith(b"PK")
     assert render_pdf(report).startswith(b"%PDF")
 

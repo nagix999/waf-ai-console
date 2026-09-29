@@ -25,7 +25,7 @@ def test_waf_observation_followup_export_does_not_change_final_verdict(verdict, 
     detail["result"]["analyst_guidance"]["checks"] = [{"source_ko": "서비스 기록", "check_ko": "요청 값의 처리 범위", "why_ko": "입력의 처리 문맥을 대조합니다."}]
     before = deepcopy(detail)
     report = build_report(detail)
-    assert report.sections[-1].title == ("판정 확정에 필요한 조건" if verdict == "inconclusive" else "후속 확인 · 선택사항")
+    assert report.sections[-1].title == ("판정에 필요한 확인" if verdict == "inconclusive" else "영향·대응 확인")
     assert ("차단으로 기록됐습니다" if action == "D" else "허용으로 기록됐습니다") in report_text(report)
     assert "공격 시도가 있었는지 확인" not in report_text(report)
     assert detail == before

@@ -40,16 +40,17 @@ export function decisionConditions(detail) {
     if (!item.checks.some(row => row.source_ko === check.source_ko && row.why_ko === check.why_ko)) item.checks.push(check);
   }
   const sections = [
-    { key: "conditions", title: held ? ["판정 확정에 필요한 조건", "Conditions to reach a decision"] : ["후속 확인 · 선택사항", "Optional follow-up"], items,
+    { key: "conditions", title: held ? ["판정에 필요한 확인", "Checks needed for a decision"] : ["영향·대응 확인", "Impact and response checks"], items,
       introduction: semantic && held && items.length ? "아래 조건을 원문·처리 규칙과 대조해 판정을 검토하세요." : followUp.introduction_ko,
       introductionEn: semantic && held && items.length ? "Review the conditions below against the source and handling rules." : undefined,
       empty: followUp.empty_ko },
-    { key: "impact", title: ["후속 확인 · 선택사항", "Optional follow-up"], items: optional,
-      introduction: "판정의 필수 조건이 아닙니다. 필요한 경우 영향 범위와 후속 대응을 확인하세요.", introductionEn: "Not required for the verdict. Review impact and response where useful." },
-    { key: "tuning", title: ["튜닝 검증 · 선택사항", "Tuning validation · optional"], items: tuning,
+    { key: "impact", title: ["영향·대응 확인", "Impact and response checks"], items: optional,
+      introduction: held ? "판정에 필요한 확인과는 별개로, 영향 범위나 대응 필요성을 확인할 때 참고하세요." : "판정은 이미 확정되었습니다. 아래 항목은 영향 범위나 대응 필요성을 확인할 때 참고하세요.",
+      introductionEn: held ? "Separate from the checks needed for a decision, use these to review impact and response needs." : "The verdict is already determined. Use these checks to review impact and response needs." },
+    { key: "tuning", title: ["튜닝 전 검증", "Pre-tuning validation"], items: tuning,
       introduction: "정책 검토 제안과 함께 확인하세요. WAF 설정은 자동 변경하지 않습니다.", introductionEn: "Review alongside the policy suggestion. WAF settings are never changed automatically." },
     { key: "unclassified", title: ["기록된 확인 사항", "Recorded checks"], items: unclassified },
-  ].filter(section => section.items.length || section.key === "conditions" && held);
+  ].filter(section => section.items.length);
   return { ...followUp, items, sections, visible: sections.length > 0, held };
 }
 
