@@ -56,7 +56,8 @@ test("saved semantic conflict remains a hold, not an asserted normal request or 
   const report = buildAnalysisReport(detail);
   assert.ok(!analystSummary(detail).includes("정상 요청으로"));
   assert.ok(!report.includes("업무 규격"));
-  assert.ok(report.includes("검토한 유형"));
+  assert.ok(report.includes("자동 분석 해석이 서로 달랐습니다."));
+  assert.ok(!report.includes("저장된 해석"));
   assert.ok(report.includes("확정된 결론으로 사용하지 마세요"));
   assert.equal(JSON.stringify(detail), before);
 });

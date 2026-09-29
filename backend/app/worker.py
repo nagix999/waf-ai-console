@@ -520,6 +520,7 @@ def _ground_output_evidence(
     grounded = [item for item in output.evidence if sources.matches(item.field, item.excerpt)]
     rejected_count = len(output.evidence) - len(grounded)
     downgraded = output.verdict != AgentVerdict.inconclusive and (not grounded or force_inconclusive)
+    semantic = output.signature_assessment.version == "signature-assessment-v2"
 
     if downgraded or force_inconclusive:
         validated = output.model_copy(
@@ -535,7 +536,7 @@ def _ground_output_evidence(
                     update={"severity": ThreatSeverity.UNKNOWN}
                 ),
                 "evidence": grounded,
-                "recommended_checks": _dedupe_checks(
+                "recommended_checks": [] if semantic else _dedupe_checks(
                     output.recommended_checks,
                     "원본 HTTP 요청과 이벤트 필드에서 판정 근거를 다시 확인하세요.",
                 ),
@@ -554,7 +555,7 @@ def _ground_output_evidence(
         validated = output.model_copy(
             update={
                 "evidence": grounded,
-                "recommended_checks": _dedupe_checks(
+                "recommended_checks": [] if semantic else _dedupe_checks(
                     output.recommended_checks,
                     "일부 LLM 근거가 지정된 필드의 원문과 일치하지 않아 제외되었습니다. 남은 근거를 직접 확인하세요.",
                 ),
@@ -595,8 +596,8 @@ def _ground_agent_call(
 
 
 def _execute_grounded_agent(*, analysis, raw_payload, parsed, input_truncated,
-                            submitted_payload_spans=None, assessment_enabled=False, **kwargs):
-    from .agent.contracts import EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput
+                            submitted_payload_spans=None, assessment_enabled=False, semantic_enabled=False, **kwargs):
+    from .agent.contracts import EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput, SemanticAssessmentOutput
     from .agent.evidence_candidates import (
         VERSION as SELECTION_VERSION, REPAIR_INSTRUCTIONS as SELECTION_REPAIR_INSTRUCTIONS,
         resolve_selection, apply_selection_corrections,
@@ -608,7 +609,7 @@ def _execute_grounded_agent(*, analysis, raw_payload, parsed, input_truncated,
     document = json.loads(kwargs["user_input"])
     catalog = document.get("evidence_candidates")
     selecting = isinstance(catalog, dict) and catalog.get("version") == SELECTION_VERSION
-    selection_model = EvidenceAssessmentOutput if assessment_enabled else EvidenceSelectionOutput
+    selection_model = SemanticAssessmentOutput if semantic_enabled else EvidenceAssessmentOutput if assessment_enabled else EvidenceSelectionOutput
     repair_instructions = SELECTION_REPAIR_INSTRUCTIONS if selecting else REPAIR_INSTRUCTIONS
     if selecting:
         kwargs["output_model"] = selection_model
@@ -937,10 +938,12 @@ def _process_moduagent_steps(
     ) as step:
         from .agent.analyst_assessment import RULES_VERSIONS as ASSESSMENT_RULES_VERSIONS, build_analyst_assessment
         assessment_enabled = prompt.fixed_rules_version in ASSESSMENT_RULES_VERSIONS
+        semantic_enabled = prompt.fixed_rules_version == "waf-system-v2.13"
         primary = _execute_grounded_agent(
                 analysis=analysis, raw_payload=raw_payload, parsed=parsed, input_truncated=agent_input.input_truncated,
                 submitted_payload_spans=agent_input.retained_payload_spans,
                 assessment_enabled=assessment_enabled,
+                semantic_enabled=semantic_enabled,
                 profile=profile, api_key=api_key, instructions=prompt.primary_instructions,
                 user_input=agent_input.text, session_id=f"{analysis.id}:primary", agent_name="waf-primary",
                 egress_check=egress_check,
@@ -993,6 +996,7 @@ def _process_moduagent_steps(
                     analysis=analysis, raw_payload=raw_payload, parsed=parsed, input_truncated=agent_input.input_truncated,
                     submitted_payload_spans=agent_input.retained_payload_spans,
                     assessment_enabled=assessment_enabled,
+                    semantic_enabled=semantic_enabled,
                     profile=verifier_profile, api_key=verifier_key, instructions=prompt.verifier_instructions,
                     user_input=agent_input.text, session_id=f"{analysis.id}:verifier", agent_name="waf-verifier",
                     egress_check=verifier_check,
@@ -1046,6 +1050,7 @@ def _process_moduagent_steps(
             "schema_version": "waf-analysis-v2",
             "analyst_guidance": build_analyst_guidance(
                 final_output, incomplete_execution=bool(reasons and (verifier is None or not verifier.succeeded)),
+                evidence_rejected=any(bool(call and call.telemetry.get("evidence_grounding", {}).get("rejected_count")) for call in (primary, verifier)),
             ),
             "primary": primary.output.model_dump(mode="json"),
             "verifier": {
@@ -1101,7 +1106,7 @@ def _organize_evidence(db, crypto, analysis, run, sequence, snapshot, request_ch
     from .services.agent_configuration import profile_metadata, role_request_check
     result = dict(analysis.result_json)
     assessment = result.get("analyst_assessment")
-    extended = snapshot.version == result_editor.VERSION
+    extended = snapshot.version in result_editor.SUPPORTED_VERSIONS
     source_checks = result.get("analyst_guidance", {}).get("checks", [])
     preparation_failed = False
     try:
@@ -1112,11 +1117,11 @@ def _organize_evidence(db, crypto, analysis, run, sequence, snapshot, request_ch
                 "model_profile_id": snapshot.profile_id, "profile_fingerprint": snapshot.profile_fingerprint,
                 "verdict_changed": False, "llm_called": False}
     presentation = {"version": VERSION, "status": "skipped", "reason": "no_duplicate_candidates"}
-    check_presentation = {"version": result_editor.CHECK_VERSION}
+    check_presentation = {"version": result_editor.CHECK_VERSION if snapshot.version == result_editor.VERSION else "follow-up-editor-v1"}
     with measured_step(db, crypto, run, sequence, "llm_evidence_editor", "근거·확인사항 정리" if extended else "근거 정리",
                        {"instructions": snapshot.instructions, "input": document}, metadata) as step:
         call = None
-        if preparation_failed or snapshot.version not in {VERSION, result_editor.VERSION}:
+        if preparation_failed or snapshot.version not in {VERSION, *result_editor.SUPPORTED_VERSIONS}:
             presentation.update(status="fallback", reason="editor_unavailable_or_invalid")
         elif document is not None:
             try:

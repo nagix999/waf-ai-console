@@ -224,14 +224,14 @@ def test_older_pinned_execution_keeps_its_protocol_after_deployment(client, even
     from agent_selection_helpers import model_output
     from app.agent.executor import AgentCallResult
     from app.models import VLLMProfile
-    from app.services import prompt_snapshots
+    from app.agent import prompts
     from test_prompt_snapshots import fake_output, login
     login(client)
     with monkeypatch.context() as old:
-        old.setattr(prompt_snapshots, "FIXED_RULES_VERSION", f"waf-system-v{revision}")
-        old.setattr(prompt_snapshots, "PROMPT_VERSION", f"waf-judgment-v{revision}")
+        old.setattr(prompts, "FIXED_RULES_VERSION", f"waf-system-v{revision}")
+        old.setattr(prompts, "PROMPT_VERSION", f"waf-judgment-v{revision}")
         contract_description = "field/excerpt exact citation" if revision == "2.6" else "source_id selection"
-        old.setattr(prompt_snapshots, "build_role_instructions", lambda policy: (
+        old.setattr(prompts, "build_role_instructions", lambda policy: (
             "synthetic-old-primary: " + contract_description, "synthetic-old-verifier: " + contract_description))
         created = client.post("/api/v1/analyses", json=event_payload).json()
     calls = []

@@ -32,6 +32,9 @@ PAPER = colors.HexColor("#F4F8F6")
 GROUPS = {
     "정탐 근거": ("#B94235", "#FCF2EF"),
     "오탐 근거": ("#16775E", "#EEF8F3"),
+    "공격 해석": ("#B94235", "#FCF2EF"),
+    "정상 해석": ("#16775E", "#EEF8F3"),
+    "반대 근거": ("#56667B", "#F1F4F8"),
     "참고 내용": ("#56667B", "#F1F4F8"),
     "구분 미기록": ("#56667B", "#F1F4F8"),
 }
@@ -139,6 +142,8 @@ def evidence_card(title, rows, sheet):
         foreground, background = map(colors.HexColor, {
             "정탐 근거": ("#FFA899", "#49332E"),
             "오탐 근거": ("#8EDBC2", "#254339"),
+            "공격 해석": ("#FFA899", "#49332E"),
+            "정상 해석": ("#8EDBC2", "#254339"),
         }.get(title, ("#BFCDE1", "#2D3D4C")))
     border = colors.Color(*[(component + 3 * base) / 4 for component, base in zip(
                             (foreground.red, foreground.green, foreground.blue),
@@ -398,5 +403,3 @@ def render_pdf(document, *, theme="light"):
                 raise ReportLayoutError(code) from None
         raise ReportLayoutError("report_render_failed") from None
     return buffer.getvalue()
-
-

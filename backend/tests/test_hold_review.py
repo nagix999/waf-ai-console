@@ -37,7 +37,7 @@ def test_report_pdf_and_excel_include_the_same_review_without_role_or_raw_reads(
     review = hold_review(detail, decision_explanation(detail))
     report = build_report(detail)
     text = report_text(report)
-    assert report.sections[-1].title == "추가 확인 사항"
+    assert report.sections[-1].title == "판정 확정에 필요한 조건"
     for check in review["checks"]:
         assert all(value in text for value in check.values())
     for issue in review["issues"]:

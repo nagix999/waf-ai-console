@@ -35,7 +35,10 @@ def output(
             },
             "signature_assessment": {
                 "relation": relation,
-                "explanation_ko": "요청 구문과 시그니처가 일치합니다.",
+                "explanation_ko": {"exact": "탐지 설명과 요청의 핵심 동작이 일치합니다.",
+                    "partial": "일부는 일치하지만 중요한 차이가 있습니다.",
+                    "mismatch": "탐지 설명과 요청의 핵심 동작이 다릅니다.",
+                    "unknown": "현재 입력만으로 관계를 확인하기 어렵습니다."}[relation],
             },
             "evidence": [
                 {

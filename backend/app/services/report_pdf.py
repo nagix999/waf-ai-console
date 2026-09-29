@@ -7,6 +7,7 @@ import sys
 from threading import BoundedSemaphore
 
 from .analysis_exports import MAX_DOWNLOAD_BYTES, ReportExportError, build_report
+from .decision_semantics import verifier_disagreed
 
 _SLOTS = BoundedSemaphore(1)
 PDF_TIMEOUT_SECONDS = 45
@@ -37,6 +38,11 @@ def pdf_document(detail, *, decoding=None, include_appendix=False, theme="light"
     }
     if isinstance(result.get("verifier"), dict):
         clean["result"]["verifier"] = {key: result["verifier"][key] for key in ("executed", "agreement", "failure_id", "reasons", "error") if key in result["verifier"]}
+    if verifier_disagreed(detail):
+        # Only role verdicts, never whole intermediate outputs, reach the PDF.
+        clean["result"]["primary"] = pick(result.get("primary"), "verdict")
+        if isinstance(result.get("verifier"), dict):
+            clean["result"]["verifier"]["output"] = pick(result["verifier"].get("output"), "verdict")
     return {"detail": clean, "decoding": decoding, "includeAppendix": include_appendix, "theme": theme}
 
 

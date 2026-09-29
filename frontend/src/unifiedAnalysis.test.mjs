@@ -43,7 +43,7 @@ test("unified list has exactly six stable columns without a WAF column or altern
   assert.deepEqual(headers, ["판정 / 심각도", "이벤트 / 요약", "회사 / 연결", "참고 답안 비교", "전체 소요 시간", "접수 시각"]);
   assert.doesNotMatch(html, /NEVER_SHOW_WAF_VENDOR_COLUMN|Deny|status-completed|분석 보기|평가 보기/);
   assert.match(html, /class="sr-only">분석 완료/);
-  assert.match(html, /unified-event-title[^>]*>Synthetic detection/);
+  assert.match(html, /unified-event-title[^>]*>분석 상세 보기/);
   assert.doesNotMatch(html, /unified-event-id|synthetic-complete/);
   const opened = [];
   const tree = AnalysisTable({ items: [fixture("complete")], onOpen: id => opened.push(id) });

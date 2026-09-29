@@ -159,13 +159,13 @@ export function Login({ onLogin }) {
 export function AnalysisTable({ items, onOpen, title = "분석 결과", subtitle, total = items.length, loading = false, purpose = "", selection, sorting, onSortingChange }) {
   const showPurpose = !["test", "production", "legacy_unknown"].includes(purpose);
   const columns = [
-    ...(selection ? [{ id: "select", header: selection.header, width: 44, className: "selection-cell", render: item => selection.cell(item.id, item.signature || item.event_name || "분석") }] : []),
+    ...(selection ? [{ id: "select", header: selection.header, width: 44, className: "selection-cell", render: item => selection.cell(item.id, item.event_name || "분석") }] : []),
     { id: "decision", header: "판정 / 심각도", width: "14%", className: "table-meta unified-decision", render: item => {
       const state = analysisRowState(item.status);
       return <>{item.status === "completed" ? <><Status value={finalValue(item, "verdict")} /><Severity value={item.severity} /><span className="sr-only">{state.label}</span></> : <span className="analysis-row-state"><Icon name={item.status === "failed" ? "alert" : "clock"} size={14} />{state.label}</span>}
         <InitialAssessment compact value={item.initial_assessment} />{isMockAnalysis(item) && <small className="label-revision">모의 판정 · LLM 아님</small>}{item.input_truncated === true && <small>입력 일부 생략</small>}</>;
     }},
-    { id: "summary", header: "이벤트 / 요약", className: "table-meta analyst-event unified-event", render: item => <><button className="text-button unified-event-title" onClick={() => onOpen(item.id)}>{item.signature || item.event_name || "분석 상세 보기"}</button><SummaryPreview text={analystSummary(item)} />{showPurpose && <Purpose value={item.analysis_purpose} />}</> },
+    { id: "summary", header: "이벤트 / 요약", className: "table-meta analyst-event unified-event", render: item => <><button className="text-button unified-event-title" onClick={() => onOpen(item.id)}>{item.event_name || "분석 상세 보기"}</button><SummaryPreview text={analystSummary(item)} />{showPurpose && <Purpose value={item.analysis_purpose} />}</> },
     { id: "company_name", header: "회사 / 연결", sortable: true, width: "18%", className: "table-meta unified-company", render: item => <><strong title={item.company_name || ""}>{item.company_name}</strong><small title={`${item.src_ip || "-"}${item.src_port != null ? ` : ${item.src_port}` : ""}`}>{item.src_ip || "-"}{item.src_port != null ? ` : ${item.src_port}` : ""}</small><small title={`${item.dest_ip || "-"}${item.dest_port != null ? ` : ${item.dest_port}` : ""}`}>→ {item.dest_ip || "-"}{item.dest_port != null ? ` : ${item.dest_port}` : ""}</small></> },
     { id: "reference", header: "참고 답안 비교", width: "14%", className: "unified-reference", render: item => <CompactReferenceComparison evaluation={item.evaluation} detail={item} /> },
     { id: "duration", header: "전체 소요 시간", width: "10%", className: "numeric", render: item => analysisElapsedTime(item) },
@@ -492,7 +492,7 @@ export function Detail({ id, onBack, onOpen, backLabel = "분석 결과", tab: c
     <DecisionHero detail={detail} />
     <DetailTabs label={t("detail")} items={tabItems} value={tab} onChange={setTab} focusRequest={tabFocusRequest}>{key => {
       if (key === "result") return tab === "result" && <div className="decision-layout">
-        {detail.status === "completed" && detail.result ? <ResultView detail={detail} onViewInput={openInput} includePolicy={false} /> : <section className="panel decision-awaiting"><h2>{detail.status === "completed" ? w("결과 본문 미기록", "Result body not recorded") : detail.status === "failed" ? w("실행 확인", "Check execution") : w("분석 진행", "Analysis progress")}</h2><p>{detail.status === "completed" ? w("처리는 완료되었지만 저장된 결과 본문이 없어 근거를 표시할 수 없습니다. 실행 기록을 확인해 주세요.", "Processing completed, but the result body is unavailable. Check the execution record.") : detail.status === "failed" ? w("실패한 단계는 실행 탭에서 확인할 수 있습니다. 재실행해도 기존 실패 이력은 보존됩니다.", "Check the Execution tab for the failed step. Retrying preserves the original failure history.") : w("분석이 완료되면 판정 근거를 표시합니다.", "Evidence will appear when the analysis finishes.")}</p><NavigationAction onClick={() => jumpTab("agent")}>{w("실행 상세", "Execution details")}</NavigationAction></section>}
+        {detail.status === "completed" && detail.result ? <ResultView detail={detail} onViewInput={openInput} includePolicy={false} onExecution={() => jumpTab("agent")} /> : <section className="panel decision-awaiting"><h2>{detail.status === "completed" ? w("결과 본문 미기록", "Result body not recorded") : detail.status === "failed" ? w("실행 확인", "Check execution") : w("분석 진행", "Analysis progress")}</h2><p>{detail.status === "completed" ? w("처리는 완료되었지만 저장된 결과 본문이 없어 근거를 표시할 수 없습니다. 실행 기록을 확인해 주세요.", "Processing completed, but the result body is unavailable. Check the execution record.") : detail.status === "failed" ? w("실패한 단계는 실행 탭에서 확인할 수 있습니다. 재실행해도 기존 실패 이력은 보존됩니다.", "Check the Execution tab for the failed step. Retrying preserves the original failure history.") : w("분석이 완료되면 판정 근거를 표시합니다.", "Evidence will appear when the analysis finishes.")}</p><NavigationAction onClick={() => jumpTab("agent")}>{w("실행 상세", "Execution details")}</NavigationAction></section>}
         <DecisionContext detail={detail} history={labelHistory} historyError={labelHistoryError} onSaved={() => loader.current?.refresh()} onExecution={() => jumpTab("agent")} />
       </div>;
       if (key === "agent") return <ExecutionView key={id} detail={detail} runs={runs} runsError={runsError} runsLoading={runsLoading} onRetry={() => loader.current?.refreshAgent()} onMetadata={() => setTechnicalOpen(true)} initialJson={requestedTab === "json"} active={tab === "agent"} />;
@@ -520,12 +520,12 @@ export function Detail({ id, onBack, onOpen, backLabel = "분석 결과", tab: c
   </div>;
 }
 
-export function ResultView({ detail, onViewInput, includePolicy = true }) {
+export function ResultView({ detail, onViewInput, onExecution, includePolicy = true }) {
   if (!detail.result || detail.status !== "completed") return null;
   return <div className="decision-main-stack">
     <EvidenceCards detail={detail} onViewInput={onViewInput} />
     <DecisionConditions detail={detail} onViewInput={onViewInput} />
-    <TechnicalInterpretation detail={detail} />
+    <TechnicalInterpretation detail={detail} onExecution={onExecution} />
     {includePolicy && <PolicySuggestion detail={detail} />}
   </div>;
 }

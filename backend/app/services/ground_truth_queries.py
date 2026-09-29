@@ -182,7 +182,7 @@ def document(db, row, state, query, crypto):
     legacy_metadata = legacy_metadata_for(db, [row.id], crypto) if state is None else "[]"
     values = relation([row.id], legacy_metadata)
     conditions = []
-    for key in ("state", "change", "reference_verdict", "source_kind"):
+    for key in ("state", "change", "reference_verdict", "source_kind", "reference_origin"):
         if getattr(query, key):
             conditions.append(values.c[key] == getattr(query, key))
     if query.query.strip():

@@ -104,7 +104,11 @@ test("back restores scroll in memory without adding positions or filters to URL/
   browser.history.back(); browser.flush();
   while (frames.length) frames.shift()();
   assert.equal(browser.scrollY, 420);
-  assert.doesNotMatch(JSON.stringify(browser.history.state), /420|scroll/);
+  // IDs are random UUIDs and may legitimately contain the digits "420".
+  // Assert the stored structure instead of matching substrings inside IDs.
+  assert.deepEqual(Object.keys(browser.history.state), ["__wafNavigation"]);
+  assert.deepEqual(Object.keys(browser.history.state.__wafNavigation).sort(), ["document", "entry", "session"]);
+  assert.ok(Object.values(browser.history.state.__wafNavigation).every(value => typeof value === "string"));
   stop(); assert.equal(browser.history.scrollRestoration, "auto");
 });
 

@@ -8,7 +8,7 @@ from typing import Any, Awaitable, Callable
 import httpx
 
 from ..models import ModelTestMode, VLLMProfile
-from ..agent.contracts import WAFAnalysisOutput
+from ..agent.contracts import WAFAnalysisOutput, legacy_output_schema
 from .crypto import CryptoService
 from .internal_egress import InternalEgressError
 from .validation_output_diagnostics import inspect_json_output, inspection_limit_exceeded, probe_json_decoder
@@ -314,7 +314,9 @@ async def run_vllm_test(
                                 )}],
                                 response_format={"type": "json_schema", "json_schema": {
                                     "name": "WAFAnalysisOutput", "strict": True,
-                                    "schema": strict_json_schema(WAFAnalysisOutput.model_json_schema()),
+                                    # Provider capability probing is not a candidate
+                                    # evaluation. Preserve its small legacy contract.
+                                    "schema": strict_json_schema(legacy_output_schema(WAFAnalysisOutput.model_json_schema())),
                                 }},
                             ),
                         )

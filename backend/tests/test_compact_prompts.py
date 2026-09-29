@@ -1,4 +1,4 @@
-"""Static safeguards for the shared, compact v2.12 instructions.
+"""Static safeguards for the shared, compact v2.13 instructions.
 
 These checks establish text/contract boundaries, not model obedience, tokenizer
 savings or an improvement in verdict quality on any particular serving model.
@@ -20,8 +20,8 @@ from app.agent.prompts import (
 
 
 def test_shared_revision_and_default_exports_are_consistent():
-    assert PROMPT_VERSION == "waf-judgment-v2.12"
-    assert FIXED_RULES_VERSION == "waf-system-v2.12"
+    assert PROMPT_VERSION == "waf-judgment-v2.13"
+    assert FIXED_RULES_VERSION == "waf-system-v2.13"
     assert build_role_instructions(DEFAULT_POLICY_TEXT) == (
         PRIMARY_INSTRUCTIONS,
         VERIFIER_INSTRUCTIONS,
@@ -126,7 +126,7 @@ def test_instruction_and_default_policy_length_decrease_in_chars_and_utf8_bytes(
             "why_ko=판정을 가르는 조건(보류)",
             "자료의 존재·조회 완료·확인 후 판정을 약속하지 않는다",
             "공격 성공·HTTP 성공 응답을 판정의 필수 조건으로 요구하지 않는다",
-            "recommended_checks는 같은 작업을 짧게 쓰고 중복하지 않는다",
+            "recommended_checks=[]로 두고 analyst_checks만 작성한다",
             "확인이 없으면 두 목록 모두 빈 배열",
         ),
         (

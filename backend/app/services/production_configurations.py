@@ -23,6 +23,7 @@ def fail(code):
 
 
 def live_snapshot(db, crypto, settings, *, roles=None, prompt_id=None, schema_id=None):
+    production = roles is None and prompt_id is None
     roles = roles or configuration_document(db)["assignments"]["production"]
     primary = db.get(VLLMProfile, roles["primary_profile_id"]) if roles["primary_profile_id"] else None
     verifier = db.get(VLLMProfile, roles["verifier_profile_id"] or primary.id) if primary else None
@@ -33,9 +34,9 @@ def live_snapshot(db, crypto, settings, *, roles=None, prompt_id=None, schema_id
         profile_metadata={"verifier_profile": profile_metadata(verifier) if verifier else {
             "model_profile_id": None, "profile_fingerprint": None},
             "verifier_confidence_threshold": settings.verifier_confidence_threshold})
-    pin_analysis_prompt(db, crypto, temporary, version_id=prompt_id)
+    pin_analysis_prompt(db, crypto, temporary, version_id=prompt_id, production=production)
     pin_schema(db, crypto, temporary, version=get_schema_version(db, schema_id) if schema_id else None)
-    editor = capture_editor_profile(editor_profile) if editor_profile else None
+    editor = capture_editor_profile(editor_profile, db=db if production else None) if editor_profile else None
     temporary.evidence_editor_snapshot_ciphertext = crypto.encrypt_text(editor.model_dump_json()) if editor else None
     return snapshot_from_run(temporary, crypto)
 

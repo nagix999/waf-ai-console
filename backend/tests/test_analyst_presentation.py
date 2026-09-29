@@ -31,12 +31,12 @@ def test_exports_include_both_sides_and_issue_but_no_raw_snapshots():
     value["result"]["primary"] = {"secret": "NOT_EXPORTED"}
     report = build_report(value)
     text = str(report)
-    for label in [*list(EVIDENCE_LABELS.values())[:3], "판단이 필요한 부분", "관련 근거", "아직 확인되지 않은 조건", "로그 발췌", "판단 이유"]:
+    for label in ["공격 해석", "정상 해석", "참고 내용", "판정 확정에 필요한 조건", "관련 근거", "확인 내용", "로그 발췌", "판단 이유"]:
         assert label in text
     for item in CASES[0]["expected"]["evidence"]:
         assert item["interpretation_ko"] in text
     assert "NOT_EXPORTED" not in text and "연결할 수 없는 쟁점" not in text
-    assert report.sections[-1].title == "추가 확인 사항"
+    assert report.sections[-1].title == "판정 확정에 필요한 조건"
     assert render_xlsx(report).startswith(b"PK")
     assert render_pdf(report).startswith(b"%PDF")
 
@@ -45,7 +45,7 @@ def test_exports_include_both_sides_and_issue_but_no_raw_snapshots():
 def test_system_failure_does_not_present_business_issue_as_the_hold_cause(reason):
     value = detail()
     value["result"]["diagnostics"]["inconclusive_reasons"] = [reason]
-    assert "판단이 필요한 부분" not in [item.title for item in build_report(value).sections]
+    assert "code_verifier의 값이 인증 데이터인지 구문으로 해석되는지 구분해야 합니다." not in str(build_report(value))
 
 
 @pytest.mark.parametrize("text", [

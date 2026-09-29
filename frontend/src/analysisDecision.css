@@ -121,3 +121,7 @@
   .decision-definitions > div { grid-template-columns: minmax(0, 1fr); gap: 4px; }
   .decision-stage-summary li { grid-template-columns: minmax(0, 1fr) auto 65px; gap: 8px; }
 }
+.decision-check-group + .decision-check-group { border-top: 1px solid var(--line); padding-top: 18px; margin-top: 18px; }
+.decision-check-group > .muted { margin: 8px 0 14px; }
+.decision-check-group[data-purpose="impact"] li, .decision-check-group[data-purpose="tuning"] li { border-left-color: var(--accent); }
+.decision-check-group[data-purpose="impact"] li::marker, .decision-check-group[data-purpose="tuning"] li::marker { color: var(--accent); }

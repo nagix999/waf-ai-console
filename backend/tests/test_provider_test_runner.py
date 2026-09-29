@@ -81,6 +81,10 @@ def test_provider_checks_use_matching_options_and_store_no_response_text(monkeyp
             assert not {"max_tokens", "chat_template_kwargs", "temperature", "reasoning_effort"} & body.keys()
             if "response_format" in body:
                 assert_strict_schema(body["response_format"]["json_schema"]["schema"])
+                if body["response_format"]["json_schema"]["name"] == "WAFAnalysisOutput":
+                    definitions = body["response_format"]["json_schema"]["schema"]["$defs"]
+                    assert set(definitions["SignatureAssessment"]["properties"]) == {"relation", "explanation_ko"}
+                    assert set(definitions["AnalystCheck"]["properties"]) == {"source_ko", "check_ko", "why_ko"}
         else:
             assert body["temperature"] == 0
             assert body["chat_template_kwargs"] == {"enable_thinking": False}

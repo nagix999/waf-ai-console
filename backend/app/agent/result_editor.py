@@ -4,8 +4,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from .contracts import AnalystCheck
 from .evidence_editor import EvidenceGroup, INSTRUCTIONS as EVIDENCE_INSTRUCTIONS, _key, validate_groups
 
-VERSION = "result-editor-v2"
-CHECK_VERSION = "follow-up-editor-v1"
+LEGACY_VERSION = "result-editor-v2"
+VERSION = "result-editor-v3"
+CHECK_VERSION = "follow-up-editor-v2"
+SUPPORTED_VERSIONS = frozenset({LEGACY_VERSION, VERSION})
 CHECK_FIELDS = ("source_ko", "check_ko", "why_ko")
 INSTRUCTIONS = EVIDENCE_INSTRUCTIONS + """
 추가 확인사항 checks도 정리한다. check_allowed_groups 안에서 같은 자료·대상·처리 경로·확인 조건을 점검하는 동일 작업만 묶는다.
@@ -14,6 +16,8 @@ INSTRUCTIONS = EVIDENCE_INSTRUCTIONS + """
 모든 check_id를 정확히 한 번씩 check_groups의 member_ids에 포함한다. 대표 번호는 구성원이어야 한다.
 확인 항목·설명·자료·조건을 새로 작성하거나 바꾸지 않는다. 의미가 같은지 확실하지 않으면 각각 남긴다.
 근거는 groups, 확인사항은 check_groups로 분리하고 서로 섞지 않는다. 입력 목록이 비어 있으면 해당 그룹 목록도 빈 배열이다."""
+LEGACY_INSTRUCTIONS = INSTRUCTIONS
+INSTRUCTIONS += "\npurpose가 다른 항목은 자료가 같아도 병합하지 않는다. purpose·signature relation·판정을 바꾸거나 새 확인 문장을 만들지 않는다."
 
 
 class ResultEditorOutput(BaseModel):
@@ -28,7 +32,8 @@ def check_items(checks):
     items = []
     for index, check in enumerate(checks):
         AnalystCheck.model_validate(check)
-        items.append({"check_id": f"c{index + 1}", **{key: check[key] for key in CHECK_FIELDS}})
+        items.append({"check_id": f"c{index + 1}", **{key: check[key] for key in CHECK_FIELDS},
+                      **({"purpose": check["purpose"]} if check.get("purpose") is not None else {})})
     return items
 
 
@@ -37,7 +42,7 @@ def check_buckets(items):
     for item in items:
         # Do not guess source aliases or normalize field/path values. The LLM
         # still must distinguish different tasks within an identical source.
-        buckets.setdefault(item["source_ko"], []).append(item["check_id"])
+        buckets.setdefault((item["source_ko"], item.get("purpose")), []).append(item["check_id"])
     return list(buckets.values())
 
 
@@ -71,6 +76,8 @@ def validate_check_groups(checks, groups):
             raise ValueError("editor_invalid_check_ids")
         if len({indexed[identifier]["source_ko"] for identifier in ids}) != 1:
             raise ValueError("editor_check_source_mismatch")
+        if len({indexed[identifier].get("purpose") for identifier in ids}) != 1:
+            raise ValueError("editor_check_purpose_mismatch")
         seen.update(ids)
     if seen != indexed.keys():
         raise ValueError("editor_incomplete_check_coverage")
@@ -93,14 +100,16 @@ def validate_result(assessment, checks, output):
 
 def present_checks(checks, presentation):
     """Apply only a complete mapping bound to the unchanged original list."""
-    if not isinstance(presentation, dict) or presentation.get("version") != CHECK_VERSION or presentation.get("status") != "completed":
+    if not isinstance(presentation, dict) or presentation.get("version") not in {"follow-up-editor-v1", CHECK_VERSION} or presentation.get("status") != "completed":
         return checks
     try:
         items = check_items(checks)
+        if presentation["version"] == "follow-up-editor-v1" and any("purpose" in item for item in items):
+            return checks
         if presentation.get("items") != items:
             return checks
         groups = validate_check_groups(checks, presentation.get("groups"))
         indexed = {item["check_id"]: item for item in items}
-        return [{key: indexed[group["representative_id"]][key] for key in CHECK_FIELDS} for group in groups]
+        return [{key: value for key, value in indexed[group["representative_id"]].items() if key != "check_id"} for group in groups]
     except (ValueError, TypeError, KeyError):
         return checks

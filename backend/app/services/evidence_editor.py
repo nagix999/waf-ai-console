@@ -31,12 +31,30 @@ def capture_editor(db, purpose, primary):
     # Assignment API prevents missing profiles. Do not silently select a new one.
     if profile is None:
         return None
-    return capture_editor_profile(profile)
+    return capture_editor_profile(profile, db=db if purpose == "production" else None)
 
 
-def capture_editor_profile(profile):
+def capture_editor_profile(profile, *, db=None):
+    version, instructions = VERSION, INSTRUCTIONS
+    if db is not None:
+        from .prompt_snapshots import approved_production_record, PromptSnapshotError
+        from ..agent import evidence_editor, result_editor
+        approved = approved_production_record(db)
+        if approved is not None:
+            try:
+                expected = approved.snapshot_json["evidence_editor"]
+                if not expected["enabled"]:
+                    raise ValueError()
+                version = expected["version"]
+                instructions = {evidence_editor.VERSION: evidence_editor.INSTRUCTIONS,
+                    result_editor.LEGACY_VERSION: result_editor.LEGACY_INSTRUCTIONS,
+                    VERSION: INSTRUCTIONS}[version]
+                if instructions_hash(instructions) != expected["instructions_hash"]:
+                    raise ValueError()
+            except (ValueError, TypeError, KeyError):
+                raise PromptSnapshotError() from None
     meta = profile_metadata(profile)
-    return EditorSnapshot(version=VERSION, instructions=INSTRUCTIONS, instructions_hash=instructions_hash(INSTRUCTIONS),
+    return EditorSnapshot(version=version, instructions=instructions, instructions_hash=instructions_hash(instructions),
                           profile_id=profile.id, profile_fingerprint=meta["profile_fingerprint"])
 
 

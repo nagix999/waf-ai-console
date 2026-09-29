@@ -7,6 +7,8 @@ import { buildSync } from "esbuild";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { decisionTab, detailEvidence, decisionConditions } from "./decisionDetail.js";
+import { buildAnalysisReport, decodeReportText } from "./analysisReport.js";
+import { evidenceSections, signatureSummary, verifierDisagreed } from "./decisionSemantics.js";
 
 const bundle = buildSync({ entryPoints: [fileURLToPath(new URL("./AnalysisDecision.jsx", import.meta.url))], bundle: true, write: false, platform: "node", format: "cjs", packages: "external", jsx: "automatic", loader: { ".css": "empty", ".md": "text" }, logLevel: "silent" });
 const module = { exports: {} };
@@ -60,7 +62,7 @@ test("evidence keeps opposing interpretations and source numbers; legacy evidenc
 test("reference evidence is folded, attack and benign evidence stay visible and inert", () => {
   const detail = fixture(); detail.result.analyst_assessment.evidence[0].excerpt = '<script>window.hostile=true</script>';
   const html = render(EvidenceCards, { detail, onViewInput() {} });
-  assert.match(html, /정탐 근거/); assert.match(html, /오탐 근거/);
+  assert.match(html, /공격 해석/); assert.match(html, /정상 해석/);
   assert.match(html, /<details class="decision-context-evidence">/);
   assert.match(html, /&lt;script&gt;/); assert.doesNotMatch(html, /<script/);
 });
@@ -113,4 +115,68 @@ test("execution starts with summary, not a full debugger; legacy JSON can start 
   assert.doesNotMatch(html, /private-output|inspection-agent-grid|hidden-run/);
   assert.match(html, /<details><summary>결과 JSON/);
   assert.match(render(ExecutionView, { detail, runs, initialJson: true }), /<details open=""><summary>결과 JSON/);
+});
+
+for (const verdict of ["true_positive", "false_positive", "inconclusive"]) for (const action of ["D", "A"]) test(`WAF ${action} and ${verdict}: observation is not a verdict prerequisite`, () => {
+  const detail = fixture(); detail.waf_action = action; detail.result.verdict = verdict;
+  const check = verdict === "inconclusive" ? "셸 실행 여부" : "동일 요청 이후의 영향 범위";
+  detail.result.analyst_guidance.checks = [{ source_ko: "서비스 기록", check_ko: check, why_ko: "입력 처리 범위를 검토합니다." }];
+  const before = JSON.stringify(detail), html = render(DecisionConditions, { detail });
+  const report = decodeReportText(buildAnalysisReport(detail));
+  assert.match(html, action === "D" ? /차단으로 기록됐습니다/ : /허용으로 기록됐습니다/);
+  assert.ok(html.includes(verdict === "inconclusive" ? "판정 확정에 필요한 조건" : "후속 확인 · 선택사항"));
+  assert.ok(report.includes(verdict === "inconclusive" ? "판정 확정에 필요한 조건" : "후속 확인 · 선택사항"));
+  assert.doesNotMatch(html, /공격 시도가 있었는지 확인|200 응답인지 확인 후/);
+  if (verdict !== "inconclusive") {
+    assert.doesNotMatch(html, /셸 실행 여부|값을 사용하는 위치/);
+    assert.match(render(TechnicalInterpretation, { detail }), /판정 시 고려한 쟁점/);
+  }
+  assert.equal(JSON.stringify(detail), before);
+});
+
+for (const severity of ["CRITICAL", "HIGH", "MEDIUM", "LOW", "NONE", "UNKNOWN"]) test(`hero severity ${severity} uses the existing lowercase CSS`, () => {
+  const detail = fixture(); detail.event_name = "중립 이벤트명"; detail.signature = "SQL Injection";
+  detail.result.threat_analysis.severity = severity;
+  const html = render(DecisionHero, { detail });
+  assert.ok(html.includes(`severity-${severity.toLowerCase()}`));
+  assert.match(html, /<h1>중립 이벤트명<\/h1>/);
+  assert.match(html, /WAF 탐지.*SQL Injection/);
+  assert.match(html, /잠재 영향 기준 · 실제 공격 성공 여부와 별도/);
+});
+
+for (const relation of ["exact", "partial", "mismatch", "unknown"]) test(`legacy signature ${relation} uses a deterministic summary without rewriting original explanation`, () => {
+  const detail = fixture(); detail.result.verdict = "true_positive";
+  detail.result.signature_assessment = { relation, explanation_ko: "명확히 일치합니다." };
+  const before = JSON.stringify(detail), html = render(TechnicalInterpretation, { detail });
+  assert.ok(html.includes(signatureSummary(relation)[0]));
+  assert.match(html, /<details><summary>기존 분석 설명/);
+  assert.match(html, /기존 분석 설명은 검증된 결론이 아닙니다/);
+  const report = decodeReportText(buildAnalysisReport(detail));
+  assert.ok(report.includes(signatureSummary(relation)[0]));
+  assert.equal(JSON.stringify(detail), before);
+  assert.equal(detail.result.verdict, "true_positive"); // mismatch does not mean benign.
+});
+
+test("disagreement keeps both evidence sides, exposes role verdicts and never invents missing role analysis", () => {
+  const detail = fixture(); detail.result.diagnostics.inconclusive_reasons = ["verdict_disagreement"];
+  detail.result.primary = { verdict: "true_positive" }; detail.result.verifier = { output: { verdict: "false_positive" } };
+  const before = JSON.stringify(detail), html = render(TechnicalInterpretation, { detail, onExecution() {} });
+  assert.equal(verifierDisagreed(detail), true);
+  assert.match(html, /자동 분석 해석이 서로 달랐습니다/); assert.match(html, /Primary/); assert.match(html, /Verifier/);
+  assert.doesNotMatch(html, /기술 해석 문구|Primary 해석 기록|Verifier 해석 기록/);
+  assert.match(html, /실행 상세/);
+  assert.match(render(EvidenceCards, { detail }), /공격 해석/); assert.match(render(EvidenceCards, { detail }), /정상 해석/);
+  assert.doesNotMatch(decodeReportText(buildAnalysisReport(detail)), /기술 해석 문구/);
+  assert.equal(JSON.stringify(detail), before);
+  detail.result.primary.threat_analysis = { ...detail.result.threat_analysis, technique_ko: "역할별 기록" };
+  const recorded = render(TechnicalInterpretation, { detail });
+  assert.match(recorded, /Primary 해석 기록/); assert.match(recorded, /역할별 기록/); assert.doesNotMatch(recorded, /Verifier 해석 기록/);
+});
+
+for (const verdict of ["true_positive", "false_positive", "inconclusive"]) test(`${verdict} evidence is ordered for the verdict, original numbering is stable`, () => {
+  const detail = fixture(); detail.result.verdict = verdict;
+  const html = render(EvidenceCards, { detail }), sections = evidenceSections(verdict);
+  assert.ok(html.indexOf(`evidence-${sections[0].side}`) < html.indexOf(`evidence-${sections[1].side}`));
+  assert.deepEqual(detailEvidence(detail.result).map(item => item.number), [1, 2, 3]);
+  for (const { label: [label] } of sections.slice(0, 2)) assert.ok(html.includes(label));
 });

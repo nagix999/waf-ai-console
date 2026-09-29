@@ -30,7 +30,9 @@ def test_context_rules_require_both_benign_and_attack_explanations():
         "회사명·유입명·테스트 표식은 정상 근거가 아니다",
     ):
         assert fragment in FIXED_INSTRUCTIONS
-    assert len(PRIMARY_INSTRUCTIONS) <= 3950  # Characters, not tokenizer tokens.
+    # v2.13 adds relation/purpose contracts; bound growth without discarding
+    # existing context safeguards. Characters, not tokenizer tokens.
+    assert len(PRIMARY_INSTRUCTIONS) <= 4500
     assert FIXED_RULES_VERSION in SELECTION_RULES_VERSIONS
     assert "waf-system-v2.7" in SELECTION_RULES_VERSIONS
     assert "waf-system-v2.6" not in SELECTION_RULES_VERSIONS

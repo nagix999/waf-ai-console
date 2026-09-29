@@ -57,7 +57,7 @@ try {
   assert.equal(await reads('rawEvent'), 0); assert.equal(await reads('agentRuns'), 0);
   assert.equal(await page.locator('.inference-overview:visible').count(), 0);
   assert.equal(await page.locator('.decision-hero-summary:visible').count(), 1);
-  assert.equal(await page.locator('.decision-technical details').getAttribute('open'), null);
+  assert.equal(await page.locator('.decision-technical > details').getAttribute('open'), null);
   await tabs.getByRole('tab', { name: '판정', exact: true }).focus(); await page.keyboard.press('ArrowRight');
   assert.equal(await page.evaluate(() => document.activeElement.textContent), '근거·입력');
   assert.equal(await reads('rawEvent'), 0); assert.equal(await reads('agentRuns'), 0);

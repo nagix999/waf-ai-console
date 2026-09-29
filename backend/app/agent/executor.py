@@ -19,7 +19,8 @@ from ..services.provider_options import (
     strict_json_schema,
 )
 from .contracts import (CONTRACT_ERRORS, EvidenceCorrectionOutput, WAFAnalysisOutput,
-                        EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput)
+                        EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput,
+                        SemanticAssessmentOutput, legacy_output_schema)
 from .evidence_editor import EvidenceEditorOutput, MAX_SECONDS as EDITOR_SECONDS, MAX_OUTPUT_TOKENS as EDITOR_TOKENS
 from .result_editor import ResultEditorOutput
 
@@ -55,6 +56,8 @@ class _TrackingOutputCodec:
 
     def schema(self) -> Mapping[str, Any] | None:
         schema = self.delegate.schema()
+        if schema is not None and self.output_model in {WAFAnalysisOutput, EvidenceSelectionOutput, EvidenceAssessmentOutput}:
+            schema = legacy_output_schema(schema)
         return strict_json_schema(schema) if self.strict and schema is not None else schema
 
     def decode(self, response: Any) -> BaseModel:
@@ -406,7 +409,7 @@ async def _execute_structured_agent(
     output_model: type[WAFAnalysisOutput] | type[EvidenceCorrectionOutput] = WAFAnalysisOutput,
 ) -> AgentCallResult:
     _validate_attempt_limit(output_validation_max_attempts)
-    if output_model not in {WAFAnalysisOutput, EvidenceCorrectionOutput, EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput, EvidenceEditorOutput, ResultEditorOutput}:
+    if output_model not in {WAFAnalysisOutput, EvidenceCorrectionOutput, EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput, SemanticAssessmentOutput, EvidenceEditorOutput, ResultEditorOutput}:
         raise ValueError("unsupported_agent_output_contract")
     if issubclass(output_model, EvidenceCorrectionOutput) and output_validation_max_attempts != 1:
         raise ValueError("evidence_correction_requires_single_attempt")

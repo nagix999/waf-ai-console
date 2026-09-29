@@ -18,11 +18,12 @@ def analyst_text(value: str) -> bool:
 
 def merge_analyst_checks(*outputs: WAFAnalysisOutput) -> list[AnalystCheck]:
     checks: list[AnalystCheck] = []
-    seen: set[tuple[str, str, str]] = set()
+    seen: set[tuple] = set()
     for output in outputs:
         for check in output.analyst_checks:
-            values = (check.source_ko, check.check_ko, check.why_ko)
-            if values not in seen and all(analyst_text(value) for value in values):
+            text = (check.source_ko, check.check_ko, check.why_ko)
+            values = (*text, check.purpose)
+            if values not in seen and all(analyst_text(value) for value in text):
                 checks.append(check)
                 seen.add(values)
             if len(checks) == 5:
@@ -30,17 +31,18 @@ def merge_analyst_checks(*outputs: WAFAnalysisOutput) -> list[AnalystCheck]:
     return checks
 
 
-def build_analyst_guidance(output: WAFAnalysisOutput, *, incomplete_execution: bool = False) -> dict:
+def build_analyst_guidance(output: WAFAnalysisOutput, *, incomplete_execution: bool = False, evidence_rejected: bool = False) -> dict:
+    semantic = output.signature_assessment.version == "signature-assessment-v2"
     # The worker's exact source-validation diagnostic is a limitation, not a
     # request-specific investigation task. Preserve it without inventing work.
-    source_notice = EVIDENCE_SOURCE_CHECK in output.recommended_checks or any(
+    source_notice = evidence_rejected or EVIDENCE_SOURCE_CHECK in output.recommended_checks or any(
         check.check_ko == EVIDENCE_SOURCE_CHECK for check in output.analyst_checks
     )
     checks = [check.model_dump(mode="json") for check in merge_analyst_checks(output)
               if check.check_ko != EVIDENCE_SOURCE_CHECK]
     # Previous output contracts remain accepted. Do not invent request-specific
     # findings when a model omitted structured follow-up guidance.
-    if not checks:
+    if not checks and not semantic:
         for item in output.recommended_checks:
             if item != EVIDENCE_SOURCE_CHECK and analyst_text(item):
                 checks.append({
@@ -54,7 +56,7 @@ def build_analyst_guidance(output: WAFAnalysisOutput, *, incomplete_execution: b
                 })
             if len(checks) == 5:
                 break
-    if output.verdict == AgentVerdict.inconclusive and not checks and not incomplete_execution:
+    if output.verdict == AgentVerdict.inconclusive and not checks and not incomplete_execution and not semantic:
         checks.append({
             "source_ko": "대상 애플리케이션의 요청 처리 규격 또는 담당자",
             "check_ko": "탐지된 입력이 해당 기능에서 허용되는 업무 데이터인지, 저장·출력·명령 실행 중 어떤 처리 경로로 사용되는지 확인하세요.",

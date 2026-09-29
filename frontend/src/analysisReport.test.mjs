@@ -29,6 +29,13 @@ function fixture() {
 }
 
 function parsed(detail, options) { return parseApiDocument(buildAnalysisReport(detail, options)); }
+for (const [verdict, label] of [["true_positive", "정탐"], ["false_positive", "오탐"]]) test(`report shows the eligible hold reference direction: ${verdict}`, () => {
+  const detail = fixture(); detail.result.verdict = verdict;
+  detail.evaluation = { outcome: "expected_abstention_mismatch", reference_label: { verdict: "inconclusive" } };
+  assert.equal(cell(parsed(detail, { includeAppendix: true }), "보류 답안의 확정 방향"), `보류 답안 → ${label} 확정`);
+  detail.evaluation.outcome = "unknown_provenance";
+  assert.doesNotMatch(buildAnalysisReport(detail, { includeAppendix: true }), /보류 답안의 확정 방향/);
+});
 function blocks(document) { return [...document.intro, ...document.sections.flatMap((section) => section.blocks)]; }
 function cell(document, label) {
   const row = blocks(document).filter((block) => block.type === "table").flatMap((block) => block.rows).find((row) => row[0] === label);
@@ -61,9 +68,9 @@ test("report orders analysis and evidence before other material and always ends 
     assert.match(text(document), /탐지 내용과 요청의 연관성/);
     assert.ok(titles.indexOf("판정 근거") < titles.indexOf("WAF 정책 검토"));
     assert.ok(titles.indexOf("WAF 정책 검토") < titles.indexOf("인코딩·난독화 문자열"));
-    assert.ok(titles.indexOf("소요 시간") < titles.indexOf("추가 확인 사항"));
-    if (includeAppendix) assert.ok(titles.indexOf("부록 · 실행 정보") < titles.indexOf("추가 확인 사항"));
-    assert.equal(titles.at(-1), "추가 확인 사항");
+    assert.ok(titles.indexOf("소요 시간") < titles.indexOf("후속 확인 · 선택사항"));
+    if (includeAppendix) assert.ok(titles.indexOf("부록 · 실행 정보") < titles.indexOf("후속 확인 · 선택사항"));
+    assert.equal(titles.at(-1), "후속 확인 · 선택사항");
     assert.match(text(document), /필요한 경우 아래 자료/);
     assert.doesNotMatch(text(document), /판정 보류를 해소하려면|판단 보류\(inconclusive\)는/);
   }
@@ -75,23 +82,23 @@ test("decisive results without checks hide the section while inconclusive result
     detail.result.verdict = verdict;
     detail.result.confidence_score = 0.97;
     detail.result.recommended_checks = [];
-    assert.ok(!parsed(detail).sections.some(section => section.title === "추가 확인 사항"));
+    assert.ok(!parsed(detail).sections.some(section => section.title === "후속 확인 · 선택사항"));
     detail.result.recommended_checks = ["합성 후속 확인"];
-    assert.ok(parsed(detail).sections.some(section => section.title === "추가 확인 사항"));
+    assert.ok(parsed(detail).sections.some(section => section.title === "후속 확인 · 선택사항"));
     detail.result.analyst_guidance = { checks: [], limitations: ["합성 입력 제한 안내"] };
-    assert.ok(!parsed(detail).sections.some(section => section.title === "추가 확인 사항"));
+    assert.ok(!parsed(detail).sections.some(section => section.title === "후속 확인 · 선택사항"));
     assert.match(text(parsed(detail)), /합성 입력 제한 안내/);
   }
   const detail = fixture();
   detail.result.verdict = "inconclusive";
   detail.result.analyst_guidance = { checks: [] };
   const report = parsed(detail, { includeAppendix: true });
-  assert.equal(report.sections.at(-1).title, "추가 확인 사항");
+  assert.equal(report.sections.at(-1).title, "판정 확정에 필요한 조건");
   assert.match(text(report), /원문과 기록된 확인 항목/);
   assert.match(text(report), /구체적인 확인 자료는 기록되지 않았습니다/);
   for (const status of ["pending", "processing", "failed"]) {
     detail.status = status;
-    assert.ok(!parsed(detail).sections.some(section => section.title === "추가 확인 사항"));
+    assert.ok(!parsed(detail).sections.some(section => ["후속 확인 · 선택사항", "판정 확정에 필요한 조건"].includes(section.title)));
   }
 });
 
@@ -120,7 +127,7 @@ test("historical grounding-only work is an honest report limitation, not an addi
   detail.result.recommended_checks = [diagnostic];
   detail.result.analyst_guidance = { checks: [{ source_ko: "운영 자료", check_ko: diagnostic, why_ko: "후속 확인" }], limitations: [limitation] };
   const document = parsed(detail);
-  assert.ok(!document.sections.some(section => section.title === "추가 확인 사항"));
+  assert.ok(!document.sections.some(section => section.title === "후속 확인 · 선택사항"));
   assert.equal(text(document).split(limitation).length - 1, 1);
   assert.ok(!text(document).includes(diagnostic));
   assert.ok(document.sections.some(section => section.title === "해석 시 주의할 점"));
@@ -397,9 +404,9 @@ test("technical and reference answer details are an explicit appendix, never a d
   const other = fixture();
   const base = buildAnalysisReport(other);
   const extended = buildAnalysisReport(other, { includeAppendix: true });
-  const [baseBody, baseChecks] = base.split("## 추가 확인 사항");
+  const [baseBody, baseChecks] = base.split("## 후속 확인 · 선택사항");
   assert.ok(extended.startsWith(baseBody));
-  assert.ok(extended.endsWith(`## 추가 확인 사항${baseChecks}`));
+  assert.ok(extended.endsWith(`## 후속 확인 · 선택사항${baseChecks}`));
   assert.doesNotMatch(base, /## 부록|답안|독립 검증|실패 ID|프롬프트 버전/);
   assert.match(extended, /## 부록 · 참고 답안 평가/);
   assert.match(extended, /## 부록 · 독립 검증/);

@@ -1,7 +1,8 @@
+from copy import deepcopy
 from enum import Enum
-from typing import Annotated
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 from pydantic_core import PydanticCustomError
 
 
@@ -15,6 +16,17 @@ CONTRACT_ERRORS = {
         "tuning_recommendation", "튜닝을 제안하면 scope/proposal_ko/risk_ko/validation_ko를 모두 작성해야 합니다."
     ),
     "duplicate_correction_index": ("corrections", "같은 근거 인덱스는 한 번만 교정할 수 있습니다."),
+    "signature_exact_requires_match": ("signature_assessment.matched_points", "exact에는 일치 지점을 1개 이상 작성하세요."),
+    "signature_exact_disallows_mismatch": ("signature_assessment", "exact는 차이 지점이 빈 배열이고 uncertainty_ko가 null이어야 합니다."),
+    "signature_partial_requires_match_and_mismatch": ("signature_assessment", "partial에는 일치 지점과 차이 지점을 각각 1개 이상 작성하세요."),
+    "signature_mismatch_requires_difference": ("signature_assessment.mismatched_points", "mismatch에는 차이 지점을 1개 이상 작성하세요. 정탐과 함께 사용할 수 있습니다."),
+    "signature_unknown_requires_reason": ("signature_assessment.uncertainty_ko", "unknown에는 관계를 비교할 수 없는 이유를 작성하세요."),
+    "signature_v2_explanation_must_be_null": ("signature_assessment.explanation_ko", "v2의 explanation_ko는 null입니다. 세부 내용은 일치·차이 지점과 비교 제한에 작성하세요."),
+    "signature_legacy_requires_explanation": ("signature_assessment.explanation_ko", "기존 계약에는 explanation_ko가 필요합니다."),
+    "signature_v2_requires_version": ("signature_assessment.version", "구조화한 관계 설명에는 signature-assessment-v2 버전이 필요합니다."),
+    "analyst_check_purpose_required": ("analyst_checks.purpose", "새 계약의 확인 항목에는 purpose가 필요합니다."),
+    "decisive_verdict_disallows_decision_condition": ("analyst_checks.purpose", "확정 판정에는 decision_condition을 사용할 수 없습니다. 실제 영향 확인·튜닝 검증만 남기고, 판정을 가르는 조건이 빠졌다면 원문을 다시 검토하세요."),
+    "recommended_checks_legacy_only": ("recommended_checks", "새 계약에서는 recommended_checks를 빈 배열로 두고 analyst_checks만 작성하세요."),
 }
 
 
@@ -68,7 +80,52 @@ class ThreatAnalysis(StrictContract):
 
 class SignatureAssessment(StrictContract):
     relation: SignatureRelation
-    explanation_ko: str = Field(min_length=1, max_length=2000)
+    explanation_ko: str | None = Field(default=None, min_length=1, max_length=2000)
+    version: Literal["signature-assessment-v2"] | None = None
+    matched_points: list[Annotated[str, Field(min_length=1, max_length=400, pattern=r"\S")]] = Field(default_factory=list, max_length=5)
+    mismatched_points: list[Annotated[str, Field(min_length=1, max_length=400, pattern=r"\S")]] = Field(default_factory=list, max_length=5)
+    uncertainty_ko: str | None = Field(default=None, min_length=1, max_length=500, pattern=r"\S")
+
+    @model_validator(mode="after")
+    def validate_relation(self):
+        if self.version is None:
+            if self.matched_points or self.mismatched_points or self.uncertainty_ko is not None:
+                raise contract_error("signature_v2_requires_version")
+            if self.explanation_ko is None:
+                raise contract_error("signature_legacy_requires_explanation")
+            return self
+        if self.explanation_ko is not None:
+            raise contract_error("signature_v2_explanation_must_be_null")
+        if self.relation == SignatureRelation.exact:
+            if self.mismatched_points or self.uncertainty_ko is not None:
+                raise contract_error("signature_exact_disallows_mismatch")
+            if not self.matched_points:
+                raise contract_error("signature_exact_requires_match")
+        elif self.relation == SignatureRelation.partial and not (self.matched_points and self.mismatched_points):
+            raise contract_error("signature_partial_requires_match_and_mismatch")
+        elif self.relation == SignatureRelation.mismatch and not self.mismatched_points:
+            raise contract_error("signature_mismatch_requires_difference")
+        elif self.relation == SignatureRelation.unknown and self.uncertainty_ko is None:
+            raise contract_error("signature_unknown_requires_reason")
+        return self
+
+    @model_serializer(mode="wrap")
+    def serialize_compatible(self, handler):
+        value = handler(self)
+        if self.version is None:
+            for key in ("version", "matched_points", "mismatched_points", "uncertainty_ko"):
+                value.pop(key, None)
+        return value
+
+
+class SignatureAssessmentV2(SignatureAssessment):
+    # New calls cannot opt out through a missing/null version; old snapshots
+    # use the legacy wire schema, while stored results use the compatible base.
+    version: Literal["signature-assessment-v2"]
+    matched_points: list[Annotated[str, Field(min_length=1, max_length=400, pattern=r"\S")]] = Field(max_length=5)
+    mismatched_points: list[Annotated[str, Field(min_length=1, max_length=400, pattern=r"\S")]] = Field(max_length=5)
+    uncertainty_ko: str | None = Field(min_length=1, max_length=500, pattern=r"\S")
+    explanation_ko: None
 
 
 class EvidenceItem(StrictContract):
@@ -96,10 +153,28 @@ class EvidenceCorrectionOutput(StrictContract):
         return self
 
 
+class AnalystCheckPurpose(str, Enum):
+    decision_condition = "decision_condition"
+    impact_followup = "impact_followup"
+    tuning_validation = "tuning_validation"
+
+
 class AnalystCheck(StrictContract):
     source_ko: str = Field(min_length=1, max_length=240)
     check_ko: str = Field(min_length=1, max_length=800)
     why_ko: str = Field(min_length=1, max_length=800)
+    purpose: AnalystCheckPurpose | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_compatible(self, handler):
+        value = handler(self)
+        if self.purpose is None:
+            value.pop("purpose", None)
+        return value
+
+
+class PurposeAnalystCheck(AnalystCheck):
+    purpose: AnalystCheckPurpose
 
 
 class TuningRecommendation(StrictContract):
@@ -131,6 +206,15 @@ class WAFAnalysisOutput(StrictContract):
 
     @model_validator(mode="after")
     def validate_verdict_contract(self):
+        if self.signature_assessment.version == "signature-assessment-v2":
+            if self.recommended_checks:
+                raise contract_error("recommended_checks_legacy_only")
+            if any(check.purpose is None for check in self.analyst_checks):
+                raise contract_error("analyst_check_purpose_required")
+        if self.verdict != AgentVerdict.inconclusive and any(
+            check.purpose == AnalystCheckPurpose.decision_condition for check in self.analyst_checks
+        ):
+            raise contract_error("decisive_verdict_disallows_decision_condition")
         if self.verdict != AgentVerdict.inconclusive and not self.evidence:
             raise contract_error("decisive_verdict_requires_evidence")
         severity = self.threat_analysis.severity
@@ -180,6 +264,34 @@ class EvidenceAssessmentOutput(EvidenceSelectionOutput):
 
     evidence: list[AssessedEvidenceSelection] = Field(default_factory=list, max_length=5)
     decision_issue: DecisionIssue | None
+
+
+class SemanticAssessmentOutput(EvidenceAssessmentOutput):
+    """v2.13 wire output: structured relation details and explicit check purpose."""
+
+    signature_assessment: SignatureAssessmentV2
+    analyst_checks: list[PurposeAnalystCheck] = Field(max_length=5)
+
+
+def legacy_output_schema(schema: dict) -> dict:
+    """Preserve the pre-v2.13 wire contract of pinned old executions.
+
+    Compatibility fields belong to stored-result readers, not old LLM calls.
+    model_json_schema() returns a fresh dict; never mutate saved snapshots.
+    """
+    schema = deepcopy(schema)
+    definitions = schema.get("$defs", {})
+    signature = definitions.get("SignatureAssessment")
+    if signature:
+        for key in ("version", "matched_points", "mismatched_points", "uncertainty_ko"):
+            signature["properties"].pop(key, None)
+        signature["properties"]["explanation_ko"] = {"title": "Explanation Ko", "type": "string", "minLength": 1, "maxLength": 2000}
+        signature["required"] = ["relation", "explanation_ko"]
+    check = definitions.get("AnalystCheck")
+    if check:
+        check["properties"].pop("purpose", None)
+    definitions.pop("AnalystCheckPurpose", None)
+    return schema
 
 
 class EvidenceSelectionCorrection(StrictContract):

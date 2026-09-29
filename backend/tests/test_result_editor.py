@@ -159,7 +159,7 @@ def test_worker_groups_followups_only_once_without_changing_verdict_or_originals
         assert analysis.status == "completed"
         assert result["verdict"] == result["primary"]["verdict"]
         original = result["analyst_guidance"]["checks"]
-        assert original == [checks()[0], checks()[1], checks()[2]]
+        assert original == [{**task, "purpose": "impact_followup"} for task in checks()]
         saved = result["follow_up_presentation"]
         assert saved["status"] == ("completed" if mode == "valid" else "fallback")
         assert len(editor.present_checks(original, saved)) == (2 if mode == "valid" else 3)

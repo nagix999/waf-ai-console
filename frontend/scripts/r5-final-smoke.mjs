@@ -39,7 +39,7 @@ try {
       await go("#overview");await page.locator(".r3-evaluation-chart").waitFor();await snap("home-"+locale+"-"+color);
       await go("#evaluate/tests/"+run);await page.locator(".test-run-detail").waitFor();
       await page.getByRole("tab",{name:locale==="KR"?"평가 상세":"Evaluation Details",exact:true}).click();
-      await page.locator(".r5-matrix").waitFor();assert.equal(await page.locator(".r5-matrix-cell").count(),4);
+      await page.locator(".r5-matrix").waitFor();assert.equal(await page.locator(".r5-matrix .r5-matrix-cell").count(),4);assert.equal(await page.locator(".r5-risk-grid .r5-matrix-cell").count(),6);
       assert.equal(await page.locator(".test-run-detail > .v5-metric-strip").count(),0);
       await snap("test-evaluation-"+locale+"-"+color);
       const focused=page.getByRole("tab",{name:locale==="KR"?"평가 상세":"Evaluation Details",exact:true});await focused.focus();
@@ -80,7 +80,7 @@ try {
   await go("#operate/inference");await page.locator(".analysis-data-table").waitFor();
   assert.equal(await page.evaluate(()=>window.fixture.searchQuery.analysis_purpose),"production");
   await snap("production-inference");
-  await page.getByRole("button",{name:"인코딩 요청 검사",exact:true}).click();await page.locator(".decision-context-rows").first().waitFor();await snap("initial-deep-comparison");
+  await page.locator(".analysis-data-table .unified-event-title").click();await page.locator(".decision-context-rows").first().waitFor();await snap("initial-deep-comparison");
   await go("#promotion/"+run);await page.evaluate(()=>{window.fixture.incompatible=true});await page.getByRole("button",{name:"다시 확인",exact:true}).click();
   await page.locator(".v5-preflight").waitFor();assert.equal(await page.locator(".brand-mutation").isDisabled(),true);await snap("production-review-blocked");
   for(const state of ["unconfigured","legacy_active"]){await page.evaluate(state=>{window.fixture.productionState=state},state);await go("#overview");await page.locator(state==="unconfigured"?".r5-setup":".r3-overview").waitFor();await snap("home-"+state);await go("#evaluate/tests");}

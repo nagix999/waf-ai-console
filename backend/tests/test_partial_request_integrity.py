@@ -11,7 +11,7 @@ from app.agent.executor import AgentCallResult
 from app.agent.input_builder import build_agent_input
 from app.agent.input_integrity import apply_integrity_guard
 from app.models import AgentStep, Analysis, VLLMProfile
-from app.services import prompt_snapshots
+from app.agent import prompts
 from app.services.http_parser import parse_http_payload
 from app.services.request_integrity import (
     INTEGRITY_VERSION, LEGACY_INTEGRITY_VERSION, MAX_PAYLOAD_CHARS,
@@ -121,8 +121,8 @@ def test_worker_partial_snapshot_selects_version_for_both_roles_and_all_history(
     raw = partial()
     event_payload.update(payload=raw, waf_action="A")
     with monkeypatch.context() as pinned:
-        pinned.setattr(prompt_snapshots, "FIXED_RULES_VERSION", f"waf-system-v{revision}")
-        pinned.setattr(prompt_snapshots, "PROMPT_VERSION", f"waf-judgment-v{revision}")
+        pinned.setattr(prompts, "FIXED_RULES_VERSION", f"waf-system-v{revision}")
+        pinned.setattr(prompts, "PROMPT_VERSION", f"waf-judgment-v{revision}")
         created = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()
     calls = []
 

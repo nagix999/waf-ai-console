@@ -88,7 +88,7 @@ def test_common_report_only_uses_final_allowlisted_fields_and_preserves_saved_da
     assert "원문 발췌" in text and "q=' OR 1=1" in text
     for marker in ("STALE-SUMMARY", "RAW-PAYLOAD-MUST", "EXTRA-MUST", "PRIMARY-MUST", "VERIFIER-MUST", "UNKNOWN-MUST", "DO-NOT-INVENT"):
         assert marker not in text
-    assert "추가 확인 사항" not in [section.title for section in report.sections]
+    assert "후속 확인 · 선택사항" not in [section.title for section in report.sections]
     assert "참고 답안 비교" in [section.title for section in report.sections]
     assert "3.00초 (3000 ms)" in text
     assert detail == before
@@ -113,7 +113,7 @@ def test_inconclusive_followup_last_and_missing_times_are_not_zero():
     detail["result"]["threat_analysis"]["severity"] = "UNKNOWN"
     detail["processing_duration_ms"] = None
     report = build_report(detail)
-    assert report.sections[-1].title == "추가 확인 사항"
+    assert report.sections[-1].title == "판정 확정에 필요한 조건"
     assert "구체적인 확인 자료는 기록되지 않았습니다" in report_text(report)
     assert ("처리 경과 시간", "미측정") in next(s for s in report.sections if s.title == "소요 시간").rows
 

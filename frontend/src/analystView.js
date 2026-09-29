@@ -65,6 +65,7 @@ export function analystGuidance(detail) {
   const result = record(detail?.result) ? detail.result : {};
   const guidance = record(result.analyst_guidance) ? result.analyst_guidance : {};
   const explicitChecks = Array.isArray(guidance.checks);
+  const semantic = result.signature_assessment?.version === "signature-assessment-v2";
   const structured = explicitChecks ? presentFollowUpChecks(guidance.checks, result.follow_up_presentation)
     : Array.isArray(result.analyst_checks) ? result.analyst_checks : [];
   const recommended = Array.isArray(result.recommended_checks) ? result.recommended_checks : [];
@@ -77,15 +78,16 @@ export function analystGuidance(detail) {
       source_ko: analystText(item.source_ko, "확인 위치 미기록"),
       check_ko: item.check_ko,
       why_ko: analystText(item.why_ko, "확인 목적 미기록"),
+      ...(item.purpose != null ? { purpose: item.purpose } : {}),
     }));
   // An explicit final guidance list, including [], is authoritative. Legacy
   // recommendations are a compatibility fallback, not extra required work.
-  if (!explicitChecks && !checks.length) checks = recommended
+  if (!semantic && !explicitChecks && !checks.length) checks = recommended
     .filter((item) => typeof item === "string" && item.trim() && item !== legacyGroundingCheck && !isTechnicalText(item))
     .map((check_ko) => ({ source_ko: "확인 위치 미기록", check_ko, why_ko: "확인 목적 미기록" }));
   // Explicit [] remains authoritative for decisive results. On a final hold,
   // fill only an empty visible list from saved, evidence-linked review points.
-  if (!checks.length && !isMockAnalysis(detail)) checks = holdReview(detail, decisionExplanation(detail)).checks;
+  if (!semantic && !checks.length && !isMockAnalysis(detail)) checks = holdReview(detail, decisionExplanation(detail)).checks;
   checks = checks.filter((item, index) => checks.findIndex(other => JSON.stringify(other) === JSON.stringify(item)) === index);
   const limitations = savedLimitations.filter((item) => typeof item === "string" && item.trim() && !isTechnicalText(item))
     .map((item) => item === legacyGroundingCheck ? groundingLimitation : analystText(item));

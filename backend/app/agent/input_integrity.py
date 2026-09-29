@@ -66,12 +66,14 @@ def apply_integrity_guard(output, assessment, raw, parsed):
         "json": ("같은 요청의 수집 기록과 애플리케이션 입력 규격", "JSON 본문의 닫는 구문이 수집 중 빠졌는지, 실제로 닫히지 않은 입력이 전송됐는지 확인하세요.",
                  "끝나지 않은 JSON 구조를 정상 본문으로 해석한 근거가 있습니다. 누락된 내용이나 실제 입력 형식을 확인해야 합니다."),
     }
-    checks = [AnalystCheck(source_ko=check_text[group][0], check_ko=check_text[group][1], why_ko=check_text[group][2])
+    semantic = output.signature_assessment.version == "signature-assessment-v2"
+    checks = [AnalystCheck(source_ko=check_text[group][0], check_ko=check_text[group][1], why_ko=check_text[group][2],
+                          purpose="decision_condition" if semantic else None)
               for group in groups]
     for check in output.analyst_checks:
         if check not in checks and len(checks) < 5:
             checks.append(check)
-    recommended = list(dict.fromkeys([check.check_ko for check in checks] + output.recommended_checks))[:10]
+    recommended = [] if semantic else list(dict.fromkeys([check.check_ko for check in checks] + output.recommended_checks))[:10]
     revised = output.model_copy(update={
         "verdict": AgentVerdict.inconclusive,
         "confidence_score": min(output.confidence_score, .49),

@@ -84,7 +84,7 @@ def test_decisive_summary_remains_the_final_summary_not_a_new_decision():
 
 
 def test_prompt_requires_specific_followups_and_untrusted_derived_hints():
-    assert PROMPT_VERSION == "waf-judgment-v2.12"
+    assert PROMPT_VERSION == "waf-judgment-v2.13"
     for term in ["source_ko", "check_ko", "why_ko", "decoded_payload_hints", "디코딩 전 원문", "공격 성공"]:
         assert term in BASE_INSTRUCTIONS
 

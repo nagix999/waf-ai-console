@@ -18,16 +18,17 @@ for (const item of cases) test(`shared follow-up: ${item.name}`, () => {
   assert.equal(JSON.stringify(detail), before);
 });
 
-test("UI and Markdown fill empty hold checks from linked conditions, never read roles", () => {
+test("UI and Markdown fill empty hold checks from linked conditions, never read raw role IO", () => {
   for (const name of ["linked_missing_condition", "missing_point_anchors_saved_body", "hostile_condition_is_literal_not_executed"]) {
     const detail = structuredClone(cases.find(item => item.name === name).detail);
-    Object.defineProperty(detail.result, "primary", { get() { throw Error("No role read"); } });
+    detail.result.primary = { verdict: "true_positive" };
+    Object.defineProperty(detail.result.primary, "input", { get() { throw Error("No raw role read"); } });
     const review = holdReview(detail, decisionExplanation(detail));
     assert.deepEqual(analystGuidance(detail).checks, review.checks);
     assert.deepEqual(decisionIssues(detail), review.issues);
     const report = decodeReportText(buildAnalysisReport(detail));
     for (const check of review.checks) for (const value of Object.values(check)) assert.ok(report.includes(value), value);
-    assert.ok(report.indexOf("## 추가 확인 사항") > report.indexOf("## 판정 근거"));
+    assert.ok(report.indexOf("## 판정 확정에 필요한 조건") > report.indexOf("## 판정 근거"));
   }
 });
 

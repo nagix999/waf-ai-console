@@ -11,14 +11,14 @@ import "./analysisReport.css";
 function ReportBlocks({ blocks, section }) {
   // Only fixed-template level-three headings form evidence groups. Untrusted
   // model values remain escaped text, never Markdown structure or CSS names.
-  const firstGroup = blocks.findIndex(block => block.type === "heading" && block.level === 3 && ["정탐 근거", "오탐 근거", "참고 내용", "참고내용"].includes(block.text));
+  const firstGroup = blocks.findIndex(block => block.type === "heading" && block.level === 3 && ["정탐 근거", "오탐 근거", "반대 근거", "공격 해석", "정상 해석", "참고 내용", "참고내용"].includes(block.text));
   if (firstGroup >= 0) {
     const groups = [];
     for (const block of blocks.slice(firstGroup)) {
       if (block.type === "heading" && block.level === 3) groups.push({ heading: block.text, blocks: [] });
       else groups.at(-1).blocks.push(block);
     }
-    return <><ReportBlocks blocks={blocks.slice(0, firstGroup)} section={section} />{groups.map((group, index) => <section key={index} className={`report-evidence-group ${group.heading === "정탐 근거" ? "attack" : group.heading === "오탐 근거" ? "normal" : "context"}`}><h4>{decodeReportText(group.heading)}</h4><ReportBlocks blocks={group.blocks} section={group.heading} /></section>)}</>;
+    return <><ReportBlocks blocks={blocks.slice(0, firstGroup)} section={section} />{groups.map((group, index) => <section key={index} className={`report-evidence-group ${["정탐 근거", "공격 해석"].includes(group.heading) ? "attack" : ["오탐 근거", "정상 해석"].includes(group.heading) ? "normal" : "context"}`}><h4>{decodeReportText(group.heading)}</h4><ReportBlocks blocks={group.blocks} section={group.heading} /></section>)}</>;
   }
   return blocks.map((block, index) => {
     // The generator appends exactly one LF to separate the excerpt from its

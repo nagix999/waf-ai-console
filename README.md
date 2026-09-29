@@ -1,5 +1,9 @@
 # WAF AI Analysis Console v0.3.0
 
+2026-09-29 Agent 계약 2차: 탐지 설명 비교를 구조화하고 확인사항을 보류 조건·선택적 후속 확인·튜닝 검증으로 구분했습니다. 잘못된 출력은 기존 교정 재시도로 처리합니다. 새 후보는 v2.13이며 Production은 승인된 지침을 유지하고 공식 테스트·운영 반영 절차 이후에만 새 계약을 사용합니다. [호환성·API 영향·검증·제한](docs/Agent_Semantic_Contract_v2_2026-09-29.md)을 참고하세요. DB migration·재배포·실제 LLM 호출·Git 게시는 하지 않았습니다.
+
+2026-09-29 Agent/UI 의미 정합성 1차: 보류 조건과 확정 후 선택적 확인, 판정별 근거 순서, Verifier 불일치 설명, 평가의 오류·보류 방향, 정답 데이터 출처 검색·가져오기를 맞췄습니다. DB·Agent 출력 계약·활성 지침은 변경하지 않았습니다. [구현·회귀 검증·다음 단계](docs/Agent_UI_Semantic_Alignment_2026-09-29.md)를 참고하세요. 아직 재배포·실제 LLM 검증은 하지 않았습니다.
+
 2026-09-29 SQLite 조회 최적화: 분석/테스트 목록 경량화, Ground Truth SQL 페이지네이션·집계, 홈 반복 조회와 완료 테스트 polling을 개선했습니다. DB head는 인덱스만 추가하는 `0025_analysis_read_index`입니다. 운영 DB 적용·Docker 재배포·Git 게시와는 별개이며 [측정·변경·검증 기록](docs/SQLite_Read_Optimization_2026-09-29.md)을 참고하세요.
 
 2026-09-22 **Canonical R5 FINAL COMPLETE**: 현재 기준은 [`WAF_AI_Console_Astra_Handoff_CANONICAL_V5_REVIEWED_R5_FINAL_COMPLETE/ASTRA_HANDOFF.md`](WAF_AI_Console_Astra_Handoff_CANONICAL_V5_REVIEWED_R5_FINAL_COMPLETE/ASTRA_HANDOFF.md)와 같은 폴더의 `UI_TERMINOLOGY.md`입니다. `main`의 `ee4797b`에서 기존 기능을 보존하며 구현했습니다. 메뉴는 **홈 → 평가 → 설정 → 운영 → 연동**이며 운영의 다섯 구성요소는 **공식 테스트 → 운영 반영 검토 → 운영에 반영**으로만 변경합니다. 기본 테스트 설정, 정답 데이터 가져오기 미리보기, 답안 출처, 첫 운영 가이드, 테스트 평가 상세, 1차·심층 판정 비교를 연결했습니다. DB head는 `0024_r5_contract`입니다. **이 작업에서는 운영 DB 변경·재배포·Git 게시·실제 LLM 호출을 하지 않았습니다.** 검증 범위와 남은 제한은 [R5 구현·API/DB·검증 보고서](docs/v0.3.0/CANONICAL_R5_FINAL_IMPLEMENTATION.md)를 확인하세요.

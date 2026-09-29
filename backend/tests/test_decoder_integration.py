@@ -144,7 +144,9 @@ def test_worker_uses_identical_tool_hints_in_independent_calls_and_keeps_artifac
         assert "decoding" not in row.result_json
         assert row.result_json["agent"]["tools"] == []
         assert row.result_json["agent"]["preprocessors"] == [DECODER_VERSION, "request-integrity-v2"]
-        assert row.result_json["analyst_guidance"]["checks"]
+        # The new contract does not fabricate tasks from legacy recommendations
+        # or a grounding failure; no explicit checks were returned by the model.
+        assert row.result_json["analyst_guidance"]["checks"] == []
         assert row.verdict == ("inconclusive" if forged_decoded_evidence else "true_positive")
         if forged_decoded_evidence:
             assert row.result_json["evidence"] == []
@@ -163,7 +165,7 @@ def test_unchanged_jndi_warning_is_a_whole_bounded_model_hint():
 def test_agent_instructions_keep_lookup_candidates_distinct_from_observed_execution():
     from app.agent.prompts import BASE_INSTRUCTIONS, PROMPT_VERSION
 
-    assert PROMPT_VERSION == "waf-judgment-v2.12"
+    assert PROMPT_VERSION == "waf-judgment-v2.13"
     for marker in ["log4j_lookup_static", "unresolved_lookup", "default_lookup_candidate", "base64_padding_inferred"]:
         assert marker in BASE_INSTRUCTIONS
     assert "연결 기록 부재로 공격 시도를 부정하지 않는다" in BASE_INSTRUCTIONS
