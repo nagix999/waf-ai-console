@@ -43,6 +43,9 @@ def ingest(db, crypto, settings, principal, rows, *, run_id=None, upload=False):
     write_lock(db)
     if run_id:
         run = owned_run(db, run_id, principal)
+        db.refresh(run)
+        if run.stopped_at is not None:
+            raise AnalysisIngestError("test_run_stopped", 409)
     else:
         identity_rows = rows
         if not upload:

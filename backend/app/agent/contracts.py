@@ -2,7 +2,7 @@ from copy import deepcopy
 from enum import Enum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, model_serializer, model_validator
 from pydantic_core import PydanticCustomError
 
 
@@ -24,6 +24,7 @@ CONTRACT_ERRORS = {
     "signature_v2_explanation_must_be_null": ("signature_assessment.explanation_ko", "v2의 explanation_ko는 null입니다. 세부 내용은 일치·차이 지점과 비교 제한에 작성하세요."),
     "signature_legacy_requires_explanation": ("signature_assessment.explanation_ko", "기존 계약에는 explanation_ko가 필요합니다."),
     "signature_v2_requires_version": ("signature_assessment.version", "구조화한 관계 설명에는 signature-assessment-v2 버전이 필요합니다."),
+    "signature_detail_requires_explanation": ("signature_assessment", "일치 지점·차이 지점·비교 제한을 한 글자가 아닌 구체적인 설명으로 작성하세요."),
     "analyst_check_purpose_required": ("analyst_checks.purpose", "새 계약의 확인 항목에는 purpose가 필요합니다."),
     "decisive_verdict_disallows_decision_condition": ("analyst_checks.purpose", "확정 판정에는 decision_condition을 사용할 수 없습니다. 실제 영향 확인·튜닝 검증만 남기고, 판정을 가르는 조건이 빠졌다면 원문을 다시 검토하세요."),
     "recommended_checks_legacy_only": ("recommended_checks", "새 계약에서는 recommended_checks를 빈 배열로 두고 analyst_checks만 작성하세요."),
@@ -78,13 +79,26 @@ class ThreatAnalysis(StrictContract):
     potential_impact_ko: str = Field(min_length=1, max_length=2000)
 
 
+def nonblank_signature_text(value: str) -> str:
+    # Do not emit pattern=\\S into a provider schema. Grammar-constrained
+    # decoders can compile it as exactly ONE character, unlike Pydantic search.
+    # Preserve literal content; whitespace validation is server-side only.
+    if not value.strip():
+        raise contract_error("signature_detail_requires_explanation")
+    return value
+
+
+SignaturePoint = Annotated[str, Field(min_length=1, max_length=400), AfterValidator(nonblank_signature_text)]
+SignatureLimit = Annotated[str, Field(min_length=1, max_length=500), AfterValidator(nonblank_signature_text)]
+
+
 class SignatureAssessment(StrictContract):
     relation: SignatureRelation
     explanation_ko: str | None = Field(default=None, min_length=1, max_length=2000)
     version: Literal["signature-assessment-v2"] | None = None
-    matched_points: list[Annotated[str, Field(min_length=1, max_length=400, pattern=r"\S")]] = Field(default_factory=list, max_length=5)
-    mismatched_points: list[Annotated[str, Field(min_length=1, max_length=400, pattern=r"\S")]] = Field(default_factory=list, max_length=5)
-    uncertainty_ko: str | None = Field(default=None, min_length=1, max_length=500, pattern=r"\S")
+    matched_points: list[SignaturePoint] = Field(default_factory=list, max_length=5)
+    mismatched_points: list[SignaturePoint] = Field(default_factory=list, max_length=5)
+    uncertainty_ko: SignatureLimit | None = None
 
     @model_validator(mode="after")
     def validate_relation(self):
@@ -122,10 +136,21 @@ class SignatureAssessmentV2(SignatureAssessment):
     # New calls cannot opt out through a missing/null version; old snapshots
     # use the legacy wire schema, while stored results use the compatible base.
     version: Literal["signature-assessment-v2"]
-    matched_points: list[Annotated[str, Field(min_length=1, max_length=400, pattern=r"\S")]] = Field(max_length=5)
-    mismatched_points: list[Annotated[str, Field(min_length=1, max_length=400, pattern=r"\S")]] = Field(max_length=5)
-    uncertainty_ko: str | None = Field(min_length=1, max_length=500, pattern=r"\S")
+    matched_points: list[SignaturePoint] = Field(max_length=5)
+    mismatched_points: list[SignaturePoint] = Field(max_length=5)
+    uncertainty_ko: SignatureLimit | None
     explanation_ko: None
+
+    @model_validator(mode="after")
+    def require_explanation_not_character(self):
+        # New model responses must repair the known incomplete shape. Stored
+        # results still use SignatureAssessment and remain byte-for-byte intact.
+        values = [*self.matched_points, *self.mismatched_points]
+        if self.uncertainty_ko is not None:
+            values.append(self.uncertainty_ko)
+        if any(len(value.strip()) == 1 for value in values):
+            raise contract_error("signature_detail_requires_explanation")
+        return self
 
 
 class EvidenceItem(StrictContract):

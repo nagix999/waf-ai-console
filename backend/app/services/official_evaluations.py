@@ -62,8 +62,8 @@ def finalize_official_evaluation(db, run_id):
     admission marks the run pending again without modifying earlier records.
     """
     write_lock(db)
-    run = db.get(TestRun, run_id)
-    if not run or run.evaluation_mode != "ground_truth" or not run.official_evaluation_pending or run.accepting_items:
+    run = db.get(TestRun, run_id, populate_existing=True)
+    if not run or run.stopped_at is not None or run.evaluation_mode != "ground_truth" or not run.official_evaluation_pending or run.accepting_items:
         return None
     if run.metrics_version != METRICS_VERSION:
         raise ValueError("official_evaluation_metrics_version_unsupported")
@@ -117,7 +117,7 @@ def finalize_for_analysis(session_factory, analysis_id):
 def recover_pending_evaluations(session_factory, *, after=None, limit=5):
     """Bounded round-robin scan also recovers a crash after result commit."""
     with session_factory() as db:
-        query = select(TestRun.id).where(TestRun.official_evaluation_pending.is_(True))
+        query = select(TestRun.id).where(TestRun.official_evaluation_pending.is_(True), TestRun.stopped_at.is_(None))
         if after:
             query = query.where(TestRun.id > after)
         identifiers = list(db.scalars(query.order_by(TestRun.id).limit(limit)))

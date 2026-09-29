@@ -3,6 +3,7 @@
 export const referenceVerdicts = { true_positive: "정탐", false_positive: "오탐", inconclusive: "판단 보류" };
 export const labelSources = { synthetic_expected: "기대 답안", reference: "참고 답안" };
 export const evaluationOutcomes = {
+  canceled: "중지됨 · 평가 제외",
   match: "답안 일치", false_negative: "불일치 · 미탐 방향", false_positive: "불일치 · 과탐 방향",
   abstained: "모델 판단 보류", expected_abstention_match: "기대 보류 일치", expected_abstention_mismatch: "기대 보류 불일치",
   unlabeled: "답안 없음", pending: "평가 대기", failed: "실행 실패 · 평가 제외", stub: "모의 실행 · 평가 제외",
@@ -56,6 +57,7 @@ export function evaluationTone(outcome) {
 
 export function evaluationExplanation(evaluation) {
   const outcome = evaluation?.outcome;
+  if (outcome === "canceled") return "테스트 중지로 판정을 완료하지 않은 문항입니다. 실패·오답으로 집계하지 않으며 평가 분모에서 제외합니다.";
   if (outcome === "unlabeled") return "연결된 답안이 없어 평가하지 않습니다. 답안 연결은 분석 결과 목록에서 할 수 있습니다.";
   if (outcome === "pending") return "분석 완료 후 저장된 최종 판정으로 비교합니다. 현재는 일치율 분모에서 제외합니다.";
   if (outcome === "failed") return "실행 실패는 잘못된 보안 판정과 구분하며 일치율 분모에서 제외합니다.";
@@ -70,7 +72,7 @@ export function evaluationExplanation(evaluation) {
 const compactOutcomes = {
   match: "일치", false_negative: "다름", false_positive: "다름",
   abstained: "판정 보류", expected_abstention_match: "일치", expected_abstention_mismatch: "다름",
-  pending: "평가 대기", failed: "제외", stub: "제외", unknown_provenance: "제외", input_contaminated: "제외",
+  canceled: "중지됨", pending: "평가 대기", failed: "제외", stub: "제외", unknown_provenance: "제외", input_contaminated: "제외",
 };
 
 // Compact wording never recalculates eligibility or equality from displayed
@@ -97,7 +99,7 @@ export function compactEvaluation(evaluation) {
     referenceText,
     sourceText: reference ? `${source} · ${visibility}` : "기준 정보 없음",
     direction,
-    excluded: ["failed", "stub", "unknown_provenance", "input_contaminated"].includes(outcome),
+    excluded: ["canceled", "failed", "stub", "unknown_provenance", "input_contaminated"].includes(outcome),
     explanation: unlabeled ? "연결된 참고 답안이 없습니다." : known ? evaluationExplanation(evaluation)
       : "평가 정보를 확인할 수 없습니다. 답안 없음이나 평가 제외로 추정하지 않으며 새로고침으로 다시 확인하세요.",
   };

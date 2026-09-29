@@ -17,3 +17,12 @@
 .test-run-detail .panel-head-inline .back { flex-shrink: 0; white-space: nowrap; }
 .test-submission-fields { border: 0; padding: 0; margin: 0; min-width: 0; }.test-submission-fields:disabled { opacity: .7; }
 @media(max-width:680px) { .test-run-history,.test-run-header,.test-run-scope,.test-run-cases { padding: 16px; }.test-run-history > .panel-head { flex-wrap: wrap; }.test-run-search label { min-width: 0; }.test-run-header dl { grid-template-columns: 1fr 1fr; }.test-run-table,.test-run-items { min-width: 650px; } }
+/* User stops are neutral, not model/system failures. Theme tokens retain contrast. */
+.status-stopped, .status-canceled { background: var(--raised); color: var(--muted); }
+.test-stop-counts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 20px 0; }
+.test-stop-counts > div { padding: 16px; border: 1px solid var(--line); border-radius: 12px; }
+.test-stop-counts dt { font-size: .85rem; color: var(--muted); }
+.test-stop-counts dd { margin: 8px 0 0; font-size: 1.65rem; font-weight: 700; }
+.test-stopped-notice p { margin: 8px 0; }
+.step-tone-canceled { color: var(--muted); background: var(--raised); }
+:root[data-theme="dark"] .primary.danger.test-stop-confirm { color: #172033; }

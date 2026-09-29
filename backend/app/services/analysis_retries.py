@@ -184,7 +184,18 @@ def original_execution_snapshot(db, crypto, analysis):
     return validate_snapshot_binding(analysis, crypto, snapshot)
 
 
+def require_test_not_stopped(db, analysis):
+    if analysis.analysis_purpose == "test":
+        from .test_runs import analysis_test_run
+        run = analysis_test_run(db, analysis)
+        if run:
+            db.refresh(run)
+            if run.stopped_at is not None:
+                raise RetryError("test_run_stopped", 409)
+
+
 def retry_context(db, crypto, analysis, agent_mode):
+    require_test_not_stopped(db, analysis)
     if analysis.status != "failed":
         raise RetryError("retry_requires_failed_analysis")
     if agent_mode != "moduagent":
@@ -234,6 +245,7 @@ def enqueue_retry(db, crypto, settings, analysis_id, request, actor, *, commit=T
     original = db.get(Analysis, analysis_id)
     if original is None:
         raise RetryError("analysis_not_found", 404)
+    require_test_not_stopped(db, original)
     replay = db.scalar(select(Analysis).where(Analysis.retry_idempotency_key == request.idempotency_key))
     if replay:
         if replay.retry_of_analysis_id != original.id:

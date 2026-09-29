@@ -26,6 +26,8 @@ export function analysisRowState(status) {
     pending: { className: "analysis-row-pending", label: "분석 대기" },
     processing: { className: "analysis-row-processing", label: "분석 중" },
     failed: { className: "analysis-row-failed", label: "분석 실패" },
+    canceled: { className: "analysis-row-canceled", label: "중지됨" },
+    stopped: { className: "analysis-row-canceled", label: "중지됨" },
     completed: { className: "analysis-row-completed", label: "분석 완료" },
   };
   return typeof status === "string" && Object.hasOwn(states, status)

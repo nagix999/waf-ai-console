@@ -48,6 +48,7 @@ export function hasTuningContent(value) {
 }
 
 export function analystSummary(detail) {
+  if (detail?.status === "canceled") return "테스트가 중지되어 이 문항의 판정을 완료하지 않았습니다. 실패나 오답으로 집계하지 않습니다.";
   if (detail?.status === "pending") return "분석을 기다리고 있습니다. 아직 확정된 판정이 없습니다.";
   if (detail?.status === "processing") return "요청을 분석하고 있습니다. 완료되면 판정과 확인할 내용을 표시합니다.";
   if (detail?.status === "failed") return "자동 분석을 완료하지 못했습니다. 입력을 직접 검토하고 Agent 실행 이력에서 실패한 단계를 확인해 주세요.";

@@ -14,7 +14,7 @@ from ..models import TestRun, TestEvaluation
 from ..validation_data_schemas import EvaluationCreate
 from ..services.manual_references import create_evaluation, evaluation_record
 from ..security import Principal, require_scope
-from ..test_run_schemas import TestRunCreate, TestRunDetail, TestRunList
+from ..test_run_schemas import TestRunCreate, TestRunDetail, TestRunList, TestRunSummary
 from ..candidate_schemas import CandidateConfiguration
 from ..services.analysis import AnalysisIngestError
 from ..services.prompt_policies import PromptPolicyError
@@ -28,6 +28,17 @@ from ..services.vllm_profiles import TargetNotAllowedError
 router = APIRouter(prefix="/test-runs", tags=["test-runs"])
 Admin = Annotated[Principal, Depends(require_scope("admin"))]
 DbSession = Annotated[Session, Depends(get_db)]
+
+
+@router.post("/{run_id}/stop", response_model=TestRunSummary)
+def stop_run(run_id: str, db: DbSession, principal: Admin):
+    from ..services.test_stops import stop_test_run
+    try:
+        run = stop_test_run(db, run_id, principal.username or "admin")
+        return describe_run(db, run, detail=False)
+    except AnalysisIngestError as exc:
+        db.rollback()
+        raise HTTPException(exc.status_code, exc.code) from None
 
 
 class GroundTruthImportRequest(BaseModel):
@@ -145,7 +156,7 @@ def get_test_run(run_id: str, db: DbSession, _principal: Admin,
                  difficulty: str | None = Query(None, max_length=80),
                  test_category: str | None = Query(None, max_length=120),
                  difficulty_missing: bool = False, test_category_missing: bool = False,
-                 status: str | None = Query(None, pattern=r"^(pending|processing|completed|failed)$"),
+                 status: str | None = Query(None, pattern=r"^(pending|processing|completed|failed|canceled)$"),
                  evaluation_outcome: str | None = Query(None, max_length=80),
                  reference_verdict: str | None = Query(None, pattern=r"^(true_positive|false_positive|inconclusive)$"),
                  verdict: str | None = Query(None, pattern=r"^(true_positive|false_positive|inconclusive)$")):

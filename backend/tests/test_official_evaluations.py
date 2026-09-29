@@ -56,6 +56,52 @@ def records(client, run):
     return client.get(f"/api/v1/test-runs/{run['id']}/evaluations").json()["items"]
 
 
+def test_stop_retry_preserves_old_official_record_blocks_new_record_and_promotion(client, event_payload, candidate, monkeypatch):
+    from threading import Event
+    from app.services import official_evaluations
+    from app.services.test_runs import write_lock
+    from app.services.test_stops import stop_test_run
+    dataset = create_dataset(client)
+    approved_item(client, dataset, {**event_payload, "vendor_score": 2}, "true_positive")
+    run = execute(client, dataset, candidate)
+    original = run["items"][0]["analysis_id"]
+    finish(client, original, failed=True)
+    with client.app.state.session_factory() as db:
+        row = db.get(Analysis, original)
+        snapshot = make_execution_snapshot(row, db.get(VLLMProfile, candidate["primary_profile_id"]),
+            load_analysis_prompt(row, client.app.state.crypto), .75, verifier_profile=db.get(VLLMProfile, candidate["verifier_profile_id"]))
+        row.execution_snapshot_ciphertext = client.app.state.crypto.encrypt_text(snapshot.model_dump_json())
+        db.commit()
+    previous_id = finalize(client, run)
+    with client.app.state.session_factory() as db:
+        frozen = db.get(Evaluation, previous_id).summary_json
+    assert submit(client, run, [original]).status_code == 202
+    reached = Event()
+    def finalizer_lock(db):
+        reached.set()
+        write_lock(db)
+    monkeypatch.setattr(official_evaluations, "write_lock", finalizer_lock)
+    with ThreadPoolExecutor(max_workers=1) as pool, client.app.state.session_factory() as stopping:
+        write_lock(stopping)
+        future = pool.submit(finalize, client, run)
+        assert reached.wait(10)
+        stop_test_run(stopping, run["id"], "admin")
+        assert future.result(timeout=10) is None
+    assert len(records(client, run)) == 1
+    with client.app.state.session_factory() as db:
+        assert db.get(Evaluation, previous_id).summary_json == frozen
+        assert not db.get(Run, run["id"]).official_evaluation_pending
+    saved = detail(client, run, evaluation_id=previous_id)
+    assert saved["evaluation_summary"] == frozen["evaluation_summary"]
+    assert saved["status"] == frozen["status"] and saved["stopped_at"] and not saved["can_stop"]
+    # Use service as well so qualification is verified independently of UI routes.
+    from app.services.production_configurations import preflight
+    with client.app.state.session_factory() as db:
+        result = preflight(db, client.app.state.crypto, client.app.state.settings, run["id"])
+    assert not result["eligible"]
+    assert not next(check["passed"] for check in result["checks"] if check["code"] == "candidate_completed_without_failures")
+
+
 def test_published_only_frozen_scope_and_no_production_changes(client, event_payload, candidate):
     dataset = create_dataset(client)
     approved = approved_item(client, dataset, {**event_payload, "vendor_score": 2}, difficulty="hard")

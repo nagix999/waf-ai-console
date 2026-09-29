@@ -220,13 +220,26 @@ def _ensure_benchmark_owner(db: Session) -> None:
 
 def _ensure_run_active(db: Session, run: AgentRun) -> None:
     _ensure_benchmark_owner(db)
+    _ensure_analysis_active(db, run.analysis_id)
     if db.scalar(select(AgentRun.status).where(AgentRun.id == run.id)) != RunStatus.running.value:
+        raise WorkerExecutionError("analysis_lease_lost")
+
+
+def _ensure_analysis_active(db: Session, analysis_id: str) -> None:
+    # Also protect unclaimed/direct execution paths. A read alone would race
+    # with stop between the status check and the following ORM flush.
+    with db.no_autoflush:
+        result = db.execute(update(Analysis).where(Analysis.id == analysis_id,
+            Analysis.status.in_(["pending", "processing"]))
+            .values(updated_at=Analysis.updated_at).execution_options(synchronize_session=False))
+    if result.rowcount != 1:
         raise WorkerExecutionError("analysis_lease_lost")
 
 
 @contextmanager
 def measured_run(db: Session, analysis: Analysis) -> Iterator[AgentRun]:
     _ensure_benchmark_owner(db)
+    _ensure_analysis_active(db, analysis.id)
     # Validate the original claim before a run exists for recovery to abandon.
     # The conditional write holds the SQLite writer lock until run creation commits.
     if analysis.lease_owner is not None:
@@ -323,7 +336,7 @@ def measured_step(
         step.metadata_json = {**step.metadata_json, "error_type": type(exc).__name__}
         raise
     finally:
-        _ensure_benchmark_owner(db)
+        _ensure_run_active(db, run)
         # A recovering worker owns abandoned steps; their true end is unknown.
         if not step.metadata_json.get("timing_incomplete"):
             step.completed_at = utcnow()
@@ -1191,6 +1204,7 @@ def mark_failed(db: Session, analysis: Analysis, exc: Exception) -> None:
         return
     try:
         _ensure_benchmark_owner(db)
+        _ensure_analysis_active(db, analysis.id)
     except WorkerExecutionError:
         db.rollback()
         return

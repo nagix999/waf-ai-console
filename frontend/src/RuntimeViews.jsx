@@ -70,7 +70,7 @@ export function RuntimeOutcomes({ counts, onFilter }) {
   return <section className="panel runtime-outcomes"><div className="panel-head"><h2>{t("failureRate")}</h2><span>{t("finishedRequests")}</span></div>
     <div className="runtime-outcome-body"><div className="runtime-rate"><strong>{rate != null ? `${(rate * 100).toFixed(1)}%` : "—"}</strong><span>{outcome ? t("finishedCount", { count: outcome.finished.toLocaleString() }) : t("unavailable")}</span></div>
       {rate != null && <svg className="runtime-outcome-ring" viewBox="0 0 100 100" role="img" aria-label={`${t("failureRate")} ${(rate * 100).toFixed(1)}%`}><circle className="ring-base" cx="50" cy="50" r="38" /><circle className="ring-failed" cx="50" cy="50" r="38" pathLength="100" strokeDasharray={`${rate * 100} 100`} transform="rotate(-90 50 50)" /></svg>}
-      <div className="runtime-outcome-legend">{["completed", "failed", "processing", "pending"].map(key => <button type="button" key={key} disabled={!outcome} onClick={() => onFilter({ status: key })}><span><i className={`outcome-dot outcome-${key}`} />{t(key)}</span><strong>{outcome ? counts[key].toLocaleString() : "—"}</strong></button>)}</div>
+      <div className="runtime-outcome-legend">{["completed", "failed", "processing", "pending", "canceled"].map(key => <button type="button" key={key} disabled={!outcome} onClick={() => onFilter({ status: key })}><span><i className={`outcome-dot outcome-${key}`} />{t(key)}</span><strong>{outcome ? (counts[key] ?? 0).toLocaleString() : "—"}</strong></button>)}</div>
     </div><p className="runtime-footnote ux-muted">{t("failureRateNote")}</p>
   </section>;
 }

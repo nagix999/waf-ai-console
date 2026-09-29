@@ -4,11 +4,15 @@ import { Icon } from "./Icon.jsx";
 import TextInspector from "./TextInspector.jsx";
 import DetailTabs from "./DetailTabs.jsx";
 import { executionDuration, formatDate } from "./analysisView.js";
+import { useR5Words } from "./R5Evaluation.jsx";
 import { stepLabel } from "./inspection.js";
 
 const statuses = { pending: "대기", running: "실행 중", processing: "실행 중", completed: "완료", passed: "통과", failed: "실패", skipped: "건너뜀" };
+const stopped = item => item?.failure_id === "test_run_stopped" || item?.metadata?.error_code === "test_run_stopped";
+const tone = item => stopped(item) ? "canceled" : item.status;
 const status = value => statuses[value] || value || "미기록";
 export default function AgentHistory({ runs = [], active = true }) {
+  const w = useR5Words(); const state = item => stopped(item) ? w("테스트 중지", "Test stopped") : status(item.status);
   const [selectedRun, setSelectedRun] = useState(null); const [selectedStep, setSelectedStep] = useState(null);
   const [tab, setTab] = useState("output"); const [identityOpen, setIdentityOpen] = useState(false);
   useEffect(() => { if (!active) setIdentityOpen(false); }, [active]);
@@ -17,10 +21,10 @@ export default function AgentHistory({ runs = [], active = true }) {
   const step = steps.find(item => item.id === selectedStep) || steps[0];
   if (!run) return <p className="empty">아직 실행 이력이 없습니다. 분석을 시작하면 단계별 기록이 표시됩니다.</p>;
   return <section className="agent-history inspection-history">
-    <div className="ux-toolbar inspection-run-toolbar"><label className="ux-grow">실행 선택<select value={run.id} onChange={event => { setSelectedRun(event.target.value); setSelectedStep(null); setTab("output"); }}>{runs.map((item, index) => <option key={item.id} value={item.id}>실행 {runs.length - index} · {status(item.status)} · {formatDate(item.started_at)}</option>)}</select></label><span className="inspection-run-duration">실행 시간 <strong>{executionDuration(run)}</strong></span><button type="button" className="secondary" onClick={() => setIdentityOpen(true)}>실행 식별자</button></div>
+    <div className="ux-toolbar inspection-run-toolbar"><label className="ux-grow">실행 선택<select value={run.id} onChange={event => { setSelectedRun(event.target.value); setSelectedStep(null); setTab("output"); }}>{runs.map((item, index) => <option key={item.id} value={item.id}>실행 {runs.length - index} · {state(item)} · {formatDate(item.started_at)}</option>)}</select></label><span className="inspection-run-duration">실행 시간 <strong>{executionDuration(run)}</strong></span><button type="button" className="secondary" onClick={() => setIdentityOpen(true)}>실행 식별자</button></div>
     <div className="inspection-agent-grid">
-      <nav className="inspection-steps" aria-label="분석 단계"><h3>실행 단계 <span>({steps.length})</span></h3>{steps.map((item, index) => <button type="button" key={item.id} aria-current={step?.id === item.id ? "step" : undefined} onClick={() => { setSelectedStep(item.id); setTab("output"); }}><span className={`inspection-step-number step-tone-${item.status}`}><Icon name={["completed", "passed"].includes(item.status) ? "check" : item.status === "failed" ? "close" : ["running", "processing"].includes(item.status) ? "refresh" : "clock"} size={14} /></span><span><strong>{index + 1}. {stepLabel(item.step_type || item.name, item.metadata)}</strong><small>{status(item.status)} · {executionDuration(item)}</small></span></button>)}</nav>
-      {step ? <section className="inspection-step-detail"><div className="panel-head-inline"><h3>{stepLabel(step.step_type || step.name, step.metadata)}</h3></div><p className="step-timing"><span className={`status status-${step.status}`}>{status(step.status)}</span><strong>{executionDuration(step)}</strong><small>재시도 포함</small><small>{formatDate(step.started_at)} → {step.completed_at ? formatDate(step.completed_at) : "종료 기록 없음"}</small></p>
+      <nav className="inspection-steps" aria-label="분석 단계"><h3>실행 단계 <span>({steps.length})</span></h3>{steps.map((item, index) => <button type="button" key={item.id} aria-current={step?.id === item.id ? "step" : undefined} onClick={() => { setSelectedStep(item.id); setTab("output"); }}><span className={`inspection-step-number step-tone-${tone(item)}`}><Icon name={stopped(item) ? "clock" : ["completed", "passed"].includes(item.status) ? "check" : item.status === "failed" ? "close" : ["running", "processing"].includes(item.status) ? "refresh" : "clock"} size={14} /></span><span><strong>{index + 1}. {stepLabel(item.step_type || item.name, item.metadata)}</strong><small>{state(item)} · {executionDuration(item)}</small></span></button>)}</nav>
+      {step ? <section className="inspection-step-detail"><div className="panel-head-inline"><h3>{stepLabel(step.step_type || step.name, step.metadata)}</h3></div><p className="step-timing"><span className={`status status-${tone(step)}`}>{state(step)}</span><strong>{executionDuration(step)}</strong><small>재시도 포함</small><small>{formatDate(step.started_at)} → {step.completed_at ? formatDate(step.completed_at) : "종료 기록 없음"}</small></p>
         <StepMetrics metadata={step.metadata} />
         <RepairSummary metadata={step.metadata} />
         <DetailTabs label="단계 자료" items={[["output", "처리 결과"], ["input", "분석 입력"], ["metadata", "실행 정보"]]} value={tab} onChange={setTab}>{key => tab === key && <TextInspector jsonText key={`${run.id}-${step.id}-${key}`} label={key === "output" ? "단계 처리 결과" : key === "input" ? "단계 분석 입력" : "단계 실행 정보"} value={key === "metadata" ? { metadata: step.metadata, tool_calls: step.tool_calls } : step[key]} />}</DetailTabs>

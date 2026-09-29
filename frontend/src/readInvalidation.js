@@ -8,5 +8,6 @@ export function affectsHome(path, method = "GET") {
     !/\/(search|selection|preview)(?:\?|$)/.test(path) && !path.startsWith("/api/v1/auth/");
 }
 export function testRunActive(run) {
-  return ["pending", "processing"].includes(run?.status) || Boolean(run?.official_evaluation_pending);
+  if (run?.stopped_at || run?.status === "stopped") return false;
+  return ["pending", "processing"].includes(run?.status) || Boolean(run?.official_evaluation_pending || run?.accepting_items || run?.can_stop);
 }

@@ -28,6 +28,39 @@ def signature(relation="exact"):
         "uncertainty_ko": "탐지 설명이 없어 요청과 비교하지 못했습니다." if relation == "unknown" else None}
 
 
+@pytest.mark.parametrize("provider", ["vllm", "openai"])
+def test_signature_wire_schema_has_no_single_character_pattern(provider):
+    codec = _TrackingOutputCodec(PydanticOutputCodec(SemanticAssessmentOutput), strict=provider == "openai", output_model=SemanticAssessmentOutput)
+    schema = codec.schema()
+    fields = schema["$defs"]["SignatureAssessmentV2"]["properties"]
+    for name in ("matched_points", "mismatched_points"):
+        item = fields[name]["items"]
+        assert "pattern" not in item and item["maxLength"] == 400 and fields[name]["maxItems"] == 5
+    limit = next(value for value in fields["uncertainty_ko"]["anyOf"] if value["type"] == "string")
+    assert "pattern" not in limit and limit["maxLength"] == 500
+    value = signature("partial")
+    value["matched_points"] = ['요청의 "q" 값과 탐지 대상이 같습니다.\n공백과 줄바꿈도 보존합니다.']
+    value["uncertainty_ko"] = "탐지 규칙 원문이 없어 매치 조건은 확인하지 못했습니다."
+    assert SignatureAssessmentV2.model_validate(value).model_dump(mode="json") == value
+
+
+@pytest.mark.parametrize("field,short", [("matched_points", ["요"]), ("mismatched_points", ["탐"]), ("uncertainty_ko", "시")])
+def test_one_character_new_response_repairs_but_stored_record_is_preserved(field, short):
+    value = {**signature("partial"), field: short}
+    assert SignatureAssessment.model_validate(value).model_dump(mode="json") == value
+    with pytest.raises(ValidationError) as exc:
+        SignatureAssessmentV2.model_validate(value)
+    assert exc.value.errors()[0]["type"] == "signature_detail_requires_explanation"
+
+
+@pytest.mark.parametrize("field", ["matched_points", "mismatched_points", "uncertainty_ko"])
+@pytest.mark.parametrize("blank", [" ", "\t\r\n", "\u3000"])
+def test_removed_wire_pattern_keeps_nonblank_validation(field, blank):
+    value = {**signature("partial"), field: blank if field == "uncertainty_ko" else [blank]}
+    with pytest.raises(ValidationError):
+        SignatureAssessmentV2.model_validate(value)
+
+
 def output(verdict="true_positive", relation="exact"):
     value = fake_output().model_dump(mode="json")
     value.update(verdict=verdict, signature_assessment=signature(relation), decision_issue=None,
@@ -143,13 +176,15 @@ def test_editor_and_dedup_never_cross_purpose_or_modify_originals():
 
 @pytest.mark.parametrize("provider", ["openai", "vllm"])
 @pytest.mark.parametrize("role", ["primary", "verifier"])
-@pytest.mark.parametrize("fault,code", [("signature", "signature_mismatch_requires_difference"), ("purpose", "decisive_verdict_disallows_decision_condition")])
+@pytest.mark.parametrize("fault,code", [("signature", "signature_mismatch_requires_difference"), ("purpose", "decisive_verdict_disallows_decision_condition"), ("short_signature", "signature_detail_requires_explanation")])
 def test_contract_retry_reuses_input_and_does_not_echo_bad_output(monkeypatch, provider, role, fault, code):
     valid = output(relation="mismatch")
     invalid = copy.deepcopy(valid)
     invalid["summary_ko"] = "PRIVATE_INVALID_OUTPUT_CANARY"
     if fault == "signature":
         invalid["signature_assessment"]["mismatched_points"] = []
+    elif fault == "short_signature":
+        invalid["signature_assessment"]["mismatched_points"] = ["탐"]
     else:
         invalid["analyst_checks"] = [check("decision_condition")]
     requests, _ = install_http(monkeypatch, lambda request, count: httpx.Response(200, json=completion(json.dumps(invalid if count == 1 else valid))))

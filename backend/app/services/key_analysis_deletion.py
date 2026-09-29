@@ -26,7 +26,7 @@ def preview(db, key_id):
     copies = db.scalar(select(func.count()).select_from(ValidationDatasetItem).where(ValidationDatasetItem.original_analysis_id.in_(scope)))
     copies += db.scalar(select(func.count()).select_from(ValidationDatasetWorkingItem).where(ValidationDatasetWorkingItem.original_analysis_id.in_(scope)))
     return ServiceApiKeyDeletionPreview(name=key.name, purpose=key.purpose, analyses=len(rows),
-        active_analyses=sum(status not in {"completed", "failed"} for _, status in rows),
+        active_analyses=sum(status not in {"completed", "failed", "canceled"} for _, status in rows),
         dataset_copies=copies, blocked_references=bool(linked or label_linked or foreign_retry), scope=fingerprint)
 
 

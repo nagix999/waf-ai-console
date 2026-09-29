@@ -6,11 +6,13 @@ ReferenceVerdict = Literal["true_positive", "false_positive", "inconclusive"]
 LabelSourceKind = Literal["synthetic_expected", "reference"]
 AIVisibility = Literal["unknown", "true", "false"]
 EvaluationOutcome = Literal[
+    "canceled",
     "unlabeled", "pending", "failed", "stub", "unknown_provenance", "input_contaminated",
     "match", "false_negative", "false_positive", "abstained",
     "expected_abstention_match", "expected_abstention_mismatch",
 ]
 OUTCOMES = (
+    "canceled",
     "unlabeled", "pending", "failed", "stub", "unknown_provenance", "input_contaminated",
     "match", "false_negative", "false_positive", "abstained",
     "expected_abstention_match", "expected_abstention_mismatch",

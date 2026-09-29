@@ -22,7 +22,7 @@ def elapsed_ms(start: datetime | None, end: datetime | None) -> int | None:
 def analysis_timings(analysis: Analysis, now: datetime | None = None) -> dict[str, int | None]:
     """Processing spans first claim to completion, including lease-recovery gaps."""
     now = now or datetime.now(UTC)
-    terminal = analysis.status in {"completed", "failed"}
+    terminal = analysis.status in {"completed", "failed", "canceled"}
     end = analysis.completed_at if terminal else now
     queue_end = analysis.started_at or end
     return {

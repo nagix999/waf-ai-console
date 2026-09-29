@@ -35,7 +35,7 @@ def status_document(db, crypto, settings, window, purpose="all", service_api_key
     # Only timestamps/status/counters are selected, never result_json or raw input.
     rows = db.execute(select(Analysis.created_at, Analysis.completed_at, Analysis.status, Analysis.attempt_count)
         .where(*condition)).all()
-    buckets = [{"from": start + timedelta(hours=hours * i / 12), "completed": 0, "failed": 0, "pending": 0, "processing": 0, "retry": 0} for i in range(12)]
+    buckets = [{"from": start + timedelta(hours=hours * i / 12), "completed": 0, "failed": 0, "pending": 0, "processing": 0, "canceled": 0, "retry": 0} for i in range(12)]
     latencies = []
     retries = 0
     for created, completed, state, attempts in rows:
@@ -64,7 +64,7 @@ def status_document(db, crypto, settings, window, purpose="all", service_api_key
     failures = db.execute(select(Analysis.error_code, func.count()).where(*condition, Analysis.status == "failed").group_by(Analysis.error_code)).all()
     return {"window": window, "purpose": purpose, "service_api_key_id": service_api_key_id, "updated_at": now, "production_configuration": current_configuration(db, crypto, settings),
         "health": health, "queue": {k: queue.get(k, 0) for k in ("pending", "processing")},
-        "outcome_summary": {k: counts.get(k, 0) for k in ("completed", "failed", "pending", "processing")},
+        "outcome_summary": {k: counts.get(k, 0) for k in ("completed", "failed", "pending", "processing", "canceled")},
         "request_volume_series": buckets, "request_count": len(rows), "retry_count": retries,
         "retry_basis": "queue_claim_attempts", "failure_types": [{"code": c, "count": n} for c, n in failures],
         "latency_summary": {**{f"p{p}": latencies[max(0, ceil(len(latencies) * p / 100) - 1)] if latencies else None for p in (50, 95, 99)},

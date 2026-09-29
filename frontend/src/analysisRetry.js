@@ -1,5 +1,6 @@
 export function retryError(code) {
   const messages = {
+    test_run_stopped: "중지된 테스트의 문항은 재실행할 수 없습니다. 같은 설정으로 새 테스트를 만드세요.",
     retry_requires_failed_analysis: "실패한 분석만 재실행할 수 있습니다.",
     retry_requires_moduagent_mode: "실제 분석 모드에서 재실행할 수 있습니다.",
     retry_model_validation_requires_new_validation: "모델 검증의 실패 항목입니다. LLM 설정에서 새 검증을 진행하세요.",

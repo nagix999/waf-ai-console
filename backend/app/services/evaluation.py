@@ -127,6 +127,7 @@ def evaluation_relation(labels=None):
         value("$.verdict").in_((*BINARY, "inconclusive")), value("$.verdict") == Analysis.verdict,
     )
     outcome = case(
+        (Analysis.status == "canceled", "canceled"),
         (labels.c.id.is_(None), "unlabeled"),
         (Analysis.status.in_(("pending", "processing")), "pending"),
         (Analysis.status == "failed", "failed"),

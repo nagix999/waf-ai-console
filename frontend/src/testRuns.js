@@ -2,6 +2,8 @@ import { matrixDrilldown } from "./evaluationMetrics.js";
 
 export const runKinds = { direct: "단건 분석", upload: "배치 파일 분석", dataset: "검증 데이터셋 분석", api: "API 테스트", model_validation: "150건 모델 검증" };
 export const runStatuses = { pending: "대기", processing: "진행 중", completed: "처리 완료", failed: "실행 실패" };
+export const caseStatuses = { ...runStatuses, canceled: "중지됨" };
+runStatuses.stopped = "중지됨";
 
 export function newTestRequestKey() {
   return globalThis.crypto?.randomUUID?.() || `test-${Date.now()}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}`;

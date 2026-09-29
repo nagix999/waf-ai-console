@@ -111,7 +111,7 @@ test("test and production quality summary retain provenance and all exclusion an
     const excluded = nodes.find(node => node.props?.title === "평가 제외·보류 내역");
     assert.equal(excluded.props.open, false);
     const exclusions = renderToStaticMarkup(excluded.props.children);
-    assert.match(exclusions, /진행 중 1 · 실행 실패 1 · 모의 실행 1/); assert.match(exclusions, /정답 포함 입력/);
+    assert.match(exclusions, /진행 중 1 · 실행 실패 1 · 중지 0 · 모의 실행 1/); assert.match(exclusions, /정답 포함 입력/);
     assert.match(exclusions, /기대 보류 일치 1건/); assert.match(exclusions, /일치율 분모에서 제외/);
     const sources = nodes.find(node => node.props?.title === "답안 출처별 지표");
     assert.equal(sources.props.open, false);

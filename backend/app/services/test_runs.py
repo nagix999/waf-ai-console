@@ -136,6 +136,9 @@ def pin_item_prompt(analysis, run):
 
 
 def add_run_items(db, crypto, settings, run, rows, *, ai_visible=None, source_ref="test-upload:expected_verdict", trusted_items=None, source_kind="synthetic_expected", actor_kind="admin_session"):
+    write_lock(db)
+    if db.scalar(select(TestRun.stopped_at).where(TestRun.id == run.id)) is not None:
+        raise AnalysisIngestError("test_run_stopped", 409)
     if not rows or len(rows) > MAX_TEST_ITEMS:
         raise AnalysisIngestError("test_item_count_out_of_range", 422)
     try:
@@ -294,6 +297,8 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
     finished = max((completed for _, _, completed in processing_rows if completed is not None), default=None)
     state = "processing" if processing.get("processing") else "pending" if processing.get("pending") else (
         "failed" if processing.get("failed") or counts.get("rejected") else "completed")
+    if run.stopped_at is not None and evaluation is None:
+        state, finished = "stopped", run.stopped_at
     history_ids = select(_nodes.c.analysis_id).join(TestRunItem, TestRunItem.id == _nodes.c.item_id).where(
         *cohort, TestRunItem.ingest_status == "accepted")
     started = db.scalar(select(func.min(Analysis.started_at)).where(Analysis.id.in_(history_ids)))
@@ -304,6 +309,13 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
     elapsed = max(0, int((utc(end) - utc(run.created_at)).total_seconds() * 1000))
     from .official_evaluations import ground_truth_metadata
     ground_truth = ground_truth_metadata(db, run)
+    # Actions concern the whole live run, never a filtered or saved evaluation.
+    _, live_attempts = test_attempts(run.id)
+    can_stop = run.stopped_at is None and run.model_test_run_id is None and (run.accepting_items or bool(db.scalar(
+        select(Analysis.id).join(live_attempts, live_attempts.c.analysis_id == Analysis.id)
+        .join(TestRunItem, TestRunItem.id == live_attempts.c.item_id).where(
+            TestRunItem.ingest_status == "accepted", Analysis.analysis_purpose == "test",
+            Analysis.status.in_(["pending", "processing"])).limit(1))))
     if ground_truth and ground_truth.get("published"):
         from .validation_datasets import digest as scope_digest
         scope = {"difficulty": difficulty, "test_category": test_category,
@@ -320,6 +332,7 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
         duplicates=counts.get("duplicate", 0), rejected=counts.get("rejected", 0),
         pending=processing.get("pending", 0), processing=processing.get("processing", 0),
         completed=processing.get("completed", 0), failed=processing.get("failed", 0),
+        canceled=processing.get("canceled", 0), stopped_at=run.stopped_at, stopped_by=run.stopped_by, can_stop=can_stop,
         execution_mode=run.execution_mode, profile_metadata=run.profile_metadata,
         configuration_snapshot=run.configuration_snapshot_json, configuration_hash=run.configuration_hash,
         evaluation_mode=run.evaluation_mode, ground_truth=ground_truth, test_purpose=run.test_purpose,
@@ -338,6 +351,7 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
         # Unfiltered historical scores/timing are a stored observation, not a
         # recomputation under future metric definitions or mutable labels.
         summary = TestRunSummary.model_validate({**evaluation.summary_json,
+            "stopped_at": run.stopped_at, "stopped_by": run.stopped_by, "can_stop": can_stop,
             "evaluation_id": evaluation.id, "evaluation_revision": evaluation.revision,
             "reference_basis": "saved", "official_evaluation_pending": False})
     if not detail:
@@ -411,6 +425,8 @@ def named_test_request_check(engine, run_id):
     def check():
         with Session(engine) as latest:
             run = latest.get(TestRun, run_id)
+            if run and run.stopped_at is not None:
+                raise TargetNotAllowedError("test_run_stopped")
             profile = latest.get(VLLMProfile, run.profile_id) if run and run.profile_id else None
             if profile is None or profile.status == "disabled" or profile_fingerprint(profile) != run.profile_fingerprint:
                 raise TargetNotAllowedError("test_run_profile_changed")

@@ -18,6 +18,7 @@ class AnalysisStatus(str, enum.Enum):
     processing = "processing"
     completed = "completed"
     failed = "failed"
+    canceled = "canceled"
 
 
 class AnalysisPurpose(str, enum.Enum):
@@ -481,6 +482,8 @@ class TestRun(Base):
     dataset_version_id: Mapped[str | None] = mapped_column(ForeignKey("validation_dataset_versions.id", ondelete="RESTRICT"))
     api_source_system: Mapped[str | None] = mapped_column(String(120), index=True)
     accepting_items: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
+    stopped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    stopped_by: Mapped[str | None] = mapped_column(String(255))
     model_test_run_id: Mapped[str | None] = mapped_column(ForeignKey("vllm_test_runs.id", ondelete="RESTRICT"), unique=True)
     profile_id: Mapped[str | None] = mapped_column(ForeignKey("vllm_profiles.id", ondelete="RESTRICT"))
     profile_fingerprint: Mapped[str | None] = mapped_column(String(64))

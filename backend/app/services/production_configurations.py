@@ -80,7 +80,8 @@ def official_for_hash(db, digest):
     return db.scalar(select(TestEvaluation).join(TestRun, TestRun.id == TestEvaluation.test_run_id)
         .join(ValidationDatasetVersion, ValidationDatasetVersion.id == TestRun.dataset_version_id)
         .where(ValidationDatasetVersion.is_published.is_(True), TestEvaluation.configuration_hash == digest,
-        TestEvaluation.evaluation_kind == "ground_truth", TestEvaluation.metrics_version == METRICS_VERSION)
+        TestEvaluation.evaluation_kind == "ground_truth", TestEvaluation.metrics_version == METRICS_VERSION,
+        TestRun.stopped_at.is_(None))
         .order_by(TestEvaluation.created_at.desc(), TestEvaluation.revision.desc()).limit(1))
 
 
@@ -95,7 +96,7 @@ def schema_diff(db, crypto, current_id, candidate_id):
 
 
 def preflight(db, crypto, settings, identifier):
-    run = db.get(TestRun, identifier)
+    run = db.get(TestRun, identifier, populate_existing=True)
     if not run:
         raise AnalysisIngestError("test_run_not_found", 404)
     current = current_configuration(db, crypto, settings)
@@ -111,7 +112,7 @@ def preflight(db, crypto, settings, identifier):
     check("candidate_snapshot_valid", snapshot is not None)
     summary = describe_run(db, run, detail=False, reference_basis="initial")
     check("candidate_completed_without_failures", summary.status == "completed" and summary.failed == 0
-          and summary.rejected == 0 and summary.completed > 0 and not run.accepting_items)
+          and summary.rejected == 0 and summary.completed > 0 and not run.accepting_items and run.stopped_at is None)
     check("official_approved_evaluation", run.test_purpose == "official_evaluation"
           and run.evaluation_mode == "ground_truth" and not run.official_evaluation_pending)
     evaluation = db.scalar(select(TestEvaluation).where(TestEvaluation.test_run_id == run.id,

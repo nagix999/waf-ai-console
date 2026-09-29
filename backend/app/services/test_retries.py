@@ -13,9 +13,11 @@ from .test_runs import read_snapshot, write_lock
 
 
 def get_run(db, run_id):
-    run = db.get(TestRun, run_id)
+    run = db.get(TestRun, run_id, populate_existing=True)
     if run is None:
         raise RetryError("test_run_not_found", 404)
+    if run.stopped_at is not None:
+        raise RetryError("test_run_stopped", 409)
     return run
 
 

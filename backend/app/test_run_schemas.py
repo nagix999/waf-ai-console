@@ -61,6 +61,10 @@ class TestRunSummary(UTCResponse):
     processing: int
     completed: int
     failed: int
+    canceled: int = 0
+    stopped_at: datetime | None = None
+    stopped_by: str | None = None
+    can_stop: bool = False
     execution_mode: str
     profile_metadata: dict[str, Any]
     configuration_snapshot: dict[str, Any] | None = None
