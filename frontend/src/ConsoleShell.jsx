@@ -87,7 +87,7 @@ export default function ConsoleShell({ screen, principal, healthError, onNavigat
         </div>
       </header>
       <div className="content console-content" id="workspace-content" tabIndex={-1}>
-        <div className="console-page-heading"><p className="console-breadcrumb">WAF AI Console<span aria-hidden="true">/</span>{t(location.group || location.title)}</p><h1>{t(location.title)}</h1><p className="page-description">{t(`${location.title}.description`)}</p></div>
+        <div className={`console-page-heading${screen.page === "detail" ? " is-analysis-detail" : ""}`}><p className="console-breadcrumb">WAF AI Console<span aria-hidden="true">/</span>{t(location.group || location.title)}{screen.page === "detail" && <><span aria-hidden="true">/</span>{t(location.title)}</>}</p>{screen.page !== "detail" && <><h1>{t(location.title)}</h1><p className="page-description">{t(`${location.title}.description`)}</p></>}</div>
         {consoleGroups.find(group => group.key === location.group)?.items.length > 1 && <nav className="v5-workspace-tabs" aria-label={t(location.group)}>{consoleGroups.find(group => group.key === location.group).items.map(key => <button type="button" key={key} aria-current={location.item === key ? "page" : undefined} onClick={() => navigate(key)}>{t(key)}</button>)}</nav>}
         {children}
       </div>

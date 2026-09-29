@@ -2,7 +2,7 @@ import { formatDuration } from "./analysisView.js";
 import { recordedProfiles } from "./inferenceDetail.js";
 import { useConsolePreferences } from "./consolePreferences.jsx";
 
-export default function InferenceSummary({ detail, runs, children, onMetadata }) {
+export default function InferenceSummary({ detail, runs, children, onMetadata, title }) {
   const { t } = useConsolePreferences();
   const profiles = recordedProfiles(detail, runs);
   const missing = t("detail.missing");
@@ -19,12 +19,12 @@ export default function InferenceSummary({ detail, runs, children, onMetadata })
     [t("detail.processingTime"), formatDuration(detail.processing_duration_ms, t("unmeasured"))],
     [t("detail.total"), formatDuration(detail.total_elapsed_ms, t("unmeasured"))],
   ];
-  return <div className="inference-overview">
+  return <div className={`inference-overview${children ? "" : " execution-only"}`}>
     <section className="panel inference-execution">
-      <div className="panel-head-inline"><h2>{t("detail.execution")}</h2><button type="button" className="text-button" onClick={onMetadata}>{t("detail.metadata")}</button></div>
+      <div className="panel-head-inline"><h2>{title || t("detail.execution")}</h2><button type="button" className="text-button" onClick={onMetadata}>{t("detail.metadata")}</button></div>
       <dl className="inference-facts">{cells.map(([label, value], index) => <div key={label}><dt>{label}</dt><dd>{index === 1 ? <span className={`runtime-status-text outcome-${detail.status}`}><i />{value}</span> : value}</dd></div>)}</dl>
       <p className="ux-muted inference-record-note">{t("detail.recordNote")}</p>
     </section>
-    <section className="panel inference-result-snapshot">{children}</section>
+    {children && <section className="panel inference-result-snapshot">{children}</section>}
   </div>;
 }

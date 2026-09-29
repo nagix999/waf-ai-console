@@ -104,9 +104,9 @@ try {
     await page.getByRole('button', { name: '운영 수집기 관리', exact: true }).click(); await page.getByRole('button', { name: '운영 수집기 삭제', exact: true }).click(); await page.getByRole('dialog', { name: 'API 키 삭제', exact: true }).waitFor(); await snap('key-delete'); await page.keyboard.press('Escape');
     await go('#connect/vllm-targets', '.internal-egress-settings'); await page.getByRole('button', { name: '10.1.2.3:8000 편집', exact: true }).click(); await page.getByRole('dialog').waitFor(); await snap('target-editor'); await page.keyboard.press('Escape');
     await go('#operate/inference', '.analysis-data-table'); await page.getByRole('button', { name: '인코딩 요청 검사', exact: true }).click(); await page.locator('.inference-detail').waitFor();
-    for (const name of ['판정 결과', 'Agent 실행 이력', 'HTTP 원문', '이벤트 실행 정보', '보고서']) {
+    for (const name of ['판정', '근거·입력', '실행', '보고서']) {
       const tabs = page.locator('.inference-detail > .detail-tabs button');
-      const index = ['판정 결과', 'Agent 실행 이력', 'HTTP 원문', '이벤트 실행 정보', '보고서'].indexOf(name);
+      const index = ['판정', '근거·입력', '실행', '보고서'].indexOf(name);
       await tabs.nth(index).click(); await snap('analysis-tab-' + index);
     }
     if (width === 390) { await page.getByRole('button', { name: '메뉴 열기', exact: true }).click(); await snap('navigation'); await page.keyboard.press('Escape'); }

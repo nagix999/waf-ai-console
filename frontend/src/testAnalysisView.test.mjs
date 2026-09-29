@@ -63,7 +63,8 @@ test("R5 Test starts with purpose and explicit configuration; developer forms re
 test("actual result component uses analyst wording, ordered sections and precise source paths", () => {
   const detail = fixture();
   const html = renderToStaticMarkup(createElement(ResultView, { detail }));
-  assert.ok(html.indexOf("세부 분석") < html.indexOf("판정 근거"));
+  assert.ok(html.indexOf("판정 근거") < html.indexOf("기술 해석 펼치기"));
+  assert.match(html, /<details><summary>기술 해석 펼치기/);
   assert.match(html, /탐지 내용과 요청의 연관성/);
   assert.match(html, /요청 파라미터 · q/);
   assert.match(html, /payload.query.q/);

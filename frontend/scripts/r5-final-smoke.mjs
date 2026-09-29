@@ -80,7 +80,7 @@ try {
   await go("#operate/inference");await page.locator(".analysis-data-table").waitFor();
   assert.equal(await page.evaluate(()=>window.fixture.searchQuery.analysis_purpose),"production");
   await snap("production-inference");
-  await page.getByRole("button",{name:"인코딩 요청 검사",exact:true}).click();await page.locator(".r5-initial").waitFor();await snap("initial-deep-comparison");
+  await page.getByRole("button",{name:"인코딩 요청 검사",exact:true}).click();await page.locator(".decision-context-rows").first().waitFor();await snap("initial-deep-comparison");
   await go("#promotion/"+run);await page.evaluate(()=>{window.fixture.incompatible=true});await page.getByRole("button",{name:"다시 확인",exact:true}).click();
   await page.locator(".v5-preflight").waitFor();assert.equal(await page.locator(".brand-mutation").isDisabled(),true);await snap("production-review-blocked");
   for(const state of ["unconfigured","legacy_active"]){await page.evaluate(state=>{window.fixture.productionState=state},state);await go("#overview");await page.locator(state==="unconfigured"?".r5-setup":".r3-overview").waitFor();await snap("home-"+state);await go("#evaluate/tests");}

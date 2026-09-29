@@ -1,9 +1,6 @@
 import NavigationAction from "./NavigationAction.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { api } from "./api.js";
-import { decisionExplanation, provisionalAnalysisNotice, threatCategoryLabel } from "./decisionExplanation.js";
-import { AnalystEvidence, DecisionIssues } from "./AnalystEvidence.jsx";
-import { assessmentView, legacyEvidenceNotice } from "./analystAssessment.js";
 import { Icon } from "./Icon.jsx";
 import ProductionApi from "./ProductionApi.jsx";
 import AnalysisReport from "./AnalysisReport.jsx";
@@ -23,7 +20,7 @@ import RetryAnalysis from "./RetryAnalysis.jsx";
 import AnalysisDownloads from "./AnalysisDownloads.jsx";
 import { analysisElapsedTime, analysisQuery, analysisReceivedAt, analysisRowState, appliedFilterTags, dashboardListState, executionDuration, formatDate, formatDuration, initialListState, removeAppliedFilter, searchFields, uploadErrorText, validateFilters } from "./analysisView.js";
 import { EXTERNAL_DATA_APPROVAL, changeProfileProvider, editProfileForm, modelProfileError, newProfileForm, profilePayload, profileRequiresKey, providerLabel, providerOf, validateProfileForm } from "./llmProfiles.js";
-import { CompactEvaluationDetail, CompactReferenceComparison, EvaluationSummary, LabelAttachment } from "./ReferenceLabels.jsx";
+import { CompactReferenceComparison, EvaluationSummary, LabelAttachment } from "./ReferenceLabels.jsx";
 import AnalysisSelectionActions, { useAnalysisSelection } from "./AnalysisSelection.jsx";
 import DataTable, { Table, serverSorting, changedSort } from "./DataTable.jsx";
 import DataManagement from "./DataManagement.jsx";
@@ -37,11 +34,10 @@ import TestDefaults, { ReadOnlyAgentRoles } from "./R5TestDefaults.jsx";
 import { InitialAssessment, useR5Words } from "./R5Evaluation.jsx";
 import { evaluationOutcomes, isMockAnalysis, labelSources, referenceVerdicts } from "./labelEvaluation.js";
 import { createDetailLoader, emptyDetailState } from "./detailLoader.js";
-import { analysisNotices, analystFieldLabel, analystFollowUp, analystGuidance, analystItems, analystSummary, analystText, finalValue, groupedEvidence, hasTuningContent, isTechnicalText } from "./analystView.js";
-import RawEventView from "./RawEventView.jsx";
-import AgentHistory from "./AgentHistory.jsx";
+import { analystSummary, analystText, finalValue, isTechnicalText } from "./analystView.js";
 import DetailTabs from "./DetailTabs.jsx";
-import InferenceSummary from "./InferenceSummary.jsx";
+import { DecisionHero, DecisionContext, EvidenceCards, DecisionConditions, TechnicalInterpretation, PolicySuggestion, EvidenceWorkspace, ExecutionView } from "./AnalysisDecision.jsx";
+import { decisionTab } from "./decisionDetail.js";
 import "./inferenceDetail.css";
 import QuickValidationDialog from "./QuickValidationDialog.jsx";
 import TextInspector from "./TextInspector.jsx";
@@ -444,6 +440,7 @@ function SingleTest({ onCreated, disabledReason, candidateConfiguration, onBusy 
 
 export function Detail({ id, onBack, onOpen, backLabel = "분석 결과", tab: controlledTab, onTabChange, onResolved }) {
   const { t } = useConsolePreferences();
+  const w = useR5Words();
   const [view, setView] = useState(() => emptyDetailState(id));
   const loader = useRef(null);
   const { detail, error, loading, runs, runsError, runsLoading, labelHistory, labelHistoryError, labelsLoading } = view;
@@ -453,13 +450,16 @@ export function Detail({ id, onBack, onOpen, backLabel = "분석 결과", tab: c
   const [rawError, setRawError] = useState("");
   const [rawAttempt, setRawAttempt] = useState(0);
   const [localTab, setLocalTab] = useState("result");
-  const tab = controlledTab ?? localTab;
+  const requestedTab = controlledTab ?? localTab;
+  const tab = decisionTab(requestedTab);
   const setTab = onTabChange || setLocalTab;
   const [reportMode, setReportMode] = useState("preview");
   const [technicalOpen, setTechnicalOpen] = useState(false);
   const [inputTarget, setInputTarget] = useState(null);
+  const [tabFocusRequest, setTabFocusRequest] = useState(0);
   const [reportAppendix, setReportAppendix] = useState(false);
-  const openInput = item => { setInputTarget({ field: item.field, excerpt: item.excerpt }); setTab("raw"); };
+  const jumpTab = value => { setTab(value); setTabFocusRequest(count => count + 1); };
+  const openInput = item => { setInputTarget(item ? { number: item.number, field: item.field, excerpt: item.excerpt } : null); jumpTab("raw"); };
   useEffect(() => {
     const current = createDetailLoader({ id, api, onChange: setView });
     loader.current = current;
@@ -485,44 +485,18 @@ export function Detail({ id, onBack, onOpen, backLabel = "분석 결과", tab: c
     </div>
   </div>;
   if (!detail || view.id !== id) return <div className="page-stack">{navigation}{error ? <div className="error" role="alert">{error}</div> : <div className="loading">{t("loading")}</div>}</div>;
-  const notices = analysisNotices(detail);
-  const decisionReason = isMockAnalysis(detail) ? null : decisionExplanation(detail);
-  const rawFailure = rawError && <div className="error" role="alert"><p>{t("detail.rawError")}</p><button type="button" className="secondary" onClick={() => setRawAttempt(value => value + 1)}>{t("retry")}</button></div>;
-  const tabItems = ["result", "agent", "raw", "json", "report"].map(key => [key, t(`detail.tab.${key}`)]);
+  const tabItems = [["result", w("판정", "Decision")], ["raw", w("근거·입력", "Evidence & input")], ["agent", w("실행", "Execution")], ["report", w("보고서", "Report")]];
   return <div className="page-stack inference-detail">
     {navigation}
     {error && <div className="error" role="alert">{error}</div>}
-    <InferenceSummary detail={detail} runs={runs} onMetadata={() => setTechnicalOpen(true)}>
-      <h2>{t(isMockAnalysis(detail) ? "detail.mock" : "detail.summary")}</h2>
-      <div className="snapshot-highlight" data-verdict={detail.status === "completed" ? finalValue(detail, "verdict") : detail.status}>
-        <div className="snapshot-verdict"><span className="snapshot-mark"><Icon name={detail.status === "failed" ? "close" : "shield"} size={25} /></span><div><small>{t("detail.verdict")}</small>{detail.status === "completed" ? <Status value={finalValue(detail, "verdict")} /> : <Status value={detail.status} />}</div>{detail.status === "completed" && <Severity value={detail.result?.threat_analysis?.severity} describe />}</div>
-        <div className="snapshot-summary"><SummaryPreview text={analystSummary(detail)} /></div>
-      </div>
-      {decisionReason && <small className="snapshot-reason">{decisionReason.title_ko}</small>}
-    </InferenceSummary>
-    <DetailTabs label={t("detail")} items={tabItems} value={tab} onChange={setTab} focusRequest={inputTarget}>{key => {
-      if (key === "result") return tab === "result" && <div className="inference-result-content">
-        <InitialAssessment value={detail.initial_assessment} verdict={finalValue(detail, "verdict")} confidence={finalValue(detail, "confidence_score")} />
-        <section className={`panel decision-card decision-${detail.status === "completed" ? finalValue(detail, "verdict") : "pending"}`}>
-          <h2>{t("detail.summary")}</h2><div className="decision-summary-line"><strong>{analystSummary(detail)}</strong></div>
-          {!isMockAnalysis(detail) && <DecisionIssues detail={detail} />}
-          {notices.map(notice => <small className="analyst-notice" key={notice}>{notice}</small>)}
-        </section>
-        {detail.status === "completed" && detail.result && <ResultView detail={detail} onViewInput={openInput} />}
-        <section className="inference-evaluation">
-          <div className="inference-reference-actions"><h2>{t("detail.reference")}</h2><AnalysisSelectionActions allowDataset={detail.analysis_purpose !== "test"} key={id} ids={[id]} single compact onSaved={() => loader.current?.refresh()} /></div>
-          <CompactEvaluationDetail detail={detail} history={labelHistory} historyError={labelHistoryError} />
-          {detail.evaluation?.outcome === "unlabeled" && !labelHistoryError && <p className="ux-muted">등록된 참고 답안이 없습니다.</p>}
-        </section>
-        <AdditionalChecks detail={detail} />
+    <DecisionHero detail={detail} />
+    <DetailTabs label={t("detail")} items={tabItems} value={tab} onChange={setTab} focusRequest={tabFocusRequest}>{key => {
+      if (key === "result") return tab === "result" && <div className="decision-layout">
+        {detail.status === "completed" && detail.result ? <ResultView detail={detail} onViewInput={openInput} includePolicy={false} /> : <section className="panel decision-awaiting"><h2>{detail.status === "completed" ? w("결과 본문 미기록", "Result body not recorded") : detail.status === "failed" ? w("실행 확인", "Check execution") : w("분석 진행", "Analysis progress")}</h2><p>{detail.status === "completed" ? w("처리는 완료되었지만 저장된 결과 본문이 없어 근거를 표시할 수 없습니다. 실행 기록을 확인해 주세요.", "Processing completed, but the result body is unavailable. Check the execution record.") : detail.status === "failed" ? w("실패한 단계는 실행 탭에서 확인할 수 있습니다. 재실행해도 기존 실패 이력은 보존됩니다.", "Check the Execution tab for the failed step. Retrying preserves the original failure history.") : w("분석이 완료되면 판정 근거를 표시합니다.", "Evidence will appear when the analysis finishes.")}</p><NavigationAction onClick={() => jumpTab("agent")}>{w("실행 상세", "Execution details")}</NavigationAction></section>}
+        <DecisionContext detail={detail} history={labelHistory} historyError={labelHistoryError} onSaved={() => loader.current?.refresh()} onExecution={() => jumpTab("agent")} />
       </div>;
-      if (key === "agent") return <section className="agent-trace-panel">
-        <p className="ux-muted trace-audit">{t("detail.audit")}</p>
-        {runsError && <div className="error" role="alert"><p>{t("detail.agentError")}</p><button type="button" className="secondary" disabled={runsLoading} onClick={() => loader.current?.refreshAgent()}>{t("retry")}</button></div>}
-        {runs === null ? (!runsError && <p className="loading" role="status">{t("loading")}</p>) : <AgentHistory runs={runs} active={tab === "agent"} />}
-      </section>;
-      if (key === "raw") return rawFailure || (raw ? <RawEventView key={id} event={raw} detail={detail} target={inputTarget} active={tab === "raw"} /> : <p className="panel loading" role="status">{t("loading")}</p>);
-      if (key === "json") return tab === "json" && <section className="panel detail-body"><h2>{t("detail.tab.json")}</h2><p className="ux-muted">{t("detail.jsonNote")}</p><TextInspector label={t("detail.tab.json")} value={detail.result} /></section>;
+      if (key === "agent") return <ExecutionView key={id} detail={detail} runs={runs} runsError={runsError} runsLoading={runsLoading} onRetry={() => loader.current?.refreshAgent()} onMetadata={() => setTechnicalOpen(true)} initialJson={requestedTab === "json"} active={tab === "agent"} />;
+      if (key === "raw") return (tab === "raw" || raw) && <EvidenceWorkspace key={id} event={raw} detail={detail} target={inputTarget} onSelect={setInputTarget} error={rawError} onRetry={() => setRawAttempt(value => value + 1)} active={tab === "raw"} />;
       return tab === "report" && <AnalysisReport detail={detail} decoding={raw?.decoding ?? null} mode={reportMode} onModeChange={setReportMode} includeAppendix={reportAppendix} onAppendixChange={setReportAppendix} />;
     }}</DetailTabs>
     <Dialog open={technicalOpen} title={t("detail.metadata")} className="inspection-dialog" onClose={() => setTechnicalOpen(false)}>{technicalOpen && <div className="analyst-disclosure-body">
@@ -546,56 +520,14 @@ export function Detail({ id, onBack, onOpen, backLabel = "분석 결과", tab: c
   </div>;
 }
 
-export function ResultView({ detail, onViewInput }) {
-  const result = detail.result;
-  if (!result || detail.status !== "completed") return <section className="panel detail-body"><h2>분석 상태</h2><p>{analystSummary(detail)}</p></section>;
-  const threat = result.threat_analysis;
-  const signature = result.signature_assessment;
-  const tuning = result.tuning_recommendation;
-  const guidance = analystGuidance(detail);
-  const evidence = groupedEvidence(result.evidence);
-  const circumstances = analystItems(result.conflicting_evidence);
-  const obfuscations = analystItems(threat?.obfuscations);
-  const undecided = finalValue(detail, "verdict") === "inconclusive";
-  return (
-    <div className="result-stack">
-      <section className="panel result-card detailed-analysis">
-        <h2>세부 분석</h2>
-        {undecided && <p className="analyst-notice">{provisionalAnalysisNotice}</p>}
-        {threat ? <dl><dt>{threatCategoryLabel(finalValue(detail, "verdict"))}</dt><dd>{analystText(threat.category)}</dd><dt>분석 위치</dt><dd>{analystFieldLabel(analystText(threat.target))}</dd><dt>분석 내용</dt><dd>{analystText(threat.technique_ko, "저장된 설명은 기술정보에서 확인할 수 있습니다.")}</dd><dt>예상 영향</dt><dd>{analystText(threat.potential_impact_ko)}</dd>{!!obfuscations.length && <><dt>인코딩·난독화</dt><dd>{obfuscations.join(", ")}</dd></>}</dl> : <p>세부 분석 내용이 기록되지 않았습니다.</p>}
-        {signature && <div className="signature-context"><h3>탐지 내용과 요청의 연관성</h3><Status value={signature.relation} /><p>{analystText(signature.explanation_ko)}</p></div>}
-      </section>
-      {assessmentView(result) ? <AnalystEvidence result={result} onViewInput={onViewInput} /> : <section className="panel result-card evidence-card">
-        <h2>판정 근거</h2>
-        {!!evidence.length && <p className="muted">{legacyEvidenceNotice}</p>}
-        <div className="evidence-list">
-          {evidence.map((item, index) => <article key={index}>
-            <div className="evidence-heading"><span>근거 {index + 1}</span><strong>{analystFieldLabel(item.field)}</strong>{typeof item.field === "string" && analystFieldLabel(item.field) !== item.field && <small className="evidence-field-path">{item.field}</small>}</div>
-            <div className="evidence-section"><span>원문 발췌</span><code>{typeof item.excerpt === "string" ? item.excerpt : "발췌문 미기록"}</code></div>
-            {onViewInput && typeof item.field === "string" && typeof item.excerpt === "string" && item.excerpt && <button type="button" className="text-button evidence-input-link" onClick={() => onViewInput(item)}>입력에서 보기</button>}
-            <div className="evidence-section evidence-interpretation"><span>분석 내용</span>{item.interpretations.map((interpretation, interpretationIndex) => <p key={interpretationIndex}>{analystText(interpretation, "저장된 설명은 기술정보에서 확인할 수 있습니다.")}</p>)}</div>
-          </article>)}
-          {!evidence.length && <p>{decisionExplanation(detail)?.code === "evidence_unverified" ? "원문 대조를 통과한 판정 근거가 남아 있지 않습니다. HTTP 원문에서 직접 확인해 주세요." : "저장된 판정 근거가 없습니다. 이것만으로 공격이 없다고 볼 수는 없습니다."}</p>}
-        </div>
-      </section>}
-      {!!circumstances.length && <TextList title="함께 고려할 정황" items={circumstances} />}
-      {!!guidance.limitations.length && <TextList title="해석 시 주의할 점" items={guidance.limitations} />}
-      {hasTuningContent(tuning) && <section className="panel result-card tuning-card">
-        <div className="panel-head-inline"><h2>WAF 정책 검토</h2><span className="status purpose-test">{tuning.recommended ? "검토 제안" : "주의사항"}</span></div>
-        <dl>{[["범위", tuning.scope], ["제안", tuning.proposal_ko], ["변경 시 주의사항", tuning.risk_ko], ["적용 전 확인", tuning.validation_ko]].filter(([, value]) => analystText(value, "")).map(([label, value]) => <div className="definition-row" key={label}><dt>{label}</dt><dd>{analystText(value)}</dd></div>)}</dl><p className="muted">WAF 설정은 자동 변경하지 않습니다.</p>
-      </section>}
-    </div>
-  );
-}
-
-function AdditionalChecks({ detail }) {
-  const followUp = analystFollowUp(detail);
-  if (!followUp.visible) return null;
-  return <section className="panel result-card analyst-checks"><h2>추가 확인 사항</h2><p className="muted">{followUp.introduction_ko}</p>{followUp.checks.length ? <ol>{followUp.checks.map((check, index) => <li key={index}><span className="check-source">{check.source_ko}</span><h3>{check.check_ko}</h3><p>{check.why_ko}</p></li>)}</ol> : <p>{followUp.empty_ko}</p>}</section>;
-}
-
-function TextList({ title, items = [], empty }) {
-  return <section className="panel result-card"><h2>{title}</h2>{items.length ? <ul>{items.map((item, index) => <li key={index}>{item}</li>)}</ul> : <p>{empty}</p>}</section>;
+export function ResultView({ detail, onViewInput, includePolicy = true }) {
+  if (!detail.result || detail.status !== "completed") return null;
+  return <div className="decision-main-stack">
+    <EvidenceCards detail={detail} onViewInput={onViewInput} />
+    <DecisionConditions detail={detail} onViewInput={onViewInput} />
+    <TechnicalInterpretation detail={detail} />
+    {includePolicy && <PolicySuggestion detail={detail} />}
+  </div>;
 }
 
 export function Settings({ onProductionChange, onViewDataset, tab: controlledTab, onTabChange, standalone = false }) {

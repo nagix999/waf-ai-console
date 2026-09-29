@@ -4,7 +4,8 @@ import { api } from "./api.js";
 import Dialog from "./Dialog.jsx";
 import DetailTabs from "./DetailTabs.jsx";
 import TextInspector from "./TextInspector.jsx";
-import { AnalystEvidence, DecisionIssues } from "./AnalystEvidence.jsx";
+import { AnalystEvidence } from "./AnalystEvidence.jsx";
+import { DecisionConditions } from "./AnalysisDecision.jsx";
 import { analystSummary, finalValue } from "./analystView.js";
 import { executionDuration, formatDuration } from "./analysisView.js";
 import { stepLabel } from "./inspection.js";
@@ -24,7 +25,7 @@ export default function CaseDrawer({ id, onClose, onOpen, groundTruthSource, onG
     {!detail && !error && <p role="status">{w("조회 중…", "Loading…")}</p>}
     {detail && <><div className={`r3-drawer-verdict ${verdict}`}><strong>{names[verdict] || names[detail.status] || w("상태 미확인", "Unknown")}</strong><span>{formatDuration(detail.total_elapsed_ms, "—")}</span></div>
       <DetailTabs label={w("문항 확인", "Inspect case")} value={tab} onChange={setTab} items={[["result", w("결과", "Result")], ["evidence", w("근거", "Evidence")], ["input", w("입력", "Input")], ["trace", w("실행 요약", "Trace")]]}>{key => <>
-        {key === "result" && <><p className="r3-case-summary">{analystSummary(detail)}</p><DecisionIssues detail={detail} /></>}
+        {key === "result" && <><p className="r3-case-summary">{analystSummary(detail)}</p><DecisionConditions detail={detail} /></>}
         {key === "evidence" && (detail.result ? <AnalystEvidence result={detail.result} /> : <p>{w("저장된 근거가 없습니다.", "No evidence has been recorded.")}</p>)}
         {key === "input" && <><p className="v5-context">{w("원문 조회는 감사 이력에 남습니다.", "Source access is audited.")}</p>{extra?.tab === key ? <TextInspector label={w("입력 요약과 원문", "Input and source")} value={extra.value} /> : !error && <p>{w("조회 중…", "Loading…")}</p>}</>}
         {key === "trace" && <><p className="v5-context">{w("단계별 입출력은 전체 분석 상세에서 확인하세요.", "Open full analysis to inspect step inputs and outputs.")}</p>{extra?.tab === key ? <div className="r3-trace-summary">{(Array.isArray(extra.value) ? extra.value : extra.value.items || extra.value.runs || []).map((run, index) => <div key={run.id || index}><strong>{run.status}</strong>{run.steps?.map((step, i) => <p key={step.id || i}><span>{stepLabel(step.step_type || step.name, step.metadata)}</span><span>{step.status} · {executionDuration(step)}</span></p>)}</div>)}</div> : !error && <p>{w("조회 중…", "Loading…")}</p>}</>}
