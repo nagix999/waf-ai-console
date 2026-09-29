@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 from pydantic import ValidationError
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, load_only
 
 from ..models import AccessAudit, Analysis, AnalysisLabel, TestEvaluation, TestRun, TestRunItem, VLLMProfile, ValidationDatasetItem
 from ..schemas import AnalysisInput
@@ -288,12 +288,12 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
     evaluation_summary = summarize_evaluations(db, relation, [Analysis.id.in_(accepted_ids)])
     counts = dict(db.execute(select(TestRunItem.ingest_status, func.count()).where(
         *cohort).group_by(TestRunItem.ingest_status)).all())
-    processing = dict(db.execute(select(Analysis.status, func.count()).where(
-        Analysis.id.in_(accepted_ids)).group_by(Analysis.status)).all())
+    processing_rows = db.execute(select(Analysis.status, func.count(), func.max(Analysis.completed_at)).where(
+        Analysis.id.in_(accepted_ids)).group_by(Analysis.status)).all()
+    processing = {state: count for state, count, _ in processing_rows}
+    finished = max((completed for _, _, completed in processing_rows if completed is not None), default=None)
     state = "processing" if processing.get("processing") else "pending" if processing.get("pending") else (
         "failed" if processing.get("failed") or counts.get("rejected") else "completed")
-    started, finished = db.execute(select(func.min(Analysis.started_at), func.max(Analysis.completed_at)).where(
-        Analysis.id.in_(accepted_ids))).one()
     history_ids = select(_nodes.c.analysis_id).join(TestRunItem, TestRunItem.id == _nodes.c.item_id).where(
         *cohort, TestRunItem.ingest_status == "accepted")
     started = db.scalar(select(func.min(Analysis.started_at)).where(Analysis.id.in_(history_ids)))
@@ -342,8 +342,10 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
             "reference_basis": "saved", "official_evaluation_pending": False})
     if not detail:
         return summary
-    query = select(TestRunItem, Analysis, current.c.retry_count, relation).join(current, current.c.item_id == TestRunItem.id).outerjoin(Analysis, Analysis.id == current.c.analysis_id).outerjoin(
-        relation, relation.c.analysis_id == Analysis.id).where(*cohort)
+    query = select(TestRunItem, Analysis, current.c.retry_count, relation,
+        ValidationDatasetItem.item_id.label("stable_case_id")).join(current, current.c.item_id == TestRunItem.id).outerjoin(Analysis, Analysis.id == current.c.analysis_id).outerjoin(
+        relation, relation.c.analysis_id == Analysis.id).outerjoin(ValidationDatasetItem,
+        ValidationDatasetItem.id == TestRunItem.dataset_item_version_id).where(*cohort)
     if status is not None:
         query = query.where(Analysis.status == status)
     if evaluation_outcome is not None:
@@ -357,13 +359,14 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
     column = {"row_number": TestRunItem.row_number, "case_name": TestRunItem.case_name,
               "status": Analysis.status}.get(sort_by, TestRunItem.row_number)
     order = column.desc().nulls_last() if sort_order == "desc" else column.asc().nulls_last()
+    query = query.options(load_only(Analysis.id, Analysis.error_code, Analysis.status, Analysis.verdict, Analysis.summary_ko, raiseload=True))
     for row in db.execute(query.order_by(order, TestRunItem.row_number).limit(limit).offset(offset)):
         item, analysis = row[0], row[1]
         metadata = metadata_from_row(row._mapping) if analysis else None
         items.append(TestRunItemResponse(
             ground_truth_source={"dataset_id": ground_truth["dataset_id"],
                 "dataset_revision_id": run.dataset_version_id, "item_version_id": item.dataset_item_version_id,
-                "stable_case_id": db.get(ValidationDatasetItem, item.dataset_item_version_id).item_id}
+                "stable_case_id": row._mapping["stable_case_id"]}
                 if ground_truth and item.dataset_item_version_id else None,
             **{key: getattr(item, key) for key in ("id", "row_number", "event_id", "difficulty",
                 "test_category", "case_name", "ingest_status")},
@@ -374,15 +377,14 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
             summary_ko=analysis.summary_ko if analysis else None,
             **({"evaluation": metadata} if metadata else {}),
         ))
-    facets = {name: list(db.scalars(select(column).where(TestRunItem.test_run_id == run.id,
-        column.is_not(None)).distinct().order_by(column))) for name, column in (
-            ("difficulties", TestRunItem.difficulty), ("test_categories", TestRunItem.test_category))}
+    facet_rows = db.execute(select(TestRunItem.difficulty, TestRunItem.test_category, func.count()).where(
+        TestRunItem.test_run_id == run.id).group_by(TestRunItem.difficulty, TestRunItem.test_category)).all()
+    facets = {"difficulties": sorted({d for d, _, _ in facet_rows if d is not None}),
+        "test_categories": sorted({c for _, c, _ in facet_rows if c is not None})}
     return TestRunDetail(**summary.model_dump(), items=items, total_items=total_items,
                          limit=limit, offset=offset, facets=facets,
-        missing_difficulty_count=db.scalar(select(func.count()).select_from(TestRunItem).where(
-            TestRunItem.test_run_id == run.id, TestRunItem.difficulty.is_(None))) or 0,
-        missing_test_category_count=db.scalar(select(func.count()).select_from(TestRunItem).where(
-            TestRunItem.test_run_id == run.id, TestRunItem.test_category.is_(None))) or 0)
+        missing_difficulty_count=sum(n for d, _, n in facet_rows if d is None),
+        missing_test_category_count=sum(n for _, c, n in facet_rows if c is None))
 
 
 def analysis_test_run(db, analysis):

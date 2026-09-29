@@ -26,6 +26,8 @@ class AnalysisIngestError(ValueError):
 
 
 def review_state(analysis: Analysis) -> str:
+    if hasattr(analysis, "_list_review_state"):
+        return analysis._list_review_state
     if not analysis.reviews:
         return "unreviewed"
     latest = max(analysis.reviews, key=lambda review: (review.created_at, review.id))

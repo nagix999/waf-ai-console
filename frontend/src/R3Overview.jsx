@@ -2,15 +2,16 @@ import NavigationAction from "./NavigationAction.jsx";
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api.js";
 import { startVisiblePolling } from "./visiblePolling.js";
+import { HOME_INVALIDATED } from "./readInvalidation.js";
 import { Section, MetricStrip, OfficialMetrics, ConfigurationRows, useWords } from "./LifecycleViews.jsx";
 import DataTable from "./DataTable.jsx";
 import { formatDate, formatDuration } from "./analysisView.js";
 import SetupProgress from "./R5Setup.jsx";
 import { Icon } from "./Icon.jsx";
 
-function useObservation(read, dependencies = []) {
+function useObservation(read, dependencies = [], interval = null) {
   const [state, setState] = useState({ value: null, error: false });
-  useEffect(() => { setState({ value: null, error: false }); return startVisiblePolling(async signal => { const value = await read({ signal }); if (!signal.aborted) setState({ value, error: false }); return Boolean(value?.queue?.pending || value?.queue?.processing); }, { onError: () => setState({ value: null, error: true }) }); }, dependencies);
+  useEffect(() => { setState({ value: null, error: false }); return startVisiblePolling(async signal => { const value = await read({ signal }); if (!signal.aborted) setState({ value, error: false }); return Boolean(value?.queue?.pending || value?.queue?.processing); }, { interval, activeInterval: 5000, invalidationEvent: HOME_INVALIDATED, onError: () => setState({ value: null, error: true }) }); }, dependencies);
   return state;
 }
 const percent = value => typeof value === "number" ? `${(value * 100).toFixed(1)}%` : "—";
@@ -37,9 +38,19 @@ export function OfficialTrend({ points }) {
 
 export default function R3Overview({ onNavigate, onOpenRun, onPromotion, onGroundTruth, onFailures }) {
   const w = useWords(); const [key, setKey] = useState("");
-  const overview = useObservation(api.overview), activity = useObservation(options => api.activity({ limit: 4 }, options));
-  const keys = useObservation(api.serviceApiKeys);
-  const runtime = useObservation(options => api.runtimeStatus("24h", options, { purpose: "production", ...(key ? { service_api_key_id: key } : {}) }), [key]);
+  const [refresh, setRefresh] = useState(0);
+  const [contextRevision, setContextRevision] = useState(0);
+  const observedRevision = useRef(null);
+  const overview = useObservation(api.overview, [refresh, contextRevision]);
+  const activity = useObservation(options => api.activity({ limit: 4, include_home_revision: true }, options), [refresh], 60000);
+  useEffect(() => {
+    const revision = activity.value?.home_revision;
+    if (!revision) return;
+    if (observedRevision.current && observedRevision.current !== revision) setContextRevision(value => value + 1);
+    observedRevision.current = revision;
+  }, [activity.value?.home_revision]);
+  const keys = useObservation(api.serviceApiKeys, [refresh]);
+  const runtime = useObservation(options => api.runtimeStatus("24h", options, { purpose: "production", ...(key ? { service_api_key_id: key } : {}) }), [key, refresh], 30000);
   const data = overview.value, production = data?.production, r = runtime.value, draft = data?.ground_truth_working_draft;
   const terminal = (r?.outcome_summary?.completed || 0) + (r?.outcome_summary?.failed || 0);
   const comparable = Boolean(data?.comparison_key);
@@ -50,7 +61,7 @@ export default function R3Overview({ onNavigate, onOpenRun, onPromotion, onGroun
     <SetupProgress setup={data?.setup} onNavigate={onNavigate} onPromotion={onPromotion} />
     {(overview.error || runtime.error) && <p className="error" role="alert">{w("운영 정보를 불러오지 못했습니다. 자동으로 다시 확인합니다.", "Could not load Production information. Retrying automatically.")}</p>}
     <section className="r3-production-strip"><div><span className="eyebrow">Production</span><strong>{production ? production.profile_names?.[production.snapshot?.primary?.profile_id] || w("모델 미지정", "No model assigned") : w("미확인", "Unknown")}</strong><small>{production?.drifted ? w("구성 확인 필요", "Configuration drift") : production?.configuration_id ? w("반영된 설정", "Promoted configuration") : data?.setup?.production_state === "unconfigured" ? w("운영 설정 전", "Not configured") : w("기존 운영 설정", "Previous Production configuration")}</small></div><div><span>{w("분석 worker", "Analysis worker")}</span><strong className={r?.health?.analysis_worker?.status === "healthy" ? "r3-good" : ""}>{r?.health?.analysis_worker?.status === "healthy" ? w("응답 확인", "Responding") : r?.health?.analysis_worker?.status === "stale" ? w("응답 지연", "Stale") : w("미확인", "Unknown")}</strong><small>{formatDate(r?.health?.analysis_worker?.observed_at)}</small></div><div><span>{w("대기 / 처리 중", "Queue / processing")}</span><strong>{r?.queue?.pending ?? "—"} / {r?.queue?.processing ?? "—"}</strong></div><div><span>{w("최근 24시간 요청", "Requests · 24h")}</span><strong>{r?.request_count ?? "—"}</strong><small>p95 {formatDuration(r?.latency_summary?.p95, "—")} · {w("실패", "Failed")} {terminal ? percent(r.outcome_summary.failed / terminal) : "—"}</small></div><NavigationAction onClick={() => onNavigate("runtime")}>{w("실행 상태", "Runtime")}</NavigationAction></section>
-    <div className="r3-overview-toolbar"><label>{w("API 키", "API Keys")}<select value={key} onChange={e => setKey(e.target.value)}><option value="">{w("전체 운영 키", "All Production keys")}</option>{keys.value?.items.filter(row => row.purpose === "production").map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label><span className="v5-context">{w("키 선택은 요청·실패·대기에만 적용합니다.", "Key selection affects request, failure and queue counts only.")}</span><small className="ux-grow">{w("갱신", "Updated")} {formatDate(r?.updated_at)}</small></div>
+    <div className="r3-overview-toolbar"><label>{w("API 키", "API Keys")}<select value={key} onChange={e => setKey(e.target.value)}><option value="">{w("전체 운영 키", "All Production keys")}</option>{keys.value?.items.filter(row => row.purpose === "production").map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label><span className="v5-context">{w("키 선택은 요청·실패·대기에만 적용합니다.", "Key selection affects request, failure and queue counts only.")}</span><small className="ux-grow">{w("갱신", "Updated")} {formatDate(r?.updated_at)}</small><button type="button" className="secondary small" onClick={() => setRefresh(value => value + 1)}>{w("새로고침", "Refresh")}</button></div>
     <div className="r3-overview-grid">{data?.evaluation && <Section title={points.length >= 2 ? w("운영 평가 추세", "Production Evaluation Trend") : w("현재 공식 평가", "Current Official Evaluation")} action={<NavigationAction onClick={() => onNavigate("quality")}>{w("평가 상세", "View evaluation")}</NavigationAction>}>
       {points.length >= 2 ? <><p className="v5-context">{data.evaluation?.summary?.ground_truth?.dataset_name} · r{data.evaluation?.summary?.ground_truth?.dataset_revision} · {w("같은 문항·평가 범위의 운영 구성만 비교", "Matching revision and evaluation scope only")}</p><OfficialTrend points={points} /></> : <><OfficialMetrics evaluation={data?.evaluation} /><p className="v5-context">{w("같은 평가 기준의 운영 구성이 두 개 이상일 때 추이를 표시합니다.", "A trend requires at least two Production configurations evaluated on the same basis.")}</p></>}
     </Section>}{draft && <Section title={w("정답 데이터 상태", "Ground Truth Status")} action={draft && <NavigationAction onClick={() => onGroundTruth(draft.id)}>{w("편집 중 데이터 열기", "Open Draft")}</NavigationAction>}>

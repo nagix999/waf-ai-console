@@ -122,53 +122,27 @@ def item_summary(item, change):
 
 
 def document(db, identifier, crypto, query=None):
-    row, state, items = rows(db, identifier, crypto)
-    published = latest_published(db, identifier)
-    baseline = (published.publish_metadata or {}).get("cases", {}) if published else {}
-    current = {item.item_id: item for item in items}
-    counts = {key: 0 for key in ("ready", "needs_attention", "excluded")}
-    changes = {key: 0 for key in ("added", "changed", "removed", "unchanged")}
-    listing = []
-    for item in items:
-        old = baseline.get(item.item_id)
-        change = "added" if old is None else "unchanged" if old["content_hash"] == item.content_hash else "changed"
-        entry = item_summary(item, change)
-        counts[entry["state"]] += 1
-        changes[change] += 1
-        listing.append(entry)
-    if published:
-        for old in legacy.version_items(db, published):
-            if old.item_id not in current:
-                changes["removed"] += 1
-                listing.append(item_summary(from_snapshot(old, crypto, baseline.get(old.item_id)), "removed"))
-    if query:
-        listing = [entry for entry in listing if
-            (not query.state or entry["state"] == query.state) and
-            (not query.change or entry["change"] == query.change) and
-            (not query.reference_verdict or entry["reference_verdict"] == query.reference_verdict) and
-            (not query.source_kind or entry["source_kind"] == query.source_kind) and
-            (not query.query.strip() or query.query.strip().casefold() in " ".join(str(entry.get(k) or "")
-                for k in ("case_name", "test_category", "difficulty", "tags")).casefold())]
-    offset, limit = (query.offset, query.limit) if query else (0, 50)
-    return {"id": row.id, "name": row.name, "description": row.description, "revision": row.revision,
-        "working_revision": state.working_revision if state else 0, "counts": counts, "changes": changes,
-        "working_changes_count": sum(changes[k] for k in ("added", "changed", "removed")),
-        "included_reference_origin_counts": dict(Counter(i.reference_origin for i in items if not i.excluded and i.validation_state == "ready")),
-        "total": len(items), "filtered_total": len(listing), "items": listing[offset:offset + limit],
-        "limit": limit, "offset": offset, "latest_published_revision_id": published.id if published else None,
-        "published_revisions": [{"id": v.id, "revision": v.revision, "total": len(v.item_version_ids),
-            "created_at": utc_datetime(v.created_at), "metadata": {k: val for k, val in (v.publish_metadata or {}).items() if k != "cases"}}
-            for v in db.scalars(select(ValidationDatasetVersion).where(ValidationDatasetVersion.dataset_id == row.id,
-                ValidationDatasetVersion.is_published.is_(True)).order_by(ValidationDatasetVersion.revision.desc()))]}
+    from . import ground_truth_queries
+    from ..models import ValidationDataset
+    row = db.get(ValidationDataset, identifier)
+    if row is None or row.deleted_at:
+        raise AnalysisIngestError("dataset_not_found", 404)
+    return ground_truth_queries.document(db, row, db.get(State, identifier), query, crypto)
 
 
 def read_item(db, identifier, case_id, crypto, actor):
-    _, _, items = rows(db, identifier, crypto)
-    item = next((i for i in items if i.item_id == case_id), None)
+    _, version = legacy.dataset(db, identifier)
+    if db.get(State, identifier):
+        item = db.scalar(select(Item).where(Item.dataset_id == identifier, Item.item_id == case_id))
+    else:
+        old = db.scalar(select(ValidationDatasetItem).where(ValidationDatasetItem.id.in_(version.item_version_ids),
+            ValidationDatasetItem.dataset_id == identifier, ValidationDatasetItem.item_id == case_id))
+        item = from_snapshot(old, crypto) if old else None
     removed = False
     if item is None:
         published = latest_published(db, identifier)
-        old = next((i for i in legacy.version_items(db, published) if i.item_id == case_id), None) if published else None
+        old = db.scalar(select(ValidationDatasetItem).where(ValidationDatasetItem.id.in_(published.item_version_ids),
+            ValidationDatasetItem.dataset_id == identifier, ValidationDatasetItem.item_id == case_id)) if published else None
         if old:
             item, removed = from_snapshot(old, crypto, (published.publish_metadata or {}).get("cases", {}).get(case_id)), True
     if item is None:

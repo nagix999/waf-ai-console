@@ -1,5 +1,6 @@
 import { modelTestPayload } from "./modelValidation.js";
 import { modelAssignmentPayload } from "./modelAssignments.js";
+import { affectsHome, invalidateHome } from "./readInvalidation.js";
 
 async function request(path, options = {}) {
   const response = await fetch(path, {
@@ -10,6 +11,7 @@ async function request(path, options = {}) {
       ...(options.headers || {})
     }
   });
+  if (response.ok && affectsHome(path, options.method)) invalidateHome();
   if (response.status === 204) return null;
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {

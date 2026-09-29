@@ -162,7 +162,7 @@ def metadata_from_row(row) -> EvaluationMetadata:
 def attach_evaluations(db: Session, analyses: list[Analysis]) -> None:
     if not analyses:
         return
-    relation = evaluation_relation()
+    relation = evaluation_relation(latest_labels([row.id for row in analyses]))
     values = db.execute(select(relation).where(relation.c.analysis_id.in_([row.id for row in analyses]))).mappings()
     indexed = {row["analysis_id"]: metadata_from_row(row) for row in values}
     for row in analyses:

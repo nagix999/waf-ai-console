@@ -3,12 +3,20 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import case, func, or_, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import Session, load_only, raiseload
 
 from ..agent.contracts import ThreatSeverity
 from ..models import Analysis, AnalysisPurpose, AnalysisStatus, IngestChannel, Review, Verdict, TestRunItem
 from ..evaluation_schemas import AIVisibility, EvaluationOutcome, LabelSourceKind, ReferenceVerdict
-from .evaluation import attach_evaluations, evaluation_relation, summarize_evaluations
+from .evaluation import evaluation_relation, latest_labels, metadata_from_row, summarize_evaluations
+
+# Never hydrate encrypted snapshots, raw input, result JSON or long error text
+# for a list row. raiseload makes accidental N+1/blob reads fail in tests.
+LIST_FIELDS = ("id", "source_system", "analysis_purpose", "ingest_channel", "event_id", "company_name",
+    "src_ip", "dest_ip", "src_port", "dest_port", "waf_vendor", "waf_action", "signature", "event_name",
+    "status", "verdict", "severity", "threat_category", "confidence_score", "summary_ko", "input_truncated",
+    "initial_verdict", "initial_probability", "initial_model_version", "created_at", "started_at", "completed_at",
+    "model_profile", "service_api_key_id", "retry_of_analysis_id")
 
 
 SearchField = Literal[
@@ -165,15 +173,34 @@ def analysis_conditions(filters: AnalysisFilters, source_system: str | None, eva
 def find_analyses(db: Session, filters: AnalysisFilters, source_system: str | None = None) -> tuple[list[Analysis], int]:
     evaluation = evaluation_relation()
     conditions = analysis_conditions(filters, source_system, evaluation)
-    total = int(db.scalar(select(func.count()).select_from(Analysis).join(evaluation, evaluation.c.analysis_id == Analysis.id).where(*conditions)) or 0)
+    uses_evaluation = any(getattr(filters, name) is not None for name in (
+        "label_presence", "evaluation_outcome", "reference_label", "label_source_kind", "label_source_ref", "label_ai_visible"))
+    candidates = select(Analysis.id)
+    if uses_evaluation:
+        candidates = candidates.join(evaluation, evaluation.c.analysis_id == Analysis.id)
+    candidates = candidates.where(*conditions)
+    total = int(db.scalar(select(func.count()).select_from(candidates.subquery())) or 0)
     column = getattr(Analysis, filters.sort_by)
     order = column.desc() if filters.sort_order == "desc" else column.asc()
+    page = candidates.order_by(order, Analysis.id.desc()).offset(filters.offset).limit(filters.limit).cte("analysis_page")
+    # The page membership already passed every filter. Only these cases need
+    # label/retry ancestry materialization for row metadata (not the whole DB).
+    evaluation = evaluation_relation(latest_labels(select(page.c.id)))
+    latest_review = select(Review.decision).where(Review.analysis_id == Analysis.id).order_by(
+        Review.created_at.desc(), Review.id.desc()).limit(1).correlate(Analysis).scalar_subquery()
     query = (
-        select(Analysis).options(selectinload(Analysis.reviews)).join(evaluation, evaluation.c.analysis_id == Analysis.id).where(*conditions)
-        .order_by(order, Analysis.id.desc()).offset(filters.offset).limit(filters.limit)
+        select(Analysis, evaluation, latest_review.label("latest_review_decision")).options(
+            load_only(*(getattr(Analysis, name) for name in LIST_FIELDS), raiseload=True), raiseload(Analysis.reviews)
+        ).join(page, page.c.id == Analysis.id).join(evaluation, evaluation.c.analysis_id == Analysis.id)
+        .order_by(order, Analysis.id.desc())
     )
-    rows = list(db.scalars(query).all())
-    attach_evaluations(db, rows)
+    rows = []
+    for entry in db.execute(query):
+        analysis = entry[0]
+        analysis._evaluation = metadata_from_row(entry._mapping)
+        decision = entry._mapping["latest_review_decision"]
+        analysis._list_review_state = "unreviewed" if decision is None else "deferred" if decision == "deferred" else "confirmed"
+        rows.append(analysis)
     from .test_runs import attach_test_run_ids
     attach_test_run_ids(db, rows)
     from .analysis import attach_retry_ids

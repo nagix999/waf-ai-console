@@ -229,13 +229,13 @@ test("changing run or query cancels its request and blocks late success and fail
   }
 });
 
-test("run readers poll active reads at 5s, stable reads at 25s without overlap and clear timers on departure", async () => {
+test("run readers poll active reads at 5s and stop terminal reads without overlap", async () => {
   const first = deferredRead(); const scheduled = []; const cleared = []; let calls = 0;
   const cancel = watchTestRunRead({ read: () => { calls++; return calls === 1 ? first.promise : Promise.resolve({ status: "completed" }); }, onUpdate() {}, isRunning: data => data.status === "processing", errorMessage: "조회 실패", setTimer: (callback, ms) => { scheduled.push({ callback, ms }); return scheduled.length; }, clearTimer: id => cleared.push(id) });
   assert.equal(calls, 1); assert.equal(scheduled.length, 0);
   first.resolve({ status: "processing" }); await flushRead(); assert.equal(scheduled.length, 1); assert.equal(scheduled[0].ms, 5000);
-  scheduled[0].callback(); await flushRead(); assert.equal(calls, 2); assert.equal(scheduled.length, 2); assert.equal(scheduled[1].ms, 25000);
-  cancel(); assert.equal(cleared.at(-1), 2);
+  scheduled[0].callback(); await flushRead(); assert.equal(calls, 2); assert.equal(scheduled.length, 1);
+  cancel(); assert.equal(cleared.at(-1), 1);
 });
 
 test("read errors expose no server text, back off server errors and stop on authorization failure", async () => {

@@ -9,6 +9,7 @@ from ..security import Principal, require_scope
 from ..validation_data_schemas import DatasetCreate, DatasetUpdate, DatasetImport, DatasetItemWrite, DatasetItemReview, DatasetReviewStatus, DatasetRun, RevisionRequest, DatasetSearch
 from ..validation_data_schemas import WorkingSearch, WorkingItemWrite, WorkingRevision, WorkingBulk, WorkingImport, PublishRevision, WorkingMetadata
 from ..services import ground_truth_working as working
+from ..services.ground_truth_queries import catalog
 from ..services import validation_datasets as service
 from ..services.analysis import AnalysisIngestError
 from ..services.input_schemas import InputSchemaError
@@ -43,8 +44,9 @@ def listing(request: Request, db: DbSession, _principal: Admin, limit: int = Que
     read_snapshot(db)
     query = select(ValidationDataset).where(ValidationDataset.deleted_at.is_(None))
     total = db.scalar(select(func.count()).select_from(query.subquery()))
-    return {"items": [dataset_metadata(db, row, request.app.state.crypto) for row in db.scalars(query
-        .order_by(ValidationDataset.created_at.desc(), ValidationDataset.id).limit(limit).offset(offset))], "total": total}
+    rows = list(db.scalars(query.order_by(ValidationDataset.created_at.desc(), ValidationDataset.id).limit(limit).offset(offset)))
+    with errors(db):
+        return {"items": catalog(db, rows, request.app.state.crypto), "total": total}
 
 
 @router.post("", status_code=201)
@@ -61,18 +63,14 @@ def search(payload: DatasetSearch, request: Request, db: DbSession, _principal: 
     if payload.query.strip():
         query = query.where(ValidationDataset.name.contains(payload.query.strip(), autoescape=True))
     total = db.scalar(select(func.count()).select_from(query.subquery()))
-    return {"items": [dataset_metadata(db, row, request.app.state.crypto) for row in db.scalars(query
-        .order_by(ValidationDataset.created_at.desc(), ValidationDataset.id).limit(payload.limit).offset(payload.offset))],
-        "total": total, "limit": payload.limit, "offset": payload.offset}
+    rows = list(db.scalars(query.order_by(ValidationDataset.created_at.desc(), ValidationDataset.id).limit(payload.limit).offset(payload.offset)))
+    with errors(db):
+        return {"items": catalog(db, rows, request.app.state.crypto),
+            "total": total, "limit": payload.limit, "offset": payload.offset}
 
 
 def dataset_metadata(db, row, crypto):
-    summary = service.dataset_summary(db, row)
-    data = working.document(db, row.id, crypto)
-    latest = data["published_revisions"][0] if data["published_revisions"] else None
-    return {**summary, "latest_published_revision": latest, "published_case_count": latest["total"] if latest else 0,
-        "working_revision": data["working_revision"], "working_change_count": data["working_changes_count"],
-        **{f"{key}_count": value for key, value in data["counts"].items()}}
+    return catalog(db, [row], crypto)[0]
 
 
 @router.get("/{identifier}")

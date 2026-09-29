@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 from ..database import get_db
-from ..models import ChangeEvent
+from ..models import ChangeEvent, TestEvaluation, ValidationDatasetWorkingState
 from ..security import Principal, require_scope
 from ..services.runtime_status import status_document, deployment_document
 from ..services.production_configurations import ensure_baseline
@@ -39,11 +39,22 @@ def deployment(request: Request, response: Response, db: Db, _admin: Admin):
 @router.get("/activity")
 def activity(response: Response, db: Db, _admin: Admin,
              category: Literal["all", "promotion", "runtime", "configuration", "integration", "deployment"] = "all",
-             limit: Annotated[int, Query(ge=1, le=100)] = 30, offset: Annotated[int, Query(ge=0)] = 0):
+             limit: Annotated[int, Query(ge=1, le=100)] = 30, offset: Annotated[int, Query(ge=0)] = 0,
+             include_home_revision: bool = False):
     response.headers["Cache-Control"] = "no-store"
     condition = [ChangeEvent.category == category] if category != "all" else []
     rows = db.scalars(select(ChangeEvent).where(*condition).order_by(ChangeEvent.created_at.desc(), ChangeEvent.id.desc()).offset(offset).limit(limit))
-    return {"total": db.scalar(select(func.count()).select_from(ChangeEvent).where(*condition)), "limit": limit, "offset": offset,
+    result = {"total": db.scalar(select(func.count()).select_from(ChangeEvent).where(*condition)), "limit": limit, "offset": offset,
         "items": [{"id": r.id, "category": r.category, "actor": r.actor, "action": r.action,
             "resource_type": r.resource_type, "resource_id": r.resource_id, "before": r.before_json,
             "after": r.after_json, "created_at": r.created_at} for r in rows]}
+    if include_home_revision:
+        # Detect background official-evaluation completion and draft edits with
+        # metadata aggregates, not another overview/full evaluation read.
+        import hashlib
+        evaluation = db.execute(select(func.count(), func.max(TestEvaluation.created_at)).select_from(TestEvaluation)).one()
+        working = db.execute(select(func.count(), func.max(ValidationDatasetWorkingState.updated_at))
+            .select_from(ValidationDatasetWorkingState)).one()
+        result["home_revision"] = hashlib.sha256(repr((evaluation, working,
+            result["items"][0]["id"] if result["items"] else None)).encode()).hexdigest()
+    return result

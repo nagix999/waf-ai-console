@@ -8,8 +8,8 @@ from .test_defaults import document as defaults_document
 from .test_runs import describe_run
 
 
-def document(db, crypto, settings):
-    current = current_configuration(db, crypto, settings)
+def document(db, crypto, settings, *, current=None):
+    current = current if current is not None else current_configuration(db, crypto, settings)
     complete = True
     for key in ("primary", "verifier", "evidence_editor"):
         value = current["snapshot"][key]

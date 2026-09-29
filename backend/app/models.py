@@ -85,6 +85,7 @@ class Analysis(Base):
         Index("ix_analyses_purpose_created", "analysis_purpose", "created_at"),
         Index("ix_analyses_severity_created", "severity", "created_at"),
         Index("ix_analyses_category_created", "threat_category", "created_at"),
+        Index("ix_analyses_created_id", "created_at", "id"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))

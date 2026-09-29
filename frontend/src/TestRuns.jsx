@@ -53,10 +53,12 @@ export function testRunFilterChange(filters, action) {
   return filters;
 }
 
+import { invalidateHome, testRunActive } from "./readInvalidation.js";
+
 // Each read belongs to one mounted query. Cancellation invalidates even a late
 // response from a transport that does not honor AbortSignal.
 export function watchTestRunRead({ read, onUpdate, isRunning, errorMessage, onUnauthorized, setTimer = setTimeout, clearTimer = clearTimeout, document: doc = globalThis.document }) {
-  let active = true, timer, loading = false, failures = 0;
+  let active = true, timer, loading = false, failures = 0, wasRunning = false;
   const controller = new AbortController();
   async function load() {
     clearTimer(timer);
@@ -67,7 +69,10 @@ export function watchTestRunRead({ read, onUpdate, isRunning, errorMessage, onUn
       if (!active) return;
       failures = 0;
       onUpdate({ data, error: "", loading: false, updatedAt: new Date().toISOString() });
-      if (!doc?.hidden) timer = setTimer(load, isRunning(data) ? 5000 : 25000);
+      const running = isRunning(data);
+      if (wasRunning && !running) invalidateHome();
+      wasRunning = running;
+      if (!doc?.hidden && running) timer = setTimer(load, 5000);
     } catch (error) {
       if (!active) return;
       onUpdate({ error: error?.status === 401 ? "로그인 세션이 만료되었습니다. 다시 로그인하세요." : errorMessage, loading: false });
@@ -129,7 +134,7 @@ export function TestRunHistory({ refresh = 0, onSelect, state, onStateChange, on
   const { data, error, loading } = read.key === requestKey ? read : emptyRead();
   useEffect(() => {
     setRead({ ...emptyRead(), key: requestKey });
-    return watchTestRunRead({ read: async options => { const result = await api.testRuns({ ...query, reference_basis: "latest" }, options); if (!Array.isArray(result?.items)) throw new Error("invalid_test_runs"); return result; }, onUpdate: patch => setRead(current => ({ ...current, ...patch, key: requestKey })), isRunning: result => result.items.some(run => ["pending", "processing"].includes(run.status)), errorMessage: "테스트 목록을 조회하지 못했습니다. 다시 조회하세요.", onUnauthorized: () => unauthorized.current?.() });
+    return watchTestRunRead({ read: async options => { const result = await api.testRuns({ ...query, reference_basis: "latest" }, options); if (!Array.isArray(result?.items)) throw new Error("invalid_test_runs"); return result; }, onUpdate: patch => setRead(current => ({ ...current, ...patch, key: requestKey })), isRunning: result => result.items.some(testRunActive), errorMessage: "테스트 목록을 조회하지 못했습니다. 다시 조회하세요.", onUnauthorized: () => unauthorized.current?.() });
   }, [requestKey]);
   return <section className="panel test-run-history" aria-busy={loading}><div className="panel-head"><div><h2>{title || w("테스트 목록", "Tests")}</h2><small>{description || w("테스트 설정과 평가 기준을 함께 확인하세요.", "Review each Test configuration and evaluation basis.")}</small></div><button type="button" className="secondary" disabled={loading} onClick={() => setReload(v => v + 1)}>{w("새로고침", "Refresh")}</button></div>
     <form className="test-run-search" onSubmit={event => { event.preventDefault(); change({ type: "search" }); }}><label>{w("테스트명 검색", "Find test")}<input value={queryText} maxLength={120} onChange={event => change({ type: "draft", value: event.target.value })} placeholder={w("테스트 이름", "Test name")} /></label><button type="submit" className="secondary" disabled={loading}>{w("검색", "Search")}</button><button type="button" className="secondary r3-metrics-toggle" aria-expanded={Boolean(view.metricsExpanded)} onClick={() => setView(current => ({ ...current, metricsExpanded: !current.metricsExpanded }))}>{view.metricsExpanded ? w("평가지표 접기", "Collapse metrics") : w("평가지표 펼치기", "Expand metrics")}</button></form>
@@ -176,7 +181,7 @@ export function TestRunDetail({ id, onBack, onOpen, filters: controlledFilters, 
   const { data, error, loading } = read.key === requestKey ? read : emptyRead();
   useEffect(() => {
     setRead({ ...emptyRead(), key: requestKey });
-    return watchTestRunRead({ read: async options => { const result = await api.testRun(id, query, options); if (result?.id !== id || !Array.isArray(result.items)) throw new Error("invalid_test_run"); return result; }, onUpdate: patch => setRead(current => ({ ...current, ...patch, key: requestKey })), isRunning: result => ["pending", "processing"].includes(result.status) || result.official_evaluation_pending, errorMessage: "테스트 실행 정보를 조회하지 못했습니다. 다시 조회하세요.", onUnauthorized: () => unauthorized.current?.() });
+    return watchTestRunRead({ read: async options => { const result = await api.testRun(id, query, options); if (result?.id !== id || !Array.isArray(result.items)) throw new Error("invalid_test_run"); return result; }, onUpdate: patch => setRead(current => ({ ...current, ...patch, key: requestKey })), isRunning: testRunActive, errorMessage: "테스트 실행 정보를 조회하지 못했습니다. 다시 조회하세요.", onUnauthorized: () => unauthorized.current?.() });
   }, [requestKey]);
   const selection = useAnalysisSelection(data?.items || [], JSON.stringify([id, query]));
   const scopeChange = event => { const { name, value } = event.target; change({ type: "scope", name, value }); };

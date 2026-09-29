@@ -87,10 +87,13 @@ def test_read_routes_keep_one_wal_snapshot_during_label_and_worker_updates(tmp_p
         db.commit()
 
     module = analysis_query if route == "list" else analysis_service
-    original = module.attach_evaluations
+    # List labels now arrive in the row query itself; interleave the writer
+    # before its later aggregate read. Detail retains the attachment path.
+    hook = "metadata_from_row" if route == "list" else "attach_evaluations"
+    original = getattr(module, hook)
     updates = []
 
-    def update_between_row_and_label_reads(db, rows):
+    def update_between_row_and_label_reads(*args):
         if not updates:
             with sessions() as writer:
                 row = writer.get(Analysis, analysis_id)
@@ -102,9 +105,9 @@ def test_read_routes_keep_one_wal_snapshot_during_label_and_worker_updates(tmp_p
                 ))
                 writer.commit()
             updates.append(True)
-        original(db, rows)
+        return original(*args)
 
-    monkeypatch.setattr(module, "attach_evaluations", update_between_row_and_label_reads)
+    monkeypatch.setattr(module, hook, update_between_row_and_label_reads)
     principal = Principal(kind="service_api_key", scopes=frozenset({"ingest"}), source_system="synthetic-source")
     with sessions() as reader:
         if route == "list":

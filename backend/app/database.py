@@ -1,4 +1,5 @@
 from collections.abc import Generator
+import json
 
 from fastapi import Request
 from sqlalchemy import Engine, create_engine, event
@@ -8,6 +9,13 @@ from sqlalchemy.pool import StaticPool
 
 class Base(DeclarativeBase):
     pass
+
+
+def case_metadata_search(name, category, difficulty, tags, query):
+    """Keep Unicode casefold/tag search semantics while paging inside SQLite."""
+    tag_values = json.loads(tags) if tags else []
+    text = " ".join(str(value or "") for value in (name, category, difficulty, tag_values))
+    return int(query.casefold() in text.casefold())
 
 
 def build_engine(database_url: str) -> Engine:
@@ -20,6 +28,7 @@ def build_engine(database_url: str) -> Engine:
     if database_url.startswith("sqlite"):
         @event.listens_for(engine, "connect")
         def configure_sqlite(dbapi_connection, _connection_record) -> None:
+            dbapi_connection.create_function("waf_case_search", 5, case_metadata_search, deterministic=True)
             cursor = dbapi_connection.cursor()
             cursor.execute("PRAGMA journal_mode=WAL")
             cursor.execute("PRAGMA foreign_keys=ON")
