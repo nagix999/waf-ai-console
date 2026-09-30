@@ -64,6 +64,8 @@ Test 키로 같은 `/analyses`, `/uploads`를 호출하면 Test 모델·동시 �
 
 ### 테스트명과 실행 ID 구분
 
+단건 `POST /analyses`는 Test 키에서도 `initial_verdict`와 `initial_probability`를 함께 받을 수 있다. 선택한 1차 판정은 `true_positive` 또는 `false_positive`, 신뢰도는 숫자 0~1이다. `initial_model_version`은 선택이다. 이는 외부 모델의 비교용 결과이며 `expected_verdict`와 별도로 저장하고 LLM 입력에는 전달하지 않는다. 같은 이벤트 재전송에서 1차 판정을 추가·제거·변경하면 409로 거부한다. 파일 업로드에는 지원하지 않는다.
+
 | 값 | 보내는 위치 | 의미 |
 | --- | --- | --- |
 | `name` | `POST /test-sessions`의 JSON 본문 | 화면에 표시할 테스트명. 생략하면 UUID 형태의 이름 자동 생성 |

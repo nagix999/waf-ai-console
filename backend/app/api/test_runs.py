@@ -89,6 +89,12 @@ def submit(db, request, principal, **kwargs):
 @router.post("", response_model=TestRunDetail, status_code=202)
 def create_test_run(payload: TestRunCreate, request: Request, db: DbSession, principal: Admin):
     row = dict(payload.event)
+    from ..services.initial_assessment import FIELDS
+    for field in FIELDS:
+        if field in payload.model_fields_set:
+            if field in row:
+                raise HTTPException(422, "duplicate_test_metadata_location")
+            row[field] = getattr(payload, field)
     for field in ("expected_verdict", "difficulty", "test_category", "case_name"):
         value = getattr(payload, field)
         if value is not None:

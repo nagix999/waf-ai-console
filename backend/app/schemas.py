@@ -7,6 +7,7 @@ from .agent.contracts import ThreatSeverity, WAFAnalysisOutput
 from .evaluation_schemas import EvaluationMetadata, EvaluationSummary
 from .services.label_fields import LABEL_FIELDS
 from .services.input_field_policy import SERVER_CONTROL_FIELDS
+from .initial_assessment_schemas import InitialAssessmentInput
 from .models import AnalysisPurpose, AnalysisStatus, IngestChannel, ModelProfileStatus, ModelProvider, ModelTestMode, ModelTestStatus, ReviewDecision, Verdict
 
 
@@ -56,11 +57,8 @@ class AnalysisInput(BaseModel):
         return self.model_extra or {}
 
 
-class AnalysisRequest(AnalysisInput):
+class AnalysisRequest(AnalysisInput, InitialAssessmentInput):
     """HTTP admission metadata, never an agent/event input."""
-    initial_verdict: Literal["true_positive", "false_positive"] | None = None
-    initial_probability: float | None = Field(default=None, ge=0, le=1, allow_inf_nan=False, strict=True)
-    initial_model_version: str | None = Field(default=None, min_length=1, max_length=255)
     expected_verdict: Literal["true_positive", "false_positive", "inconclusive"] | None = Field(
         default=None, description="Optional reference answer. Stored separately; never sent to the LLM.")
 
@@ -73,14 +71,6 @@ class AnalysisRequest(AnalysisInput):
 
     def event_input(self) -> AnalysisInput:
         return AnalysisInput.model_validate(self.model_dump(mode="json", exclude={"expected_verdict", "initial_verdict", "initial_probability", "initial_model_version"}, exclude_unset=True))
-
-    @model_validator(mode="after")
-    def initial_pair(self):
-        if (self.initial_verdict is None) != (self.initial_probability is None):
-            raise ValueError("initial_assessment_pair_required")
-        if self.initial_model_version is not None and self.initial_verdict is None:
-            raise ValueError("initial_assessment_pair_required")
-        return self
 
 
 class AnalysisSummary(UTCResponse):

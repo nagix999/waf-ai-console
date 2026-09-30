@@ -99,9 +99,9 @@ async def create_analysis(
 ) -> AnalysisDetail:
     from ..services.initial_assessment import FIELDS
     if set(FIELDS).intersection(payload.model_fields_set) and not (
-        principal.kind == "service_api_key" and principal.purpose == "production"
+        principal.kind == "service_api_key" and principal.purpose in {"production", "test"}
     ):
-        raise HTTPException(422, "initial_assessment_production_service_only")
+        raise HTTPException(422, "initial_assessment_service_key_required")
     if principal.purpose == "test":
         if set(request.query_params) - {"wait_seconds", "test_run_id"}:
             raise HTTPException(422, "unsupported_query_parameter")

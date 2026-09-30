@@ -19,6 +19,8 @@ async function request(path, options = {}) {
     const message = typeof detail === "string" ? detail : detail?.code || `HTTP ${response.status}`;
     const error = new Error(message);
     error.status = response.status;
+    error.issues = Array.isArray(detail) ? detail.map(({ field, type, message }) => ({ field, type,
+      code: message === "Value error, initial_assessment_pair_required" ? "initial_assessment_pair_required" : null })) : [];
     throw error;
   }
   return body;

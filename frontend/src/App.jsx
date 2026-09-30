@@ -1,3 +1,5 @@
+import InitialAssessmentFields from "./InitialAssessmentFields.jsx";
+import { emptyInitialAssessment, initialAssessmentError, singleTestAdmission } from "./initialAssessmentInput.js";
 import NavigationAction from "./NavigationAction.jsx";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { api } from "./api.js";
@@ -393,6 +395,7 @@ function SingleTest({ onCreated, disabledReason, candidateConfiguration, onBusy 
   const [difficulty, setDifficulty] = useState(""); const [category, setCategory] = useState(""); const requestKey = useRef(null);
   const [form, setForm] = useState(emptySingleTest);
   const [additionalFields, setAdditionalFields] = useState("");
+  const [initialAssessment, setInitialAssessment] = useState(emptyInitialAssessment);
   useEffect(() => { requestKey.current = null; }, [candidateConfiguration]);
   const [extraOpen, setExtraOpen] = useState(false);
   const [message, setMessage] = useState("");
@@ -406,12 +409,15 @@ function SingleTest({ onCreated, disabledReason, candidateConfiguration, onBusy 
     let observation = singleTestEvent(form, requestKey.current);
     try { const extra = additionalFields.trim() ? JSON.parse(additionalFields) : {}; if (!extra || Array.isArray(extra) || typeof extra !== "object" || Object.keys(extra).some(key => Object.hasOwn(observation, key))) throw new Error(); observation = { ...observation, ...extra }; }
     catch { setMessage("추가 필드는 JSON 객체로 입력하세요. 기본 필드를 중복해서 넣을 수 없습니다."); return; }
+    let admission;
+    try { admission = singleTestAdmission(observation, initialAssessment); }
+    catch (error) { setMessage(initialAssessmentError(error, w)); return; }
     setMessage("등록 중…"); setBusy(true); onBusy?.(true);
     try {
-      const created = await api.createTestRun({ name: testName, idempotency_key: requestKey.current, event: observation, ...(candidateConfiguration ? { candidate_configuration: candidateConfiguration } : {}), ...(expectedVerdict ? { expected_verdict: expectedVerdict } : {}), ...(difficulty.trim() ? { difficulty: difficulty.trim() } : {}), ...(category.trim() ? { test_category: category.trim() } : {}) });
+      const created = await api.createTestRun({ name: testName, idempotency_key: requestKey.current, ...admission, ...(candidateConfiguration ? { candidate_configuration: candidateConfiguration } : {}), ...(expectedVerdict ? { expected_verdict: expectedVerdict } : {}), ...(difficulty.trim() ? { difficulty: difficulty.trim() } : {}), ...(category.trim() ? { test_category: category.trim() } : {}) });
       setMessage("테스트를 접수했습니다.");
       requestKey.current = null; onCreated(created);
-    } catch (err) { setMessage(testRunError(err)); }
+    } catch (err) { setMessage(initialAssessmentError(err, w) || testRunError(err)); }
     finally { setBusy(false); onBusy?.(false); }
   }
   return (
@@ -432,6 +438,7 @@ function SingleTest({ onCreated, disabledReason, candidateConfiguration, onBusy 
       <label>{w("HTTP 원문", "Raw HTTP")}<textarea rows="8" required value={form.payload} onChange={update("payload")} placeholder={"GET /search?q=example HTTP/1.1\nHost: example.internal\n\n"} /></label>
       <button type="button" className="text-button" aria-expanded={extraOpen} aria-controls="single-test-extra" onClick={() => setExtraOpen(value => !value)}>{extraOpen ? w("추가 입력 닫기", "Hide optional fields") : w("추가 입력", "Optional fields")}</button>
       <div className="form-grid" id="single-test-extra" hidden={!extraOpen}><label>{w("이벤트 ID", "Event ID")}<input value={form.event_id} onChange={update("event_id")} placeholder={w("비워두면 ID 자동 생성", "Leave blank for an automatic ID")} /></label><label>{w("이벤트명", "Event name")}<input value={form.event_name} onChange={update("event_name")} placeholder={w("예: 검색 요청", "e.g. search request")} /></label><label>{w("출발지 포트", "Source port")}<input type="number" min="0" max="65535" value={form.src_port} onChange={update("src_port")} placeholder={w("예: 42310", "e.g. 42310")} /></label><label>{w("목적지 포트", "Destination port")}<input type="number" min="0" max="65535" value={form.dest_port} onChange={update("dest_port")} placeholder={w("예: 443", "e.g. 443")} /></label></div>
+      {extraOpen && <InitialAssessmentFields value={initialAssessment} words={w} onChange={value => { setInitialAssessment(value); requestKey.current = null; }} />}
       {extraOpen && <label>{w("스키마 추가 필드 (JSON)", "Additional schema fields (JSON)")}<textarea value={additionalFields} rows={3} placeholder={'{"vendor_score": 2}'} onChange={event => { setAdditionalFields(event.target.value); requestKey.current = null; }} /></label>}
       </fieldset><div className="action-row"><button className="primary" disabled={busy || Boolean(disabledReason)}>{busy ? w("접수 중…", "Submitting…") : w("분석 시작", "Start analysis")}</button><span aria-live="polite">{message}</span></div>
     </form>

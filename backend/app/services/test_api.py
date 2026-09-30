@@ -9,6 +9,7 @@ from .analysis import AnalysisIngestError, check_duplicate, event_fingerprint
 from .test_runs import add_run_items, create_run_record, split_test_metadata, write_lock
 from .uploads import UploadFormatError, normalize_upload_row
 from .validation_datasets import digest
+from .initial_assessment import split_admission, check_duplicate as check_initial
 
 
 def require_test_key(principal):
@@ -54,6 +55,7 @@ def ingest(db, crypto, settings, principal, rows, *, run_id=None, upload=False):
             # but keep the submitted field presence for schema validation below.
             try:
                 event, expected, _ = split_test_metadata(rows[0])
+                event, _initial = split_admission(event, allowed=True)
                 identity_rows = [AnalysisInput.model_validate(event).model_dump(mode="json")]
                 if expected is not None:
                     identity_rows[0]["expected_verdict"] = expected
@@ -65,18 +67,26 @@ def ingest(db, crypto, settings, principal, rows, *, run_id=None, upload=False):
             request_hash=digest(identity_rows), kind="api", actor=principal.source_system)
         if duplicate:
             items = list(db.scalars(select(TestRunItem).where(TestRunItem.test_run_id == run.id).order_by(TestRunItem.row_number)))
+            if not upload:
+                _, initial = split_admission(rows[0], allowed=True)
+                for item in items:
+                    if item.analysis_id:
+                        check_initial(db.get(Analysis, item.analysis_id), initial)
             return run, [(item, item.ingest_status == "accepted") for item in items]
         run.api_source_system = principal.source_system
     result = []
     for raw in rows:
         try:
             event, expected, _ = split_test_metadata(raw)
+            # Uploads retain per-row rejection instead of aborting the batch.
+            event, initial = split_admission(event, allowed=len(rows) == 1) if not upload else (event, None)
             payload = AnalysisInput.model_validate(normalize_upload_row(event))
             old = db.scalar(select(TestRunItem).where(TestRunItem.test_run_id == run.id,
                 TestRunItem.event_id == payload.event_id, TestRunItem.ingest_status == "accepted"))
             if old:
                 analysis = db.get(Analysis, old.analysis_id)
                 check_duplicate(analysis, crypto, event_fingerprint(payload.model_dump(mode="json")), "test")
+                check_initial(analysis, initial)
                 label = db.scalar(select(AnalysisLabel).where(AnalysisLabel.analysis_id == analysis.id)
                                   .order_by(AnalysisLabel.revision.desc()).limit(1))
                 if expected is not None and (label.verdict if label else None) != expected:
@@ -88,7 +98,8 @@ def ingest(db, crypto, settings, principal, rows, *, run_id=None, upload=False):
         if run_id and not run.accepting_items:
             raise AnalysisIngestError("test_session_closed", 409)
         add_run_items(db, crypto, settings, run, [raw], source_kind="reference",
-                      source_ref="analysis-request:expected_verdict", actor_kind=principal.kind)
+                      source_ref="analysis-request:expected_verdict", actor_kind=principal.kind,
+                      allow_initial_assessment=not upload and len(rows) == 1)
         item = db.scalar(select(TestRunItem).where(TestRunItem.test_run_id == run.id)
                          .order_by(TestRunItem.row_number.desc()).limit(1))
         if item.analysis_id:

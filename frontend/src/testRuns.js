@@ -1,4 +1,5 @@
 import { matrixDrilldown } from "./evaluationMetrics.js";
+import { initialAssessmentError } from "./initialAssessmentInput.js";
 
 export const runKinds = { direct: "단건 분석", upload: "배치 파일 분석", dataset: "평가 데이터셋 분석", api: "API 테스트", model_validation: "150건 모델 검증" };
 export const runStatuses = { pending: "대기", processing: "진행 중", completed: "처리 완료", failed: "실행 실패" };
@@ -50,6 +51,8 @@ export function testScopeSelection(name, value) {
 }
 
 export function testRunError(error) {
+  const initialError = initialAssessmentError(error);
+  if (initialError) return initialError;
   const messages = {
     candidate_requires_llm_test: "실제 LLM 실행 모드에서만 후보 구성을 선택할 수 있습니다.",
     agent_context_budget_too_small: "선택한 지침을 담을 모델 입력 공간이 부족합니다. 입력·출력 한도를 확인하세요.",

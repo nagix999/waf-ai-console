@@ -23,7 +23,7 @@ def finished_run(client, event_payload, expected=None):
     return run
 
 
-def test_test_key_and_nested_metadata_rejected(client, event_payload):
+def test_test_key_initial_allowed_but_nested_metadata_rejected(client, event_payload):
     from app.api_key_schemas import ServiceApiKeyCreate
     from app.services.service_api_keys import issue_key
     with client.app.state.session_factory() as db:
@@ -31,7 +31,8 @@ def test_test_key_and_nested_metadata_rejected(client, event_payload):
         db.commit()
     initial = {"initial_verdict": "false_positive", "initial_probability": .5}
     result = client.post("/api/v1/analyses", json={**event_payload, **initial}, headers={"x-api-key": key})
-    assert result.status_code == 422
+    assert result.status_code == 202
+    assert result.json()["initial_assessment"]["verdict"] == "false_positive"
     assert client.post("/api/v1/analyses", json={**event_payload, "extra_fields": initial}, headers={"x-api-key": key}).status_code == 422
 
 

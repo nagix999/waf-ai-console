@@ -28,6 +28,7 @@ import CaseDrawer from "./CaseDrawer.jsx";
 import R5Evaluation, { purposeText } from "./R5Evaluation.jsx";
 import TestGroundTruthImport from "./TestGroundTruthImport.jsx";
 import { canCopyTest } from "./evaluationDatasets.js";
+import { initialAssessmentError } from "./initialAssessmentInput.js";
 import { configurationChanges, comparisonContext } from "./testConfigurationIdentity.js";
 import { ConsolePopover } from "./ConsoleShell.jsx";
 
@@ -155,7 +156,9 @@ export function TestRunHistory({ refresh = 0, onSelect, state, onStateChange, on
 
 export function TestRunItemError({ item }) {
   const [open, setOpen] = useState(false);
-  return <><button type="button" className="text-button" onClick={() => setOpen(true)}>오류 정보</button><Dialog open={open} title="문항 오류 정보" onClose={() => setOpen(false)}><dl className="label-metadata"><dt>문항</dt><dd>{item.case_name || item.event_id || `${item.row_number}행`}</dd><dt>이벤트 식별자</dt><dd>{item.event_id || "미기록"}</dd><dt>오류 코드</dt><dd><code>{item.error_code}</code></dd></dl><p>접수 거부·실행 실패는 정답 불일치와 구분하며 품질 지표에 오답으로 포함하지 않습니다.</p></Dialog></>;
+  const w = useWords();
+  const explanation = initialAssessmentError({ message: item.error_code }, w);
+  return <><button type="button" className="text-button" onClick={() => setOpen(true)}>오류 정보</button><Dialog open={open} title="문항 오류 정보" onClose={() => setOpen(false)}>{explanation && <p>{explanation}</p>}<dl className="label-metadata"><dt>문항</dt><dd>{item.case_name || item.event_id || `${item.row_number}행`}</dd><dt>이벤트 식별자</dt><dd>{item.event_id || "미기록"}</dd><dt>오류 코드</dt><dd><code>{item.error_code}</code></dd></dl><p>접수 거부·실행 실패는 정답 불일치와 구분하며 품질 지표에 오답으로 포함하지 않습니다.</p></Dialog></>;
 }
 
 export function TestRunItemRows({ items, onOpen, selection, sorting, onSortingChange }) {

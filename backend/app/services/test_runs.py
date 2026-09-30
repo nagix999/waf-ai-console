@@ -14,6 +14,7 @@ from ..test_run_schemas import TestRunCreate, TestRunDetail, TestRunItemResponse
 from .analysis import AnalysisIngestError
 from .evaluation import evaluation_relation, metadata_from_row, summarize_evaluations
 from .internal_egress import allowed_targets_from_db
+from .initial_assessment import split_admission
 from .prompt_snapshots import load_analysis_prompt, pin_analysis_prompt
 from .input_schemas import InputSchemaError, get_schema_version, pin_schema
 from .upload_expected_labels import enqueue_test_upload_row
@@ -135,7 +136,7 @@ def pin_item_prompt(analysis, run):
     analysis.prompt_version = run.prompt_version
 
 
-def add_run_items(db, crypto, settings, run, rows, *, ai_visible=None, source_ref="test-upload:expected_verdict", trusted_items=None, source_kind="synthetic_expected", actor_kind="admin_session"):
+def add_run_items(db, crypto, settings, run, rows, *, ai_visible=None, source_ref="test-upload:expected_verdict", trusted_items=None, source_kind="synthetic_expected", actor_kind="admin_session", allow_initial_assessment=False):
     write_lock(db)
     if db.scalar(select(TestRun.stopped_at).where(TestRun.id == run.id)) is not None:
         raise AnalysisIngestError("test_run_stopped", 409)
@@ -156,6 +157,7 @@ def add_run_items(db, crypto, settings, run, rows, *, ai_visible=None, source_re
         item.dataset_item_version_id = trusted.get("dataset_item_version_id")
         try:
             event, expected, metadata = split_test_metadata(raw)
+            event, initial = split_admission(event, allowed=allow_initial_assessment)
             for key, value in metadata.items():
                 setattr(item, key, value)
             candidate_id = event.get("event_id")
@@ -182,6 +184,7 @@ def add_run_items(db, crypto, settings, run, rows, *, ai_visible=None, source_re
                     ingest_channel="model_validation" if run.model_test_run_id else "test_lab" if run.kind == "direct" else "file_upload",
                     schema_snapshot=snapshot,
                     prompt_snapshot=prompt,
+                    initial_assessment=initial,
                 )
                 if not duplicate:
                     pin_item_prompt(analysis, run)
@@ -227,7 +230,7 @@ def enqueue_named_run(db, crypto, settings, *, name, idempotency_key, rows, kind
             request_hash=digest, kind=kind, actor=actor, filename=filename, dataset_hash=content_hash,
             candidate_configuration=candidate_configuration)
         if not duplicate:
-            add_run_items(db, crypto, settings, run, rows)
+            add_run_items(db, crypto, settings, run, rows, allow_initial_assessment=kind == "direct")
             db.add(AccessAudit(actor_kind="admin_session", actor_id=actor, action="create_test_run",
                 resource_type="test_run", resource_id=run.id))
         db.commit()

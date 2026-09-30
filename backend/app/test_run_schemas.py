@@ -5,9 +5,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from .evaluation_schemas import EvaluationMetadata, EvaluationSummary
 from .schemas import UTCResponse
 from .candidate_schemas import CandidateConfiguration
+from .initial_assessment_schemas import InitialAssessmentInput
 
 
-class TestRunCreate(BaseModel):
+class TestRunCreate(InitialAssessmentInput):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=1, max_length=120)
     idempotency_key: str = Field(min_length=8, max_length=120, pattern=r"^[A-Za-z0-9_.:-]+$")
