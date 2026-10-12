@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { applyAppRoute, readAppHash, writeAppHash } from "./appRoutes.js";
-import { initialStatistics, groupCases, percent, referenceQuery, statisticsQuery } from "./testStatistics.js";
+import { addGrouping, changeGrouping, clearGroupSelection, initialStatistics, groupCases, percent, referenceQuery, selectedGroups, statisticsFields, statisticsQuery } from "./testStatistics.js";
 import { testRunQuery } from "./testRuns.js";
 import { fetchTestExport, testExportPath } from "./testExport.js";
 import { reportTypes } from "./analysisDownloads.js";
@@ -23,6 +23,34 @@ test("missing and exact group drilldowns are distinct; a zero accuracy is not mi
   assert.deepEqual(testRunQuery(groupCases({}, "signature", null)).group_missing, true);
   assert.equal(testRunQuery(groupCases({}, "signature", "missing")).group_value, "missing");
   assert.equal(groupCases({ status: "failed", offset: 100, cell: "fp" }, "signature", "SQL").offset, 0);
+});
+
+test("grouping defaults to one field, can add two or three, and never adds duplicate fields", () => {
+  const initial = initialStatistics();
+  assert.deepEqual(statisticsFields(initial), ["signature"]);
+  const two = addGrouping({ ...initial, offset: 20, q: "SQL", draft: "SQL" });
+  assert.deepEqual(statisticsFields(two), ["signature", "company_name"]);
+  assert.equal(two.offset, 0); assert.equal(two.q, ""); assert.equal(two.draft, "");
+  const three = addGrouping(two);
+  assert.equal(three.group_by, "signature,company_name,waf_action");
+  assert.strictEqual(addGrouping(three), three);
+  assert.equal(changeGrouping(three, ["company_name", "signature"]).group_by, "company_name,signature");
+  assert.deepEqual(statisticsFields({ group_by: "signature,signature,payload,company_name,waf_action,waf_vendor" }), ["signature", "company_name", "waf_action"]);
+});
+
+test("combined drilldown preserves tuples and missing values, clears legacy selection and unrelated row filters", () => {
+  const values = { company_name: "A · B", signature: null, waf_action: "D" };
+  const filters = groupCases({ group_field: "signature", group_value: "old", status: "failed", cell: "fp", offset: 100, difficulty: "hard" }, Object.keys(values), values);
+  assert.equal(filters.group_field, ""); assert.equal(filters.cell, ""); assert.equal(filters.status, "");
+  const query = testRunQuery(filters);
+  assert.equal(query.offset, 0); assert.equal(query.difficulty, "hard"); assert.equal(query.group_field, undefined);
+  assert.deepEqual(JSON.parse(query.group_filters), [{ field: "company_name", value: "A · B" }, { field: "signature", value: null }, { field: "waf_action", value: "D" }]);
+  assert.deepEqual(selectedGroups(filters), JSON.parse(query.group_filters));
+  assert.equal(statisticsQuery(filters, initialStatistics()).group_filters, undefined);
+  assert.deepEqual(referenceQuery(filters), { reference_basis: "latest" });
+  assert.equal(testRunQuery(clearGroupSelection(filters)).group_filters, undefined);
+  const single = groupCases(filters, "signature", "미입력");
+  assert.equal(testRunQuery(single).group_value, "미입력"); assert.equal(testRunQuery(single).group_filters, undefined);
 });
 
 test("test statistics/evaluation tabs survive reload without writing group values into URLs", () => {

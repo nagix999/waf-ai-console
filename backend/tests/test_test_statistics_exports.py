@@ -85,6 +85,110 @@ def test_statistics_scope_sort_missing_group_and_drilldown(client, event_payload
     assert client.get(f"/api/v1/test-runs/{run['id']}/statistics", params={"difficulty": "hard", "difficulty_missing": True}).status_code == 422
 
 
+def combination_run(client, event_payload):
+    run = fixture_run(client, event_payload)
+    dimensions = [("Company A", "D"), ("Company A", "D"), ("Company A", "A"), ("Company B", "D"),
+                  ("Company B", "D"), ("Company A", "D"), ("Company A", "A"), ("Company B", "D")]
+    with client.app.state.session_factory() as db:
+        for item, (company, action) in zip(run["items"], dimensions):
+            row = db.get(Analysis, item["analysis_id"])
+            row.company_name, row.waf_action = company, action
+        db.get(Analysis, run["items"][6]["analysis_id"]).signature = ""
+        db.commit()
+    return run
+
+
+def test_two_and_three_field_statistics_partition_cases_without_changing_totals(client, event_payload, monkeypatch):
+    run = combination_run(client, event_payload)
+    monkeypatch.setattr(client.app.state.crypto, "decrypt_text", lambda _: pytest.fail("Must not decrypt input"))
+    single = stats(client, run)
+    for fields, groups in [("company_name,signature", 5), ("company_name,signature,waf_action", 7)]:
+        result = stats(client, run, group_by=fields)
+        assert result["group_fields"] == fields.split(",") and result["total_groups"] == groups
+        assert result["summary"] == single["summary"]
+        assert sum(row["cases"] for row in result["items"]) == 8
+        assert sum(row["comparable"] for row in result["items"]) == 5
+        assert all(list(row["values"]) == fields.split(",") for row in result["items"])
+    group = stats(client, run, group_by="company_name,signature,waf_action")["items"][0]
+    assert group["values"] == {"company_name": "Company A", "signature": "SQL", "waf_action": "D"}
+    assert group["cases"] == group["comparable"] == 2 and group["accuracy"] == .5
+    assert stats(client, run, group_by="company_name,signature", q="Company B")["total_groups"] == 3
+    assert stats(client, run, group_by="company_name,signature", q="XSS")["total_groups"] == 1
+    assert stats(client, run, group_by="company_name,signature", q="Company %")["total_groups"] == 0
+    scoped = stats(client, run, group_by="company_name,signature,waf_action", difficulty="hard")
+    assert scoped["summary"]["cases"] == 4 and scoped["total_groups"] == 3
+
+
+def test_combination_drilldown_intersects_all_values_and_missing_dimension(client, event_payload):
+    run = combination_run(client, event_payload)
+    result = stats(client, run, group_by="company_name,signature,waf_action")
+    for group in result["items"]:
+        criteria = [{"field": field, "value": value} for field, value in group["values"].items()]
+        response = client.get(f"/api/v1/test-runs/{run['id']}", params={"group_filters": json.dumps(criteria)})
+        assert response.status_code == 200, response.text
+        detail = response.json()
+        assert detail["total_items"] == group["cases"]
+        assert detail["evaluation_summary"]["total"] == 8
+        assert all(item["ingest_status"] == "accepted" for item in detail["items"])
+
+
+def test_combination_tuple_sort_page_and_literal_values_do_not_collide(client, event_payload):
+    run = combination_run(client, event_payload)
+    with client.app.state.session_factory() as db:
+        for item, company, signature in [(run["items"][0], "A · B", "C"), (run["items"][1], "A", "B · C"),
+                                         (run["items"][2], "A", "미입력")]:
+            row = db.get(Analysis, item["analysis_id"])
+            row.company_name, row.signature = company, signature
+        db.commit()
+    query = {"group_by": "company_name,signature", "sort_by": "value", "sort_order": "asc"}
+    all_rows = stats(client, run, **query)["items"]
+    assert len(all_rows) == 7
+    paged = [stats(client, run, **query, limit=1, offset=i)["items"][0] for i in range(len(all_rows))]
+    assert paged == all_rows
+    assert all_rows[0]["values"] == {"company_name": "A", "signature": "B · C"}
+    assert {"company_name": "A · B", "signature": "C"} in [row["values"] for row in all_rows]
+    assert {"company_name": "A", "signature": "미입력"} in [row["values"] for row in all_rows]
+    descending = stats(client, run, **{**query, "sort_order": "desc"})["items"]
+    assert [row["values"]["signature"] for row in descending if row["value"] == "A"] == ["미입력", "B · C"]
+
+
+@pytest.mark.parametrize("fields", ["", "signature,", "signature,signature", "signature,company_name,waf_action,waf_vendor", "payload", "signature,payload"])
+def test_statistics_rejects_invalid_group_combinations(client, event_payload, fields):
+    run = fixture_run(client, event_payload)
+    assert client.get(f"/api/v1/test-runs/{run['id']}/statistics", params={"group_by": fields}).status_code == 422
+    assert client.get(f"/api/v1/test-runs/{run['id']}/statistics", params=[("group_by", "signature"), ("group_by", "company_name")]).status_code == 422
+
+
+@pytest.mark.parametrize("criteria", ["not json", "[]", "{}", '[{"field":"signature"}]',
+    '[{"field":"payload","value":"x"}]', '[{"field":"signature","value":true}]',
+    '[{"field":"signature","value":""}]', '[{"field":"signature","value":"x","extra":true}]',
+    json.dumps([{"field": "signature", "value": "x"}] * 2),
+    json.dumps([{"field": field, "value": "x"} for field in ("signature", "company_name", "waf_action", "waf_vendor")]),
+    json.dumps([{"field": "signature", "value": "x" * 4097}])])
+def test_combination_drilldown_rejects_malformed_or_conflicting_filters(client, event_payload, criteria):
+    run = fixture_run(client, event_payload)
+    response = client.get(f"/api/v1/test-runs/{run['id']}", params={"group_filters": criteria})
+    assert response.status_code == 422 and response.json()["detail"] == "invalid_test_group_filter"
+
+
+def test_combination_preserves_saved_reference_basis_and_rejects_legacy_filter_conflict(client, event_payload):
+    run = combination_run(client, event_payload)
+    saved = client.post(f"/api/v1/test-runs/{run['id']}/evaluations", json={"idempotency_key": str(uuid.uuid4())}).json()
+    with client.app.state.session_factory() as db:
+        row = db.get(Analysis, run["items"][1]["analysis_id"])
+        db.add(AnalysisLabel(analysis_id=row.id, revision=2, verdict="true_positive", source_kind="reference",
+            source_ref="synthetic-correction", ai_visible=False, created_by="fixture", attachment_id=str(uuid.uuid4()), token_digest="b" * 64))
+        db.commit()
+    assert stats(client, run, group_by="company_name,signature,waf_action", reference_basis="latest")["items"][0]["accuracy"] == 1
+    assert stats(client, run, group_by="company_name,signature,waf_action", evaluation_id=saved["id"])["items"][0]["accuracy"] == .5
+    criteria = json.dumps([{"field": "signature", "value": "SQL"}, {"field": "company_name", "value": "Company A"}])
+    detail = client.get(f"/api/v1/test-runs/{run['id']}", params={"group_filters": criteria, "evaluation_id": saved["id"]})
+    assert detail.status_code == 200 and detail.json()["total_items"] == 3
+    for legacy in [{"group_field": "signature", "group_value": "SQL"}, {"group_missing": True}, {"group_value": "SQL"}]:
+        response = client.get(f"/api/v1/test-runs/{run['id']}", params={"group_filters": criteria, **legacy})
+        assert response.status_code == 422 and response.json()["detail"] == "conflicting_test_group_filter"
+
+
 def test_reference_corrections_and_saved_evaluation_use_same_basis_as_detail(client, event_payload):
     run = fixture_run(client, event_payload)
     saved = client.post(f"/api/v1/test-runs/{run['id']}/evaluations", json={"idempotency_key": str(uuid.uuid4())}).json()
@@ -175,6 +279,8 @@ def test_retry_statistics_export_and_saved_record_count_each_case_once(client, e
     summary = stats(client, run)["summary"]
     assert summary["cases"] == summary["completed"] == summary["matches"] == 1 and summary["failed"] == 0
     assert stats(client, run, evaluation_id=saved["id"])["summary"]["failed"] == 1
+    assert stats(client, run, group_by="company_name,signature,waf_action")["summary"] == summary
+    assert stats(client, run, group_by="company_name,signature,waf_action", evaluation_id=saved["id"])["summary"]["failed"] == 1
     _, _, rows = workbook(client.get(f"/api/v1/test-runs/{run['id']}/export.xlsx"))
     assert len(rows) == 1 and rows[0]["analysis_id"] == child and rows[0]["retry_count"] == "1"
     _, _, frozen = workbook(client.get(f"/api/v1/test-runs/{run['id']}/export.xlsx", params={"evaluation_id": saved["id"]}))

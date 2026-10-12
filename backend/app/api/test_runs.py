@@ -167,7 +167,8 @@ def get_test_run(run_id: str, db: DbSession, _principal: Admin,
                  evaluation_outcome: str | None = Query(None, max_length=80),
                  reference_verdict: str | None = Query(None, pattern=r"^(true_positive|false_positive|inconclusive)$"),
                  verdict: str | None = Query(None, pattern=r"^(true_positive|false_positive|inconclusive)$"),
-                 group_field: GroupField | None = None, group_value: str | None = Query(None, max_length=4096), group_missing: bool = False):
+                 group_field: GroupField | None = None, group_value: str | None = Query(None, max_length=4096), group_missing: bool = False,
+                 group_filters: str | None = Query(None, max_length=32768, description="JSON array of 1–3 unique {field, value} criteria; null matches missing values.")):
     read_snapshot(db)
     if (difficulty_missing and difficulty is not None) or (test_category_missing and test_category is not None):
         raise HTTPException(422, "conflicting_test_group_filter")
@@ -184,14 +185,14 @@ def get_test_run(run_id: str, db: DbSession, _principal: Admin,
             reference_verdict=reference_verdict, verdict=verdict,
             difficulty_missing=difficulty_missing, test_category_missing=test_category_missing, evaluation_id=evaluation_id,
             reference_basis=reference_basis, sort_by=sort_by, sort_order=sort_order,
-            group_field=group_field, group_value=group_value, group_missing=group_missing)
+            group_field=group_field, group_value=group_value, group_missing=group_missing, group_filters=group_filters)
     except AnalysisIngestError as exc:
         raise HTTPException(exc.status_code, exc.code) from None
 
 
 @router.get("/{run_id}/statistics")
 def test_statistics(run_id: str, db: DbSession, _principal: Admin, request: Request,
-                    group_by: GroupField = "signature", limit: int = Query(25, ge=1, le=100), offset: int = Query(0, ge=0),
+                    group_by: str = Query("signature", max_length=120, description="1–3 unique comma-separated grouping fields."), limit: int = Query(25, ge=1, le=100), offset: int = Query(0, ge=0),
                     q: str | None = Query(None, max_length=500), sort_by: Literal["cases", "value", "accuracy", "inconclusive"] = "cases",
                     sort_order: Literal["asc", "desc"] = "desc", evaluation_id: str | None = Query(None, max_length=36),
                     reference_basis: Literal["initial", "latest"] = "latest", difficulty: str | None = Query(None, max_length=80),
@@ -200,6 +201,8 @@ def test_statistics(run_id: str, db: DbSession, _principal: Admin, request: Requ
     if set(request.query_params) - {"group_by", "limit", "offset", "q", "sort_by", "sort_order", "evaluation_id", "reference_basis",
                                   "difficulty", "test_category", "difficulty_missing", "test_category_missing"}:
         raise HTTPException(422, "unsupported_query_parameter")
+    if len(request.query_params.getlist("group_by")) > 1:
+        raise HTTPException(422, "invalid_test_statistics_grouping")
     if (difficulty_missing and difficulty is not None) or (test_category_missing and test_category is not None):
         raise HTTPException(422, "conflicting_test_group_filter")
     read_snapshot(db)

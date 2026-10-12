@@ -7,6 +7,7 @@
 ### 집계 기준
 
 - 집계 필드: `signature`(기본), `company_name`, `waf_vendor`, `waf_action`, `event_name`, `src_ip`, `dest_ip`, `difficulty`, `test_category`.
+- 기본은 1개 필드이며 **기준 추가**로 2개·3개까지 선택한다. 같은 필드를 중복 선택할 수 없다. 예: `회사 + 시그니처 + WAF 조치`는 세 값이 모두 같은 문항끼리 집계하고 각 기준을 별도 컬럼으로 표시한다. 기준 변경·추가·제거 시 항목 검색과 페이지를 초기화한다.
 - 현재 페이지가 아닌 테스트 전체의 선택한 난이도·유형 범위를 서버 SQL로 집계한다. 그룹 검색·정렬·페이지 이동을 제공하고, 상태·답안 비교·행렬·그룹의 문항 목록 필터는 집계 분모에 적용하지 않는다.
 - 통계의 문항은 접수된 고유 문항(`ingest_status=accepted`)이다. 중복·접수 거부는 별도로 표시한다. 항목을 선택해 이동한 문항 목록도 같은 고유 문항만 표시하며, 필터를 초기화하면 기존 전체 접수 내역으로 돌아간다.
 - 판정 비율 = 해당 판정 건수 / 판정이 기록된 완료 문항. 정탐·오탐·보류 세 비율을 모두 제공한다. 실패·중지·미완료는 판정 분모에 포함하지 않고, 판정값이 없는 완료 문항도 분리한다.
@@ -18,11 +19,17 @@
 
 | 경로 | 용도 | 파라미터 |
 |---|---|---|
-| `GET /api/v1/test-runs/{id}/statistics` | 필드별 통계 | `group_by`, `q`, `sort_by=cases/value/accuracy/inconclusive`, `sort_order`, `limit`(1~100), `offset`, 기존 답안·난이도·유형 선택 |
+| `GET /api/v1/test-runs/{id}/statistics` | 필드별·조합별 통계 | `group_by`(쉼표로 구분한 1~3개 필드), `q`, `sort_by=cases/value/accuracy/inconclusive`, `sort_order`, `limit`(1~100), `offset`, 기존 답안·난이도·유형 선택 |
 | `GET /api/v1/test-runs/{id}/export.xlsx` | 테스트 전체 Excel | `reference_basis=latest/initial` 또는 `evaluation_id`. 페이지·검색·문항 필터 파라미터는 거부 |
-| 기존 `GET /api/v1/test-runs/{id}` | 통계 항목의 문항 조회 | `group_field`, `group_value` 또는 `group_missing=true`. 기존 결과/평가 응답 유지 |
+| 기존 `GET /api/v1/test-runs/{id}` | 통계 항목의 문항 조회 | 기존 단일 필터 `group_field`, `group_value` 또는 `group_missing=true`; 조합은 `group_filters` JSON. 기존 결과/평가 응답 유지 |
 
 통계 응답은 `test_run_id`, `group_by`, `items`, `total_groups`, `limit`, `offset`, `summary`, `rejected`, `duplicates`, `reference_basis`, `evaluation_id`, `accuracy_includes_inconclusive`를 제공한다. `summary` 및 각 그룹은 `cases`, 처리 상태별 건수, 판정별 건수, `distribution_total`, `verdict_rates`, `labeled`, `comparable`, `matches`, `accuracy`, `label_coverage`, 오류 방향별 건수, `unclassified_completed`를 제공한다. 그룹의 `value=null`은 미입력이며 실제 문자열 "미입력"과 구분한다. 같은 테스트의 필요한 답안만 조회하도록 기존 최신 답안 관계의 대상 범위를 좁혔다.
+
+조합 집계는 `group_by=company_name,signature,waf_action`처럼 요청한다. 빈 기준·중복 필드·4개 이상·허용하지 않은 필드·반복된 `group_by` 파라미터는 422로 거부한다. 응답에 선택 순서의 `group_fields` 배열과 각 행의 `values` 객체를 추가한다. 예: `values={"company_name":"Example Corp","signature":"SQL","waf_action":"D"}`. 이전 단일 집계와의 호환을 위해 `value`는 첫 번째 필드 값으로 유지한다. SQL은 각 컬럼을 개별 `GROUP BY`하며 문자열을 이어 붙이지 않는다. 따라서 구분자가 포함된 값이나 미입력과 실제 문자열이 섞이지 않는다.
+
+항목 검색 `q`는 선택한 필드 중 하나라도 일치하면 표시한다. `sort_by=value`는 선택 순서대로 모든 기준을 정렬하고, 수치 정렬은 모든 기준 값으로 동률을 해소해 페이지 순서를 안정화한다. 검색·페이지 이동·집계 기준 수와 관계없이 상단 전체 요약과 평가의 분모는 유지한다.
+
+조합 항목의 문항 조회는 `group_filters=[{"field":"company_name","value":"Example Corp"},{"field":"signature","value":"SQL"},{"field":"waf_action","value":"D"}]`를 URL 인코딩해 요청한다. 1~3개 고유 기준을 AND로 적용하며 `value=null`은 NULL/빈 문자열을 함께 선택한다. 각 객체에는 `field`, `value`만 허용하고 값은 null 또는 1~4,096자 문자열, 전체 JSON은 32,768자까지다. 잘못된 JSON·필드·중복·타입·개수는 422이며 기존 단일 필터와 같이 보내면 충돌로 거부한다. 문항 목록의 **문항 필터 초기화**는 조합 선택도 해제하되 집계 기준 설정·답안 기준은 유지한다. WAF 차단/허용은 관측값이며 조합별 분포 자체로 관제 규칙을 확정하지 않는다.
 
 ### Excel 범위와 보존
 
@@ -45,6 +52,10 @@
 DB head는 `0026_test_run_stop`을 유지하며 과거 결과·답안·Agent 설정·운영 승격 절차를 변경하지 않는다. 코드/오프라인 검증 범위이며 실제 운영 데이터 검증·Docker 재배포·Git 업로드는 수행하지 않았다.
 
 검증: 전체 백엔드 회귀 2,509개 통과(선택형 PDF 3개 생략), 이후 보완을 포함한 통계/Excel 최종 12개와 SQLite 조회 경로를 포함한 19개 통과. 프런트엔드 `node --test --test-isolation=none frontend/src/*.test.mjs` 554개 통과, 배포용 빌드 성공(기존 500 kB 초과 번들 경고 유지). `frontend/scripts/test-statistics-smoke.mjs`로 합성 API 데이터의 KR/EN·SK/Light/Dark·모바일·키보드·뒤로/앞으로·항목별 이동·전체 다운로드를 검증하고 `test-results/test-statistics/`에 10개 화면을 생성했다. 실제 Excel의 컬럼·원문 분할·제어문자/이모지·수식 비실행·권한/감사·답안 기준·재실행/저장 평가 보존은 백엔드 API 테스트로 확인했다.
+
+### 조합 집계 추가 검증 — 2026-10-12
+
+조합 집계·Excel 회귀 33개와 기존 테스트/재실행/공식 평가/SQLite 조회 경로 39개, 총 백엔드 72개 통과. 프런트엔드 전체 557개 통과, 최종 배포용 빌드 성공(기존 번들 크기 경고 유지). 오프라인 브라우저에서 1·2·3개 기준, 중복/최대 개수 제한, 추가·제거·검색·초기화, 조합 문항 조회, KR/EN·SK/Light/Dark·모바일·키보드·뒤로/앞으로·기존 다운로드를 검증했다. `test-results/test-statistics/`의 19개 스크린샷 중 주요 조합 화면을 시각적으로 확인했고 1440px 데스크톱에서 세 기준과 지표가 가로 스크롤 없이 표시되는 것도 검증했다. 문자열 구분자 충돌·미입력·답안 수정·저장 평가·재실행 보존은 백엔드 API 테스트로 확인했다. 전체 백엔드 회귀 2,509개는 위 단일 집계 구현 당시 결과이며 이번 확장에서는 관련 72개만 실행했다. DB migration·새 패키지·실제 운영 데이터/LLM 호출·재배포·Git 게시 없이 코드와 검증만 수행했다.
 
 ## 단건 테스트의 1차 판정 — 2026-09-30
 

@@ -19,6 +19,13 @@ const { EvaluationSummary } = bundle("./ReferenceLabels.jsx");
 const { MetricCards, ConfusionMatrix, AdditionalMetrics, MetricHelp } = bundle("./EvaluationMetrics.jsx");
 const { TestRunRows, TestRunItemRows, TestRunHistory, TestRunHistoryEmpty, TestRunDetail, initialTestRunHistoryState, initialTestRunFilters, testRunHistoryChange, testRunFilterChange, watchTestRunRead } = bundle("./TestRuns.jsx");
 const render = (Component, props) => renderToStaticMarkup(createElement(Component, props));
+test("clearing case filters removes combined group selection without changing statistics criteria", () => {
+  const filters = { ...initialTestRunFilters(), group_filters: [{ field: "signature", value: "SQL" }, { field: "waf_action", value: "D" }], statistics: { group_by: "signature,waf_action" }, offset: 25 };
+  const cleared = testRunFilterChange(filters, { type: "clear_rows" });
+  assert.equal(cleared.group_filters.length, 0); assert.equal(cleared.offset, 0);
+  assert.equal(testRunQuery(cleared).group_filters, undefined);
+  assert.equal(cleared.statistics.group_by, "signature,waf_action");
+});
 test("latest answers are the default; initial and saved evaluations are explicit", () => {
   assert.equal(testRunQuery().reference_basis, "latest");
   assert.equal(testRunQuery({ evaluation_id: "initial" }).reference_basis, "initial");

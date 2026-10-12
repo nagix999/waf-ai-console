@@ -39,10 +39,10 @@ export function validateTestName(name) {
   return typeof name !== "string" || !name.trim() || name.trim().length > 120 ? "테스트명을 1~120자로 입력하세요." : "";
 }
 
-export function testRunQuery({ difficulty = "", test_category = "", difficulty_missing = false, test_category_missing = false, status = "", evaluation_outcome = "", evaluation_id = "latest", cell = "", offset = 0, limit = 25, sort_by = "row_number", sort_order = "asc", group_field = "", group_value = "", group_missing = false } = {}) {
+export function testRunQuery({ difficulty = "", test_category = "", difficulty_missing = false, test_category_missing = false, status = "", evaluation_outcome = "", evaluation_id = "latest", cell = "", offset = 0, limit = 25, sort_by = "row_number", sort_order = "asc", group_field = "", group_value = "", group_missing = false, group_filters = [] } = {}) {
   const basis = !evaluation_id || evaluation_id === "latest" ? { reference_basis: "latest" }
     : evaluation_id === "initial" ? { reference_basis: "initial" } : { evaluation_id };
-  return Object.fromEntries(Object.entries({ limit, offset, sort_by, sort_order, ...basis, ...(difficulty_missing ? { difficulty_missing: true } : { difficulty }), ...(test_category_missing ? { test_category_missing: true } : { test_category }), status, evaluation_outcome, ...matrixDrilldown(cell), ...(group_field ? { group_field, ...(group_missing ? { group_missing: true } : { group_value }) } : {}) }).filter(([, value]) => value !== ""));
+  return Object.fromEntries(Object.entries({ limit, offset, sort_by, sort_order, ...basis, ...(difficulty_missing ? { difficulty_missing: true } : { difficulty }), ...(test_category_missing ? { test_category_missing: true } : { test_category }), status, evaluation_outcome, ...matrixDrilldown(cell), ...(group_filters.length ? { group_filters: JSON.stringify(group_filters) } : group_field ? { group_field, ...(group_missing ? { group_missing: true } : { group_value }) } : {}) }).filter(([, value]) => value !== ""));
 }
 
 export function testScopeSelection(name, value) {

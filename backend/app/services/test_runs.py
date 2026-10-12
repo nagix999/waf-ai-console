@@ -291,7 +291,7 @@ def test_read_context(db, run, *, evaluation_id=None, reference_basis="initial")
 def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=None,
                  status=None, evaluation_outcome=None, reference_verdict=None, verdict=None, detail=True,
                  difficulty_missing=False, test_category_missing=False, evaluation_id=None, reference_basis="initial",
-                 sort_by="row_number", sort_order="asc", group_field=None, group_value=None, group_missing=False):
+                 sort_by="row_number", sort_order="asc", group_field=None, group_value=None, group_missing=False, group_filters=None):
     from .test_attempts import test_attempts
     read_snapshot(db)
     cohort = run_cohort(run.id, difficulty, test_category, difficulty_missing, test_category_missing)
@@ -371,8 +371,8 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
         ValidationDatasetItem.item_id.label("stable_case_id")).join(current, current.c.item_id == TestRunItem.id).outerjoin(Analysis, Analysis.id == current.c.analysis_id).outerjoin(
         relation, relation.c.analysis_id == Analysis.id).outerjoin(ValidationDatasetItem,
         ValidationDatasetItem.id == TestRunItem.dataset_item_version_id).where(*cohort)
-    from .test_run_statistics import group_condition
-    condition = group_condition(group_field, group_value, group_missing)
+    from .test_run_statistics import group_conditions
+    condition = group_conditions(group_filters, field=group_field, value=group_value, missing=group_missing)
     if condition is not None:
         query = query.where(condition, TestRunItem.ingest_status == "accepted")
     if status is not None:
