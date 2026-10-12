@@ -16,6 +16,8 @@ const canonical = {
 };
 
 export function readAppHash(hash) {
+  const testView = typeof hash === "string" && hash.match(/^#evaluate\/tests\/([^/]+)\/(metrics|statistics)$/);
+  if (testView && uuid.test(testView[1])) return { page: "analyses", purpose: "test", view: "runs", runId: testView[1].toLowerCase(), runView: testView[2] };
   const ungrouped = typeof hash === "string" && hash.match(/^#evaluate\/tests\/items\/([^/]+)\/(result|agent-trace|input|result-json|report)$/);
   if (ungrouped && uuid.test(ungrouped[1])) return { page: "detail", purpose: "test", id: ungrouped[1].toLowerCase(), tab: { result: "result", "agent-trace": "agent", input: "raw", "result-json": "json", report: "report" }[ungrouped[2]] };
   if (hash === "#promote") return { page: "analyses", purpose: "test", view: "runs" };
@@ -66,6 +68,7 @@ export function writeAppHash(state) {
   if (state.page === "promote") return uuid.test(state.promoteRunId || "") ? `#promotion/${state.promoteRunId}` : "#evaluate/tests";
   if (state.page === "datasets") return uuid.test(state.datasetId || "") ? `#evaluate/ground-truth/${state.datasetId.toLowerCase()}` : "#evaluate/ground-truth";
   if (state.page === "analyses" && state.resultsPurpose === "test" && state.testResults?.view === "runs" && uuid.test(state.testResults?.runId || "") && uuid.test(state.testResults?.caseId || "")) return `#evaluate/tests/${state.testResults.runId}/case/${state.testResults.caseId}`;
+  if (state.page === "analyses" && state.resultsPurpose === "test" && state.testResults?.view === "runs" && uuid.test(state.testResults?.runId || "") && ["metrics", "statistics"].includes(state.testResults?.filters?.view)) return `#evaluate/tests/${state.testResults.runId}/${state.testResults.filters.view}`;
   if (["runtime", "diagnostics"].includes(state.page) || state.page === "settings" && state.settingsTab === "concurrency") return "#operate/runtime";
   if (state.page === "detail" && uuid.test(state.selectedId || "")) {
     const tabs = { result: "result", agent: "agent-trace", raw: "input", json: "result-json", report: "report" };
@@ -122,6 +125,7 @@ export function applyAppRoute(state, route) {
   if (route.page === "analyses") {
     next.resultsPurpose = route.purpose;
     next.testResults = { ...state.testResults, view: route.view || "runs", runId: route.runId || null, caseId: route.caseId || null };
+    if (route.purpose === "test" && route.runId) next.testResults.filters = { ...state.testResults.filters, view: route.runView || "items" };
     if (route.purpose !== "test") next.listState = {
       ...state.listState,
       draft: { ...state.listState.draft, analysis_purpose: route.purpose },

@@ -1,0 +1,24 @@
+.test-statistics { padding: 22px; min-width: 0; }
+.test-statistics > .panel-head { padding: 0 0 16px; gap: 14px; flex-wrap: wrap; }
+.test-statistics h2 { margin: 0 0 6px; }.test-statistics .panel-head p { margin: 0; }
+.test-stat-controls { display: flex; gap: 12px; align-items: end; margin: 18px 0; flex-wrap: wrap; }
+.test-stat-controls label:first-child { flex: 0 1 210px; }.test-stat-controls label:nth-child(2) { flex: 1 1 220px; }
+.test-stat-controls button { flex-shrink: 0; }
+.test-stat-overview { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 20px 0 14px; }
+.test-stat-overview > div { border: 1px solid var(--line); background: var(--raised); border-radius: 12px; padding: 18px; display: grid; gap: 8px; }
+.test-stat-overview span,.test-stat-overview small,.test-stat-basis { color: var(--muted); font-size: 12px; line-height: 1.55; }
+.test-stat-overview strong { font-size: 26px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.test-stat-overview > div:last-child { border-color: var(--accent); background: var(--accent-soft); }
+.test-stat-definition { font-size: 12px; line-height: 1.7; color: var(--muted); margin: 12px 0; }
+.test-statistics .data-table-wrap { margin: 18px 0; border: 1px solid var(--line); }
+.test-stat-table { min-width: 980px; }.test-stat-table td { vertical-align: middle; }
+.test-stat-table :is(th,td) { padding-inline: 12px; }.test-stat-table th { white-space: normal; overflow-wrap: anywhere; }
+.test-stat-bar { display: flex; overflow: hidden; height: 10px; border-radius: 6px; background: var(--line); }
+.test-stat-bar > span { height: 100%; }
+.test-stat-true_positive { background: var(--danger, #c5364e); }.test-stat-false_positive { background: var(--accent); }.test-stat-inconclusive { background: #b88932; }
+.test-stat-distribution-label { display: flex; gap: 4px 10px; flex-wrap: wrap; margin-top: 8px; font-size: 11px; color: var(--muted); }
+.test-stat-distribution-label > span { display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; }
+.test-stat-distribution-label i { width: 7px; height: 7px; border-radius: 50%; }
+.test-run-export { display: inline-flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.test-run-export p { margin: 0; }.test-export-scope { font-size: 12px; color: var(--muted); line-height: 1.6; }
+@media(max-width:680px) { .test-statistics { padding: 16px; }.test-stat-overview { grid-template-columns: 1fr; }.test-stat-controls label:first-child { flex: 1 1 100%; } }

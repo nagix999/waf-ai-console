@@ -98,6 +98,7 @@ export const api = {
   },
   testRuns: (query = {}, options = {}) => request(`/api/v1/test-runs?${new URLSearchParams(query)}`, options),
   testRun: (id, query = {}, options = {}) => request(`/api/v1/test-runs/${encodeURIComponent(id)}?${new URLSearchParams(query)}`, options),
+  testStatistics: (id, query = {}, options = {}) => request(`/api/v1/test-runs/${encodeURIComponent(id)}/statistics?${new URLSearchParams(query)}`, { ...options, cache: "no-store" }),
   stopTestRun: id => request(`/api/v1/test-runs/${encodeURIComponent(id)}/stop`, { method: "POST", cache: "no-store" }),
   testRetryEligibility: (id, options = {}) => request(`/api/v1/test-runs/${encodeURIComponent(id)}/retry-eligibility`, { ...options, cache: "no-store" }),
   retryTestFailures: (id, payload) => request(`/api/v1/test-runs/${encodeURIComponent(id)}/retry-failed`, { method: "POST", body: JSON.stringify(payload), cache: "no-store" }),

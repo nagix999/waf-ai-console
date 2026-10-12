@@ -39,6 +39,12 @@
 .console-navigation .console-nav-items button { width: 100%; min-height: 34px; padding: 6px 10px 6px 33px; border-radius: 6px; border: 0; color: var(--muted); font-size: 13px; }
 .console-navigation .console-nav-items button[aria-current="page"] { background: var(--accent-soft); color: var(--accent); box-shadow: inset 3px 0 var(--accent); font-weight: 650; }
 .console-navigation button[aria-current="page"]::after { content: none; }
+.console-sidebar .console-navigation { min-height: 0; overflow-y: auto; flex: 1; padding-bottom: 12px; }
+.console-navigation .console-nav-group-toggle > span { flex: 1; }
+.console-navigation .console-nav-group-toggle[data-active="true"] { color: var(--text); font-weight: 650; }
+.console-navigation .console-nav-items { margin: 4px 0 2px 14px; padding-left: 10px; border-left: 1px solid var(--line-strong); }
+.console-navigation .console-nav-items[hidden] { display: none; }
+.console-navigation .console-nav-items button { white-space: normal; line-height: 1.45; }
 .console-sidebar-footer { display: grid; gap: 3px; margin-top: auto; padding: 28px 10px 0; font-size: 11px; color: var(--muted); }
 .console-shell .console-header { min-height: 80px; padding: 16px 24px; gap: 18px; background: var(--panel); }
 .console-header .console-header-actions { gap: 8px; flex-shrink: 0; }

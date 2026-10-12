@@ -807,7 +807,13 @@ function ConsoleApp() {
   const screen = useSyncExternalStore(navigation.subscribe, navigation.getSnapshot, navigation.getSnapshot);
   const { page, listState, selectedId, resultsPurpose, testResults, detailReturnPage, settingsTab, detailTab, days, serviceApiKeyId = "" } = screen;
   const setListState = useCallback(update => navigation.remember(current => ({ ...current, listState: typeof update === "function" ? update(current.listState) : update })), [navigation]);
-  const setTestResults = useCallback(update => navigation.remember(current => ({ ...current, testResults: typeof update === "function" ? update(current.testResults) : update })), [navigation]);
+  const setTestResults = useCallback(update => {
+    const current = navigation.getSnapshot();
+    const next = typeof update === "function" ? update(current.testResults) : update;
+    const apply = value => ({ ...value, testResults: next });
+    if (current.page === "analyses" && current.resultsPurpose === "test" && current.testResults.runId && next.filters?.view !== current.testResults.filters?.view) navigation.navigate(apply);
+    else navigation.remember(apply);
+  }, [navigation]);
   const setDays = useCallback(value => navigation.remember(current => ({ ...current, days: value })), [navigation]);
   const [, setProductionName] = useState("미설정");
   const summaryScope = `${days}:${serviceApiKeyId}`;

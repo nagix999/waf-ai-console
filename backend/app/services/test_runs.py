@@ -12,7 +12,7 @@ from ..models import AccessAudit, Analysis, AnalysisLabel, TestEvaluation, TestR
 from ..schemas import AnalysisInput
 from ..test_run_schemas import TestRunCreate, TestRunDetail, TestRunItemResponse, TestRunSummary
 from .analysis import AnalysisIngestError
-from .evaluation import evaluation_relation, metadata_from_row, summarize_evaluations
+from .evaluation import evaluation_relation, latest_labels, metadata_from_row, summarize_evaluations
 from .internal_egress import allowed_targets_from_db
 from .initial_assessment import split_admission
 from .prompt_snapshots import load_analysis_prompt, pin_analysis_prompt
@@ -270,12 +270,8 @@ def run_cohort(run_id, difficulty=None, test_category=None, difficulty_missing=F
     return conditions
 
 
-def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=None,
-                 status=None, evaluation_outcome=None, reference_verdict=None, verdict=None, detail=True,
-                 difficulty_missing=False, test_category_missing=False, evaluation_id=None, reference_basis="initial",
-                 sort_by="row_number", sort_order="asc"):
-    read_snapshot(db)
-    cohort = run_cohort(run.id, difficulty, test_category, difficulty_missing, test_category_missing)
+def test_read_context(db, run, *, evaluation_id=None, reference_basis="initial"):
+    """Share the selected attempts and reference snapshot across read views."""
     evaluation = db.get(TestEvaluation, evaluation_id) if evaluation_id else None
     if evaluation_id and (evaluation is None or evaluation.test_run_id != run.id):
         raise AnalysisIngestError("test_evaluation_not_found", 404)
@@ -287,10 +283,22 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
         AccessAudit.resource_type == "test_evaluation", AccessAudit.resource_id == evaluation.id).limit(1)))
     _nodes, current = test_attempts(run.id, before=evaluation.created_at if evaluation and evaluation.analysis_ids_json is None else None, include_retries=include_retries,
         analysis_ids=evaluation.analysis_ids_json if evaluation else None)
+    official = run.evaluation_mode == "ground_truth"
+    relation = evaluation_relation(latest_labels(select(current.c.analysis_id))) if reference_basis == "latest" and evaluation is None and not official else fixed_reference_relation(run.id, evaluation, include_retries=include_retries)
+    return evaluation, _nodes, current, relation
+
+
+def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=None,
+                 status=None, evaluation_outcome=None, reference_verdict=None, verdict=None, detail=True,
+                 difficulty_missing=False, test_category_missing=False, evaluation_id=None, reference_basis="initial",
+                 sort_by="row_number", sort_order="asc", group_field=None, group_value=None, group_missing=False):
+    from .test_attempts import test_attempts
+    read_snapshot(db)
+    cohort = run_cohort(run.id, difficulty, test_category, difficulty_missing, test_category_missing)
+    evaluation, _nodes, current, relation = test_read_context(db, run, evaluation_id=evaluation_id, reference_basis=reference_basis)
     accepted_ids = select(current.c.analysis_id).join(TestRunItem, TestRunItem.id == current.c.item_id).where(
         *cohort, TestRunItem.ingest_status == "accepted")
     official = run.evaluation_mode == "ground_truth"
-    relation = evaluation_relation() if reference_basis == "latest" and evaluation is None and not official else fixed_reference_relation(run.id, evaluation, include_retries=include_retries)
     evaluation_summary = summarize_evaluations(db, relation, [Analysis.id.in_(accepted_ids)])
     counts = dict(db.execute(select(TestRunItem.ingest_status, func.count()).where(
         *cohort).group_by(TestRunItem.ingest_status)).all())
@@ -363,6 +371,10 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
         ValidationDatasetItem.item_id.label("stable_case_id")).join(current, current.c.item_id == TestRunItem.id).outerjoin(Analysis, Analysis.id == current.c.analysis_id).outerjoin(
         relation, relation.c.analysis_id == Analysis.id).outerjoin(ValidationDatasetItem,
         ValidationDatasetItem.id == TestRunItem.dataset_item_version_id).where(*cohort)
+    from .test_run_statistics import group_condition
+    condition = group_condition(group_field, group_value, group_missing)
+    if condition is not None:
+        query = query.where(condition, TestRunItem.ingest_status == "accepted")
     if status is not None:
         query = query.where(Analysis.status == status)
     if evaluation_outcome is not None:

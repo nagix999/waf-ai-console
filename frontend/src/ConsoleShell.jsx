@@ -46,12 +46,24 @@ export function ConsoleAppearance() {
   </div>;
 }
 
-function Navigation({ screen, onNavigate }) {
+function Navigation({ screen, onNavigate, navigateOnExpand = true }) {
   const { t } = useConsolePreferences(); const { item, group: activeGroup } = consoleLocation(screen);
-  return <nav className="console-navigation" aria-label={t("navigation")}>{consoleGroups.map(group =>
-    <button type="button" key={group.key} className="v5-workspace-link" aria-current={activeGroup === group.key ? "page" : undefined} onClick={() => onNavigate(group.items.includes(item) ? item : group.items[0])}>
+  const [expanded, setExpanded] = useState({}); const id = useId();
+  useEffect(() => { setExpanded(current => ({ ...current, [activeGroup]: true })); }, [activeGroup]);
+  return <nav className="console-navigation" aria-label={t("navigation")}>{consoleGroups.map(group => {
+    const active = activeGroup === group.key;
+    const open = expanded[group.key] ?? active;
+    if (group.items.length === 1) return <button type="button" key={group.key} className="v5-workspace-link" aria-current={active ? "page" : undefined} onClick={() => onNavigate(group.items[0])}>
       <Icon name={group.icon} size={18} /><span>{t(group.key)}</span>
-    </button>)}</nav>;
+    </button>;
+    return <div key={group.key} className="console-nav-group">
+      <button type="button" className="v5-workspace-link console-nav-group-toggle" data-active={active} aria-expanded={open} aria-controls={`${id}-${group.key}`} onClick={() => {
+        setExpanded(current => ({ ...current, [group.key]: navigateOnExpand && !active ? true : !open }));
+        if (!active && navigateOnExpand) onNavigate(group.items[0]);
+      }}><Icon name={group.icon} size={18} /><span>{t(group.key)}</span><Icon name={open ? "chevronUp" : "chevronDown"} size={14} /></button>
+      <div className="console-nav-items" id={`${id}-${group.key}`} hidden={!open}>{group.items.map(key => <button type="button" key={key} aria-current={item === key ? "page" : undefined} onClick={() => onNavigate(key)}>{t(key)}</button>)}</div>
+    </div>;
+  })}</nav>;
 }
 
 export default function ConsoleShell({ screen, principal, healthError, onNavigate, onSearch, logoutState, onLogout, children }) {
@@ -88,11 +100,10 @@ export default function ConsoleShell({ screen, principal, healthError, onNavigat
       </header>
       <div className="content console-content" id="workspace-content" tabIndex={-1}>
         <div className={`console-page-heading${screen.page === "detail" ? " is-analysis-detail" : ""}`}><p className="console-breadcrumb">WAF AI Console<span aria-hidden="true">/</span>{t(location.group || location.title)}{screen.page === "detail" && <><span aria-hidden="true">/</span>{t(location.title)}</>}</p>{screen.page !== "detail" && <><h1>{t(location.title)}</h1><p className="page-description">{t(`${location.title}.description`)}</p></>}</div>
-        {consoleGroups.find(group => group.key === location.group)?.items.length > 1 && <nav className="v5-workspace-tabs" aria-label={t(location.group)}>{consoleGroups.find(group => group.key === location.group).items.map(key => <button type="button" key={key} aria-current={location.item === key ? "page" : undefined} onClick={() => navigate(key)}>{t(key)}</button>)}</nav>}
         {children}
       </div>
     </main>
-    <Dialog open={mobileOpen} title={t("navigation")} onClose={() => setMobileOpen(false)} className="console-mobile-dialog"><Navigation screen={screen} onNavigate={navigate} /></Dialog>
+    <Dialog open={mobileOpen} title={t("navigation")} onClose={() => setMobileOpen(false)} className="console-mobile-dialog"><Navigation screen={screen} onNavigate={navigate} navigateOnExpand={false} /></Dialog>
     <Dialog open={accountOpen} title={t("account")} onClose={() => setAccountOpen(false)} className="console-account-dialog"><p className="ux-muted">{t("accountDescription")}</p><p>{username}</p><span className="status">Admin</span></Dialog>
   </div>;
 }

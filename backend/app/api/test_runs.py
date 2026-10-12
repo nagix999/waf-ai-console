@@ -1,7 +1,7 @@
 """Administrator-only named test submission and fixed-reference reporting."""
 import hashlib
 from typing import Annotated, Literal
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
 from pydantic import ValidationError, BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -28,6 +28,7 @@ from ..services.vllm_profiles import TargetNotAllowedError
 router = APIRouter(prefix="/test-runs", tags=["test-runs"])
 Admin = Annotated[Principal, Depends(require_scope("admin"))]
 DbSession = Annotated[Session, Depends(get_db)]
+GroupField = Literal["signature", "company_name", "waf_vendor", "waf_action", "event_name", "src_ip", "dest_ip", "difficulty", "test_category"]
 
 
 @router.post("/{run_id}/stop", response_model=TestRunSummary)
@@ -165,7 +166,8 @@ def get_test_run(run_id: str, db: DbSession, _principal: Admin,
                  status: str | None = Query(None, pattern=r"^(pending|processing|completed|failed|canceled)$"),
                  evaluation_outcome: str | None = Query(None, max_length=80),
                  reference_verdict: str | None = Query(None, pattern=r"^(true_positive|false_positive|inconclusive)$"),
-                 verdict: str | None = Query(None, pattern=r"^(true_positive|false_positive|inconclusive)$")):
+                 verdict: str | None = Query(None, pattern=r"^(true_positive|false_positive|inconclusive)$"),
+                 group_field: GroupField | None = None, group_value: str | None = Query(None, max_length=4096), group_missing: bool = False):
     read_snapshot(db)
     if (difficulty_missing and difficulty is not None) or (test_category_missing and test_category is not None):
         raise HTTPException(422, "conflicting_test_group_filter")
@@ -176,11 +178,73 @@ def get_test_run(run_id: str, db: DbSession, _principal: Admin,
         evaluation = db.get(TestEvaluation, evaluation_id)
         if evaluation is None or evaluation.test_run_id != run.id:
             raise HTTPException(404, "test_evaluation_not_found")
-    return describe_run(db, run, limit=limit, offset=offset, difficulty=difficulty,
-        test_category=test_category, status=status, evaluation_outcome=evaluation_outcome,
-        reference_verdict=reference_verdict, verdict=verdict,
-        difficulty_missing=difficulty_missing, test_category_missing=test_category_missing, evaluation_id=evaluation_id,
-        reference_basis=reference_basis, sort_by=sort_by, sort_order=sort_order)
+    try:
+        return describe_run(db, run, limit=limit, offset=offset, difficulty=difficulty,
+            test_category=test_category, status=status, evaluation_outcome=evaluation_outcome,
+            reference_verdict=reference_verdict, verdict=verdict,
+            difficulty_missing=difficulty_missing, test_category_missing=test_category_missing, evaluation_id=evaluation_id,
+            reference_basis=reference_basis, sort_by=sort_by, sort_order=sort_order,
+            group_field=group_field, group_value=group_value, group_missing=group_missing)
+    except AnalysisIngestError as exc:
+        raise HTTPException(exc.status_code, exc.code) from None
+
+
+@router.get("/{run_id}/statistics")
+def test_statistics(run_id: str, db: DbSession, _principal: Admin, request: Request,
+                    group_by: GroupField = "signature", limit: int = Query(25, ge=1, le=100), offset: int = Query(0, ge=0),
+                    q: str | None = Query(None, max_length=500), sort_by: Literal["cases", "value", "accuracy", "inconclusive"] = "cases",
+                    sort_order: Literal["asc", "desc"] = "desc", evaluation_id: str | None = Query(None, max_length=36),
+                    reference_basis: Literal["initial", "latest"] = "latest", difficulty: str | None = Query(None, max_length=80),
+                    test_category: str | None = Query(None, max_length=120), difficulty_missing: bool = False, test_category_missing: bool = False):
+    from ..services.test_run_statistics import statistics
+    if set(request.query_params) - {"group_by", "limit", "offset", "q", "sort_by", "sort_order", "evaluation_id", "reference_basis",
+                                  "difficulty", "test_category", "difficulty_missing", "test_category_missing"}:
+        raise HTTPException(422, "unsupported_query_parameter")
+    if (difficulty_missing and difficulty is not None) or (test_category_missing and test_category is not None):
+        raise HTTPException(422, "conflicting_test_group_filter")
+    read_snapshot(db)
+    run = db.get(TestRun, run_id)
+    if run is None:
+        raise HTTPException(404, "test_run_not_found")
+    try:
+        return statistics(db, run, group_by=group_by, limit=limit, offset=offset, q=q, sort_by=sort_by, sort_order=sort_order,
+            evaluation_id=evaluation_id, reference_basis=reference_basis, difficulty=difficulty, test_category=test_category,
+            difficulty_missing=difficulty_missing, test_category_missing=test_category_missing)
+    except AnalysisIngestError as exc:
+        raise HTTPException(exc.status_code, exc.code) from None
+
+
+@router.get("/{run_id}/export.xlsx", response_class=Response)
+def test_excel(run_id: str, db: DbSession, principal: Admin, request: Request,
+               evaluation_id: str | None = Query(None, max_length=36), reference_basis: Literal["initial", "latest"] = "latest"):
+    from ..services.test_run_exports import EXPORT_LOCK, TestExportError, collect_rows, render_workbook
+    from .analyses import record_access
+    headers = {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"}
+    if set(request.query_params) - {"evaluation_id", "reference_basis"}:
+        raise HTTPException(422, "unsupported_query_parameter", headers=headers)
+    read_snapshot(db)
+    run = db.get(TestRun, run_id)
+    if run is None:
+        raise HTTPException(404, "test_run_not_found", headers=headers)
+    if not EXPORT_LOCK.acquire(blocking=False):
+        raise HTTPException(503, "test_export_busy", headers=headers)
+    try:
+        name = run.name
+        identifier = run.id
+        records, basis = collect_rows(db, request.app.state.crypto, run, evaluation_id=evaluation_id, reference_basis=reference_basis)
+        db.rollback()
+        record_access(db, principal, "export_test_run_xlsx", "test_run", run_id)
+        body = render_workbook(records, run_name=name, basis=basis)
+    except (AnalysisIngestError, TestExportError) as exc:
+        db.rollback()
+        raise HTTPException(exc.status_code, exc.code, headers=headers) from None
+    except Exception:
+        db.rollback()
+        raise HTTPException(503, "test_export_unavailable", headers=headers) from None
+    finally:
+        EXPORT_LOCK.release()
+    headers["Content-Disposition"] = f'attachment; filename="waf-test-{identifier}.xlsx"'
+    return Response(body, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=headers)
 
 
 @router.get("/{run_id}/evaluations")
