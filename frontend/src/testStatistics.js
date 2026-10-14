@@ -32,7 +32,7 @@ export function selectedGroups(filters) {
 
 export function clearGroupSelection(filters) {
   return { ...filters, ...(filters.group_field ? { group_field: "", group_value: "", group_missing: false } : {}),
-    ...(filters.group_filters?.length ? { group_filters: [] } : {}) };
+    ...(filters.group_filters?.length ? { group_filters: [] } : {}), ...(filters.case_filter ? { case_filter: null } : {}) };
 }
 
 export function referenceQuery(filters) {
@@ -43,12 +43,13 @@ export function referenceQuery(filters) {
 export function statisticsQuery(filters, state) {
   const scope = testRunQuery(filters);
   return { ...Object.fromEntries(Object.entries(scope).filter(([key]) => ["reference_basis", "evaluation_id", "difficulty", "test_category", "difficulty_missing", "test_category_missing"].includes(key))),
-    ...Object.fromEntries(Object.entries(state).filter(([key, value]) => key !== "draft" && value !== "")) };
+    ...Object.fromEntries(Object.entries(state).filter(([key, value]) => ["group_by", "q", "limit", "offset", "sort_by", "sort_order", "case_filter"].includes(key) && value != null && value !== "")) };
 }
 
 export function groupCases(filters, field, value) {
   const fields = Array.isArray(field) ? field : [field];
-  const base = { ...clearGroupSelection(filters), view: "items", offset: 0, status: "", evaluation_outcome: "", cell: "" };
+  const base = { ...clearGroupSelection(filters), view: "items", offset: 0, status: "", evaluation_outcome: "", cell: "",
+    ...(filters.statistics?.case_filter ? { case_filter: filters.statistics.case_filter } : {}) };
   return fields.length === 1
     ? { ...base, group_field: fields[0], group_value: value ?? "", group_missing: value == null }
     : { ...base, group_filters: fields.map(key => ({ field: key, value: value[key] ?? null })) };

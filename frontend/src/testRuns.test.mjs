@@ -26,6 +26,18 @@ test("clearing case filters removes combined group selection without changing st
   assert.equal(testRunQuery(cleared).group_filters, undefined);
   assert.equal(cleared.statistics.group_by, "signature,waf_action");
 });
+
+test("matrix drilldown replaces prior group/prefilter selection but preserves evaluation scope and statistics setup", () => {
+  const expression = { op: "and", rules: [{ op: "and", rules: [{ field: "company_name", operator: "eq", value: "A" }] }] };
+  const filters = { ...initialTestRunFilters(), difficulty: "hard", evaluation_id: "saved-id", offset: 75,
+    group_filters: [{ field: "signature", value: "SQL" }], case_filter: expression, statistics: { case_filter: expression } };
+  const selected = testRunFilterChange(filters, { type: "cell", value: "fn" });
+  const query = testRunQuery(selected);
+  assert.equal(query.group_filters, undefined); assert.equal(query.case_filter, undefined);
+  assert.equal(query.reference_verdict, "true_positive"); assert.equal(query.verdict, "false_positive"); assert.equal(query.evaluation_outcome, "false_negative");
+  assert.equal(query.evaluation_id, "saved-id"); assert.equal(query.difficulty, "hard"); assert.equal(query.offset, 0);
+  assert.strictEqual(selected.statistics.case_filter, expression);
+});
 test("latest answers are the default; initial and saved evaluations are explicit", () => {
   assert.equal(testRunQuery().reference_basis, "latest");
   assert.equal(testRunQuery({ evaluation_id: "initial" }).reference_basis, "initial");

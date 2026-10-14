@@ -1,0 +1,498 @@
+{
+  "date": "2026-10-14",
+  "environment": {
+    "python": "3.12.12",
+    "sqlite": "3.50.4",
+    "page_size": 25,
+    "result_padding_bytes": 16384,
+    "synthetic_only": true,
+    "llm_calls": 0,
+    "db_schema_changes": 0,
+    "starting_commit": "2e92bcc",
+    "before_repetitions": 1,
+    "after_repetitions": 2
+  },
+  "notes": [
+    "Before/after share the same synthetic database and HTTP requests; elapsed_ms is the full HTTP wall-clock median.",
+    "SQL times only include cursor execution, not fetch/serialization.",
+    "Local disk/process caches and concurrent offline regression tests may affect timing; this is not a Production SLA or concurrency benchmark.",
+    "The original 5000-case query did not complete and was interrupted; no numeric original baseline exists for that size.",
+    "5000-case hashes compare an intermediate optimized query with the final query, not the original baseline.",
+    "No Production data, credentials, payloads or SQL bindings are included."
+  ],
+  "small": {
+    "ground_truth_cases": 1000,
+    "latest_reference_cases": 999,
+    "analyses": 3000,
+    "results": {
+      "ground_truth:tp": {
+        "before": {
+          "elapsed_ms": 15733.623,
+          "sql_count": 11,
+          "sql_ms": 750.534,
+          "slowest_sql_ms": 338.547,
+          "returned_items": 25,
+          "response_bytes": 23163,
+          "total_items": 112,
+          "evaluation_total": 1000,
+          "decrypt_count": 0,
+          "materialized": {
+            "TestRun": 1,
+            "ValidationDatasetVersion": 1,
+            "TestRunItem": 25,
+            "Analysis": 25
+          }
+        },
+        "after": {
+          "elapsed_ms": 1058.125,
+          "sql_count": 10,
+          "sql_ms": 715.774,
+          "slowest_sql_ms": 324.152,
+          "returned_items": 25,
+          "response_bytes": 23163,
+          "total_items": 112,
+          "evaluation_total": 1000,
+          "decrypt_count": 0,
+          "materialized": {
+            "TestRun": 1,
+            "ValidationDatasetVersion": 1,
+            "TestRunItem": 25,
+            "Analysis": 25
+          }
+        },
+        "full_response_hash_equal": true,
+        "response_hash": "67304bca628b3906ceb8abe5add8eb0813dd53cb21e5761b9b65e6c73e7a7a7a"
+      },
+      "ground_truth:fp": {
+        "before": {
+          "elapsed_ms": 12818.647,
+          "sql_count": 11,
+          "sql_ms": 791.861,
+          "slowest_sql_ms": 263.959,
+          "returned_items": 25,
+          "response_bytes": 23423,
+          "total_items": 111,
+          "evaluation_total": 1000,
+          "decrypt_count": 0,
+          "materialized": {
+            "TestRun": 1,
+            "ValidationDatasetVersion": 1,
+            "TestRunItem": 25,
+            "Analysis": 25
+          }
+        },
+        "after": {
+          "elapsed_ms": 1123.885,
+          "sql_count": 10,
+          "sql_ms": 842.697,
+          "slowest_sql_ms": 394.199,
+          "returned_items": 25,
+          "response_bytes": 23423,
+          "total_items": 111,
+          "evaluation_total": 1000,
+          "decrypt_count": 0,
+          "materialized": {
+            "TestRun": 1,
+            "ValidationDatasetVersion": 1,
+            "TestRunItem": 25,
+            "Analysis": 25
+          }
+        },
+        "full_response_hash_equal": true,
+        "response_hash": "df1e3afe69aa2323b49f8988fc3ca34db165acceaf02486a946139db7b2a3ccb"
+      },
+      "ground_truth:fn": {
+        "before": {
+          "elapsed_ms": 14044.697,
+          "sql_count": 11,
+          "sql_ms": 640.661,
+          "slowest_sql_ms": 244.7,
+          "returned_items": 25,
+          "response_bytes": 23423,
+          "total_items": 111,
+          "evaluation_total": 1000,
+          "decrypt_count": 0,
+          "materialized": {
+            "TestRun": 1,
+            "ValidationDatasetVersion": 1,
+            "TestRunItem": 25,
+            "Analysis": 25
+          }
+        },
+        "after": {
+          "elapsed_ms": 845.581,
+          "sql_count": 10,
+          "sql_ms": 710.73,
+          "slowest_sql_ms": 319.44,
+          "returned_items": 25,
+          "response_bytes": 23423,
+          "total_items": 111,
+          "evaluation_total": 1000,
+          "decrypt_count": 0,
+          "materialized": {
+            "TestRun": 1,
+            "ValidationDatasetVersion": 1,
+            "TestRunItem": 25,
+            "Analysis": 25
+          }
+        },
+        "full_response_hash_equal": true,
+        "response_hash": "a6764b4f5087bed724db70f7f3810e57f3369b11da1e836c2acd8559b6c4682a"
+      },
+      "ground_truth:tn": {
+        "before": {
+          "elapsed_ms": 12261.808,
+          "sql_count": 11,
+          "sql_ms": 1063.921,
+          "slowest_sql_ms": 355.973,
+          "returned_items": 25,
+          "response_bytes": 23225,
+          "total_items": 111,
+          "evaluation_total": 1000,
+          "decrypt_count": 0,
+          "materialized": {
+            "TestRun": 1,
+            "ValidationDatasetVersion": 1,
+            "TestRunItem": 25,
+            "Analysis": 25
+          }
+        },
+        "after": {
+          "elapsed_ms": 1145.681,
+          "sql_count": 10,
+          "sql_ms": 951.427,
+          "slowest_sql_ms": 419.823,
+          "returned_items": 25,
+          "response_bytes": 23225,
+          "total_items": 111,
+          "evaluation_total": 1000,
+          "decrypt_count": 0,
+          "materialized": {
+            "TestRun": 1,
+            "ValidationDatasetVersion": 1,
+            "TestRunItem": 25,
+            "Analysis": 25
+          }
+        },
+        "full_response_hash_equal": true,
+        "response_hash": "70f16260c0d7718f875a8375bdd4232483d88c81ddfa9ea15de06b5e37eb69a5"
+      },
+      "latest:tp": {
+        "before": {
+          "elapsed_ms": 14025.771,
+          "sql_count": 10,
+          "sql_ms": 926.513,
+          "slowest_sql_ms": 531.938,
+          "returned_items": 25,
+          "response_bytes": 19093,
+          "total_items": 111,
+          "evaluation_total": 999,
+          "decrypt_count": 0,
+          "materialized": {
+            "TestRun": 1,
+            "TestRunItem": 25,
+            "Analysis": 25
+          }
+        },
+        "after": {
+          "elapsed_ms": 1193.38,
+          "sql_count": 9,
+          "sql_ms": 832.565,
+          "slowest_sql_ms": 377.917,
+          "returned_items": 25,
+          "response_bytes": 19093,
+          "total_items": 111,
+          "evaluation_total": 999,
+          "decrypt_count": 0,
+          "materialized": {
+            "TestRun": 1,
+            "TestRunItem": 25,
+            "Analysis": 25
+          }
+        },
+        "full_response_hash_equal": true,
+        "response_hash": "816f4317168fa7c4299eb7cbb88dec114cf3491f8cdbeab2904e9d078fa09ce1"
+      },
+      "latest:fp": {
+        "before": {
+          "elapsed_ms": 14266.359,
+          "sql_count": 10,
+          "sql_ms": 934.802,
+          "slowest_sql_ms": 336.92,
+          "returned_items": 25,
+          "response_bytes": 19343,
+          "total_items": 111,
+          "evaluation_total": 999,
+          "decrypt_count": 0,
+          "materialized": {
+            "TestRun": 1,
+            "TestRunItem": 25,
+            "Analysis": 25
+          }
+        },
+        "after": {
+          "elapsed_ms": 859.569,
+          "sql_count": 9,
+          "sql_ms": 732.419,
+          "slowest_sql_ms": 327.9,
+          "returned_items": 25,
+          "response_bytes": 19343,
+          "total_items": 111,
+          "evaluation_total": 999,
+          "decrypt_count": 0,
+          "materialized": {
+            "TestRun": 1,
+            "TestRunItem": 25,
+            "Analysis": 25
+          }
+        },
+        "full_response_hash_equal": true,
+        "response_hash": "1c007dc633b655736ed720947c5677fcb37c8bbeececc086b15212a360bc9e4d"
+      },
+      "latest:fn": {
+        "before": {
+          "elapsed_ms": 10446.71,
+          "sql_count": 10,
+          "sql_ms": 479.779,
+          "slowest_sql_ms": 289.056,
+          "returned_items": 25,
+          "response_bytes": 19341,
+          "total_items": 111,
+          "evaluation_total": 999,
+          "decrypt_count": 0,
+          "materialized": {
+            "TestRun": 1,
+            "TestRunItem": 25,
+            "Analysis": 25
+          }
+        },
+        "after": {
+          "elapsed_ms": 679.936,
+          "sql_count": 9,
+          "sql_ms": 575.414,
+          "slowest_sql_ms": 260.759,
+          "returned_items": 25,
+          "response_bytes": 19341,
+          "total_items": 111,
+          "evaluation_total": 999,
+          "decrypt_count": 0,
+          "materialized": {
+            "TestRun": 1,
+            "TestRunItem": 25,
+            "Analysis": 25
+          }
+        },
+        "full_response_hash_equal": true,
+        "response_hash": "8972522987ac87df1ace4db5bac4668382e54478180578544a88d7a4d81dddd2"
+      },
+      "latest:tn": {
+        "before": {
+          "elapsed_ms": 12267.825,
+          "sql_count": 10,
+          "sql_ms": 548.1,
+          "slowest_sql_ms": 233.012,
+          "returned_items": 25,
+          "response_bytes": 19141,
+          "total_items": 111,
+          "evaluation_total": 999,
+          "decrypt_count": 0,
+          "materialized": {
+            "TestRun": 1,
+            "TestRunItem": 25,
+            "Analysis": 25
+          }
+        },
+        "after": {
+          "elapsed_ms": 726.629,
+          "sql_count": 9,
+          "sql_ms": 618.385,
+          "slowest_sql_ms": 274.123,
+          "returned_items": 25,
+          "response_bytes": 19141,
+          "total_items": 111,
+          "evaluation_total": 999,
+          "decrypt_count": 0,
+          "materialized": {
+            "TestRun": 1,
+            "TestRunItem": 25,
+            "Analysis": 25
+          }
+        },
+        "full_response_hash_equal": true,
+        "response_hash": "a451f996b62453db569e2d5aa407252fc602a1be8f245efb582bf24076f70f27"
+      }
+    }
+  },
+  "large": {
+    "ground_truth_cases": 5000,
+    "latest_reference_cases": 4999,
+    "analyses": 11000,
+    "original_baseline": null,
+    "results": {
+      "ground_truth:tp": {
+        "after": {
+          "elapsed_ms": 5689.06,
+          "sql_count": 10,
+          "sql_ms": 5334.039,
+          "slowest_sql_ms": 3236.677,
+          "returned_items": 25,
+          "response_bytes": 22948,
+          "total_items": 556,
+          "evaluation_total": 5000,
+          "decrypt_count": 0,
+          "materialized": {
+            "TestRun": 1,
+            "ValidationDatasetVersion": 1,
+            "TestRunItem": 25,
+            "Analysis": 25
+          }
+        },
+        "intermediate_response_hash_equal": true,
+        "response_hash": "0c20dfcd0b33571155c449f18b556a528d7183ec1262e13784e686b27f3e527c"
+      },
+      "ground_truth:fp": {
+        "after": {
+          "elapsed_ms": 4411.314,
+          "sql_count": 10,
+          "sql_ms": 4143.753,
+          "slowest_sql_ms": 2350.536,
+          "returned_items": 25,
+          "response_bytes": 23208,
+          "total_items": 556,
+          "evaluation_total": 5000,
+          "decrypt_count": 0,
+          "materialized": {
+            "TestRun": 1,
+            "ValidationDatasetVersion": 1,
+            "TestRunItem": 25,
+            "Analysis": 25
+          }
+        },
+        "intermediate_response_hash_equal": true,
+        "response_hash": "61e670ae64f061356ba5670ff4a5a487ca28fff29acc251542a4879861e12ae4"
+      },
+      "ground_truth:fn": {
+        "after": {
+          "elapsed_ms": 4458.408,
+          "sql_count": 10,
+          "sql_ms": 4294.919,
+          "slowest_sql_ms": 2477.866,
+          "returned_items": 25,
+          "response_bytes": 23208,
+          "total_items": 556,
+          "evaluation_total": 5000,
+          "decrypt_count": 0,
+          "materialized": {
+            "TestRun": 1,
+            "ValidationDatasetVersion": 1,
+            "TestRunItem": 25,
+            "Analysis": 25
+          }
+        },
+        "intermediate_response_hash_equal": true,
+        "response_hash": "10e1eb8362577f3d8e8a4eb58dd4903ae69172dfe38f770e35817bb1c015a348"
+      },
+      "ground_truth:tn": {
+        "after": {
+          "elapsed_ms": 4266.384,
+          "sql_count": 10,
+          "sql_ms": 4127.414,
+          "slowest_sql_ms": 2514.738,
+          "returned_items": 25,
+          "response_bytes": 23010,
+          "total_items": 556,
+          "evaluation_total": 5000,
+          "decrypt_count": 0,
+          "materialized": {
+            "TestRun": 1,
+            "ValidationDatasetVersion": 1,
+            "TestRunItem": 25,
+            "Analysis": 25
+          }
+        },
+        "intermediate_response_hash_equal": true,
+        "response_hash": "66ada6f1cd3c24a58f2af71ec34117983af0b836981b105ac37987b38c6bd758"
+      },
+      "latest:tp": {
+        "after": {
+          "elapsed_ms": 2905.132,
+          "sql_count": 9,
+          "sql_ms": 2689.561,
+          "slowest_sql_ms": 1298.905,
+          "returned_items": 25,
+          "response_bytes": 19153,
+          "total_items": 555,
+          "evaluation_total": 4999,
+          "decrypt_count": 0,
+          "materialized": {
+            "TestRun": 1,
+            "TestRunItem": 25,
+            "Analysis": 25
+          }
+        },
+        "intermediate_response_hash_equal": true,
+        "response_hash": "2deb4befee1282e5df2cf0e52924f70a56131e1ce418cb33963bc0c878a1ebf3"
+      },
+      "latest:fp": {
+        "after": {
+          "elapsed_ms": 3392.327,
+          "sql_count": 9,
+          "sql_ms": 3277.066,
+          "slowest_sql_ms": 1485.364,
+          "returned_items": 25,
+          "response_bytes": 19401,
+          "total_items": 555,
+          "evaluation_total": 4999,
+          "decrypt_count": 0,
+          "materialized": {
+            "TestRun": 1,
+            "TestRunItem": 25,
+            "Analysis": 25
+          }
+        },
+        "intermediate_response_hash_equal": true,
+        "response_hash": "78a4adb98ab7fbe22bab14a8db317100caebab07f95586a4d81e56a66d7363c5"
+      },
+      "latest:fn": {
+        "after": {
+          "elapsed_ms": 2705.505,
+          "sql_count": 9,
+          "sql_ms": 2603.39,
+          "slowest_sql_ms": 1175.098,
+          "returned_items": 25,
+          "response_bytes": 19401,
+          "total_items": 555,
+          "evaluation_total": 4999,
+          "decrypt_count": 0,
+          "materialized": {
+            "TestRun": 1,
+            "TestRunItem": 25,
+            "Analysis": 25
+          }
+        },
+        "intermediate_response_hash_equal": true,
+        "response_hash": "190ade899b9aabd34fc89581354b0d96cd5b9d01b2ece06a6f806e8985914546"
+      },
+      "latest:tn": {
+        "after": {
+          "elapsed_ms": 3394.742,
+          "sql_count": 9,
+          "sql_ms": 3280.136,
+          "slowest_sql_ms": 1458.635,
+          "returned_items": 25,
+          "response_bytes": 19203,
+          "total_items": 555,
+          "evaluation_total": 4999,
+          "decrypt_count": 0,
+          "materialized": {
+            "TestRun": 1,
+            "TestRunItem": 25,
+            "Analysis": 25
+          }
+        },
+        "intermediate_response_hash_equal": true,
+        "response_hash": "f3a81e65281f6a1ddec764fba1b7d2d03a76db85a0414cdc5895efeec84ced65"
+      }
+    }
+  }
+}

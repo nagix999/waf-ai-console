@@ -5,7 +5,7 @@ import uuid
 from datetime import UTC, datetime
 
 from pydantic import ValidationError
-from sqlalchemy import func, select
+from sqlalchemy import false, func, literal, select, true
 from sqlalchemy.orm import Session, load_only
 
 from ..models import AccessAudit, Analysis, AnalysisLabel, TestEvaluation, TestRun, TestRunItem, VLLMProfile, ValidationDatasetItem
@@ -240,9 +240,34 @@ def enqueue_named_run(db, crypto, settings, *, name, idempotency_key, rows, kind
         raise
 
 
-def fixed_reference_relation(run_id, evaluation=None, *, include_retries=True):
+def _test_read_labels(labels):
+    # A flattened labels -> item -> current join can become a nested scan for
+    # each analysis. Keep just comparison/provenance fields and let SQLite
+    # build its temporary lookup once for this statement.
+    names = ("analysis_id", "id", "revision", "verdict", "source_kind", "source_ref", "ai_visible", "created_at")
+    return select(*(labels.c[name] for name in names)).cte("test_read_labels").prefix_with("MATERIALIZED", dialect="sqlite")
+
+
+def _test_read_relation(labels, current):
+    # LEFT JOIN may scan a fixed label set for every analysis when SQLite
+    # underestimates its size. Its exact equivalent is labelled inner rows
+    # UNION ALL unlabelled rows. This preserves duplicates, NULL semantics,
+    # cancellation and the shared evaluator's original policy unchanged.
+    identifiers = select(current.c.analysis_id)
+    labelled = evaluation_relation(labels, labelled_only=True)
+    empty = select(*(literal(None, type_=column.type).label(column.name) for column in labels.c)).where(false()).subquery()
+    unlabelled = evaluation_relation(empty)
+    labelled_ids = select(labels.c.analysis_id).where(labels.c.analysis_id.is_not(None))
+    return select(labelled).where(labelled.c.analysis_id.in_(identifiers)).union_all(
+        select(unlabelled).where(unlabelled.c.analysis_id.in_(identifiers),
+                                unlabelled.c.analysis_id.not_in(labelled_ids))).cte(
+        "test_read_evaluation").prefix_with("MATERIALIZED", dialect="sqlite")
+
+
+def fixed_reference_relation(run_id, evaluation=None, *, include_retries=True, attempts=None):
     from .test_attempts import test_attempts
-    nodes, current = test_attempts(run_id, before=evaluation.created_at if evaluation and evaluation.analysis_ids_json is None else None, include_retries=include_retries,
+    nodes, current = attempts if attempts is not None else test_attempts(run_id,
+        before=evaluation.created_at if evaluation and evaluation.analysis_ids_json is None else None, include_retries=include_retries,
         analysis_ids=evaluation.analysis_ids_json if evaluation else None)
     if evaluation is not None:
         labels = select(*(column for column in AnalysisLabel.__table__.columns if column.name != "analysis_id"),
@@ -254,7 +279,7 @@ def fixed_reference_relation(run_id, evaluation=None, *, include_retries=True):
             current.c.analysis_id.label("analysis_id")).join(TestRunItem, TestRunItem.label_id == AnalysisLabel.id).join(
                 current, current.c.item_id == TestRunItem.id).where(
                 TestRunItem.test_run_id == run_id, TestRunItem.ingest_status == "accepted").subquery()
-    return evaluation_relation(labels)
+    return _test_read_relation(_test_read_labels(labels), current) if attempts is not None else evaluation_relation(labels)
 
 
 def run_cohort(run_id, difficulty=None, test_category=None, difficulty_missing=False, test_category_missing=False):
@@ -270,7 +295,7 @@ def run_cohort(run_id, difficulty=None, test_category=None, difficulty_missing=F
     return conditions
 
 
-def test_read_context(db, run, *, evaluation_id=None, reference_basis="initial"):
+def test_read_context(db, run, *, evaluation_id=None, reference_basis="initial", cohort=None):
     """Share the selected attempts and reference snapshot across read views."""
     evaluation = db.get(TestEvaluation, evaluation_id) if evaluation_id else None
     if evaluation_id and (evaluation is None or evaluation.test_run_id != run.id):
@@ -283,19 +308,27 @@ def test_read_context(db, run, *, evaluation_id=None, reference_basis="initial")
         AccessAudit.resource_type == "test_evaluation", AccessAudit.resource_id == evaluation.id).limit(1)))
     _nodes, current = test_attempts(run.id, before=evaluation.created_at if evaluation and evaluation.analysis_ids_json is None else None, include_retries=include_retries,
         analysis_ids=evaluation.analysis_ids_json if evaluation else None)
+    # A flattened derived table can rerun retry/window and comparison work for
+    # every returned row after an outcome predicate. Materialize only scoped
+    # IDs/small metadata, never raw input or complete result JSON.
+    selected = select(current)
+    if cohort is not None:
+        selected = selected.join(TestRunItem, TestRunItem.id == current.c.item_id).where(*cohort)
+    current = selected.cte("test_read_current").prefix_with("MATERIALIZED", dialect="sqlite")
     official = run.evaluation_mode == "ground_truth"
-    relation = evaluation_relation(latest_labels(select(current.c.analysis_id))) if reference_basis == "latest" and evaluation is None and not official else fixed_reference_relation(run.id, evaluation, include_retries=include_retries)
+    relation = _test_read_relation(_test_read_labels(latest_labels(select(current.c.analysis_id))), current) if reference_basis == "latest" and evaluation is None and not official else fixed_reference_relation(
+        run.id, evaluation, include_retries=include_retries, attempts=(_nodes, current))
     return evaluation, _nodes, current, relation
 
 
 def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=None,
                  status=None, evaluation_outcome=None, reference_verdict=None, verdict=None, detail=True,
                  difficulty_missing=False, test_category_missing=False, evaluation_id=None, reference_basis="initial",
-                 sort_by="row_number", sort_order="asc", group_field=None, group_value=None, group_missing=False, group_filters=None):
+                 sort_by="row_number", sort_order="asc", group_field=None, group_value=None, group_missing=False, group_filters=None, case_filter=None):
     from .test_attempts import test_attempts
     read_snapshot(db)
     cohort = run_cohort(run.id, difficulty, test_category, difficulty_missing, test_category_missing)
-    evaluation, _nodes, current, relation = test_read_context(db, run, evaluation_id=evaluation_id, reference_basis=reference_basis)
+    evaluation, _nodes, current, relation = test_read_context(db, run, evaluation_id=evaluation_id, reference_basis=reference_basis, cohort=cohort)
     accepted_ids = select(current.c.analysis_id).join(TestRunItem, TestRunItem.id == current.c.item_id).where(
         *cohort, TestRunItem.ingest_status == "accepted")
     official = run.evaluation_mode == "ground_truth"
@@ -375,6 +408,10 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
     condition = group_conditions(group_filters, field=group_field, value=group_value, missing=group_missing)
     if condition is not None:
         query = query.where(condition, TestRunItem.ingest_status == "accepted")
+    from .test_case_filters import case_condition
+    condition = case_condition(case_filter, relation)
+    if condition is not None:
+        query = query.where(condition, TestRunItem.ingest_status == "accepted")
     if status is not None:
         query = query.where(Analysis.status == status)
     if evaluation_outcome is not None:
@@ -383,14 +420,34 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
         query = query.where(relation.c.reference_verdict == reference_verdict)
     if verdict is not None:
         query = query.where(Analysis.verdict == verdict)
-    total_items = db.scalar(select(func.count()).select_from(query.subquery())) or 0
+    if evaluation_outcome is not None and reference_verdict is not None and verdict is not None:
+        # A matrix cell counts accepted cases, not duplicate admissions that
+        # happen to point at the same Analysis and would repeat its verdict.
+        query = query.where(TestRunItem.ingest_status == "accepted")
     items = []
     column = {"row_number": TestRunItem.row_number, "case_name": TestRunItem.case_name,
               "status": Analysis.status}.get(sort_by, TestRunItem.row_number)
-    order = column.desc().nulls_last() if sort_order == "desc" else column.asc().nulls_last()
-    query = query.options(load_only(Analysis.id, Analysis.error_code, Analysis.status, Analysis.verdict, Analysis.summary_ko, raiseload=True))
-    for row in db.execute(query.order_by(order, TestRunItem.row_number).limit(limit).offset(offset)):
+    # Count and page share a single scoped comparison evaluation. Keep only
+    # IDs/small reference metadata here; hydrate ORM rows AFTER LIMIT/OFFSET.
+    metadata_names = [name for name in relation.c.keys() if name != "analysis_id"]
+    matches = query.with_only_columns(TestRunItem.id.label("item_id"), current.c.analysis_id,
+        current.c.retry_count, *(relation.c[name] for name in metadata_names),
+        ValidationDatasetItem.item_id.label("stable_case_id"), column.label("sort_value"),
+        TestRunItem.row_number.label("row_order"), maintain_column_froms=True).cte("test_read_matches").prefix_with("MATERIALIZED", dialect="sqlite")
+    order = matches.c.sort_value.desc().nulls_last() if sort_order == "desc" else matches.c.sort_value.asc().nulls_last()
+    page = select(matches).order_by(order, matches.c.row_order).limit(limit).offset(offset).cte("test_read_page")
+    count = select(func.count().label("filtered_total")).select_from(matches).subquery()
+    query = select(TestRunItem, Analysis, page.c.retry_count, *(page.c[name] for name in metadata_names),
+        page.c.stable_case_id, count.c.filtered_total).select_from(count).outerjoin(page, true()).outerjoin(
+        TestRunItem, TestRunItem.id == page.c.item_id).outerjoin(Analysis, Analysis.id == page.c.analysis_id).options(
+        load_only(Analysis.id, Analysis.error_code, Analysis.status, Analysis.verdict, Analysis.summary_ko, raiseload=True))
+    page_order = page.c.sort_value.desc().nulls_last() if sort_order == "desc" else page.c.sort_value.asc().nulls_last()
+    total_items = 0
+    for row in db.execute(query.order_by(page_order, page.c.row_order)):
         item, analysis = row[0], row[1]
+        total_items = row._mapping["filtered_total"]
+        if item is None:  # A zero/empty page still returns its exact count.
+            continue
         metadata = metadata_from_row(row._mapping) if analysis else None
         items.append(TestRunItemResponse(
             ground_truth_source={"dataset_id": ground_truth["dataset_id"],

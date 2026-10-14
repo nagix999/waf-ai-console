@@ -15,6 +15,7 @@ from ..validation_data_schemas import EvaluationCreate
 from ..services.manual_references import create_evaluation, evaluation_record
 from ..security import Principal, require_scope
 from ..test_run_schemas import TestRunCreate, TestRunDetail, TestRunList, TestRunSummary
+from ..test_filter_schemas import FilteredCasesRead, FilteredStatisticsRead
 from ..candidate_schemas import CandidateConfiguration
 from ..services.analysis import AnalysisIngestError
 from ..services.prompt_policies import PromptPolicyError
@@ -213,6 +214,31 @@ def test_statistics(run_id: str, db: DbSession, _principal: Admin, request: Requ
         return statistics(db, run, group_by=group_by, limit=limit, offset=offset, q=q, sort_by=sort_by, sort_order=sort_order,
             evaluation_id=evaluation_id, reference_basis=reference_basis, difficulty=difficulty, test_category=test_category,
             difficulty_missing=difficulty_missing, test_category_missing=test_category_missing)
+    except AnalysisIngestError as exc:
+        raise HTTPException(exc.status_code, exc.code) from None
+
+
+@router.post("/{run_id}/statistics/search")
+def filtered_statistics(run_id: str, payload: FilteredStatisticsRead, db: DbSession, _principal: Admin, request: Request, response: Response):
+    from ..services.test_run_statistics import statistics
+    return filtered_test_read(run_id, payload, db, request, response, statistics)
+
+
+@router.post("/{run_id}/cases/search", response_model=TestRunDetail)
+def filtered_cases(run_id: str, payload: FilteredCasesRead, db: DbSession, _principal: Admin, request: Request, response: Response):
+    return filtered_test_read(run_id, payload, db, request, response, describe_run)
+
+
+def filtered_test_read(run_id, payload, db, request, response, read):
+    if request.query_params:
+        raise HTTPException(422, "unsupported_query_parameter")
+    read_snapshot(db)
+    run = db.get(TestRun, run_id)
+    if run is None:
+        raise HTTPException(404, "test_run_not_found")
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return read(db, run, **payload.model_dump())
     except AnalysisIngestError as exc:
         raise HTTPException(exc.status_code, exc.code) from None
 

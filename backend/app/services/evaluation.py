@@ -102,7 +102,7 @@ def latest_labels(analysis_ids=None):
         ranked.c.position == 1).subquery()
 
 
-def evaluation_relation(labels=None):
+def evaluation_relation(labels=None, *, labelled_only=False):
     labels = latest_labels() if labels is None else labels
     # Invalid legacy JSON must not crash a whole list/aggregate operation.
     result = case((func.json_valid(Analysis.result_json) == 1, Analysis.result_json), else_=literal("{}"))
@@ -145,7 +145,7 @@ def evaluation_relation(labels=None):
         Analysis.id.label("analysis_id"), Analysis.verdict.label("prediction_verdict"), outcome.label("outcome"),
         labels.c.id.label("label_id"), labels.c.revision, labels.c.verdict.label("reference_verdict"),
         labels.c.source_kind, labels.c.source_ref, labels.c.ai_visible, labels.c.created_at,
-    ).select_from(Analysis).outerjoin(labels, labels.c.analysis_id == Analysis.id).subquery()
+    ).select_from(Analysis).join(labels, labels.c.analysis_id == Analysis.id, isouter=not labelled_only).subquery()
 
 
 def metadata_from_row(row) -> EvaluationMetadata:
