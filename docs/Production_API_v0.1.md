@@ -444,6 +444,8 @@ Test·Production 키로 호출하는 `/analyses`·`/uploads`와 관리자 `/test
 
 ## 분석가 리뷰
 
+2026-10-22부터 리뷰는 정오탐 판정 대신 **분석 결과에 대한 선택형 피드백**을 받는다. 경로와 `review` 권한, source/용도 격리, 추가형 이력 정책은 유지한다.
+
 ```http
 POST /api/v1/analyses/{id}/reviews
 ```
@@ -452,16 +454,20 @@ POST /api/v1/analyses/{id}/reviews
 {
   "external_review_id": "review-20260905-0001",
   "event_id": "evt-prod-20260905-000001",
-  "decision": "false_positive",
+  "rating": "like",
   "analyst_id": "analyst-7",
-  "comment": "정상 업무 요청으로 확인",
+  "comment": "로그 발췌와 설명이 분석에 도움이 됐습니다.",
   "ai_visible": false
 }
 ```
 
-필수: `external_review_id`, `event_id`, `decision`. 판정값은 true_positive / false_positive / deferred이다. `ai_visible`는 AI 결과를 보고 판단했는지를 나타낸다. 리뷰는 모델 입력이나 학습 데이터로 전달되지 않는다.
+필수: `external_review_id`, `event_id`. `rating`은 선택이며 `like`(좋아요), `dislike`(싫어요), null 중 하나다. 생략과 null은 모두 선택하지 않음으로 처리한다. `comment`(피드백 의견)도 선택이며 문자열 또는 null이다. **좋아요·싫어요와 의견을 모두 생략해도 접수한다.** `analyst_id`는 선택이며 `ai_visible`는 피드백 작성 시 AI 결과를 봤는지를 나타내는 선택 필드(기본 false)다. 응답에는 `rating`과 `comment`를 포함하며 미입력은 null이다.
+
+`decision`은 더 이상 요청·응답 필드가 아니다. 전달하면 422로 거부하며 다른 이름의 미지원 필드도 거부한다. 기존 연동 코드는 업데이트해야 한다. 좋아요/싫어요와 의견은 모델 입력·학습 데이터·참고 답안·공식 정답에 사용하지 않고, AI 최종 판정이나 정확도·Confusion Matrix를 변경하지 않는다. 피드백이 있으면 리뷰 상태는 `confirmed`(리뷰 등록됨)이며 싫어요를 리뷰 보류나 오탐 판정으로 해석하지 않는다.
 
 신규 이력은 201, 동일 `(source_system, external_review_id)`의 동일 리뷰 재전송은 200이다. 대상 분석이나 내용이 달라진 리뷰 ID 재사용은 409다. 수정·삭제 API는 없으며 새로운 external review ID로 추가한다. analysis의 event ID와 본문의 event ID가 다르면 409 `event_id_mismatch`다.
+
+Alembic `0027_review_feedback`은 nullable `rating`을 추가하고 기존 `decision`의 필수 조건만 해제한다. 과거 판정·의견·ID·작성 시각은 그대로 보존하며 기존 판정을 좋아요/싫어요로 변환하지 않는다. 과거 판정형 리뷰의 ID를 새 피드백에 재사용하면 409다. 새 피드백이 저장된 DB의 구버전 downgrade는 이력 손실을 막기 위해 거부한다. 이 변경은 서비스 API Key의 허용 경로를 별도로 축소하는 작업은 아니다.
 
 ## 참고 Label 연결과 평가
 

@@ -8,7 +8,7 @@ from .evaluation_schemas import EvaluationMetadata, EvaluationSummary
 from .services.label_fields import LABEL_FIELDS
 from .services.input_field_policy import SERVER_CONTROL_FIELDS
 from .initial_assessment_schemas import InitialAssessmentInput
-from .models import AnalysisPurpose, AnalysisStatus, IngestChannel, ModelProfileStatus, ModelProvider, ModelTestMode, ModelTestStatus, ReviewDecision, Verdict
+from .models import AnalysisPurpose, AnalysisStatus, IngestChannel, ModelProfileStatus, ModelProvider, ModelTestMode, ModelTestStatus, Verdict
 
 
 class UTCResponse(BaseModel):
@@ -147,9 +147,11 @@ class AnalysisListResponse(BaseModel):
 
 
 class ReviewCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     external_review_id: str = Field(min_length=1, max_length=255)
     event_id: str = Field(min_length=1, max_length=255)
-    decision: ReviewDecision
+    rating: Literal["like", "dislike"] | None = Field(default=None, description="좋아요/싫어요. 생략 또는 null이면 선택하지 않음. 판정·참고 답안과 별개입니다.")
     analyst_id: str | None = Field(default=None, max_length=255)
     comment: str | None = None
     ai_visible: bool = False
@@ -161,7 +163,7 @@ class ReviewResponse(UTCResponse):
     source_system: str
     external_review_id: str
     event_id: str
-    decision: ReviewDecision
+    rating: Literal["like", "dislike"] | None
     analyst_id: str | None
     comment: str | None
     ai_visible: bool

@@ -8,7 +8,7 @@ import { reportTypes } from "./analysisDownloads.js";
 
 const id = "11111111-1111-4111-8111-111111111111";
 
-test("statistics excludes case-only filters while whole-Test export keeps only the selected reference basis", () => {
+test("statistics excludes case-only filters and the legacy GET export retains its reference-only contract", () => {
   const filters = { evaluation_id: "latest", difficulty: "hard", status: "failed", cell: "fp", limit: 1, offset: 50, group_field: "signature", group_value: "private value" };
   const query = statisticsQuery(filters, { ...initialStatistics(), q: "SQL", draft: "private draft" });
   assert.equal(query.group_by, "signature"); assert.equal(query.difficulty, "hard"); assert.equal(query.limit, 10);
@@ -64,7 +64,7 @@ test("test statistics/evaluation tabs survive reload without writing group value
   assert.equal(readAppHash(`#evaluate/tests/${id}/unknown`), null);
 });
 
-test("whole-Test download requests are authenticated, uncached and independent of row pagination", async () => {
+test("legacy GET download requests remain authenticated, uncached and independent of row pagination", async () => {
   let request;
   const blob = await fetchTestExport(id, { reference_basis: "latest" }, { fetchImpl: async (path, options) => {
     request = { path, options };

@@ -1,19 +1,20 @@
-"""Administrator whole-Test XLSX export. Raw input stays local and is audited."""
+"""Administrator filtered, field-selectable XLSX. Raw input stays local/audited."""
+import hashlib
 import json
-from datetime import UTC, datetime
 from io import BytesIO
 from math import isfinite
 from threading import Lock
 from xml.etree.ElementTree import Element, SubElement, tostring
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from sqlalchemy import select
-from sqlalchemy.orm import aliased
+from sqlalchemy import case, func, select
+from sqlalchemy.orm import aliased, load_only
 
 from ..models import Analysis, AnalysisLabel, TestRunItem
 from .analysis_exports import _chunks, _xml_text
 from .analyst_presentation import assessment_view
-from .test_runs import MAX_TEST_ITEMS, test_read_context
+from .test_runs import MAX_TEST_ITEMS, run_cohort, test_case_query, test_read_context
+from .test_export_columns import EVIDENCE_COLUMNS, column_catalog
 
 MAX_SOURCE_BYTES = 128 * 1024 * 1024
 MAX_FILE_BYTES = 32 * 1024 * 1024
@@ -21,7 +22,6 @@ MAX_COLUMNS = 512
 EXPORT_LOCK = Lock()
 INPUT_FIELDS = ("event_id", "company_name", "src_ip", "dest_ip", "src_port", "dest_port", "payload",
                 "signature", "event_name", "waf_vendor", "waf_action")
-EVIDENCE_COLUMNS = ("주요 정탐 근거", "주요 오탐 근거", "주요 참고 내용")
 
 
 class TestExportError(ValueError):
@@ -47,50 +47,120 @@ def evidence_columns(result):
     return {name: "\n---\n".join(values) for name, values in groups.items()}
 
 
-def collect_rows(db, crypto, run, *, evaluation_id=None, reference_basis="latest"):
-    evaluation, _nodes, current, relation = test_read_context(db, run, evaluation_id=evaluation_id, reference_basis=reference_basis)
+def prepare_export(db, crypto, run, filters=None):
+    """Metadata-only membership/catalog; never load/decrypt HTTP or result blobs."""
+    filters = filters or {}
+    cohort = run_cohort(run.id, **{name: filters.get(name) for name in (
+        "difficulty", "test_category", "difficulty_missing", "test_category_missing")})
+    evaluation, _, current, relation = test_read_context(db, run, cohort=cohort,
+        evaluation_id=filters.get("evaluation_id"), reference_basis=filters.get("reference_basis", "latest"))
+    query = test_case_query(current, relation, cohort, **{name: filters.get(name) for name in (
+        "status", "evaluation_outcome", "reference_verdict", "verdict", "group_field", "group_value",
+        "group_missing", "group_filters", "case_filter")})
+    sort = {"row_number": TestRunItem.row_number, "case_name": TestRunItem.case_name, "status": Analysis.status}.get(filters.get("sort_by"), TestRunItem.row_number)
+    matches = query.with_only_columns(TestRunItem.id.label("item_id"), current.c.analysis_id,
+        current.c.retry_count, relation.c.reference_verdict, relation.c.outcome,
+        TestRunItem.row_number, sort.label("sort_value"), maintain_column_froms=True).cte(
+        "test_export_matches").prefix_with("MATERIALIZED", dialect="sqlite")
+    valid = case((func.json_valid(Analysis.extra_fields) == 1, Analysis.extra_fields), else_="{}")
+    extra = case((func.json_type(valid) == "object", valid), else_="{}")
+    keys = func.json_each(extra).table_valued("key", "type")
+    key_list = select(func.json_group_array(func.json_object("key", keys.c.key, "type", keys.c.type))).select_from(keys).correlate(Analysis).scalar_subquery()
+    rows = db.execute(select(matches, key_list.label("extra_keys")).outerjoin(
+        Analysis, Analysis.id == matches.c.analysis_id).order_by(matches.c.row_number, matches.c.item_id).limit(MAX_TEST_ITEMS + 1)).mappings().all()
+    if len(rows) > MAX_TEST_ITEMS:
+        raise TestExportError("test_export_too_large", 413)
+    extras = {}
+    for row in rows:
+        for field in json.loads(row["extra_keys"] or "[]"):
+            extras.setdefault(field["key"], field["type"])
+            if len(extras) > MAX_COLUMNS:
+                raise TestExportError("test_export_too_many_columns", 413)
+    definitions = []
+    if run.input_schema_snapshot_ciphertext:
+        from .input_schemas import read_schema_snapshot
+        definitions = read_schema_snapshot(crypto, run)["fields"]
+    columns = column_catalog(extras, definitions)
+    if len(columns) > MAX_COLUMNS:
+        raise TestExportError("test_export_too_many_columns", 413)
+    # Protect membership/attempts and field mapping, not worker heartbeats.
+    # Unfiltered in-flight cases may finish while fields are being selected;
+    # export their consistent current values rather than making export impossible.
+    scope = hashlib.sha256(json.dumps({"run": run.id, "filters": filters,
+        "rows": [[row["item_id"], row["analysis_id"]] for row in rows],
+        "columns": columns}, sort_keys=True, ensure_ascii=False, default=str, allow_nan=False).encode()).hexdigest()
+    basis = "saved" if evaluation else "ground_truth" if run.evaluation_mode == "ground_truth" else filters.get("reference_basis", "latest")
+    return {"count": len(rows), "columns": columns, "scope": scope, "reference_basis": basis}, matches
+
+
+def selected_columns(catalog, names):
+    by_name = {column["name"]: column for column in catalog}
+    if not names or len(names) != len(set(names)) or any(name not in by_name for name in names):
+        raise TestExportError("invalid_test_export_columns", 422)
+    return [by_name[name] for name in names]
+
+
+def collect_rows(db, crypto, run, *, evaluation_id=None, reference_basis="latest", prepared=None, columns=None, filters=None):
+    if prepared is None:
+        prepared = prepare_export(db, crypto, run, filters or {"evaluation_id": evaluation_id, "reference_basis": reference_basis})
+    metadata, matches = prepared
+    columns = metadata["columns"] if columns is None else columns
+    names = {column["name"] for column in columns}
+    result_fields = {*EVIDENCE_COLUMNS, "explanation_ko", "technique_ko", "potential_impact_ko", "signature_relation",
+                     "matched_points", "mismatched_points", "comparison_limit_ko"}
+    attrs = {"id"} | (names & {column.name for column in Analysis.__table__.columns})
+    if "payload" in names:
+        attrs.add("payload_ciphertext")
+    if any("source_key" in column for column in columns):
+        attrs.add("extra_fields")
+    if names & result_fields:
+        attrs.add("result_json")
     admitted_label = aliased(AnalysisLabel)
-    query = select(TestRunItem, Analysis, current.c.retry_count, relation.c.reference_verdict, relation.c.outcome, admitted_label.verdict).join(
-        current, current.c.item_id == TestRunItem.id).outerjoin(Analysis, Analysis.id == current.c.analysis_id).outerjoin(
-        relation, relation.c.analysis_id == Analysis.id).outerjoin(admitted_label, admitted_label.id == TestRunItem.label_id).where(TestRunItem.test_run_id == run.id).order_by(TestRunItem.row_number)
+    order = matches.c.sort_value.desc().nulls_last() if (filters or {}).get("sort_order") == "desc" else matches.c.sort_value.asc().nulls_last()
+    query = select(TestRunItem, Analysis, matches.c.retry_count, matches.c.reference_verdict, matches.c.outcome, admitted_label.verdict).select_from(
+        matches).join(TestRunItem, TestRunItem.id == matches.c.item_id).outerjoin(Analysis, Analysis.id == matches.c.analysis_id).outerjoin(
+        admitted_label, admitted_label.id == TestRunItem.label_id).options(load_only(*(getattr(Analysis, name) for name in attrs), raiseload=True)).order_by(order, TestRunItem.row_number, TestRunItem.id)
     records, source_bytes = [], 0
     for item, analysis, retries, reference, outcome, expected in db.execute(query.execution_options(yield_per=100)):
         if len(records) >= MAX_TEST_ITEMS:
             raise TestExportError("test_export_too_large", 413)
-        record = {"row_number": item.row_number, "case_name": item.case_name, "difficulty": item.difficulty,
-            "test_category": item.test_category, "ingest_status": item.ingest_status,
-            "status": analysis.status if analysis else "rejected", "error_code": item.error_code or (analysis.error_code if analysis else None),
-            "retry_count": retries, "analysis_id": analysis.id if analysis else None,
-            "expected_verdict": expected, "source_system": analysis.source_system if analysis else run.source_system}
-        record.update({key: getattr(analysis, key) if analysis and key != "payload" else
-            crypto.decrypt_text(analysis.payload_ciphertext) if analysis and key == "payload" else
-            item.event_id if key == "event_id" else None for key in INPUT_FIELDS})
-        result = analysis.result_json if analysis and isinstance(analysis.result_json, dict) else {}
-        extra = analysis.extra_fields if analysis and isinstance(analysis.extra_fields, dict) else {}
-        record["extra_fields"] = extra
-        record.update({f"extra_fields.{key}": value for key, value in extra.items()})
+        result = analysis.result_json if analysis and names & result_fields and isinstance(analysis.result_json, dict) else {}
+        extra = analysis.extra_fields if analysis and "extra_fields" in attrs and isinstance(analysis.extra_fields, dict) else {}
         threat, signature = result.get("threat_analysis"), result.get("signature_assessment")
         threat = threat if isinstance(threat, dict) else {}
         signature = signature if isinstance(signature, dict) else {}
-        record.update(verdict=analysis.verdict if analysis else None, summary_ko=analysis.summary_ko if analysis else None,
-            severity=analysis.severity if analysis else None, confidence_score=analysis.confidence_score if analysis else None,
-            threat_category=analysis.threat_category if analysis else None,
-            explanation_ko=result.get("explanation_ko") or signature.get("explanation_ko"),
-            technique_ko=threat.get("technique_ko"), potential_impact_ko=threat.get("potential_impact_ko"),
-            signature_relation=signature.get("relation"), matched_points=signature.get("matched_points"),
-            mismatched_points=signature.get("mismatched_points"), comparison_limit_ko=signature.get("uncertainty_ko"),
-            reference_verdict=reference, comparison_outcome=outcome,
-            initial_verdict=analysis.initial_verdict if analysis else None,
-            initial_probability=analysis.initial_probability if analysis else None,
-            initial_model_version=analysis.initial_model_version if analysis else None)
-        record.update(evidence_columns(result))
+        special = {"retry_count": retries, "analysis_id": analysis.id if analysis else None, "expected_verdict": expected,
+            "reference_verdict": reference, "comparison_outcome": outcome, "extra_fields": extra,
+            "explanation_ko": result.get("explanation_ko") or signature.get("explanation_ko"),
+            "signature_relation": signature.get("relation"), "comparison_limit_ko": signature.get("uncertainty_ko"),
+            **{key: threat.get(key) for key in ("technique_ko", "potential_impact_ko")},
+            **{key: signature.get(key) for key in ("matched_points", "mismatched_points")}}
+        if names & set(EVIDENCE_COLUMNS):
+            special.update(evidence_columns(result))
+        record = {}
+        for column in columns:
+            name = column["name"]
+            if "source_key" in column:
+                value = extra.get(column["source_key"])
+            elif name == "payload":
+                value = crypto.decrypt_text(analysis.payload_ciphertext) if analysis else None
+            elif name in {"row_number", "case_name", "difficulty", "test_category", "ingest_status"}:
+                value = getattr(item, name)
+            elif name == "event_id":
+                value = analysis.event_id if analysis else item.event_id
+            elif name == "error_code":
+                value = item.error_code or (analysis.error_code if analysis else None)
+            elif name in special:
+                value = special[name]
+            else:
+                value = getattr(analysis, name) if analysis else "rejected" if name == "status" else run.source_system if name == "source_system" else None
+            record[name] = value
         for key, value in record.items():
             source_bytes += len(key.encode("utf-8")) + len(cell_text(value).encode("utf-8", errors="surrogatepass"))
         if source_bytes > MAX_SOURCE_BYTES:
             raise TestExportError("test_export_too_large", 413)
         records.append(record)
-    basis = "saved" if evaluation else "ground_truth" if run.evaluation_mode == "ground_truth" else reference_basis
-    return records, basis
+    return records, metadata["reference_basis"]
 
 
 def cell_text(value):
@@ -109,37 +179,37 @@ def column_name(index):
     return result
 
 
-def render_workbook(records, *, run_name, basis):
-    """Inline text cells prohibit formulas/links; continuation columns preserve long input."""
-    keys = list(dict.fromkeys(key for record in records for key in record))
+def render_workbook(records, *, run_name, basis, columns=None):
+    """English headers only; safe inline cells and lossless continuation fields."""
+    keys = [column["name"] for column in columns] if columns is not None else list(dict.fromkeys(key for record in records for key in record))
     if not keys:
-        keys = ["row_number", *INPUT_FIELDS, "extra_fields", "status", "error_code", "verdict", "summary_ko", "severity", "explanation_ko", *EVIDENCE_COLUMNS]
+        keys = [column["name"] for column in column_catalog({})]
     parts = {key: 1 for key in keys}
     prepared = []
     for record in records:
         row = {}
-        for key, value in record.items():
+        for key in keys:
+            value = record.get(key)
             if type(value) is int and abs(value) < 10 ** 15 or type(value) is float and isfinite(value):
                 row[key] = [value]
             else:
                 row[key] = list(_chunks(cell_text(value), limit=32700))
             parts[key] = max(parts[key], len(row[key]))
         prepared.append(row)
-    columns = [(key, part) for key in keys for part in range(parts[key])]
-    if len(columns) > MAX_COLUMNS:
+    physical = [(key, part) for key in keys for part in range(parts[key])]
+    if len(physical) > MAX_COLUMNS:
         raise TestExportError("test_export_too_many_columns", 413)
-    headers = [key if part == 0 else f"{key}__part_{part + 1}" for key, part in columns]
-    rows = [[row.get(key, [""])[part] if part < len(row.get(key, [""])) else "" for key, part in columns] for row in prepared]
-    notes = [["테스트", run_name], ["생성 시각 (UTC)", datetime.now(UTC).isoformat()], ["답안 기준", basis],
-        ["범위", "테스트 전체 문항. 화면의 검색·필터·페이지와 무관하며 재실행은 선택한 평가 기준의 문항별 실행 한 건입니다."],
-        ["원문", "payload·Cookie와 모든 저장 입력을 포함합니다. 접수 거부 문항의 원문은 저장되지 않아 비어 있습니다."],
-        ["긴 필드", "32700 UTF-16 단위를 넘는 값은 원본 컬럼 뒤의 __part_2, __part_3 순서로 이어집니다. 이어 붙이면 전체 원문입니다."],
-        ["근거", "웹의 표시 순서·대표 근거를 사용하며 정탐·오탐·참고 각각 최대 5개입니다. 여러 개는 줄바꿈 --- 줄바꿈으로 구분합니다. 순위 점수는 없습니다."],
-        ["이전 근거", "방향이 기록되지 않은 이전 근거는 참고 내용에 포함합니다. 정탐·오탐 방향을 추측하지 않습니다."],
-        ["explanation_ko", "저장된 결과 설명. 이전 형식은 signature_assessment.explanation_ko이며 새 탐지 비교는 matched_points·mismatched_points·comparison_limit_ko입니다."],
-        ["셀 형식", "문자열은 텍스트 셀입니다. 수식·매크로·자동 외부 링크를 포함하지 않습니다."],
-        ["식별자", "analysis_id는 감사·원문 연결용이며 화면에서 숨기는 기술 식별자도 파일에는 포함합니다."]]
-    return _xlsx([( "문항별 결과", headers, rows), ("안내", ["항목", "내용"], notes)])
+    headers = [key if part == 0 else f"{key}__part_{part + 1}" for key, part in physical]
+    if len(headers) != len(set(headers)):
+        raise TestExportError("test_export_column_collision", 422)
+    rows = [[row.get(key, [""])[part] if part < len(row.get(key, [""])) else "" for key, part in physical] for row in prepared]
+    by_name = {column["name"]: column for column in (columns or column_catalog({}))}
+    notes = []
+    for (key, part), header in zip(physical, headers):
+        metadata = by_name.get(key, {"label_ko": "추가 입력", "description": "저장된 추가 입력값입니다.", "example": "예시 입력값"})
+        notes.append([header, metadata["label_ko"] + (f" (이어짐 {part + 1})" if part else ""),
+            metadata["description"] + (" 앞 컬럼 뒤에 이어 붙이면 전체 값입니다." if part else ""), metadata["example"]])
+    return _xlsx([("분석결과", headers, rows), ("컬럼안내", ["column_name", "column_name_ko", "description", "example"], notes)])
 
 
 def _xlsx(tables):
@@ -169,7 +239,7 @@ def _xlsx(tables):
             SubElement(view, "pane", ySplit="1", topLeftCell="A2", activePane="bottomLeft", state="frozen")
             cols = SubElement(sheet, "cols")
             for index, header in enumerate(headers, 1):
-                width = "64" if header in EVIDENCE_COLUMNS or header.startswith("payload") or header.endswith("_ko") else "24"
+                width = "64" if header in (*EVIDENCE_COLUMNS, "description", "example") or header.startswith("payload") or header.endswith("_ko") else "24"
                 SubElement(cols, "col", min=str(index), max=str(index), width=width, customWidth="1")
             # Stream row XML into the ZIP; never build the payload-sized XML tree.
             prefix = tostring(sheet, encoding="utf-8", xml_declaration=True)

@@ -2,6 +2,7 @@
 import hashlib
 from typing import Annotated, Literal
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
+from fastapi.responses import JSONResponse
 from pydantic import ValidationError, BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -15,7 +16,7 @@ from ..validation_data_schemas import EvaluationCreate
 from ..services.manual_references import create_evaluation, evaluation_record
 from ..security import Principal, require_scope
 from ..test_run_schemas import TestRunCreate, TestRunDetail, TestRunList, TestRunSummary
-from ..test_filter_schemas import FilteredCasesRead, FilteredStatisticsRead
+from ..test_filter_schemas import FilteredCasesRead, FilteredStatisticsRead, TestExportPreview, TestExportRequest
 from ..candidate_schemas import CandidateConfiguration
 from ..services.analysis import AnalysisIngestError
 from ..services.prompt_policies import PromptPolicyError
@@ -246,11 +247,43 @@ def filtered_test_read(run_id, payload, db, request, response, read):
 @router.get("/{run_id}/export.xlsx", response_class=Response)
 def test_excel(run_id: str, db: DbSession, principal: Admin, request: Request,
                evaluation_id: str | None = Query(None, max_length=36), reference_basis: Literal["initial", "latest"] = "latest"):
-    from ..services.test_run_exports import EXPORT_LOCK, TestExportError, collect_rows, render_workbook
+    if set(request.query_params) - {"evaluation_id", "reference_basis"}:
+        raise HTTPException(422, "unsupported_query_parameter")
+    return export_excel(run_id, db, principal, request, filters={"evaluation_id": evaluation_id, "reference_basis": reference_basis})
+
+
+@router.post("/{run_id}/export/preview")
+def export_preview(run_id: str, payload: TestExportPreview, db: DbSession, _principal: Admin, request: Request):
+    from ..services.test_run_exports import prepare_export, TestExportError
+    if request.query_params:
+        raise HTTPException(422, "unsupported_query_parameter")
+    read_snapshot(db)
+    run = db.get(TestRun, run_id)
+    if run is None:
+        raise HTTPException(404, "test_run_not_found")
+    try:
+        metadata, _ = prepare_export(db, request.app.state.crypto, run, payload.filters.model_dump())
+        # source_key is only the server's mapping, not an extra input control.
+        return JSONResponse({**metadata, "columns": [
+            {key: value for key, value in column.items() if key != "source_key"} for column in metadata["columns"]]},
+            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+    except (AnalysisIngestError, TestExportError) as exc:
+        raise HTTPException(exc.status_code, exc.code) from None
+    except Exception:
+        raise HTTPException(503, "test_export_unavailable") from None
+
+
+@router.post("/{run_id}/export.xlsx", response_class=Response)
+def filtered_excel(run_id: str, payload: TestExportRequest, db: DbSession, principal: Admin, request: Request):
+    if request.query_params:
+        raise HTTPException(422, "unsupported_query_parameter")
+    return export_excel(run_id, db, principal, request, filters=payload.filters.model_dump(), payload=payload)
+
+
+def export_excel(run_id, db, principal, request, *, filters, payload=None):
+    from ..services.test_run_exports import EXPORT_LOCK, TestExportError, collect_rows, render_workbook, prepare_export, selected_columns
     from .analyses import record_access
     headers = {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"}
-    if set(request.query_params) - {"evaluation_id", "reference_basis"}:
-        raise HTTPException(422, "unsupported_query_parameter", headers=headers)
     read_snapshot(db)
     run = db.get(TestRun, run_id)
     if run is None:
@@ -260,10 +293,15 @@ def test_excel(run_id: str, db: DbSession, principal: Admin, request: Request,
     try:
         name = run.name
         identifier = run.id
-        records, basis = collect_rows(db, request.app.state.crypto, run, evaluation_id=evaluation_id, reference_basis=reference_basis)
+        prepared = prepare_export(db, request.app.state.crypto, run, filters)
+        metadata = prepared[0]
+        if payload and (payload.expected_count != metadata["count"] or payload.preview_scope != metadata["scope"]):
+            raise TestExportError("test_export_selection_changed", 409)
+        columns = selected_columns(metadata["columns"], payload.columns) if payload else metadata["columns"]
+        records, basis = collect_rows(db, request.app.state.crypto, run, filters=filters, prepared=prepared, columns=columns)
         db.rollback()
         record_access(db, principal, "export_test_run_xlsx", "test_run", run_id)
-        body = render_workbook(records, run_name=name, basis=basis)
+        body = render_workbook(records, run_name=name, basis=basis, columns=columns)
     except (AnalysisIngestError, TestExportError) as exc:
         db.rollback()
         raise HTTPException(exc.status_code, exc.code, headers=headers) from None

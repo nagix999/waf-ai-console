@@ -20,7 +20,7 @@ const matchesFilter=(row,node)=>{if(!node)return true;if(node.op)return node.op=
 const originalTestRun=methods.testRun;
 methods.testRun=async(value,query)=>{state.caseQueries.push(query);const result=await originalTestRun(value,query);const criteria=query?.group_filters?JSON.parse(query.group_filters):query?.group_field?[{field:query.group_field,value:query.group_missing?null:query.group_value}]:[];
 const rows=statisticsCases.map((row,index)=>({...row,index})).filter(row=>matchesFilter(row,query?.case_filter)&&criteria.every(({field,value})=>row[field]===value)&&['reference_verdict','verdict','evaluation_outcome'].every(field=>query?.[field]==null||row[field]===query[field]));const offset=Number(query?.offset||0),limit=Number(query?.limit||25);
-return {...result,total_items:rows.length,items:rows.slice(offset,offset+limit).map(row=>({...result.items[row.index%result.items.length],id:id(600+row.index),analysis_id:id(1000+row.index),row_number:row.index+1,verdict:row.verdict,evaluation:{outcome:row.evaluation_outcome,reference_label:row.reference_verdict?{verdict:row.reference_verdict}:null},ground_truth_source:null}))};};
+state.exportCount=rows.length;return {...result,total_items:rows.length,items:rows.slice(offset,offset+limit).map(row=>({...result.items[row.index%result.items.length],id:id(600+row.index),analysis_id:id(1000+row.index),row_number:row.index+1,verdict:row.verdict,evaluation:{outcome:row.evaluation_outcome,reference_label:row.reference_verdict?{verdict:row.reference_verdict}:null},ground_truth_source:null}))};};
 methods.testStatistics=async(value,query)=>{state.statisticsReads.push(query);const fields=query.group_by.split(',');const source=statisticsCases.filter(row=>matchesFilter(row,query.case_filter));const grouped=new Map();for(const row of source){const key=JSON.stringify(fields.map(field=>row[field]??null));if(!grouped.has(key))grouped.set(key,[]);grouped.get(key).push(row);}let rows=[...grouped.values()].map(group=>({value:group[0][fields[0]]??null,values:Object.fromEntries(fields.map(field=>[field,group[0][field]??null])),...aggregate(group)}));if(query.q)rows=rows.filter(row=>Object.values(row.values).some(value=>value?.includes(query.q)));return {test_run_id:value,group_by:query.group_by,group_fields:fields,items:rows.slice(Number(query.offset),Number(query.offset)+Number(query.limit)),total_groups:rows.length,limit:Number(query.limit),offset:Number(query.offset),summary:source.length?aggregate(source):{...aggregate([]),label_coverage:null},scope_cases:270,case_filter_applied:!!query.case_filter,rejected:0,duplicates:0,reference_basis:query.evaluation_id?'saved':query.reference_basis||'latest',accuracy_includes_inconclusive:true};};
 export const api=`);
 const bundle = await build({ stdin: { contents: `import {createRoot} from 'react-dom/client';import App from './App.jsx';import './styles.css';import './console.css';import './lifecycle.css';import './r3.css';createRoot(document.getElementById('root')).render(<App/>);`, loader: "jsx", resolveDir: fileURLToPath(new URL("../src", import.meta.url)) },
@@ -35,11 +35,20 @@ try {
   page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: "reduce", acceptDownloads: true });
   const errors = [], network = [], exports = []; let screenshots = 0;
   page.on("pageerror", error => errors.push(error.message));
-  await page.route("**/*", route => {
+  await page.route("**/*", async route => {
     const url = new URL(route.request().url());
     if (url.href.split("#")[0] === "https://fixture.invalid/") return route.fulfill({ contentType: "text/html", body: '<html lang="ko"><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root"></div></body></html>' });
+    if (url.origin === "https://fixture.invalid" && /\/test-runs\/[^/]+\/export\/preview$/.test(url.pathname)) {
+      assert.equal(route.request().method(), "POST");
+      const count = await page.evaluate(() => fixture.exportCount);
+      return route.fulfill({ contentType: "application/json", body: JSON.stringify({ count, scope: "a".repeat(64), columns: [
+        { name: "event_id", label_ko: "이벤트 ID", description: "식별자", example: "sample", group: "input" },
+        { name: "payload", label_ko: "HTTP 원문", description: "HTTP 원문", example: "GET /sample HTTP/1.1", group: "input" },
+        { name: "verdict", label_ko: "AI 최종 판정", description: "판정", example: "true_positive", group: "result" }] }) });
+    }
     if (url.origin === "https://fixture.invalid" && /\/test-runs\/[^/]+\/export.xlsx$/.test(url.pathname)) {
-      exports.push(Object.fromEntries(url.searchParams));
+      assert.equal(route.request().method(), "POST");
+      exports.push(route.request().postDataJSON());
       return route.fulfill({ contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", body: "Offline workbook download fixture" });
     }
     network.push(url.href); return route.abort();
@@ -136,9 +145,12 @@ try {
   assert.equal(await page.getByRole("tab", { name: "문항별 결과", exact: true }).getAttribute("aria-selected"), "true");
   await snap("signature-cases");
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "전체 문항 Excel", exact: true }).click();
+  await page.getByRole("button", { name: "Excel 다운로드", exact: true }).click();
+  await page.getByRole("dialog", { name: "Excel 다운로드", exact: true }).getByRole("button", { name: "다운로드", exact: true }).click();
   assert.equal((await download).suggestedFilename(), `WAF-Test-${runId}.xlsx`);
-  assert.deepEqual(exports[0], { reference_basis: "latest" });
+  assert.equal(exports[0].filters.reference_basis, "latest");
+  assert.equal(exports[0].filters.group_field, "signature"); assert.equal(exports[0].expected_count, 10);
+  assert.equal(exports[0].filters.limit, undefined); assert.equal(exports[0].filters.offset, undefined);
   await page.getByRole("tab", { name: "통계 요약", exact: true }).click(); await page.locator(".test-stat-overview").waitFor();
   const prefilter = page.getByRole("region", { name: "집계 전 필터", exact: true });
   await prefilter.getByRole("button", { name: "과탐 방향", exact: true }).click();
@@ -184,8 +196,10 @@ try {
   assert.match(await page.locator(".test-run-cases .test-filter-summary").innerText(), /집계 전 필터 적용/);
   await snap("prefiltered-cases");
   const filteredDownload = page.waitForEvent("download");
-  await page.getByRole("button", { name: "전체 문항 Excel", exact: true }).click(); await filteredDownload;
-  assert.deepEqual(exports[1], { reference_basis: "latest" }, "whole export is not narrowed to selected errors");
+  await page.getByRole("button", { name: "Excel 다운로드", exact: true }).click();
+  await page.getByRole("dialog", { name: "Excel 다운로드", exact: true }).getByRole("button", { name: "다운로드", exact: true }).click(); await filteredDownload;
+  assert.equal(exports[1].filters.case_filter.rules.length, 2); assert.equal(exports[1].expected_count, 1);
+  assert.equal(exports[1].filters.limit, undefined); assert.equal(exports[1].filters.offset, undefined);
   await page.getByRole("tab", { name: "평가 상세", exact: true }).click();
   await page.getByRole("button", { name: /^공격을 오탐으로 판정:/ }).focus(); await page.keyboard.press("Enter");
   await page.waitForFunction(() => fixture.caseQueries.at(-1).evaluation_outcome === "false_negative");
@@ -221,7 +235,7 @@ try {
   await snap("integrations-sidebar");
   assert.deepEqual(network, []); assert.deepEqual(errors, []);
   assert.deepEqual(await page.evaluate(() => fixture.unknown), []);
-  console.log(JSON.stringify({ screenshots, checks: "sidebar desktop/mobile, KR/EN, SK/Light/Dark, keyboard, Back/Forward, 1/2/3-field grouping, typed AND/OR prefilters, false alarm/miss directions, drafts/validation, filtered drilldown/clear, matrix selection clears stale filters and pages matching cases, pagination, whole-Test download without filters", externalTraffic: 0 }));
+  console.log(JSON.stringify({ screenshots, checks: "sidebar desktop/mobile, KR/EN, SK/Light/Dark, keyboard, Back/Forward, 1/2/3-field grouping, typed AND/OR prefilters, false alarm/miss directions, drafts/validation, filtered drilldown/clear, matrix selection clears stale filters and pages matching cases, pagination, filtered export modal without pagination", externalTraffic: 0 }));
 } catch (error) {
   if (page) await page.screenshot({ path: join(output, "failure.png"), fullPage: true });
   throw error;

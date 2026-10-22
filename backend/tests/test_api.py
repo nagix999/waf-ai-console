@@ -43,7 +43,7 @@ def test_review_is_append_only_and_idempotent(client, event_payload, service_hea
     review = {
         "external_review_id": "review-001",
         "event_id": event_payload["event_id"],
-        "decision": "false_positive",
+        "rating": "like",
         "analyst_id": "analyst-7",
         "comment": "fixture review",
         "ai_visible": False,

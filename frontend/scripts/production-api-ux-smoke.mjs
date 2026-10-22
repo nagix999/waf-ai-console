@@ -34,7 +34,9 @@ ReactDOM.createRoot(document.getElementById('fixture-root')).render(React.create
 </script></body></html>`;
 const assets = new Set([
   "/@react-refresh", "/@vite/client", "/node_modules/vite/dist/client/env.mjs",
-  ...["ProductionApi.jsx", "productionApiDownloads.js", "apiDocument.js", "api.js", "Icon.jsx", "HelpTooltip.jsx", "Dialog.jsx", "styles.css", "productionApi.css", "ux.css", "modelValidation.js", "modelAssignments.js", "analysisView.js", "llmProfiles.js", "internalEgress.js", "testRuns.js", "evaluationMetrics.js"].map(name => "/src/" + name),
+  "/src/consolePreferences.jsx",
+  "/src/consoleMessages.js",
+  ...["ProductionApi.jsx", "productionApiDownloads.js", "apiDocument.js", "api.js", "Icon.jsx", "HelpTooltip.jsx", "Dialog.jsx", "NavigationAction.jsx", "navigationAction.css", "DataTable.jsx", "dataTable.css", "readInvalidation.js", "initialAssessmentInput.js", "styles.css", "productionApi.css", "ux.css", "modelValidation.js", "modelAssignments.js", "analysisView.js", "llmProfiles.js", "internalEgress.js", "testRuns.js", "evaluationMetrics.js"].map(name => "/src/" + name),
 ]);
 const passed = [];
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
@@ -80,7 +82,7 @@ async function scenario(name, check, { mobile = false, markdown = template, conf
       }
       violations.push("unexpected API request blocked"); return route.abort();
     }
-    if (request.method() === "GET" && (assets.has(path) || /^\/node_modules\/\.vite\/deps\/(?:react(?:-dom)?(?:_client|_jsx-dev-runtime)?|chunk-[A-Z0-9]+)\.js$/.test(path))) return route.continue();
+    if (request.method() === "GET" && (assets.has(path) || /^\/node_modules\/\.vite\/deps\/(?:react(?:-dom)?(?:_client|_jsx-dev-runtime)?|@tanstack_react-table|chunk-[A-Z0-9]+)\.js$/.test(path))) return route.continue();
     violations.push("unexpected asset blocked: " + path); return route.abort();
   });
   const page = await context.newPage(); page.setDefaultTimeout(10000); page.on("pageerror", error => errors.push(error.message));
@@ -131,6 +133,13 @@ try {
     for (const [index, item] of document.sections.entries()) {
       await nav(page).getByRole("button", { name: "다음 항목: " + item.title, exact: true }).click();
       await verifySection(page, item);
+      if (item.title === "분석가 리뷰") {
+        assert.match(await section(page).innerText(), /좋아요·싫어요와 의견을 모두 생략해도 접수한다/);
+        const example = await section(page).locator(".api-code").allTextContents();
+        assert.ok(example.some(text => text.includes('"rating": "like"')));
+        assert.ok(example.every(text => !text.includes('"decision"')));
+        await section(page).screenshot({ path: join(output, "feedback-contract.png") });
+      }
       assert.equal(await nav(page).getByRole("button", { name: "이전 항목: " + (index ? document.sections[index - 1].title : "정의서 안내"), exact: true }).count(), 1);
       assert.equal(await nav(page).getByRole("button", { name: /^다음 항목:/ }).count(), index === 11 ? 0 : 1);
     }

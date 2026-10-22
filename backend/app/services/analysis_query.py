@@ -150,10 +150,10 @@ def analysis_conditions(filters: AnalysisFilters, source_system: str | None, eva
         conditions.append(Analysis.created_at < filters.created_to)
     if filters.review_state is not None:
         latest_review = (
-            select(Review.decision).where(Review.analysis_id == Analysis.id)
+            select(case((Review.decision == "deferred", "deferred"), else_="confirmed")).where(Review.analysis_id == Analysis.id)
             .order_by(Review.created_at.desc(), Review.id.desc()).limit(1).correlate(Analysis).scalar_subquery()
         )
-        state = case((latest_review.is_(None), "unreviewed"), (latest_review == "deferred", "deferred"), else_="confirmed")
+        state = func.coalesce(latest_review, "unreviewed")
         conditions.append(state == filters.review_state)
     if filters.label_presence is not None:
         conditions.append(evaluation.c.label_id.is_not(None) if filters.label_presence == "labeled" else evaluation.c.label_id.is_(None))
@@ -186,10 +186,10 @@ def find_analyses(db: Session, filters: AnalysisFilters, source_system: str | No
     # The page membership already passed every filter. Only these cases need
     # label/retry ancestry materialization for row metadata (not the whole DB).
     evaluation = evaluation_relation(latest_labels(select(page.c.id)))
-    latest_review = select(Review.decision).where(Review.analysis_id == Analysis.id).order_by(
+    latest_review = select(case((Review.decision == "deferred", "deferred"), else_="confirmed")).where(Review.analysis_id == Analysis.id).order_by(
         Review.created_at.desc(), Review.id.desc()).limit(1).correlate(Analysis).scalar_subquery()
     query = (
-        select(Analysis, evaluation, latest_review.label("latest_review_decision")).options(
+        select(Analysis, evaluation, latest_review.label("latest_review_state")).options(
             load_only(*(getattr(Analysis, name) for name in LIST_FIELDS), raiseload=True), raiseload(Analysis.reviews)
         ).join(page, page.c.id == Analysis.id).join(evaluation, evaluation.c.analysis_id == Analysis.id)
         .order_by(order, Analysis.id.desc())
@@ -198,8 +198,7 @@ def find_analyses(db: Session, filters: AnalysisFilters, source_system: str | No
     for entry in db.execute(query):
         analysis = entry[0]
         analysis._evaluation = metadata_from_row(entry._mapping)
-        decision = entry._mapping["latest_review_decision"]
-        analysis._list_review_state = "unreviewed" if decision is None else "deferred" if decision == "deferred" else "confirmed"
+        analysis._list_review_state = entry._mapping["latest_review_state"] or "unreviewed"
         rows.append(analysis)
     from .test_runs import attach_test_run_ids
     attach_test_run_ids(db, rows)

@@ -322,7 +322,8 @@ def create_review(
 
 
 def validate_review_duplicate(existing: Review, analysis_id: str, payload: ReviewCreate) -> None:
-    if existing.analysis_id != analysis_id or any(
+    # Do not reinterpret a historical verdict-based review as an empty rating.
+    if existing.decision is not None or existing.analysis_id != analysis_id or any(
         getattr(existing, field) != value for field, value in payload.model_dump().items()
     ):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="external_review_id_conflict")

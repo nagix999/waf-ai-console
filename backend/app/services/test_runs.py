@@ -321,6 +321,29 @@ def test_read_context(db, run, *, evaluation_id=None, reference_basis="initial",
     return evaluation, _nodes, current, relation
 
 
+def test_case_query(current, relation, cohort, *, status=None, evaluation_outcome=None,
+                    reference_verdict=None, verdict=None, group_field=None, group_value=None,
+                    group_missing=False, group_filters=None, case_filter=None):
+    """One definition of Case Results membership for paging and Excel export."""
+    query = select(TestRunItem, Analysis, current.c.retry_count, relation,
+        ValidationDatasetItem.item_id.label("stable_case_id")).join(current, current.c.item_id == TestRunItem.id).outerjoin(
+        Analysis, Analysis.id == current.c.analysis_id).outerjoin(relation, relation.c.analysis_id == Analysis.id).outerjoin(
+        ValidationDatasetItem, ValidationDatasetItem.id == TestRunItem.dataset_item_version_id).where(*cohort)
+    from .test_run_statistics import group_conditions
+    from .test_case_filters import case_condition
+    for condition in (group_conditions(group_filters, field=group_field, value=group_value, missing=group_missing),
+                      case_condition(case_filter, relation)):
+        if condition is not None:
+            query = query.where(condition, TestRunItem.ingest_status == "accepted")
+    for column, value in ((Analysis.status, status), (relation.c.outcome, evaluation_outcome),
+                          (relation.c.reference_verdict, reference_verdict), (Analysis.verdict, verdict)):
+        if value is not None:
+            query = query.where(column == value)
+    if evaluation_outcome is not None and reference_verdict is not None and verdict is not None:
+        query = query.where(TestRunItem.ingest_status == "accepted")
+    return query
+
+
 def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=None,
                  status=None, evaluation_outcome=None, reference_verdict=None, verdict=None, detail=True,
                  difficulty_missing=False, test_category_missing=False, evaluation_id=None, reference_basis="initial",
@@ -400,30 +423,9 @@ def describe_run(db, run, *, limit=50, offset=0, difficulty=None, test_category=
             "reference_basis": "saved", "official_evaluation_pending": False})
     if not detail:
         return summary
-    query = select(TestRunItem, Analysis, current.c.retry_count, relation,
-        ValidationDatasetItem.item_id.label("stable_case_id")).join(current, current.c.item_id == TestRunItem.id).outerjoin(Analysis, Analysis.id == current.c.analysis_id).outerjoin(
-        relation, relation.c.analysis_id == Analysis.id).outerjoin(ValidationDatasetItem,
-        ValidationDatasetItem.id == TestRunItem.dataset_item_version_id).where(*cohort)
-    from .test_run_statistics import group_conditions
-    condition = group_conditions(group_filters, field=group_field, value=group_value, missing=group_missing)
-    if condition is not None:
-        query = query.where(condition, TestRunItem.ingest_status == "accepted")
-    from .test_case_filters import case_condition
-    condition = case_condition(case_filter, relation)
-    if condition is not None:
-        query = query.where(condition, TestRunItem.ingest_status == "accepted")
-    if status is not None:
-        query = query.where(Analysis.status == status)
-    if evaluation_outcome is not None:
-        query = query.where(relation.c.outcome == evaluation_outcome)
-    if reference_verdict is not None:
-        query = query.where(relation.c.reference_verdict == reference_verdict)
-    if verdict is not None:
-        query = query.where(Analysis.verdict == verdict)
-    if evaluation_outcome is not None and reference_verdict is not None and verdict is not None:
-        # A matrix cell counts accepted cases, not duplicate admissions that
-        # happen to point at the same Analysis and would repeat its verdict.
-        query = query.where(TestRunItem.ingest_status == "accepted")
+    query = test_case_query(current, relation, cohort, status=status, evaluation_outcome=evaluation_outcome,
+        reference_verdict=reference_verdict, verdict=verdict, group_field=group_field, group_value=group_value,
+        group_missing=group_missing, group_filters=group_filters, case_filter=case_filter)
     items = []
     column = {"row_number": TestRunItem.row_number, "case_name": TestRunItem.case_name,
               "status": Analysis.status}.get(sort_by, TestRunItem.row_number)

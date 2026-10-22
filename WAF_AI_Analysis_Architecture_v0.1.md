@@ -526,7 +526,7 @@ worker는 짧은 트랜잭션으로 작업을 원자적으로 선점한다. work
 | 분석 | `POST /api/v1/analyses` | ingest | 단건 이벤트 분석 요청 |
 | 분석 | `GET /api/v1/analyses/{analysis_id}` | ingest/admin | 상태 및 결과 조회 |
 | 이벤트 | `GET /api/v1/events/{event_id}/analyses` | ingest/admin | 이벤트의 재분석 이력 |
-| 판정 | `POST /api/v1/analyses/{analysis_id}/reviews` | review | 분석가 판정 등록 |
+| 피드백 | `POST /api/v1/analyses/{analysis_id}/reviews` | review | 분석 결과 피드백 등록 |
 | 배치 | `POST /api/v1/batches` | admin | CSV/JSON 업로드 |
 | 배치 | `GET /api/v1/batches/{batch_id}` | admin | 진행 상태 및 오류 |
 | 검색 | `GET /api/v1/analyses` | ingest/admin | 결과 검색·필터·페이지 조회; 서비스는 자기 source 범위 |
@@ -563,7 +563,9 @@ POST /api/v1/analyses?wait_seconds=60
 
 위 예시는 실제 `AnalysisDetail` 응답의 일부 필드만 발췌한 것이다. 조회는 `GET /api/v1/analyses/{id}`를 사용한다.
 
-### 13.3 분석가 판정
+### 13.3 분석 결과 피드백
+
+2026-10-22 변경: API의 `decision`을 선택형 `rating`으로 대체한다. 과거 판정형 리뷰는 보존하며 현재 상세 계약은 [운영 API 정의서](docs/Production_API_v0.1.md#분석가-리뷰)를 따른다.
 
 ```http
 POST /api/v1/analyses/{analysis_id}/reviews
@@ -573,7 +575,7 @@ POST /api/v1/analyses/{analysis_id}/reviews
 {
   "external_review_id": "review-12345",
   "event_id": "evt-20260902-0001",
-  "decision": "false_positive",
+  "rating": "like",
   "analyst_id": "analyst-id",
   "comment": null,
   "ai_visible": false
@@ -582,8 +584,10 @@ POST /api/v1/analyses/{analysis_id}/reviews
 
 - `(source_system, external_review_id)`로 중복 수신 방지
 - `analysis_id`와 `event_id`가 다르면 거부
-- 기존 판정을 수정하지 않고 새 이력 추가
-- AI 결과를 본 판정은 `ai_visible=true`로 기록
+- `external_review_id`, `event_id`만 필수이며 `rating`(like/dislike/null)과 의견 `comment`는 각각 선택. 둘 다 생략 가능
+- 기존 리뷰를 수정하지 않고 새 이력 추가. 기존 판정을 좋아요/싫어요로 변환하지 않음
+- AI 결과를 본 피드백은 `ai_visible=true`로 기록
+- 피드백을 정답·LLM 입력·학습 데이터에 사용하지 않으며 판정·평가 지표를 변경하지 않음
 
 ## 14. 데이터 모델
 

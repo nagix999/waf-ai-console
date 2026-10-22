@@ -94,7 +94,7 @@ def test_authentication_scopes_source_and_same_source_idempotency(client, event_
     for key, expected in ((alpha_review, 403), (alpha_ingest, 200)):
         assert client.get("/api/v1/analyses", headers=headers(key)).status_code == expected
     assert client.post("/api/v1/analyses", headers=headers(alpha_review), json=event_payload).status_code == 403
-    review = {"external_review_id": "synthetic-review", "event_id": event_payload["event_id"], "decision": "false_positive"}
+    review = {"external_review_id": "synthetic-review", "event_id": event_payload["event_id"], "rating": "like"}
     review_url = f"/api/v1/analyses/{result['id']}/reviews"
     assert client.post(review_url, headers=headers(alpha_ingest), json=review).status_code == 403
     first_review = client.post(review_url, headers=headers(alpha_review), json=review)

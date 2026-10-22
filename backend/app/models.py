@@ -191,6 +191,7 @@ class Review(Base):
     __table_args__ = (
         UniqueConstraint("source_system", "external_review_id", name="uq_review_source_external"),
         Index("ix_reviews_analysis_created", "analysis_id", "created_at"),
+        CheckConstraint("rating IS NULL OR rating IN ('like', 'dislike')", name="ck_review_rating"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -198,7 +199,9 @@ class Review(Base):
     source_system: Mapped[str] = mapped_column(String(120), nullable=False)
     external_review_id: Mapped[str] = mapped_column(String(255), nullable=False)
     event_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    decision: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Historical analyst decisions remain unchanged; new feedback never sets it.
+    decision: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    rating: Mapped[str | None] = mapped_column(String(32), nullable=True)
     analyst_id: Mapped[str | None] = mapped_column(String(255))
     comment: Mapped[str | None] = mapped_column(Text)
     ai_visible: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
