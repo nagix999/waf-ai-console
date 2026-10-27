@@ -3,6 +3,8 @@
 !.env.example
 !.env.production.example
 .local-deploy/
+# Local design, deployment and validation records are not published.
+/docs/
 .agents/
 .codex/
 test-results/
