@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any, Literal, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -146,15 +146,38 @@ class AnalysisListResponse(BaseModel):
     evaluation_summary: EvaluationSummary = Field(default_factory=EvaluationSummary)
 
 
+FeedbackCategory = Literal[
+    "insufficient_evidence",
+    "evidence_mismatch",
+    "explanation_error",
+    "exaggerated_impact",
+    "inappropriate_severity",
+    "other",
+]
+
+
 class ReviewCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     external_review_id: str = Field(min_length=1, max_length=255)
     event_id: str = Field(min_length=1, max_length=255)
-    rating: Literal["like", "dislike"] | None = Field(default=None, description="좋아요/싫어요. 생략 또는 null이면 선택하지 않음. 판정·참고 답안과 별개입니다.")
+    feedback_categories: list[FeedbackCategory] = Field(
+        default_factory=list,
+        max_length=6,
+        json_schema_extra={"uniqueItems": True, "default": []},
+        description="피드백 항목 복수 선택. 생략 또는 빈 배열은 선택하지 않음. 중복·null은 허용하지 않으며 판정·참고 답안과 별개입니다.",
+    )
     analyst_id: str | None = Field(default=None, max_length=255)
     comment: str | None = None
     ai_visible: bool = False
+
+    @field_validator("feedback_categories")
+    @classmethod
+    def normalize_feedback_categories(cls, value: list[FeedbackCategory]) -> list[FeedbackCategory]:
+        if len(value) != len(set(value)):
+            raise ValueError("duplicate_feedback_category")
+        # Checkbox selection order is not meaningful for append-only retries.
+        return sorted(value, key=get_args(FeedbackCategory).index)
 
 
 class ReviewResponse(UTCResponse):
@@ -163,7 +186,7 @@ class ReviewResponse(UTCResponse):
     source_system: str
     external_review_id: str
     event_id: str
-    rating: Literal["like", "dislike"] | None
+    feedback_categories: list[FeedbackCategory]
     analyst_id: str | None
     comment: str | None
     ai_visible: bool

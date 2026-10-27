@@ -1,4 +1,4 @@
-// A plain-text parser for the subset used by docs/Production_API_v0.1.md.
+// A plain-text parser for the subset used by backend/app/data/production_api.md.
 // It never evaluates HTML, URLs, code, or inline Markdown. Render text as React
 // children; these blocks must not be passed to dangerouslySetInnerHTML.
 

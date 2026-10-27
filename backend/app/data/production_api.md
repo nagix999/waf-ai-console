@@ -1,6 +1,6 @@
 # Production WAF Analysis API v0.2.0
 
-기준일: 2026-09-08. 내부 WAF 수집기와 분석가 시스템을 위한 REST 계약이다.
+기준일: 2026-10-27. 내부 WAF 수집기와 분석가 시스템을 위한 REST 계약이다.
 이 문서는 실제 구현을 기준으로 한다. 상위 설계서의 미구현 재분석·범용 배치·모델 비교 API와 구분한다. 별도 참고 Label 연결과 테스트 파일 답안 비교는 아래 계약을 사용한다. 설정의 선택형 150건 후보 검증은 [별도 정의서](Model_Validation_Dataset_v0.1.md)를 따른다.
 
 ## 연결과 인증
@@ -444,7 +444,7 @@ Test·Production 키로 호출하는 `/analyses`·`/uploads`와 관리자 `/test
 
 ## 분석가 리뷰
 
-2026-10-22부터 리뷰는 정오탐 판정 대신 **분석 결과에 대한 선택형 피드백**을 받는다. 경로와 `review` 권한, source/용도 격리, 추가형 이력 정책은 유지한다.
+2026-10-27부터 리뷰는 좋아요/싫어요 대신 **복수 선택형 피드백 항목**을 받는다. 경로와 `review` 권한, source/용도 격리, 추가형 이력 정책은 유지한다.
 
 ```http
 POST /api/v1/analyses/{id}/reviews
@@ -454,20 +454,46 @@ POST /api/v1/analyses/{id}/reviews
 {
   "external_review_id": "review-20260905-0001",
   "event_id": "evt-prod-20260905-000001",
-  "rating": "like",
+  "feedback_categories": ["insufficient_evidence", "exaggerated_impact"],
   "analyst_id": "analyst-7",
-  "comment": "로그 발췌와 설명이 분석에 도움이 됐습니다.",
+  "comment": "공격 시도는 확인되지만 침해 성공으로 단정할 근거는 부족합니다.",
   "ai_visible": false
 }
 ```
 
-필수: `external_review_id`, `event_id`. `rating`은 선택이며 `like`(좋아요), `dislike`(싫어요), null 중 하나다. 생략과 null은 모두 선택하지 않음으로 처리한다. `comment`(피드백 의견)도 선택이며 문자열 또는 null이다. **좋아요·싫어요와 의견을 모두 생략해도 접수한다.** `analyst_id`는 선택이며 `ai_visible`는 피드백 작성 시 AI 결과를 봤는지를 나타내는 선택 필드(기본 false)다. 응답에는 `rating`과 `comment`를 포함하며 미입력은 null이다.
+필수: `external_review_id`, `event_id`. `feedback_categories`는 선택이며 아래 값 중 중복 없이 최대 6개를 배열로 보낸다. 생략은 빈 배열 `[]`이고 null·문자열·중복·미지원 값은 422로 거부한다. `comment`(추가 의견)는 선택이며 문자열 또는 null이다. **피드백 항목과 의견을 모두 생략해도 접수한다.** `other`를 선택해도 의견은 필수가 아니며 별도 기타 필드 없이 `comment`를 사용한다. `analyst_id`는 선택이며 `ai_visible`는 피드백 작성 시 AI 결과를 봤는지를 나타내는 선택 필드(기본 false)다.
 
-`decision`은 더 이상 요청·응답 필드가 아니다. 전달하면 422로 거부하며 다른 이름의 미지원 필드도 거부한다. 기존 연동 코드는 업데이트해야 한다. 좋아요/싫어요와 의견은 모델 입력·학습 데이터·참고 답안·공식 정답에 사용하지 않고, AI 최종 판정이나 정확도·Confusion Matrix를 변경하지 않는다. 피드백이 있으면 리뷰 상태는 `confirmed`(리뷰 등록됨)이며 싫어요를 리뷰 보류나 오탐 판정으로 해석하지 않는다.
+| 값 | 표시명 | 선택 기준 |
+| --- | --- | --- |
+| `insufficient_evidence` | 근거 부족 | 판정을 뒷받침하는 증거가 충분하지 않음 |
+| `evidence_mismatch` | 근거 불일치 | 제시한 근거가 실제 로그와 맞지 않음 |
+| `explanation_error` | 설명 오류 | 로그나 공격 구문의 의미를 잘못 해석함 |
+| `exaggerated_impact` | 영향 과장 | 공격 시도를 침해 성공이나 실제 피해로 단정함 |
+| `inappropriate_severity` | 심각도 부적절 | 심각도가 실제보다 높거나 낮음 |
+| `other` | 기타 | 위 항목에 해당하지 않는 의견 |
 
-신규 이력은 201, 동일 `(source_system, external_review_id)`의 동일 리뷰 재전송은 200이다. 대상 분석이나 내용이 달라진 리뷰 ID 재사용은 409다. 수정·삭제 API는 없으며 새로운 external review ID로 추가한다. analysis의 event ID와 본문의 event ID가 다르면 409 `event_id_mismatch`다.
+응답은 `id`, `analysis_id`, `source_system`, `event_id`, `external_review_id`, `feedback_categories`, `analyst_id`, `comment`, `ai_visible`, `created_at`을 포함한다. `feedback_categories`는 위 표의 고정 순서로 정규화해 반환하며 미선택은 `[]`, 의견 미입력은 null이다. 응답 예시(서버 생성 ID·시각은 예시값):
 
-Alembic `0027_review_feedback`은 nullable `rating`을 추가하고 기존 `decision`의 필수 조건만 해제한다. 과거 판정·의견·ID·작성 시각은 그대로 보존하며 기존 판정을 좋아요/싫어요로 변환하지 않는다. 과거 판정형 리뷰의 ID를 새 피드백에 재사용하면 409다. 새 피드백이 저장된 DB의 구버전 downgrade는 이력 손실을 막기 위해 거부한다. 이 변경은 서비스 API Key의 허용 경로를 별도로 축소하는 작업은 아니다.
+```json
+{
+  "id": "5f0504d8-f2e6-4a71-96bc-864a14c7c6a0",
+  "analysis_id": "6b683a42-9ba2-4b98-aea5-eab1283bca98",
+  "source_system": "sample-collector",
+  "event_id": "evt-prod-20260905-000001",
+  "external_review_id": "review-20260905-0001",
+  "feedback_categories": ["insufficient_evidence", "exaggerated_impact"],
+  "analyst_id": "analyst-7",
+  "comment": "공격 시도는 확인되지만 침해 성공으로 단정할 근거는 부족합니다.",
+  "ai_visible": false,
+  "created_at": "2026-10-27T00:00:00Z"
+}
+```
+
+`decision`과 `rating`은 요청·응답 필드가 아니다. 요청에 전달하면 422로 거부하며 다른 이름의 미지원 필드도 거부한다. 기존 연동 코드는 업데이트해야 한다. 피드백 항목과 의견은 모델 입력·학습 데이터·참고 답안·공식 정답에 사용하지 않고, AI 최종 판정이나 정확도·Confusion Matrix를 변경하지 않는다. 피드백이 있으면 리뷰 상태는 `confirmed`(리뷰 등록됨)이며 선택 항목을 리뷰 보류나 정오탐 판정으로 해석하지 않는다.
+
+신규 이력은 201, 동일 `(source_system, external_review_id)`의 동일 리뷰 재전송은 200이다. 항목 순서는 의미가 없으므로 같은 선택을 다른 순서로 재전송해도 200이다. 대상 분석이나 항목·의견 등 내용이 달라진 리뷰 ID 재사용은 409다. 수정·삭제 API는 없으며 새로운 external review ID로 추가한다. analysis의 event ID와 본문의 event ID가 다르면 409 `event_id_mismatch`다.
+
+이전 계약: `0027_review_feedback`에서 nullable `rating`을 추가하고 기존 `decision`의 필수 조건을 해제했다. 현행 Alembic `0028_review_categories`는 항목 배열을 추가하며 기존 이력은 `[]`로 초기화한다. 과거 `decision`·`rating`·의견·ID·작성 시각을 그대로 보존하고 새 항목으로 추정 변환하지 않는다. 과거 판정 또는 좋아요/싫어요 값이 있는 리뷰 ID를 새 피드백에 재사용하면 409다. 비어 있지 않은 항목 배열이 저장된 DB의 0028 downgrade는 이력 손실을 막기 위해 거부한다. 0027의 기존 downgrade 보호도 유지한다. 이 변경은 서비스 API Key의 허용 경로를 별도로 축소하는 작업은 아니다.
 
 ## 참고 Label 연결과 평가
 

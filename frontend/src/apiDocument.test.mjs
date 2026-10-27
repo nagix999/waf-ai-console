@@ -113,7 +113,7 @@ test("section search covers titles, paragraphs, lists, tables and code while ret
 });
 
 test("the canonical Production API document retains every example and meaningful source line", () => {
-  const source = readFileSync(new URL("../../docs/Production_API_v0.1.md", import.meta.url), "utf8");
+  const source = readFileSync(new URL("../../backend/app/data/production_api.md", import.meta.url), "utf8");
   const document = parseApiDocument(source);
   assert.equal(document.title, "Production WAF Analysis API v0.2.0");
   const sectionTitles = source.split(/\r?\n/).filter((line) => /^## /.test(line)).map((line) => line.slice(3));

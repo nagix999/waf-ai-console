@@ -25,7 +25,7 @@ const passed = [];
 const assetPaths = new Set([
   "/", "/@react-refresh", "/@vite/client", "/node_modules/vite/dist/client/env.mjs",
   ...readdirSync(join(frontendRoot, "src")).filter(name => /\.(?:jsx?|css)$/.test(name)).map(name => "/src/" + name),
-  "/@fs" + join(projectRoot, "docs/Production_API_v0.1.md"),
+  "/@fs" + join(projectRoot, "backend/app/data/production_api.md"),
 ]);
 const profile = {
   id: "11111111-1111-4111-8111-111111111111", name: "Fixture only", provider: "vllm",

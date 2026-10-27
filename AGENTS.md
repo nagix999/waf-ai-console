@@ -14,7 +14,7 @@
 작업을 시작하기 전에 다음 문서를 읽는다.
 
 - README.md
-- docs/WAF_AI_Analysis_Architecture_v0.1.md
+- WAF_AI_Analysis_Architecture_v0.1.md
 - backend/app/agent/README.md
 
 ## Fixed architecture decisions

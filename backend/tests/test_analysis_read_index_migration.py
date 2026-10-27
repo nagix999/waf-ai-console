@@ -30,7 +30,7 @@ def test_read_index_migration_preserves_data_and_is_reversible(tmp_path, monkeyp
     command.upgrade(config, "head")
     command.upgrade(config, "head")
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0027_review_feedback"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0028_review_categories"
         assert any(index["name"] == "ix_analyses_created_id" and index["column_names"] == ["created_at", "id"] for index in inspect(connection).get_indexes("analyses"))
         plan = connection.execute(text("EXPLAIN QUERY PLAN SELECT id,status FROM analyses WHERE created_at >= '2020-01-01' ORDER BY created_at DESC,id DESC LIMIT 20")).all()
         assert any("ix_analyses_created_id" in row[3] for row in plan)

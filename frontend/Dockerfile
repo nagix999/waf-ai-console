@@ -5,7 +5,7 @@ RUN npm install --no-audit --no-fund
 COPY frontend/index.html frontend/vite.config.js ./
 COPY frontend/src ./src
 COPY backend/app/assets/fonts /backend/app/assets/fonts
-COPY docs/Production_API_v0.1.md /docs/Production_API_v0.1.md
+COPY backend/app/data/production_api.md /backend/app/data/production_api.md
 RUN npm run build
 
 FROM nginx:1.27-alpine

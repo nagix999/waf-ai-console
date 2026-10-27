@@ -85,7 +85,7 @@ def test_service_can_only_read_and_review_own_source(client, event_payload, serv
     assert client.get("/api/v1/analyses", headers=service_headers).json()["total"] == 1
     assert client.get("/api/v1/analyses?source_system=other-parser", headers=service_headers).json()["total"] == 0
     assert client.get(f"/api/v1/analyses/{other_id}", headers=service_headers).status_code == 404
-    review = {"external_review_id": "cross-review", "event_id": event_payload["event_id"], "rating": "like"}
+    review = {"external_review_id": "cross-review", "event_id": event_payload["event_id"], "feedback_categories": ["evidence_mismatch"]}
     assert client.post(f"/api/v1/analyses/{other_id}/reviews", headers=service_headers, json=review).status_code == 404
     for endpoint in ("event", "agent-runs"):
         assert client.get(f"/api/v1/analyses/{own['id']}/{endpoint}", headers=service_headers).status_code == 403
@@ -117,11 +117,11 @@ def test_utf8_payload_limit_and_upload_row_rejections(client, event_payload, ser
 def test_review_duplicate_cannot_change_content_or_target(client, event_payload, service_headers):
     first = client.post("/api/v1/analyses", json=event_payload, headers=service_headers).json()
     second = client.post("/api/v1/analyses", json={**event_payload, "event_id": "evt-2"}, headers=service_headers).json()
-    review = {"external_review_id": "review-1", "event_id": event_payload["event_id"], "rating": "like"}
+    review = {"external_review_id": "review-1", "event_id": event_payload["event_id"], "feedback_categories": ["insufficient_evidence"]}
     endpoint = f"/api/v1/analyses/{first['id']}/reviews"
     assert client.post(endpoint, json=review, headers=service_headers).status_code == 201
     assert client.post(endpoint, json=review, headers=service_headers).status_code == 200
-    changed = client.post(endpoint, json={**review, "rating": "dislike"}, headers=service_headers)
+    changed = client.post(endpoint, json={**review, "feedback_categories": ["explanation_error"]}, headers=service_headers)
     assert changed.status_code == 409
     changed_target = client.post(f"/api/v1/analyses/{second['id']}/reviews", json={**review, "event_id": "evt-2"}, headers=service_headers)
     assert changed_target.status_code == 409

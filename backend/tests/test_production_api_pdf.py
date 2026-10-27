@@ -74,6 +74,12 @@ def test_pdf_uses_exact_live_markdown_and_schema_without_changing_history(client
     codes = "\n".join(block.text for block in blocks if block.kind == "code")
     assert '"minimum": 1' in codes and '"maximum": 9' in codes and '"enum": [' in codes
     assert '"event_id"' in codes and '"risk_rank"' in codes and "X-API-Key:" in codes
+    assert '"feedback_categories"' in codes
+    assert '"rating":' not in codes and '"decision":' not in codes
+    table_cells = [cell for block in blocks for row in block.rows for cell in row]
+    for category in ("insufficient_evidence", "evidence_mismatch", "explanation_error",
+            "exaggerated_impact", "inappropriate_severity", "other"):
+        assert f"`{category}`" in table_cells
 
 
 @pytest.mark.parametrize("changed", ["hash", "id", "both"])

@@ -38,21 +38,23 @@ def test_upgrade_preserves_legacy_decisions_ciphertext_indexes_and_constraints(t
         command.upgrade(config, "0026_test_run_stop")
         with engine.begin() as connection:
             # 0001 bootstraps today's metadata. Rehearse a real deployed v26
-            # table, which had no rating and required a decision.
+            # table, which had no rating/categories and required a decision.
             with Operations(MigrationContext.configure(connection)).batch_alter_table("reviews") as batch:
+                batch.drop_constraint("ck_review_feedback_categories", type_="check")
+                batch.drop_column("feedback_categories")
                 batch.drop_constraint("ck_review_rating", type_="check")
                 batch.drop_column("rating")
                 batch.alter_column("decision", existing_type=Review.__table__.c.decision.type, nullable=False)
             seed_analysis(connection)
-            connection.execute(Review.__table__.insert().values(id="legacy-review", analysis_id="synthetic-analysis",
-                source_system="synthetic-source", external_review_id="legacy-external", event_id="synthetic-event",
-                decision="deferred", analyst_id="synthetic-analyst", comment="Legacy opinion", ai_visible=True))
+            connection.execute(text(f"INSERT INTO reviews ({LEGACY_COLUMNS}) VALUES "
+                "('legacy-review','synthetic-analysis','synthetic-source','legacy-external','synthetic-event',"
+                "'deferred','synthetic-analyst','Legacy opinion',1,'2026-10-01 00:00:00')"))
             reviews_before = connection.execute(text(f"SELECT {LEGACY_COLUMNS} FROM reviews")).all()
             analysis_before = connection.execute(text("SELECT * FROM analyses")).all()
             fields = {column["name"]: column for column in inspect(connection).get_columns("reviews")}
             assert "rating" not in fields and not fields["decision"]["nullable"]
-    command.upgrade(config, "head")
-    command.upgrade(config, "head")
+    command.upgrade(config, "0027_review_feedback")
+    command.upgrade(config, "0027_review_feedback")
     with engine.connect() as connection:
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0027_review_feedback"
         fields = {column["name"]: column for column in inspect(connection).get_columns("reviews")}
@@ -71,14 +73,14 @@ def test_upgrade_preserves_legacy_decisions_ciphertext_indexes_and_constraints(t
         assert "rating" not in fields and not fields["decision"]["nullable"]
         if existing:
             assert connection.execute(text(f"SELECT {LEGACY_COLUMNS} FROM reviews")).all() == reviews_before
-    command.upgrade(config, "head")
+    command.upgrade(config, "0027_review_feedback")
     engine.dispose()
 
 
 @pytest.mark.parametrize("rating", [None, "like", "dislike"])
 def test_downgrade_refuses_to_lose_new_feedback_even_when_both_fields_omitted(tmp_path, monkeypatch, rating):
     config, engine = config_for(tmp_path, monkeypatch)
-    command.upgrade(config, "head")
+    command.upgrade(config, "0027_review_feedback")
     with engine.begin() as connection:
         seed_analysis(connection)
         connection.execute(Review.__table__.insert().values(id="new-feedback", analysis_id="synthetic-analysis",

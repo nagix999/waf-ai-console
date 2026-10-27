@@ -14,9 +14,6 @@ frontend/*
 !frontend/scripts/
 frontend/scripts/*
 !frontend/scripts/build-report.mjs
-!docs/
-docs/*
-!docs/Production_API_v0.1.md
 !backend/
 backend/*
 !backend/Dockerfile

@@ -192,6 +192,11 @@ class Review(Base):
         UniqueConstraint("source_system", "external_review_id", name="uq_review_source_external"),
         Index("ix_reviews_analysis_created", "analysis_id", "created_at"),
         CheckConstraint("rating IS NULL OR rating IN ('like', 'dislike')", name="ck_review_rating"),
+        CheckConstraint(
+            "json_valid(feedback_categories) AND json_type(feedback_categories) = 'array' "
+            "AND json_array_length(feedback_categories) <= 6",
+            name="ck_review_feedback_categories",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -199,9 +204,10 @@ class Review(Base):
     source_system: Mapped[str] = mapped_column(String(120), nullable=False)
     external_review_id: Mapped[str] = mapped_column(String(255), nullable=False)
     event_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    # Historical analyst decisions remain unchanged; new feedback never sets it.
+    # Historical decisions/ratings remain unchanged; new feedback sets neither.
     decision: Mapped[str | None] = mapped_column(String(32), nullable=True)
     rating: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    feedback_categories: Mapped[list[str]] = mapped_column(JSON, default=list, server_default="[]", nullable=False)
     analyst_id: Mapped[str | None] = mapped_column(String(255))
     comment: Mapped[str | None] = mapped_column(Text)
     ai_visible: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

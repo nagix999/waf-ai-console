@@ -242,7 +242,7 @@ def test_cookie_free_service_ingest_upload_and_review_need_no_origin(browser_cli
     assert batch.status_code == 202 and batch.json()["accepted"] == 1
     review = browser_client.post(f"/api/v1/analyses/{created.json()['id']}/reviews", headers=browser_service_headers,
         json={"external_review_id": "synthetic-browser-review", "event_id": browser_event["event_id"],
-              "rating": "dislike", "analyst_id": "synthetic-analyst", "comment": None, "ai_visible": False})
+              "feedback_categories": ["insufficient_evidence"], "analyst_id": "synthetic-analyst", "comment": None, "ai_visible": False})
     assert review.status_code == 201 and review.json()["source_system"] == "synthetic-browser-source"
     assert not browser_client.cookies
 

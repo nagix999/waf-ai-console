@@ -16,7 +16,7 @@ export default defineConfig({
       allow: [
         fileURLToPath(new URL(".", import.meta.url)),
         fileURLToPath(new URL("../backend/app/assets/fonts", import.meta.url)),
-        fileURLToPath(new URL("../docs/Production_API_v0.1.md", import.meta.url))
+        fileURLToPath(new URL("../backend/app/data/production_api.md", import.meta.url))
       ]
     },
     proxy: {

@@ -83,7 +83,8 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
             "POST /api/v1/analyses uses the service key's Production/Test purpose. "
             "Test keys may group submissions with /api/v1/test-sessions. Use the returned id for polling and "
             "check status (pending/processing/completed/failed), not only HTTP status. "
-            "Detailed integration contract: docs/Production_API_v0.1.md in the project."
+            "Live integration contract: GET /api/v1/production-api. "
+            "Packaged template: backend/app/data/production_api.md in the project."
         ),
         lifespan=lifespan,
     )

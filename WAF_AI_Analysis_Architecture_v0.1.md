@@ -565,7 +565,7 @@ POST /api/v1/analyses?wait_seconds=60
 
 ### 13.3 분석 결과 피드백
 
-2026-10-22 변경: API의 `decision`을 선택형 `rating`으로 대체한다. 과거 판정형 리뷰는 보존하며 현재 상세 계약은 [운영 API 정의서](docs/Production_API_v0.1.md#분석가-리뷰)를 따른다.
+2026-10-27 변경: API의 선택형 `rating`을 복수 선택형 `feedback_categories`로 대체한다. 2026-10-22의 `decision` → `rating` 계약은 이전 이력이며 현행 상세 계약은 [운영 API 정의서](docs/Production_API_v0.1.md#분석가-리뷰)를 따른다. 과거 판정형·좋아요/싫어요 리뷰는 보존한다.
 
 ```http
 POST /api/v1/analyses/{analysis_id}/reviews
@@ -575,7 +575,7 @@ POST /api/v1/analyses/{analysis_id}/reviews
 {
   "external_review_id": "review-12345",
   "event_id": "evt-20260902-0001",
-  "rating": "like",
+  "feedback_categories": ["insufficient_evidence", "exaggerated_impact"],
   "analyst_id": "analyst-id",
   "comment": null,
   "ai_visible": false
@@ -584,8 +584,12 @@ POST /api/v1/analyses/{analysis_id}/reviews
 
 - `(source_system, external_review_id)`로 중복 수신 방지
 - `analysis_id`와 `event_id`가 다르면 거부
-- `external_review_id`, `event_id`만 필수이며 `rating`(like/dislike/null)과 의견 `comment`는 각각 선택. 둘 다 생략 가능
-- 기존 리뷰를 수정하지 않고 새 이력 추가. 기존 판정을 좋아요/싫어요로 변환하지 않음
+- `external_review_id`, `event_id`만 필수이며 `feedback_categories`와 의견 `comment`는 각각 선택. 둘 다 생략 가능
+- 항목은 근거 부족(`insufficient_evidence`), 근거 불일치(`evidence_mismatch`), 설명 오류(`explanation_error`), 영향 과장(`exaggerated_impact`), 심각도 부적절(`inappropriate_severity`), 기타(`other`) 중 최대 6개. 생략은 `[]`이고 null·중복·미지원 값은 거부
+- 기타 의견도 `comment`를 사용하며 필수는 아님. 응답은 항목 배열을 고정 순서로 반환하고 요청·응답에서 `decision`/`rating`을 제외
+- 항목 선택 순서는 의미 없으며 같은 선택·내용 재전송은 200, 내용 변경 또는 과거 `decision`/`rating` 값이 있는 ID 재사용은 409. 구형 필드 요청은 422
+- 기존 리뷰를 수정하지 않고 새 이력 추가. 과거 판정·좋아요/싫어요를 새 항목으로 추정 변환하지 않음
+- Alembic `0028_review_categories`로 기존 이력의 항목 배열은 `[]`로 추가하고 과거 값은 보존. 비어 있지 않은 배열이 있으면 이력 손실을 막기 위해 downgrade 거부
 - AI 결과를 본 피드백은 `ai_visible=true`로 기록
 - 피드백을 정답·LLM 입력·학습 데이터에 사용하지 않으며 판정·평가 지표를 변경하지 않음
 

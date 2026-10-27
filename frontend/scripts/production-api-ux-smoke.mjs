@@ -8,7 +8,7 @@ import { pathToFileURL } from "node:url";
 import { filterApiSections, parseApiDocument } from "../src/apiDocument.js";
 
 const origin = "http://127.0.0.1:15173";
-const template = readFileSync(new URL("../../docs/Production_API_v0.1.md", import.meta.url), "utf8");
+const template = readFileSync(new URL("../../backend/app/data/production_api.md", import.meta.url), "utf8");
 assert.equal(parseApiDocument(template).sections.length, 12, "real template has 12 sections");
 const schema = version => ({ version_number: version, version_id: version === 1 ? "11111111-1111-4111-8111-111111111111" : "22222222-2222-4222-8222-222222222222", content_hash: String(version).repeat(64) });
 const reference = (markdown, version) => {
@@ -134,10 +134,25 @@ try {
       await nav(page).getByRole("button", { name: "다음 항목: " + item.title, exact: true }).click();
       await verifySection(page, item);
       if (item.title === "분석가 리뷰") {
-        assert.match(await section(page).innerText(), /좋아요·싫어요와 의견을 모두 생략해도 접수한다/);
-        const example = await section(page).locator(".api-code").allTextContents();
-        assert.ok(example.some(text => text.includes('"rating": "like"')));
-        assert.ok(example.every(text => !text.includes('"decision"')));
+        const feedbackText = await section(page).innerText();
+        assert.match(feedbackText, /피드백 항목과 의견을 모두 생략해도 접수한다/);
+        assert.match(feedbackText, /other를 선택해도 의견은 필수가 아니며/);
+        assert.match(feedbackText, /null·문자열·중복·미지원 값은 422로 거부한다/);
+        assert.match(feedbackText, /같은 선택을 다른 순서로 재전송해도 200/);
+        const example = await section(page).locator(".api-code pre code").allTextContents();
+        const jsonExamples = example.map(text => text.trim()).filter(text => text.startsWith("{"));
+        assert.equal(jsonExamples.length, 2, "request and response examples are documented");
+        for (const text of jsonExamples) {
+          const value = JSON.parse(text);
+          assert.deepEqual(value.feedback_categories, ["insufficient_evidence", "exaggerated_impact"]);
+          assert.ok(!("rating" in value) && !("decision" in value), "legacy fields are absent from examples");
+        }
+        const categories = await section(page).locator("tbody tr").evaluateAll(rows => rows.map(row => [...row.querySelectorAll("td")].map(cell => cell.textContent)));
+        assert.deepEqual(categories.map(row => row.slice(0, 2)), [
+          ["insufficient_evidence", "근거 부족"], ["evidence_mismatch", "근거 불일치"],
+          ["explanation_error", "설명 오류"], ["exaggerated_impact", "영향 과장"],
+          ["inappropriate_severity", "심각도 부적절"], ["other", "기타"],
+        ]);
         await section(page).screenshot({ path: join(output, "feedback-contract.png") });
       }
       assert.equal(await nav(page).getByRole("button", { name: "이전 항목: " + (index ? document.sections[index - 1].title : "정의서 안내"), exact: true }).count(), 1);
