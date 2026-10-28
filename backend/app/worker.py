@@ -46,6 +46,7 @@ from .models import (
 from .services.crypto import CryptoService
 from .services.internal_egress import allowed_targets_from_db, lock_egress_mutation
 from .services.http_parser import HTTP_PARSER_VERSION, parse_http_payload
+from .services.test_execution_statistics import fixed_codes, PARSER_WARNING_CODES, VERIFIER_REASON_CODES
 from .services.request_integrity import (
     INTEGRITY_VERSION, LEGACY_INTEGRITY_VERSION, INTEGRITY_RULES_VERSIONS,
     INTEGRITY_V2_RULES_VERSIONS, assess_request_integrity, integrity_version_for_rules,
@@ -416,6 +417,7 @@ def process_stub(db: Session, crypto: CryptoService, analysis: Analysis) -> None
             step_output(crypto, step, parsed, {
                 "parser_version": HTTP_PARSER_VERSION,
                 "parse_status": parsed["parse_status"],
+                "parser_warning_codes": fixed_codes(parsed.get("warnings"), PARSER_WARNING_CODES),
                 "fallback_llm_used": False,
             })
         _decode_payload_step(db, crypto, run, raw_payload)
@@ -935,6 +937,7 @@ def _process_moduagent_steps(
         step_output(crypto, step, {**parsed, **({"request_integrity": integrity} if integrity is not None else {})}, {
             "parser_version": HTTP_PARSER_VERSION,
             "parse_status": parsed["parse_status"],
+            "parser_warning_codes": fixed_codes(parsed.get("warnings"), PARSER_WARNING_CODES),
             "fallback_llm_used": False,
             **({"request_integrity": {"version": integrity["version"], "status": integrity["status"],
                 "issue_codes": [item["code"] for item in integrity["issues"]],
@@ -1028,6 +1031,8 @@ def _process_moduagent_steps(
         })
         step_output(crypto, step, {"execute_verifier": bool(reasons), "reasons": reasons}, {
             "confidence_threshold": verifier_confidence_threshold,
+            "execute_verifier": bool(reasons),
+            "verifier_reason_codes": fixed_codes(reasons, VERIFIER_REASON_CODES),
         })
 
     verifier: AgentCallResult | None = None

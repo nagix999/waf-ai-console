@@ -7,6 +7,7 @@ import { watchTestRunRead } from "./TestRuns.jsx";
 import { addGrouping, changeGrouping, initialStatistics, percent, statisticFields, statisticsFields, statisticsQuery } from "./testStatistics.js";
 import "./testStatistics.css";
 import TestCaseFilter from "./TestCaseFilter.jsx";
+import TestExecutionSummary from "./TestExecutionSummary.jsx";
 
 const verdicts = [["true_positive", "정탐", "True positive"], ["false_positive", "오탐", "False positive"], ["inconclusive", "보류", "Inconclusive"]];
 
@@ -89,6 +90,7 @@ export default function TestStatistics({ run, filters, state: controlled, onChan
       <DataTable className={`test-stat-table test-stat-fields-${fields.length}`} label={w("필드별 통계", "Statistics by field")} data={data.items} columns={columns} getRowId={row => JSON.stringify(fields.map(field => rowValues(row)[field]))} sorting={serverSorting(state.sort_by, state.sort_order)} onSortingChange={update => change(changedSort(update, serverSorting(state.sort_by, state.sort_order)))} empty={w("조건에 맞는 집계 항목이 없습니다.", "No groups match this scope.")} />
       <Pagination label={w("통계 항목 페이지", "Statistics pages")} pageSizes={[10, 25, 50, 100]} total={data.total_groups} limit={state.limit} offset={state.offset} disabled={loading} onOffsetChange={offset => change({ offset })} onLimitChange={limit => change({ limit, offset: 0 })} />
       <p className="ux-muted">{w("항목명을 누르면 해당 문항을 확인할 수 있습니다. 답안이 없거나 비교 가능한 문항이 없으면 정확도는 —로 표시합니다.", "Select a group to inspect its cases. Accuracy is — when no comparable reference answers exist.")}</p>
+      <TestExecutionSummary summary={data.execution_summary} words={w} />
     </>}
   </section>;
 }

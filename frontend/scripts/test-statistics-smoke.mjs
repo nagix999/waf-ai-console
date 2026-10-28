@@ -18,10 +18,12 @@ const aggregate=rows=>{const summary={...counts(0)};Object.keys(summary).filter(
 const statisticsCases=signatureRows.flatMap((row,i)=>Array.from({length:10},(_,j)=>{const verdict=j<6?'true_positive':j<9?'false_positive':'inconclusive';const outcome=j>=8?'unlabeled':j===7?'false_negative':i===1&&j>=4&&j<6?'false_positive':i===1&&j===6?'expected_abstention_mismatch':'match';return {signature:row.value,company_name:'회사 '+['A','B','C'][j%3],waf_action:j<6?'D':'A',status:'completed',verdict,reference_verdict:j>=8?null:outcome==='false_positive'?'false_positive':outcome==='false_negative'?'true_positive':outcome==='expected_abstention_mismatch'?'inconclusive':verdict,evaluation_outcome:outcome,...counts(0),cases:1,completed:1,distribution_total:1,true_positive:j<6?1:0,false_positive:j>=6&&j<9?1:0,inconclusive:j===9?1:0,comparable:j<8?1:0,matches:outcome==='match'?1:0,labeled:j<8?1:0,false_negatives:outcome==='false_negative'?1:0,false_positives:outcome==='false_positive'?1:0,expected_hold_mismatches:outcome==='expected_abstention_mismatch'?1:0,abstained:0};}));
 const matchesFilter=(row,node)=>{if(!node)return true;if(node.op)return node.op==='and'?node.rules.every(rule=>matchesFilter(row,rule)):node.rules.some(rule=>matchesFilter(row,rule));const value=row[node.field]??null,expected=node.value;if(node.operator==='is_empty')return value==null||value==='';if(node.operator==='is_not_empty')return value!=null&&value!=='';if(value==null)return false;switch(node.operator){case 'eq':return value===expected;case 'ne':return value!==expected;case 'contains':return String(value).toLowerCase().includes(expected.toLowerCase());case 'not_contains':return !String(value).toLowerCase().includes(expected.toLowerCase());case 'starts_with':return String(value).toLowerCase().startsWith(expected.toLowerCase());case 'ends_with':return String(value).toLowerCase().endsWith(expected.toLowerCase());case 'gt':return value>expected;case 'gte':return value>=expected;case 'lt':return value<expected;case 'lte':return value<=expected;default:throw Error('invalid fixture operator');}};
 const originalTestRun=methods.testRun;
+state.executionStatsMissing=false;
+const executionSummary=source=>{const counters={version:'test-execution-summary-v1',cases:source.length,parser:{success:0,partial:0,failed:0,unrecorded:0,warnings_recorded:0,warnings_unrecorded:0,warnings:[]},verifier:{policy_recorded:0,executed:0,not_executed:0,unrecorded:0,not_applicable:0,awaiting_execution:0,parser_triggered:0,parser_only:0,parser_with_other:0,reasons:[]}};const warningCounts=new Map(),reasons=new Map();for(const row of source){const index=statisticsCases.indexOf(row)%10;const status=['success','partial','failed','unrecorded'][index%4];counters.parser[status]++;if(index%5===4||status==='unrecorded')counters.parser.warnings_unrecorded++;else{counters.parser.warnings_recorded++;if(status==='partial'||status==='failed'){const code=status==='partial'?'request_protocol_not_recognized':'request_line_not_recognized';warningCounts.set(code,(warningCounts.get(code)||0)+1);}}if(index===9){counters.verifier.not_applicable++;continue;}if(index===8){counters.verifier.unrecorded++;continue;}counters.verifier.policy_recorded++;if(index===7){counters.verifier.not_executed++;continue;}if(index===6){counters.verifier.awaiting_execution++;continue;}counters.verifier.executed++;const codes=[['parser_incomplete'],['parser_incomplete','signature_not_exact'],['low_confidence'],['primary_inconclusive','parser_incomplete'],['false_positive_but_denied'],['other']][index];if(codes.includes('parser_incomplete')){counters.verifier.parser_triggered++;counters.verifier[codes.length===1?'parser_only':'parser_with_other']++;}for(const code of codes){const value=reasons.get(code)||{code,cases:0,only_cases:0,with_other_cases:0};value.cases++;value[codes.length===1?'only_cases':'with_other_cases']++;reasons.set(code,value);}}counters.parser.warnings=[...warningCounts].map(([code,cases])=>({code,cases}));counters.verifier.reasons=[...reasons.values()];return counters;};
 methods.testRun=async(value,query)=>{state.caseQueries.push(query);const result=await originalTestRun(value,query);const criteria=query?.group_filters?JSON.parse(query.group_filters):query?.group_field?[{field:query.group_field,value:query.group_missing?null:query.group_value}]:[];
 const rows=statisticsCases.map((row,index)=>({...row,index})).filter(row=>matchesFilter(row,query?.case_filter)&&criteria.every(({field,value})=>row[field]===value)&&['reference_verdict','verdict','evaluation_outcome'].every(field=>query?.[field]==null||row[field]===query[field]));const offset=Number(query?.offset||0),limit=Number(query?.limit||25);
 state.exportCount=rows.length;return {...result,total_items:rows.length,items:rows.slice(offset,offset+limit).map(row=>({...result.items[row.index%result.items.length],id:id(600+row.index),analysis_id:id(1000+row.index),row_number:row.index+1,verdict:row.verdict,evaluation:{outcome:row.evaluation_outcome,reference_label:row.reference_verdict?{verdict:row.reference_verdict}:null},ground_truth_source:null}))};};
-methods.testStatistics=async(value,query)=>{state.statisticsReads.push(query);const fields=query.group_by.split(',');const source=statisticsCases.filter(row=>matchesFilter(row,query.case_filter));const grouped=new Map();for(const row of source){const key=JSON.stringify(fields.map(field=>row[field]??null));if(!grouped.has(key))grouped.set(key,[]);grouped.get(key).push(row);}let rows=[...grouped.values()].map(group=>({value:group[0][fields[0]]??null,values:Object.fromEntries(fields.map(field=>[field,group[0][field]??null])),...aggregate(group)}));if(query.q)rows=rows.filter(row=>Object.values(row.values).some(value=>value?.includes(query.q)));return {test_run_id:value,group_by:query.group_by,group_fields:fields,items:rows.slice(Number(query.offset),Number(query.offset)+Number(query.limit)),total_groups:rows.length,limit:Number(query.limit),offset:Number(query.offset),summary:source.length?aggregate(source):{...aggregate([]),label_coverage:null},scope_cases:270,case_filter_applied:!!query.case_filter,rejected:0,duplicates:0,reference_basis:query.evaluation_id?'saved':query.reference_basis||'latest',accuracy_includes_inconclusive:true};};
+methods.testStatistics=async(value,query)=>{state.statisticsReads.push(query);const fields=query.group_by.split(',');const source=statisticsCases.filter(row=>matchesFilter(row,query.case_filter));const grouped=new Map();for(const row of source){const key=JSON.stringify(fields.map(field=>row[field]??null));if(!grouped.has(key))grouped.set(key,[]);grouped.get(key).push(row);}let rows=[...grouped.values()].map(group=>({value:group[0][fields[0]]??null,values:Object.fromEntries(fields.map(field=>[field,group[0][field]??null])),...aggregate(group)}));if(query.q)rows=rows.filter(row=>Object.values(row.values).some(value=>value?.includes(query.q)));return {test_run_id:value,group_by:query.group_by,group_fields:fields,items:rows.slice(Number(query.offset),Number(query.offset)+Number(query.limit)),total_groups:rows.length,limit:Number(query.limit),offset:Number(query.offset),summary:source.length?aggregate(source):{...aggregate([]),label_coverage:null},scope_cases:270,case_filter_applied:!!query.case_filter,rejected:0,duplicates:0,reference_basis:query.evaluation_id?'saved':query.reference_basis||'latest',accuracy_includes_inconclusive:true,...(state.executionStatsMissing?{}:{execution_summary:executionSummary(source)})};};
 export const api=`);
 const bundle = await build({ stdin: { contents: `import {createRoot} from 'react-dom/client';import App from './App.jsx';import './styles.css';import './console.css';import './lifecycle.css';import './r3.css';createRoot(document.getElementById('root')).render(<App/>);`, loader: "jsx", resolveDir: fileURLToPath(new URL("../src", import.meta.url)) },
   plugins: [{ name: "offline-api", setup(builder) { builder.onLoad({ filter: /\/api\.js$/ }, () => ({ contents: mock, loader: "js" })); } }],
@@ -82,6 +84,13 @@ try {
       assert.equal(await nav.locator('[aria-current="page"]').innerText(), locale === "KR" ? "테스트" : "Tests");
       assert.equal(await page.locator(".test-stat-table tbody tr").count(), 10);
       assert.match(await page.locator(".test-stat-table tbody tr").first().innerText(), /87.5%/);
+      const execution = page.locator(".test-execution-summary");
+      assert.deepEqual(await execution.locator(".test-execution-metrics dd").allTextContents(), ["162", "81", "27"]);
+      assert.equal(await execution.locator(".test-execution-reason-table tbody tr").count(), 6);
+      assert.equal(await execution.locator(".test-execution-warning-table tbody tr").count(), 2);
+      assert.doesNotMatch(await execution.innerText(), /parser_incomplete|request_line_not_recognized|undefined|NaN/);
+      assert.deepEqual(await execution.locator("th").evaluateAll(nodes => nodes.filter(node => node.scrollWidth > node.clientWidth + 2).map(node => node.textContent)), []);
+      await execution.screenshot({ path: join(output, `execution-${locale}-${theme}.png`) }); screenshots++;
       await snap(`statistics-${locale}-${theme}`);
     }
   }
@@ -91,6 +100,7 @@ try {
   await page.waitForFunction(() => fixture.statisticsReads.at(-1).offset === 20);
   await page.locator(".test-stat-table tbody tr").nth(1).waitFor();
   assert.equal(await page.locator(".test-stat-table tbody tr").count(), 7);
+  assert.deepEqual(await page.locator(".test-execution-metrics dd").allTextContents(), ["162", "81", "27"], "group pagination must not narrow the execution scope");
   await pagination.getByRole("button", { name: "첫 페이지", exact: true }).click();
   await page.waitForFunction(() => fixture.statisticsReads.at(-1).offset === 0);
   await page.getByRole("combobox", { name: "집계 기준", exact: true }).selectOption("waf_action");
@@ -112,7 +122,7 @@ try {
     await page.getByRole("button", { name: /^(테마|Theme)$/ }).click(); await page.getByRole("button", { name: theme, exact: true }).click();
     for (const locale of ["KR", "EN"]) {
       await page.getByRole("button", { name: locale, exact: true }).click();
-      assert.equal(await page.locator(".test-statistics .data-table-wrap").evaluate(element => element.scrollWidth <= element.clientWidth + 2), true, "all three grouping fields and metrics fit on a desktop");
+      assert.equal(await page.locator(".test-statistics > .data-table-wrap").evaluate(element => element.scrollWidth <= element.clientWidth + 2), true, "all three grouping fields and metrics fit on a desktop");
       await snap(`three-fields-${locale}-${theme}`);
     }
   }
@@ -155,6 +165,7 @@ try {
   const prefilter = page.getByRole("region", { name: "집계 전 필터", exact: true });
   await prefilter.getByRole("button", { name: "과탐 방향", exact: true }).click();
   await page.waitForFunction(() => document.querySelector(".test-stat-overview strong")?.textContent === "2");
+  assert.deepEqual(await page.locator(".test-execution-metrics dd").allTextContents(), ["2", "0", "0"], "applied case filters also scope execution statistics");
   assert.equal(await page.locator(".test-stat-table tbody tr").count(), 1);
   assert.match(await page.locator(".test-stat-overview").innerText(), /필터 전 270/);
   await snap("false-alarm-filter");
@@ -226,6 +237,23 @@ try {
   assert.equal(await page.evaluate(() => fixture.statisticsReads.length), beforeInvalid);
   await prefilter.getByRole("button", { name: "편집 닫기", exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 }); await snap("statistics-mobile");
+  const execution = page.locator(".test-execution-summary");
+  await execution.screenshot({ path: join(output, "execution-mobile.png") }); screenshots++;
+  const reasonRegion = page.getByRole("region", { name: "이유별 추가 검증 문항 수", exact: true });
+  await reasonRegion.focus();
+  assert.equal(await reasonRegion.evaluate(node => node === document.activeElement), true);
+  await page.keyboard.press("ArrowRight");
+  await page.waitForFunction(() => document.querySelector('.test-execution-summary [aria-label="이유별 추가 검증 문항 수"]').scrollLeft > 0);
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.evaluate(() => { fixture.executionStatsMissing = true; });
+  await page.locator(".test-statistics > .panel-head").getByRole("button", { name: "다시 조회", exact: true }).click();
+  await page.getByText("이 실행에는 추가 검증 통계가 제공되지 않습니다.", { exact: true }).waitFor();
+  assert.equal(await page.locator(".test-execution-metrics").count(), 0, "an older response must not fabricate zero counts");
+  await snap("execution-unavailable");
+  await page.evaluate(() => { fixture.executionStatsMissing = false; });
+  await page.locator(".test-statistics > .panel-head").getByRole("button", { name: "다시 조회", exact: true }).click();
+  await page.locator(".test-execution-metrics").waitFor();
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "메뉴 열기", exact: true }).click();
   const menu = page.locator(".console-mobile-dialog");
   await menu.getByRole("button", { name: "연동", exact: true }).click();

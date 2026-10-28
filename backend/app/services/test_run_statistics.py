@@ -97,7 +97,7 @@ def statistics(db, run, *, group_by="signature", limit=25, offset=0, q=None, sor
     evaluation, _nodes, current, relation = test_read_context(db, run, evaluation_id=evaluation_id, reference_basis=reference_basis, cohort=cohort)
     names = ["value" if index == 0 else f"value_{index}" for index in range(len(fields))]
     dimensions = [func.nullif(GROUP_FIELDS[field], "").label(name) for field, name in zip(fields, names)]
-    source = select(*dimensions, Analysis.status, Analysis.verdict,
+    source = select(*dimensions, Analysis.id.label("analysis_id"), Analysis.status, Analysis.verdict,
         relation.c.outcome, relation.c.reference_verdict).select_from(TestRunItem).join(
         current, current.c.item_id == TestRunItem.id).join(Analysis, Analysis.id == current.c.analysis_id).outerjoin(
         relation, relation.c.analysis_id == Analysis.id).where(*cohort, TestRunItem.ingest_status == "accepted")
@@ -125,8 +125,11 @@ def statistics(db, run, *, group_by="signature", limit=25, offset=0, q=None, sor
     scope_cases = db.scalar(select(func.count()).select_from(source.subquery())) if condition is not None else summary["cases"]
     admissions = dict(db.execute(select(TestRunItem.ingest_status, func.count()).where(*cohort)
         .group_by(TestRunItem.ingest_status)).all())
+    from .test_execution_statistics import execution_summary
+    execution = execution_summary(db, select(base.c.analysis_id), execution_mode=run.execution_mode)
     return {"test_run_id": run.id, "group_by": ",".join(fields), "group_fields": fields, "items": items, "total_groups": total,
         "limit": limit, "offset": offset, "summary": summary, "scope_cases": scope_cases, "case_filter_applied": condition is not None,
         "rejected": admissions.get("rejected", 0), "duplicates": admissions.get("duplicate", 0),
         "reference_basis": "saved" if evaluation else "ground_truth" if run.evaluation_mode == "ground_truth" else reference_basis,
-        "evaluation_id": evaluation.id if evaluation else None, "accuracy_includes_inconclusive": True}
+        "evaluation_id": evaluation.id if evaluation else None, "accuracy_includes_inconclusive": True,
+        "execution_summary": execution}
