@@ -54,7 +54,10 @@ def test_integrity_hints_and_guard_preserve_independent_roles_and_history(
         if limited:
             assert row.result_json["verifier"]["agreement"] is True  # Model agreement isn't final authorization.
             assert "input_integrity_requires_review" in row.result_json["verifier"]["reasons"]
-            assert row.result_json["analyst_guidance"]["checks"][0]["source_ko"] == "수집 설정과 같은 요청의 수집 기록"
+            assert "checks" not in row.result_json["analyst_guidance"]
+            from app.services.decision_explanation import decision_explanation
+            explanation = decision_explanation({"status": "completed", "result": row.result_json})
+            assert explanation["code"] == "input_limited" and "수집 기록" in explanation["action_ko"]
             assert "input_integrity_limited" in row.result_json["diagnostics"]["inconclusive_reasons"]
         steps = db.scalars(select(AgentStep)).all()
         for step in steps:

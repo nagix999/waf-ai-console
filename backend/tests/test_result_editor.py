@@ -26,6 +26,12 @@ from agent_selection_helpers import model_output
 pytestmark = pytest.mark.usefixtures("registered_vllm_target")
 
 
+@pytest.fixture(autouse=True)
+def pinned_legacy_output(monkeypatch):
+    from legacy_state_helpers import pin_legacy_v214
+    pin_legacy_v214(monkeypatch)
+
+
 def checks():
     first = {"source_ko": "검색 API의 입력 처리 규격", "check_ko": "검색어를 문자열 값으로만 사용하는지 SQL 구문에 연결하는지 확인하세요.",
              "why_ko": "정상 검색 데이터와 SQL 조건 변경 시도를 구분하기 위한 확인입니다."}

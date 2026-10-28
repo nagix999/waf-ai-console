@@ -6,7 +6,7 @@ savings or an improvement in verdict quality on any particular serving model.
 
 import pytest
 
-from app.agent.prompts import (
+from app.agent.legacy_prompts_v214 import (
     DEFAULT_POLICY_TEXT,
     FIXED_INSTRUCTIONS,
     FIXED_RULES_VERSION,

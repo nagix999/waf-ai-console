@@ -1,8 +1,8 @@
 """Allowlisted, read-only analyst display; parity tested with the web view."""
 
-EVIDENCE_LABELS = {"true_positive": "정탐 근거", "false_positive": "오탐 근거", "context": "참고 내용", "unclassified": "구분 미기록"}
+EVIDENCE_LABELS = {"attack_request": "공격 요청 근거", "normal_request": "정상 요청 근거", "context": "참고 내용", "unclassified": "구분 미기록"}
 EVIDENCE_NOTICE = "로그에서 확인한 발췌와 그에 대한 해석입니다. 근거 개수로 판정을 결정하지 않습니다."
-LEGACY_EVIDENCE_NOTICE = "기존 분석에는 정탐·오탐 근거 구분이 기록되지 않았습니다."
+LEGACY_EVIDENCE_NOTICE = "기존 분석에는 공격·정상 요청 근거 구분이 기록되지 않았습니다."
 INPUT_LIMITATION = "분석 입력의 일부가 생략되었습니다. 전체 원문을 함께 확인해 주세요."
 OLD_INPUT_LIMITATION = "원문 전체가 분석 입력에 포함되지 않았습니다. 생략된 구간을 원문에서 확인하세요."
 # Exact, content-free legacy diagnostics only. Do not search prose for words
@@ -29,7 +29,9 @@ def analyst_text(value, fallback="미기록"):
 
 def assessment_view(result):
     """No raw input reads, role-result reads, inference or legacy rewrites."""
-    assessment = result.get("analyst_assessment")
+    assessment = ({"version": "analyst-assessment-v1", "evidence": result.get("evidence"),
+                   "decision_issues": result.get("decision_issues")}
+                  if result.get("schema_version") == "waf-analysis-v3" else result.get("analyst_assessment"))
     if not isinstance(assessment, dict) or assessment.get("version") != "analyst-assessment-v1":
         return None
     items = assessment.get("evidence", []) if isinstance(assessment.get("evidence"), list) else []
@@ -47,6 +49,7 @@ def assessment_view(result):
         if not isinstance(item, dict) or not all(isinstance(item.get(key), str) and item[key].strip() for key in ("field", "excerpt", "interpretation_ko")):
             continue
         support = item.get("supports")
+        support = {"true_positive": "attack_request", "false_positive": "normal_request"}.get(support, support) if isinstance(support, str) else None
         support = support if isinstance(support, str) and support in EVIDENCE_LABELS else "unclassified"
         key = (item["field"], item["excerpt"], item["interpretation_ko"], support)
         if key not in seen:

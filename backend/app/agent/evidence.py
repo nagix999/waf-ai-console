@@ -16,8 +16,12 @@ class EvidenceSourceResolver:
     ) -> None:
         self.raw_payload = raw_payload
         self.event = event
-        self.spans = (parsed if parsed is not None else parse_http_payload(raw_payload))["raw_source_spans"]
-        self.submitted_spans = submitted_payload_spans
+        # Source ranges are a per-execution immutable snapshot, never a shared
+        # raw-text cache. Preserve individual boundaries; do not merge ranges.
+        self.spans = {field: tuple((start, end) for start, end in ranges)
+                      for field, ranges in (parsed if parsed is not None else parse_http_payload(raw_payload))["raw_source_spans"].items()}
+        self.submitted_spans = None if submitted_payload_spans is None else tuple(submitted_payload_spans)
+        self._submitted_range_cache: dict[str, tuple[tuple[int, int], ...]] = {}
         self.submitted_event = submitted_event
         self.decoding_hints = decoding_hints or {}
 
@@ -28,6 +32,19 @@ class EvidenceSourceResolver:
         """Only fixed codes leave this function; never raw model/event text."""
         if not excerpt.strip():
             return "empty_excerpt"
+        normalized = field.strip().removeprefix("event.")
+        if normalized in {"payload", "raw_payload"} or normalized.startswith("payload."):
+            ranges = self._source_ranges(normalized)
+            if not ranges:
+                return "source_not_found"
+            if not any(self.raw_payload.find(excerpt, start, end) >= 0 for start, end in ranges):
+                return "excerpt_not_in_source"
+            submitted = self._submitted_ranges(normalized)
+            if submitted is not None and not any(
+                self.raw_payload.find(excerpt, start, end) >= 0 for start, end in submitted
+            ):
+                return "excerpt_not_submitted"
+            return None
         sources = self.sources(field)
         if not sources:
             return "source_not_found"
@@ -71,16 +88,27 @@ class EvidenceSourceResolver:
     def _submitted_sources(self, field: str) -> list[str] | None:
         field = field.strip().removeprefix("event.")
         if field in {"payload", "raw_payload"} or field.startswith("payload."):
-            if self.submitted_spans is None:
-                return None
-            ranges = ([(0, len(self.raw_payload))] if field in {"payload", "raw_payload"}
-                      else self._payload_ranges(field[8:]))
-            return [self.raw_payload[max(start, a):min(end, b)]
-                    for start, end in ranges for a, b in self.submitted_spans
-                    if max(start, a) < min(end, b)]
+            ranges = self._submitted_ranges(field)
+            return None if ranges is None else [self.raw_payload[start:end] for start, end in ranges]
         if self.submitted_event is None:
             return None
         return self._event_sources(self.submitted_event, field)
+
+    def _source_ranges(self, field: str) -> tuple[tuple[int, int], ...]:
+        if field in {"payload", "raw_payload"}:
+            return ((0, len(self.raw_payload)),)
+        return self._payload_ranges(field[8:])
+
+    def _submitted_ranges(self, field: str) -> tuple[tuple[int, int], ...] | None:
+        if self.submitted_spans is None:
+            return None
+        if field not in self._submitted_range_cache:
+            self._submitted_range_cache[field] = tuple(
+                (max(start, a), min(end, b))
+                for start, end in self._source_ranges(field) for a, b in self.submitted_spans
+                if max(start, a) < min(end, b)
+            )
+        return self._submitted_range_cache[field]
 
     def resolve_decoder_original(self, field: str, excerpt: str) -> dict | None:
         """Resolve only a submitted tool artifact's exact *original* occurrence.
@@ -110,7 +138,7 @@ class EvidenceSourceResolver:
     def _payload_sources(self, field: str) -> list[str]:
         return [self.raw_payload[start:end] for start, end in self._payload_ranges(field)]
 
-    def _payload_ranges(self, field: str) -> list:
+    def _payload_ranges(self, field: str) -> tuple[tuple[int, int], ...]:
         if field.startswith("headers."):
             field = field.lower()
-        return self.spans.get(field, [])
+        return self.spans.get(field, ())

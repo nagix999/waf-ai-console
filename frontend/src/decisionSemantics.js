@@ -19,13 +19,11 @@ export const wafObservation = action => ({
   D: ["이 요청은 WAF에서 차단으로 기록됐습니다. 우회·반복 시도나 실제 영향은 별도로 확인합니다.", "WAF recorded this request as denied. Bypass, repeat attempts and actual impact are separate checks."],
   A: ["이 요청은 WAF에서 허용으로 기록됐습니다. 애플리케이션 처리나 공격 성공을 뜻하지는 않습니다.", "WAF recorded this request as allowed. This does not establish application processing or attack success."],
 })[action] || null;
-export function evidenceSections(verdict) {
-  const attack = { side: "true_positive", label: ["정탐 근거", "Attack evidence"] };
-  const benign = { side: "false_positive", label: ["오탐 근거", "Benign evidence"] };
-  const opposite = ["반대 근거", "Counter-evidence"];
-  const leading = verdict === "false_positive" ? [benign, { ...attack, label: opposite }]
-    : verdict === "true_positive" ? [attack, { ...benign, label: opposite }]
-      : verdict === "inconclusive" ? [{ ...attack, label: ["공격 해석", "Attack interpretation"] }, { ...benign, label: ["정상 해석", "Benign interpretation"] }]
-        : [attack, benign];
-  return [...leading, { side: "context", label: ["참고 내용", "Context"] }, { side: "unclassified", label: ["구분 미기록", "Unclassified"] }];
+export function evidenceSections() {
+  return [
+    { side: "attack_request", label: ["공격 요청 근거", "Attack request evidence"] },
+    { side: "normal_request", label: ["정상 요청 근거", "Normal request evidence"] },
+    { side: "context", label: ["참고 내용", "Context"] },
+    { side: "unclassified", label: ["구분 미기록", "Unclassified"] },
+  ];
 }

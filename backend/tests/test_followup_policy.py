@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy import select
 
 from app import worker
-from app.agent import legacy_prompts_v213, prompts, result_editor
+from app.agent import legacy_prompts_v213, legacy_prompts_v214 as prompts, result_editor
 from app.agent.contracts import AnalystCheck, AgentVerdict, ThreatSeverity, TuningRecommendation, WAFAnalysisOutput
 from app.agent.executor import AgentCallResult
 from app.agent.followup_policy import apply_final_followup_policy
@@ -20,6 +20,12 @@ from test_model_profiles import login_admin
 from test_model_test_role import create_verified
 from test_evidence_editor import configure
 from agent_selection_helpers import model_output
+
+
+@pytest.fixture(autouse=True)
+def pinned_legacy_output(monkeypatch):
+    from legacy_state_helpers import pin_legacy_v214
+    pin_legacy_v214(monkeypatch)
 
 
 def tuning(recommended):

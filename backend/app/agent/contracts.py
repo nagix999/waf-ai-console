@@ -28,6 +28,8 @@ CONTRACT_ERRORS = {
     "analyst_check_purpose_required": ("analyst_checks.purpose", "새 계약의 확인 항목에는 purpose가 필요합니다."),
     "decisive_verdict_disallows_decision_condition": ("analyst_checks.purpose", "확정 판정에는 decision_condition을 사용할 수 없습니다. 실제 영향 확인·튜닝 검증만 남기고, 판정을 가르는 조건이 빠졌다면 원문을 다시 검토하세요."),
     "recommended_checks_legacy_only": ("recommended_checks", "새 계약에서는 recommended_checks를 빈 배열로 두고 analyst_checks만 작성하세요."),
+    "decisive_verdict_disallows_missing_condition": ("decision_issue.missing_condition_ko", "확정 판정의 미확인 필수 조건은 null이어야 합니다."),
+    "summary_must_describe_request": ("summary_ko", "요약에는 요청에서 확인한 동작과 보안상 의미만 쓰고 정탐·오탐·보류 선언은 빼세요."),
 }
 
 
@@ -296,6 +298,89 @@ class SemanticAssessmentOutput(EvidenceAssessmentOutput):
 
     signature_assessment: SignatureAssessmentV2
     analyst_checks: list[PurposeAnalystCheck] = Field(max_length=5)
+
+
+class RequestEvidenceSupport(str, Enum):
+    attack_request = "attack_request"
+    normal_request = "normal_request"
+    context = "context"
+
+
+class RequestEvidenceSelection(EvidenceSelection):
+    supports: RequestEvidenceSupport
+
+
+def _security_analysis_bridge(output):
+    """Internal-only adapter shared by independently ordered wire schemas."""
+    direction = {"attack_request": "true_positive", "normal_request": "false_positive", "context": "context"}
+    values = output.model_dump(mode="json")
+    values.pop("interpretation_conflict")
+    values["evidence"] = [{**item, "supports": direction[item["supports"]]} for item in values["evidence"]]
+    values.update(recommended_checks=[], analyst_checks=[],
+                  tuning_recommendation={"recommended": False}, conflicting_evidence=[])
+    return EvidenceAssessmentOutput.model_validate(values)
+
+
+def _validate_security_analysis(output):
+    # Share the established invariants, not a permissive compatibility schema.
+    output.legacy_bridge()
+    if (output.verdict != AgentVerdict.inconclusive and output.decision_issue is not None
+            and output.decision_issue.missing_condition_ko is not None):
+        raise contract_error("decisive_verdict_disallows_missing_condition")
+    compact = output.summary_ko.strip()
+    declarations = ("정탐입니다", "오탐입니다", "판정을 보류", "현재 분석에서는 정탐", "현재 분석에서는 오탐")
+    if compact.startswith(declarations):
+        raise contract_error("summary_must_describe_request")
+    return output
+
+
+class SecurityAnalysisOutput(StrictContract):
+    """v2.15 model wire contract. No undeclared output extensions or retired fields."""
+
+    # Structured providers generate in schema key order. Put observations and
+    # interpretation before the conclusion, rather than asking the model to
+    # commit to a verdict before describing the request. Legacy schemas stay
+    # unchanged for their pinned executions.
+    threat_analysis: ThreatAnalysis
+    signature_assessment: SignatureAssessmentV2
+    evidence: list[RequestEvidenceSelection] = Field(max_length=5)
+    decision_issue: DecisionIssue | None
+    interpretation_conflict: bool = Field(strict=True)
+    input_truncated: bool = Field(strict=True)
+    summary_ko: str = Field(min_length=1, max_length=3000)
+    verdict: AgentVerdict
+    confidence_score: float = Field(ge=0, le=1)
+
+    @model_validator(mode="after")
+    def validate_security_analysis(self):
+        return _validate_security_analysis(self)
+
+    def legacy_bridge(self):
+        """Internal-only adapter to the pinned, proven grounding/policy code."""
+        return _security_analysis_bridge(self)
+
+
+class SecurityAnalysisOutputV216(StrictContract):
+    """Candidate v2.16 wire order; dependency checks exactly match v2.15."""
+
+    # Observe first, then conclude, then fill fields depending on that verdict.
+    # A sibling is required: overriding inherited fields keeps their old order.
+    signature_assessment: SignatureAssessmentV2
+    evidence: list[RequestEvidenceSelection] = Field(max_length=5)
+    interpretation_conflict: bool = Field(strict=True)
+    input_truncated: bool = Field(strict=True)
+    summary_ko: str = Field(min_length=1, max_length=3000)
+    verdict: AgentVerdict
+    confidence_score: float = Field(ge=0, le=1)
+    threat_analysis: ThreatAnalysis
+    decision_issue: DecisionIssue | None
+
+    @model_validator(mode="after")
+    def validate_security_analysis(self):
+        return _validate_security_analysis(self)
+
+    def legacy_bridge(self):
+        return _security_analysis_bridge(self)
 
 
 def legacy_output_schema(schema: dict) -> dict:

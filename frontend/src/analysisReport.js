@@ -7,6 +7,7 @@ import { decisionExplanation, provisionalAnalysisNotice, threatCategoryLabel } f
 import { assessmentView, evidenceNotice, legacyEvidenceNotice } from "./analystAssessment.js";
 import { decisionConditions } from "./decisionDetail.js";
 import { disagreementNotice, evidenceSections, legacySignatureNotice, severityMeaning, signatureSummary, verifierDisagreed, wafObservation } from "./decisionSemantics.js";
+import { isResultV3 } from "./assessmentData.js";
 const punctuation = /[\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e]/;
 const escapedPunctuation = /\\([\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e])/g;
 const entities = {
@@ -93,10 +94,11 @@ function duration(value) {
 export function buildAnalysisReport(input, { decoding = null, includeAppendix = false } = {}) {
   const detail = isRecord(input) ? input : {};
   const result = isRecord(detail.result) ? detail.result : null;
+  const modern = isResultV3(result);
   const finalValue = (key) => owns(result, key) ? result[key] : detail[key];
   const threat = isRecord(result?.threat_analysis) ? result.threat_analysis : {};
   const signature = isRecord(result?.signature_assessment) ? result.signature_assessment : {};
-  const tuning = isRecord(result?.tuning_recommendation) ? result.tuning_recommendation : {};
+  const tuning = !modern && isRecord(result?.tuning_recommendation) ? result.tuning_recommendation : {};
   const verifier = includeAppendix && isRecord(result?.verifier) ? result.verifier : null;
   const stub = isMockAnalysis(detail);
   const completed = detail.status === "completed";
@@ -118,7 +120,7 @@ export function buildAnalysisReport(input, { decoding = null, includeAppendix = 
     if (followUp.visible) {
       for (const section of followUp.sections || []) {
         report.push(`## ${section.title[0]}`, escapeText(section.introduction || ""), "안내된 자료를 시스템이 이미 조회했다는 뜻은 아닙니다.");
-        if (wafObservation(detail.waf_action)) report.push(escapeText(wafObservation(detail.waf_action)[0]));
+        if (!modern && wafObservation(detail.waf_action)) report.push(escapeText(wafObservation(detail.waf_action)[0]));
         if (!section.items.length && section.empty) report.push(escapeText(section.empty));
         section.items.forEach((item, index) => {
           report.push(`### 확인 ${index + 1}`, table([["확인할 내용", item.title], ...item.notes.map(note => ["검토 내용", note]),
@@ -150,7 +152,7 @@ export function buildAnalysisReport(input, { decoding = null, includeAppendix = 
     ["판정", named(finalValue("verdict"), { true_positive: "정탐", false_positive: "오탐", inconclusive: "판단 보류" })],
     ["위협 심각도", severity === "NONE" ? "해당 없음" : severity === "UNKNOWN" ? "미확정" : severity],
     ["심각도 기준", severityMeaning[0]],
-    ...(decision ? [["보류 구분", decision.title_ko], ["검토 안내", decision.action_ko]] : []),
+    ...(!modern && decision ? [["보류 구분", decision.title_ko], ["검토 안내", decision.action_ko]] : []),
     ["입력 잘림", named(finalValue("input_truncated"), { true: "있음", false: "없음" })],
   ]), escapeText(guidance.summary_ko));
   if (inconclusive) report.push(provisionalAnalysisNotice);
@@ -165,14 +167,15 @@ export function buildAnalysisReport(input, { decoding = null, includeAppendix = 
   }
   report.push(...overview);
 
-  if (disagreed) report.push("## 세부 분석", disagreementNotice[0], "역할별 판정은 최종 해석이 아닙니다. 양쪽 근거와 실행 상세를 함께 확인하세요.", table([
+  const technicalAnalysis = [];
+  if (disagreed) technicalAnalysis.push("## 세부 분석", disagreementNotice[0], "역할별 판정은 최종 해석이 아닙니다. 양쪽 근거와 실행 상세를 함께 확인하세요.", table([
     ["Primary 판정", named(result?.primary?.verdict, referenceVerdicts)], ["Verifier 판정", named(result?.verifier?.output?.verdict, referenceVerdicts)],
   ]));
-  else report.push("## 세부 분석", table([
+  else technicalAnalysis.push("## 세부 분석", table([
     [threatCategoryLabel(finalValue("verdict")), explanation(threat.category)], ["분석 위치", analystFieldLabel(analystText(threat.target))], ["분석 내용", explanation(threat.technique_ko)], ["예상 영향", explanation(threat.potential_impact_ko)],
   ]));
-  if (!disagreed && analystItems(threat.obfuscations).length) report.push("### 인코딩·난독화", analystList(threat.obfuscations));
-  if (isRecord(result?.signature_assessment)) report.push("### 탐지 내용과 요청의 연관성", table([
+  if (!disagreed && analystItems(threat.obfuscations).length) technicalAnalysis.push("### 인코딩·난독화", analystList(threat.obfuscations));
+  if (isRecord(result?.signature_assessment)) technicalAnalysis.push("### 탐지 내용과 요청의 연관성", table([
     ["관계", named(signature.relation, { exact: "일치", partial: "부분 일치", mismatch: "불일치", unknown: "평가 불가" })],
     ["관계 설명", signatureSummary(signature.relation)[0]],
     ...(disagreed ? [["출처", "Primary 기록 · 최종 해석 아님"]] : []),
@@ -182,8 +185,9 @@ export function buildAnalysisReport(input, { decoding = null, includeAppendix = 
       ...analystItems([signature.uncertainty_ko]).map(point => ["비교의 제한", point]),
     ] : [["기존 분석 설명", explanation(signature.explanation_ko)], ["설명 구분", legacySignatureNotice[0]]]),
   ]));
+  if (!modern) report.push(...technicalAnalysis);
 
-  report.push("## 판정 근거");
+  report.push(modern ? "## 보안 분석 근거" : "## 판정 근거");
   const assessment = assessmentView(result);
   if (assessment) {
     report.push(evidenceNotice);
@@ -209,12 +213,17 @@ export function buildAnalysisReport(input, { decoding = null, includeAppendix = 
     item.interpretations.forEach((interpretation) => report.push(escapeText(explanation(interpretation))));
   });
   }
-  if (analystItems(result?.conflicting_evidence).length) report.push("## 함께 고려할 정황", analystList(result?.conflicting_evidence));
+  if (modern) report.push(...technicalAnalysis);
+  if (!modern && analystItems(result?.conflicting_evidence).length) report.push("## 함께 고려할 정황", analystList(result?.conflicting_evidence));
   if (guidance.limitations.length) report.push("## 해석 시 주의할 점", textList(guidance.limitations));
-  if (hasTuningContent(tuning)) report.push("## WAF 정책 검토", "WAF 설정을 자동 변경하지 않습니다.", table([
+  if (!modern && hasTuningContent(tuning)) report.push("## WAF 정책 검토", "WAF 설정을 자동 변경하지 않습니다.", table([
     ["제안 여부", tuning.recommended], ...[["범위", tuning.scope], ["제안", tuning.proposal_ko],
       ["변경 시 주의사항", tuning.risk_ko], ["적용 전 확인", tuning.validation_ko]].filter(([, value]) => analystText(value, "")),
   ]));
+  if (modern && decision) {
+    report.push("## 최종 판정 이유", escapeText(decision.reason_ko));
+    for (const issue of assessmentView(result)?.issues || []) if (!issue.missing_condition_ko) report.push(escapeText(issue.point_ko), `관련 근거: ${issue.evidence_numbers.join(" · ")}`);
+  }
 
   report.push("## 인코딩·난독화 문자열");
   const decoded = visibleDecoding(decoding);

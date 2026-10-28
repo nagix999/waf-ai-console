@@ -7,7 +7,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 import { r5BrowserFixture } from './r5-browser-fixture.mjs';
 
-const output = fileURLToPath(new URL('../../test-results/analysis-decision-v2', import.meta.url));
+const modern = process.argv.includes('--v3');
+const output = fileURLToPath(new URL('../../test-results/analysis-decision-' + (modern ? 'v3' : 'v2'), import.meta.url));
 mkdirSync(output, { recursive: true });
 const archive = join(homedir(), '.cache/uv/archive-v0');
 const driver = process.env.PLAYWRIGHT_MODULE || readdirSync(archive).map(name => join(archive, name, 'playwright/driver/package/index.mjs')).find(existsSync);
@@ -18,6 +19,20 @@ Object.assign(methods, {
  saveReferences: async payload => { state.writes.push({name:'saveReferences', payload}); state.detail.evaluation={outcome:'expected_abstention_match', reference_label:{verdict:payload.verdict, source_kind:'reference', ai_visible:true, revision:1}}; return {applied_count:1}; }
 });
 state.detail.result.threat_analysis.severity='UNKNOWN';
+${modern ? `
+const result=state.detail.result;
+result.schema_version='waf-analysis-v3';
+result.summary_ko='문서 저장 요청에서 명령 치환 표기가 확인됩니다. 처리 경로에 따라 의미가 달라질 수 있습니다.';
+result.evidence=result.analyst_assessment.evidence.map(item=>({...item,supports:({true_positive:'attack_request',false_positive:'normal_request',context:'context'})[item.supports]}));
+result.decision_issues=result.analyst_assessment.decision_issues;
+delete result.analyst_assessment;
+delete result.tuning_recommendation;
+delete result.analyst_checks;
+delete result.recommended_checks;
+delete result.conflicting_evidence;
+delete result.follow_up_presentation;
+result.analyst_guidance={summary_ko:result.summary_ko,limitations:result.analyst_guidance?.limitations||[]};
+` : ''}
 export const api=`);
 const bundle = await build({ stdin: { contents: `import {createRoot} from 'react-dom/client';import App from './App.jsx';import './styles.css';import './console.css';import './lifecycle.css';import './r3.css';createRoot(document.getElementById('root')).render(<App/>);`, loader: 'jsx', resolveDir: fileURLToPath(new URL('../src', import.meta.url)) },
   plugins: [{ name: 'offline-api', setup(b) { b.onLoad({ filter: /\/api\.js$/ }, () => ({ contents: fixtureSource, loader: 'js' })); } }],
@@ -57,6 +72,13 @@ try {
   assert.equal(await reads('rawEvent'), 0); assert.equal(await reads('agentRuns'), 0);
   assert.equal(await page.locator('.inference-overview:visible').count(), 0);
   assert.equal(await page.locator('.decision-hero-summary:visible').count(), 1);
+  if (modern) {
+    await page.getByRole('heading', { name: '공격 요청 근거', exact: true }).waitFor();
+    await page.getByRole('heading', { name: '정상 요청 근거', exact: true }).waitFor();
+    assert.match(await page.locator('.decision-hero-summary').innerText(), /문서 저장 요청/);
+    assert.doesNotMatch(await page.locator('.decision-hero-summary').innerText(), /판정을 보류|정탐입니다|오탐입니다/);
+    assert.equal(await page.getByRole('heading', { name: '정책 검토 제안', exact: true }).count(), 0);
+  }
   assert.equal(await page.locator('.decision-technical > details').getAttribute('open'), null);
   await tabs.getByRole('tab', { name: '판정', exact: true }).focus(); await page.keyboard.press('ArrowRight');
   assert.equal(await page.evaluate(() => document.activeElement.textContent), '근거·입력');
@@ -105,10 +127,10 @@ try {
   assert.match(files[0].path, /include_appendix=true/); assert.match(files[0].path, /include_decoding=true/); assert.match(files[1].path, /report\.xlsx$/);
   await page.getByRole('button', { name: '보고서 보기', exact: true }).click(); await screenshot('report-desktop-sk');
   await tab('판정');
-  await page.getByRole('button', { name: '답안·데이터 관리', exact: true }).click(); await page.getByRole('button', { name: '참고 답안 입력', exact: true }).click();
-  const reference = page.getByRole('dialog', { name: '참고 답안 입력', exact: true });
-  await reference.getByRole('combobox', { name: '참고 답안', exact: true }).selectOption('inconclusive');
-  await reference.getByRole('button', { name: '답안 저장', exact: true }).click(); await page.getByText('1건의 참고 답안을 저장했습니다.', { exact: true }).waitFor();
+  await page.getByRole('button', { name: '기대 판정·데이터 관리', exact: true }).click(); await page.getByRole('button', { name: '참고 판정 입력', exact: true }).click();
+  const reference = page.getByRole('dialog', { name: '참고 판정 입력', exact: true });
+  await reference.getByRole('combobox', { name: '참고 판정', exact: true }).selectOption('inconclusive');
+  await reference.getByRole('button', { name: '기대 판정 저장', exact: true }).click(); await page.getByText('1건의 참고 판정을 저장했습니다.', { exact: true }).waitFor();
   await page.locator('.decision-context .compact-evaluation-detail').waitFor();
   // Re-mount with synthetic decisive, held and failure cases, in all themes.
   await page.evaluate(() => { fixture.originalDetail = structuredClone(fixture.detail); });
@@ -123,8 +145,9 @@ try {
       d.result.verifier = {executed:true,output:{verdict:verdict === 'inconclusive' ? 'false_positive' : verdict}};
       d.evaluation.outcome = verdict === 'inconclusive' ? 'expected_abstention_match' : 'expected_abstention_mismatch';
       if (verdict !== 'inconclusive') {
-        d.result.diagnostics = {}; d.result.analyst_guidance.summary_ko = verdict === 'true_positive' ? '입력 값에 실행 가능한 공격 구문이 포함되어 있습니다. 원문과 처리 문맥을 함께 검토했습니다.' : '탐지된 문자열은 파일명에 포함된 일반 값입니다. 요청에서 실행 가능한 공격 구문은 확인되지 않았습니다.';
-        d.result.analyst_guidance.checks = []; d.result.analyst_assessment.decision_issues = [];
+        d.result.diagnostics = {}; d.result.summary_ko = d.result.analyst_guidance.summary_ko = verdict === 'true_positive' ? '입력 값에 실행 가능한 공격 구문이 포함되어 있습니다. 원문과 처리 문맥을 함께 검토했습니다.' : '탐지된 문자열은 파일명에 포함된 일반 값입니다. 요청에서 실행 가능한 공격 구문은 확인되지 않았습니다.';
+        if(d.result.schema_version==='waf-analysis-v3') d.result.decision_issues=[];
+        else {d.result.analyst_guidance.checks=[];d.result.analyst_assessment.decision_issues=[];}
       }
     }, verdict);
     await go('#analyses/' + id); await tabs.waitFor();
@@ -155,5 +178,5 @@ try {
   assert.deepEqual(errors, []); assert.deepEqual(network, []);
   assert.deepEqual(await page.evaluate(() => fixture.unknown), []);
   writeFileSync(join(output, 'index.html'), '<meta charset="utf-8"><title>판정 결과 v2 검토</title><style>body{font:14px system-ui;background:#eef0f3;margin:24px}section{margin-bottom:32px}img{max-width:100%;border:1px solid #ccd1d8}</style>' + images.map(name => `<section><h2>${name}</h2><a href="${name}.png"><img loading="lazy" src="${name}.png"></a></section>`).join(''));
-  console.log('Decision UI: four tabs, evidence/input audit, keyboard, legacy links, JSON, labels, reports, retry dialog, themes/locales and responsive screenshots passed:', images.length);
+  console.log('Decision UI ' + (modern ? 'V3' : 'legacy') + ': four tabs, evidence/input audit, keyboard, legacy links, JSON, labels, reports, retry dialog, themes/locales and responsive screenshots passed:', images.length);
 } finally { await browser.close(); }

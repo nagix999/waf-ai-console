@@ -3,6 +3,7 @@ import { decisionExplanation, genericHoldSummary, genericTuningRisk, isGenericCh
 import { analystText, isTechnicalText } from "./analystText.js";
 import { holdReview } from "./holdReview.js";
 import { presentFollowUpChecks } from "./followUpPresentation.js";
+import { isResultV3 } from "./assessmentData.js";
 export { analystText, isTechnicalText } from "./analystText.js";
 
 const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -52,6 +53,9 @@ export function analystSummary(detail) {
   if (detail?.status === "pending") return "분석을 기다리고 있습니다. 아직 확정된 판정이 없습니다.";
   if (detail?.status === "processing") return "요청을 분석하고 있습니다. 완료되면 판정과 확인할 내용을 표시합니다.";
   if (detail?.status === "failed") return "자동 분석을 완료하지 못했습니다. 입력을 직접 검토하고 Agent 실행 이력에서 실패한 단계를 확인해 주세요.";
+  // V3 separates request observations from decision/hold reasons. Never replace
+  // the saved security summary with a diagnostic or manufacture a new summary.
+  if (isResultV3(detail?.result)) return analystText(detail.result.summary_ko, "분석 요약이 기록되지 않았습니다.");
   const guidance = record(detail?.result?.analyst_guidance) ? detail.result.analyst_guidance : {};
   const fallback = finalValue(detail, "verdict") === "inconclusive"
     ? "현재 분석에서는 정탐·오탐 판정을 보류했습니다."
@@ -65,6 +69,10 @@ export function analystSummary(detail) {
 export function analystGuidance(detail) {
   const result = record(detail?.result) ? detail.result : {};
   const guidance = record(result.analyst_guidance) ? result.analyst_guidance : {};
+  if (isResultV3(result)) return {
+    summary_ko: analystSummary(detail), checks: [],
+    limitations: [...new Set(analystItems(guidance.limitations))],
+  };
   const explicitChecks = Array.isArray(guidance.checks);
   const semantic = result.signature_assessment?.version === "signature-assessment-v2";
   const structured = explicitChecks ? presentFollowUpChecks(guidance.checks, result.follow_up_presentation)

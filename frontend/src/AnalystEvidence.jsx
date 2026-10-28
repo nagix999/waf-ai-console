@@ -1,5 +1,6 @@
 import { analystFieldLabel, decodingDisplayText } from "./analystView.js";
 import { assessmentView, decisionIssues, evidenceLabels, evidenceNotice } from "./analystAssessment.js";
+import { isResultV3 } from "./assessmentData.js";
 
 export function DecisionIssues({ detail }) {
   const issues = decisionIssues(detail);
@@ -19,9 +20,9 @@ export function AnalystEvidence({ result, onViewInput }) {
   if (!view) return null;
   const groups = Object.keys(evidenceLabels).map(supports => ({ supports, items: view.evidence.filter(item => item.supports === supports) }));
   return <section className="panel result-card evidence-card">
-    <h2>판정 근거</h2><p className="muted evidence-notice">{evidenceNotice}</p>
+    <h2>{isResultV3(result) ? "보안 분석 근거" : "판정 근거"}</h2><p className="muted evidence-notice">{evidenceNotice}</p>
     <div className="evidence-sides">
-      {groups.filter(group => ["true_positive", "false_positive"].includes(group.supports) || group.items.length).map(group => <section key={group.supports} className={`evidence-side evidence-${group.supports}`} aria-label={evidenceLabels[group.supports]}>
+      {groups.filter(group => ["attack_request", "normal_request"].includes(group.supports) || group.items.length).map(group => <section key={group.supports} className={`evidence-side evidence-${group.supports}`} aria-label={evidenceLabels[group.supports]}>
         <h3>{evidenceLabels[group.supports]}</h3>
         {!group.items.length && <p className="muted evidence-empty">기록된 근거가 없습니다.</p>}
         {group.items.map(item => <article className="evidence-item" key={item.number}>

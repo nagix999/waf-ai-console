@@ -14,7 +14,7 @@ from ..models import Analysis, AnalysisLabel, TestRunItem
 from .analysis_exports import _chunks, _xml_text
 from .analyst_presentation import assessment_view
 from .test_runs import MAX_TEST_ITEMS, run_cohort, test_case_query, test_read_context
-from .test_export_columns import EVIDENCE_COLUMNS, column_catalog
+from .test_export_columns import EVIDENCE_COLUMNS, LEGACY_COLUMN_ALIASES, column_catalog
 
 MAX_SOURCE_BYTES = 128 * 1024 * 1024
 MAX_FILE_BYTES = 32 * 1024 * 1024
@@ -38,7 +38,8 @@ def evidence_columns(result):
     for item in items if isinstance(items, list) else []:
         if not isinstance(item, dict):
             continue
-        name = {"true_positive": EVIDENCE_COLUMNS[0], "false_positive": EVIDENCE_COLUMNS[1]}.get(item.get("supports"), EVIDENCE_COLUMNS[2])
+        name = {"true_positive": EVIDENCE_COLUMNS[0], "attack_request": EVIDENCE_COLUMNS[0],
+                "false_positive": EVIDENCE_COLUMNS[1], "normal_request": EVIDENCE_COLUMNS[1]}.get(item.get("supports"), EVIDENCE_COLUMNS[2])
         if len(groups[name]) == 5:
             continue
         groups[name].append("\n".join(f"{label}: {item[key]}" for label, key in (
@@ -95,6 +96,7 @@ def prepare_export(db, crypto, run, filters=None):
 
 def selected_columns(catalog, names):
     by_name = {column["name"]: column for column in catalog}
+    names = [LEGACY_COLUMN_ALIASES.get(name, name) for name in names] if names else names
     if not names or len(names) != len(set(names)) or any(name not in by_name for name in names):
         raise TestExportError("invalid_test_export_columns", 422)
     return [by_name[name] for name in names]
@@ -109,6 +111,8 @@ def collect_rows(db, crypto, run, *, evaluation_id=None, reference_basis="latest
     result_fields = {*EVIDENCE_COLUMNS, "explanation_ko", "technique_ko", "potential_impact_ko", "signature_relation",
                      "matched_points", "mismatched_points", "comparison_limit_ko"}
     attrs = {"id"} | (names & {column.name for column in Analysis.__table__.columns})
+    if "explanation_ko" in names:
+        attrs.add("status")
     if "payload" in names:
         attrs.add("payload_ciphertext")
     if any("source_key" in column for column in columns):
@@ -135,6 +139,10 @@ def collect_rows(db, crypto, run, *, evaluation_id=None, reference_basis="latest
             "signature_relation": signature.get("relation"), "comparison_limit_ko": signature.get("uncertainty_ko"),
             **{key: threat.get(key) for key in ("technique_ko", "potential_impact_ko")},
             **{key: signature.get(key) for key in ("matched_points", "mismatched_points")}}
+        if "explanation_ko" in names and result.get("schema_version") == "waf-analysis-v3":
+            from .decision_explanation import decision_explanation
+            reason = decision_explanation({"status": analysis.status, "result": result}) if analysis else None
+            special["explanation_ko"] = reason["reason_ko"] if reason else None
         if names & set(EVIDENCE_COLUMNS):
             special.update(evidence_columns(result))
         record = {}

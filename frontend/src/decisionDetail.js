@@ -1,6 +1,8 @@
 import { assessmentView, decisionIssues } from "./analystAssessment.js";
 import { analystFollowUp, finalValue, groupedEvidence } from "./analystView.js";
 import { isMockAnalysis } from "./labelEvaluation.js";
+import { isResultV3 } from "./assessmentData.js";
+import { decisionExplanation } from "./decisionExplanation.js";
 
 // Presentation only. Keep stored directions and numbering; never infer a side
 // from the final verdict, rank evidence by strength, or manufacture a condition.
@@ -19,6 +21,25 @@ export function decisionConditions(detail) {
   const followUp = analystFollowUp(detail);
   if (detail?.status !== "completed" || isMockAnalysis(detail)) return { ...followUp, items: [], visible: false };
   const held = finalValue(detail, "verdict") === "inconclusive";
+  if (isResultV3(detail.result)) {
+    const items = [];
+    const explanation = held ? decisionExplanation(detail) : null;
+    const technical = explanation && ["execution_incomplete", "evidence_unverified", "evidence_review", "input_limited"].includes(explanation.code);
+    // Only recorded conditions are actionable. No generic response-code check,
+    // guessed environment prerequisite or historical check fallback in V3.
+    if (held && !technical) for (const issue of assessmentView(detail.result)?.issues || []) {
+      if (!issue.missing_condition_ko) continue;
+      let item = items.find(row => row.title === issue.missing_condition_ko);
+      if (!item) { item = { title: issue.missing_condition_ko, notes: [], evidence_numbers: [], checks: [] }; items.push(item); }
+      if (issue.point_ko !== item.title && !item.notes.includes(issue.point_ko)) item.notes.push(issue.point_ko);
+      item.evidence_numbers = [...new Set([...item.evidence_numbers, ...issue.evidence_numbers])];
+    }
+    if (technical && !items.some(item => item.title === explanation.action_ko)) items.push({ title: explanation.action_ko, notes: [], evidence_numbers: [], checks: [] });
+    return { ...followUp, items, held, visible: items.length > 0, sections: items.length ? [{
+      key: "conditions", title: ["판정에 필요한 확인", "Checks needed for a decision"], items,
+      introduction: "기록된 확인 조건과 실행상 문제만 표시합니다.", introductionEn: "Only recorded conditions and execution issues are shown.",
+    }] : [] };
+  }
   const semantic = detail.result?.signature_assessment?.version === "signature-assessment-v2";
   const issues = held ? (semantic ? (assessmentView(detail.result)?.issues || []).filter(issue => issue.missing_condition_ko) : decisionIssues(detail)) : [];
   const items = [];

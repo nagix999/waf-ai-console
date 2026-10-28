@@ -9,8 +9,10 @@ import re
 
 INTEGRITY_VERSION = "request-integrity-v2"
 LEGACY_INTEGRITY_VERSION = "request-integrity-v1"
-INTEGRITY_V2_RULES_VERSIONS = frozenset({"waf-system-v2.12", "waf-system-v2.13", "waf-system-v2.14"})
-INTEGRITY_RULES_VERSIONS = frozenset({"waf-system-v2.9", "waf-system-v2.10", "waf-system-v2.11"}) | INTEGRITY_V2_RULES_VERSIONS
+INTEGRITY_V3_VERSION = "request-integrity-v3"
+INTEGRITY_V3_RULES_VERSIONS = frozenset({"waf-system-v2.16"})
+INTEGRITY_V2_RULES_VERSIONS = frozenset({"waf-system-v2.12", "waf-system-v2.13", "waf-system-v2.14", "waf-system-v2.15"})
+INTEGRITY_RULES_VERSIONS = frozenset({"waf-system-v2.9", "waf-system-v2.10", "waf-system-v2.11"}) | INTEGRITY_V2_RULES_VERSIONS | INTEGRITY_V3_RULES_VERSIONS
 MAX_PAYLOAD_CHARS = 262144
 MAX_HEAD_CHARS = 32768
 MAX_JSON_CHARS = 65536
@@ -29,6 +31,16 @@ NORMAL_GUARD_CODES = frozenset({
     "body_shorter_than_content_length", "chunked_body_incomplete",
     "json_container_unclosed",
 })
+
+
+def integrity_version_for_rules(fixed_rules_version: str) -> str:
+    if fixed_rules_version in INTEGRITY_V3_RULES_VERSIONS:
+        return INTEGRITY_V3_VERSION
+    if fixed_rules_version in INTEGRITY_V2_RULES_VERSIONS:
+        return INTEGRITY_VERSION
+    if fixed_rules_version in INTEGRITY_RULES_VERSIONS:
+        return LEGACY_INTEGRITY_VERSION
+    raise ValueError("request_integrity_rules_unsupported")
 
 
 def _json_shape(text):
@@ -140,6 +152,8 @@ def _partial_declared_body(raw, parsed, result):
 
 
 def assess_request_integrity(raw: str, parsed: dict, *, version: str = INTEGRITY_VERSION) -> dict:
+    if version == INTEGRITY_V3_VERSION:
+        return _assess_duplicate_values(raw, parsed)
     if version not in {INTEGRITY_VERSION, LEGACY_INTEGRITY_VERSION}:
         raise ValueError("request_integrity_version_unsupported")
     result = {"version": version, "status": "not_checked", "issues": [], "limitations": []}
@@ -263,6 +277,40 @@ def assess_request_integrity(raw: str, parsed: dict, *, version: str = INTEGRITY
             else:
                 limitation("json_syntax_not_validated")
     result["status"] = "issues_observed" if result["issues"] else "no_issue_observed"
+    return result
+
+
+def _assess_duplicate_values(raw: str, parsed: dict) -> dict:
+    """Candidate-only additive observations. Never change legacy guard policy.
+
+    The v2 finding proves a bounded, identity-encoded JSON body in a supported
+    HTTP capture. Whole-capture proof spans are retained, so a partial model
+    submission cannot turn a complete-document observation into a local claim.
+    No new finding is a normal-verdict restriction or an attack verdict.
+    """
+    from .json_duplicate_values import inspect_json_duplicate_values
+
+    result = assess_request_integrity(raw, parsed, version=INTEGRITY_VERSION)
+    result["version"] = INTEGRITY_V3_VERSION
+    duplicate = next((finding for finding in result["issues"] if finding["code"] == "json_duplicate_keys"), None)
+    if duplicate is None:
+        return result
+    ranges = parsed["raw_source_spans"]["body"]
+    body_start = ranges[0][0]
+    incomplete_codes = NORMAL_GUARD_CODES | {"body_exceeds_content_length", "data_after_chunked_body"}
+    complete = (not result["limitations"] and
+                not any(finding["code"] in incomplete_codes for finding in result["issues"]))
+    observed = inspect_json_duplicate_values(raw[body_start:], source_start=body_start, complete=complete)
+    for code in observed["limitations"]:
+        if code not in result["limitations"]:
+            result["limitations"].append(code)
+    # Bound prompt overhead independently from the lexical inspection limits.
+    for finding in observed["observations"][:8]:
+        result["issues"].append({"code": finding["code"], "scope": "body",
+            "source_spans": [list(span) for span in duplicate["source_spans"]],
+            "affected_spans": [*finding["key_spans"], *finding["value_spans"]]})
+    if len(observed["observations"]) > 8:
+        result["limitations"].append("json_duplicate_observation_limit")
     return result
 
 

@@ -3,6 +3,7 @@ import asyncio
 import json
 from datetime import timedelta
 from pathlib import Path
+from threading import Event
 
 import pytest
 from agent_selection_helpers import model_output
@@ -18,6 +19,23 @@ from app.services.vllm_test_runner import VLLMTestResult
 from test_agent_openai import synthetic_output
 from app.agent.contracts import WAFAnalysisOutput
 from test_model_profiles import login_admin, profile_payload
+
+
+@pytest.fixture
+def settings(settings, tmp_path):
+    # The real heartbeat runs in another thread. A :memory: StaticPool shares
+    # one DBAPI transaction across both threads and can commit/rollback the
+    # analysis transaction. Exercise the production file/WAL isolation instead.
+    return settings.model_copy(update={"database_url": f"sqlite+pysqlite:///{tmp_path / 'model-validation.sqlite'}"})
+
+
+def test_background_validation_uses_separate_wal_connections(client):
+    with client.app.state.session_factory() as db:
+        engine = db.get_bind()
+        with engine.connect() as first, engine.connect() as second:
+            assert first.connection.driver_connection is not second.connection.driver_connection
+            assert first.exec_driver_sql("PRAGMA journal_mode").scalar() == "wal"
+            assert second.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
 
 
 def enqueue(client, *, include=True):
@@ -171,6 +189,14 @@ def test_dataset_failure_rolls_back_run_and_all_cases(client, registered_vllm_ta
 
 
 def test_all_150_use_candidate_not_production_and_report_reference_comparison(client, registered_vllm_target, monkeypatch):
+    renewed = Event()
+    def pulse_often(self):
+        while not self.stop.wait(.1):
+            self.renew()
+            renewed.set()
+            if self.lost.is_set():
+                return
+    monkeypatch.setattr(LeaseHeartbeat, "pulse", pulse_often)
     profile, run = enqueue(client)
     with client.app.state.session_factory() as db:
         other = VLLMProfile(name="different-production", model_name="other-model", base_url="http://10.0.0.99:8000/v1", status="production")
@@ -189,6 +215,7 @@ def test_all_150_use_candidate_not_production_and_report_reference_comparison(cl
     assert report["summary"]["evaluable"] == 150
     assert report["summary"]["outcomes"]["expected_abstention_match"] == 30
     assert report["summary"]["outcomes"]["abstained"] == 120
+    assert renewed.is_set()  # Do not rely on a slow host to exercise concurrency.
     assert len(calls) == 300  # Primary and independent Verifier for each held judgment.
     assert {call["profile"].id for call in calls} == {profile["id"]}
     for primary, verifier in zip(calls[::2], calls[1::2]):

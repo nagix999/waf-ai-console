@@ -10,6 +10,7 @@ import json
 from pydantic import BaseModel, ConfigDict, Field
 
 VERSION = "evidence-editor-v1"
+CANONICAL_VERSION = "evidence-editor-v2"
 MAX_OUTPUT_TOKENS = 1024
 MAX_INPUT_BYTES = 16000
 MAX_SECONDS = 30
@@ -18,6 +19,7 @@ allowed_groups 안에서 같은 관찰·같은 의미인 근거만 묶고 가장
 다른 조건·범위·의미가 있거나 동일한 의미인지 확신할 수 없으면 각각 별도 그룹으로 둔다.
 모든 evidence_id를 정확히 한 번씩 member_ids에 포함한다. 대표 번호는 그 그룹의 구성원이어야 한다.
 판정·심각도·발췌·설명을 새로 만들거나 수정하지 않는다. 번호만 지정된 JSON으로 반환한다."""
+CANONICAL_INSTRUCTIONS = INSTRUCTIONS + "\n공격 요청 근거·정상 요청 근거·참고 내용의 구분을 유지하고 확인사항은 생성하거나 정리하지 않는다."
 
 
 class EvidenceGroup(BaseModel):

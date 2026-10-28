@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from app.agent.analyst_guidance import EVIDENCE_SOURCE_CHECK, EVIDENCE_SOURCE_NOTICE, build_analyst_guidance
 from app.agent.contracts import AnalystCheck, WAFAnalysisOutput
 from app.agent.policy import finalize_with_verifier
-from app.agent.prompts import BASE_INSTRUCTIONS, PROMPT_VERSION
+from app.agent.legacy_prompts_v214 import BASE_INSTRUCTIONS, PROMPT_VERSION
 from test_agent_policy import output
 
 

@@ -138,10 +138,13 @@ def build_report(detail: dict, *, generated_at: datetime | None = None) -> Analy
         sections.append(ReportSection(title, tuple(safe_rows)))
 
     guidance, threat = _record(result.get("analyst_guidance")), _record(result.get("threat_analysis"))
+    current_contract = result.get("schema_version") == "waf-analysis-v3"
     fallback = "현재 분석에서는 정탐·오탐 판정을 보류했습니다." if verdict == "inconclusive" else "저장된 최종 판정과 원문 근거를 확인해 주세요."
     summary = _analyst(guidance.get("summary_ko"), _analyst(result.get("summary_ko"), fallback))
     decision = decision_explanation(detail)
-    if decision and (not decision["use_recorded_summary"] or summary == GENERIC_HOLD_SUMMARY):
+    if current_contract:
+        summary = _analyst(result.get("summary_ko"), "분석 요약이 기록되지 않았습니다.")
+    elif decision and (not decision["use_recorded_summary"] or summary == GENERIC_HOLD_SUMMARY):
         summary = decision["reason_ko"]
     severity = threat.get("severity")
     if severity is None:
@@ -154,10 +157,10 @@ def build_report(detail: dict, *, generated_at: datetime | None = None) -> Analy
     view = assessment_view(result)
     section("판정 요약", [
         ("최종 판정", VERDICTS[verdict]), ("심각도", severity), ("심각도 기준", SEVERITY_MEANING), ("요약", summary),
-        *([("보류 구분", decision["title_ko"]), ("검토 안내", decision["action_ko"])] if decision else []),
+        *([("보류 구분", decision["title_ko"]), ("검토 안내", decision["action_ko"])] if decision and not current_contract else []),
         ("안내", "자동 분석 결과입니다. 공격 시도와 실제 피해 발생을 구분하고 최종 판단은 분석가가 검토합니다."),
     ])
-    review = hold_review(detail, decision)
+    review = {"issues": [], "checks": []} if current_contract else hold_review(detail, decision)
     considered = view["issues"] if view and verdict != "inconclusive" else []
     if considered:
         issue_rows = []
@@ -201,7 +204,7 @@ def build_report(detail: dict, *, generated_at: datetime | None = None) -> Analy
         seen.add(key)
         rows += [(f"근거 {len(seen)} · 위치", field), ("원문 발췌", excerpt), ("판정 근거", interpretation)]
     if view is not None:
-        section("판정 근거", [("안내", EVIDENCE_NOTICE)])
+        section("보안 분석" if current_contract else "판정 근거", [("안내", EVIDENCE_NOTICE)])
         for supports, label in evidence_sections(verdict):
             items = [item for item in view["evidence"] if item["supports"] == supports]
             if not items and supports in {"context", "unclassified"}:
@@ -292,7 +295,27 @@ def build_report(detail: dict, *, generated_at: datetime | None = None) -> Analy
         ("표시 안내", "PDF에서 제어 문자와 글꼴이 지원하지 않는 문자는 [U+코드]로 표시합니다. Excel의 긴 내용은 순서대로 계속 행에 나눕니다."),
         ("출력 한도", f"본문 UTF-8 {MAX_REPORT_BYTES:,}바이트·{MAX_REPORT_ROWS:,}항목·PDF {MAX_PDF_PAGES}페이지·파일 10 MiB. 초과하면 부분 파일을 만들지 않습니다.")])
     # New purposes are never inferred from prose or the WAF action.
-    if semantic:
+    if current_contract:
+        if decision:
+            section("최종 판정 이유", [("구분", decision["title_ko"]), ("이유", decision["reason_ko"])])
+            conditions = [issue for issue in (view["issues"] if view else []) if issue["missing_condition_ko"]]
+            rows = []
+            if decision["code"] in {"model_abstained", "assessment_pending", "reason_unrecorded"}:
+                for issue in conditions:
+                    rows += [("확인할 조건", issue["missing_condition_ko"]),
+                             ("관련 근거", " · ".join(map(str, issue["evidence_numbers"])))]
+            elif decision["code"] in {"execution_incomplete", "evidence_unverified", "evidence_review", "input_limited"}:
+                rows.append(("확인할 내용", decision["action_ko"]))
+            if rows:
+                section("판정에 필요한 확인", rows)
+        # Put observations and evidence before technical detail; do not repeat
+        # the analysis summary in the final decision explanation.
+        evidence_titles = {"보안 분석", "공격 요청 근거", "정상 요청 근거", "참고 내용", "구분 미기록"}
+        first, rest = sections[:1], sections[1:]
+        evidence_sections_saved = [part for part in rest if part.title in evidence_titles]
+        other_sections = [part for part in rest if part.title not in evidence_titles]
+        sections = [*first, *evidence_sections_saved, *other_sections]
+    elif semantic:
         for purpose, title in (("decision_condition", "판정에 필요한 확인"),
                                ("impact_followup", "영향·대응 확인"),
                                ("tuning_validation", "튜닝 전 검증")):

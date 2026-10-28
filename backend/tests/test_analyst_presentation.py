@@ -15,7 +15,11 @@ CASES = json.loads((Path(__file__).parent / "fixtures/analyst_assessment_cases.j
 @pytest.mark.parametrize("case", CASES, ids=lambda item: item["name"])
 def test_shared_read_only_presentation(case):
     before = copy.deepcopy(case["result"])
-    assert assessment_view(case["result"]) == case["expected"]
+    expected = copy.deepcopy(case["expected"])
+    if expected:
+        for item in expected["evidence"]:
+            item["supports"] = {"true_positive": "attack_request", "false_positive": "normal_request"}.get(item["supports"], item["supports"])
+    assert assessment_view(case["result"]) == expected
     assert case["result"] == before
 
 
@@ -31,7 +35,7 @@ def test_exports_include_both_sides_and_issue_but_no_raw_snapshots():
     value["result"]["primary"] = {"secret": "NOT_EXPORTED"}
     report = build_report(value)
     text = str(report)
-    for label in ["공격 해석", "정상 해석", "참고 내용", "판정에 필요한 확인", "관련 근거", "확인 내용", "로그 발췌", "판단 이유"]:
+    for label in ["공격 요청 근거", "정상 요청 근거", "참고 내용", "판정에 필요한 확인", "관련 근거", "확인 내용", "로그 발췌", "판단 이유"]:
         assert label in text
     for item in CASES[0]["expected"]["evidence"]:
         assert item["interpretation_ko"] in text

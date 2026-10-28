@@ -27,12 +27,6 @@ def verifier_disagreed(detail):
 
 
 def evidence_sections(verdict):
-    if verdict == "false_positive":
-        sides = [("false_positive", "오탐 근거"), ("true_positive", "반대 근거")]
-    elif verdict == "true_positive":
-        sides = [("true_positive", "정탐 근거"), ("false_positive", "반대 근거")]
-    elif verdict == "inconclusive":
-        sides = [("true_positive", "공격 해석"), ("false_positive", "정상 해석")]
-    else:
-        sides = [("true_positive", "정탐 근거"), ("false_positive", "오탐 근거")]
-    return [*sides, ("context", "참고 내용"), ("unclassified", "구분 미기록")]
+    # Request interpretation is independent of the final detection verdict.
+    return [("attack_request", "공격 요청 근거"), ("normal_request", "정상 요청 근거"),
+            ("context", "참고 내용"), ("unclassified", "구분 미기록")]

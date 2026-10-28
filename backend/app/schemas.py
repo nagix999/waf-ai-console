@@ -8,6 +8,7 @@ from .evaluation_schemas import EvaluationMetadata, EvaluationSummary
 from .services.label_fields import LABEL_FIELDS
 from .services.input_field_policy import SERVER_CONTROL_FIELDS
 from .initial_assessment_schemas import InitialAssessmentInput
+from .result_contracts import AnalysisResultV3
 from .models import AnalysisPurpose, AnalysisStatus, IngestChannel, ModelProfileStatus, ModelProvider, ModelTestMode, ModelTestStatus, Verdict
 
 
@@ -118,8 +119,8 @@ class AnalysisResultV2(WAFAnalysisOutput):
 
 
 class AnalysisDetail(AnalysisSummary):
-    result: AnalysisResultV2 | dict[str, Any] | None = Field(
-        description="waf-analysis-v2 result, or an unchanged legacy result object.",
+    result: AnalysisResultV3 | AnalysisResultV2 | dict[str, Any] | None = Field(
+        description="Closed waf-analysis-v3 result, explicit v2 compatibility response, or unchanged historical result.",
         union_mode="left_to_right",
     )
     prompt_version: str | None
@@ -127,6 +128,15 @@ class AnalysisDetail(AnalysisSummary):
     input_schema_metadata: dict[str, Any] | None = None
     error_code: str | None
     error_message: str | None
+
+    @field_validator("result", mode="before")
+    @classmethod
+    def validate_current_result_without_legacy_fallback(cls, value):
+        if isinstance(value, dict) and value.get("schema_version") == "waf-analysis-v3":
+            # A malformed current result must not be accepted by the dict
+            # branch reserved for immutable historical records.
+            return AnalysisResultV3.model_validate(value)
+        return value
 
 
 class RawEventResponse(BaseModel):

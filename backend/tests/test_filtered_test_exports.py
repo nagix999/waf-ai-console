@@ -43,7 +43,7 @@ def test_exports_every_matching_case_not_just_one_page(client, event_payload, fi
 def test_two_sheets_english_headers_and_selected_column_guide_only(client, event_payload):
     run = fixture_run(client, event_payload)
     metadata = preview(client, run)
-    columns = ["verdict", "expected_verdict", "initial_verdict", "reference_verdict", "evidence_true_positive"]
+    columns = ["verdict", "expected_verdict", "initial_verdict", "reference_verdict", "evidence_attack_request"]
     response = download(client, run, {}, metadata, columns)
     archive, _, rows = workbook(response)
     sheets = ET.fromstring(archive.read("xl/workbook.xml")).find("s:sheets", NS)
@@ -57,6 +57,29 @@ def test_two_sheets_english_headers_and_selected_column_guide_only(client, event
     assert all(row[1] and row[2] and row[3] for row in values[1:])
     assert event_payload["payload"] not in str(values)  # illustrative examples only
     assert not any(b"<f>" in archive.read(name) for name in archive.namelist())
+
+
+@pytest.mark.parametrize("verdict", ["false_positive", "inconclusive"])
+def test_v3_explanation_column_is_separate_from_observation_summary(client, event_payload, verdict):
+    from test_result_contract_v3 import result_fixture
+    from app.services.decision_explanation import decision_explanation
+
+    run = fixture_run(client, event_payload)
+    result = result_fixture()
+    result["verdict"] = verdict
+    if verdict == "inconclusive":
+        result["threat_analysis"]["severity"] = "UNKNOWN"
+        result["diagnostics"]["inconclusive_reasons"] = ["verifier_failed"]
+    with client.app.state.session_factory() as db:
+        analysis = db.get(Analysis, run["items"][0]["analysis_id"])
+        analysis.result_json = result
+        analysis.status, analysis.verdict, analysis.summary_ko = "completed", verdict, result["summary_ko"]
+        db.commit()
+    _, _, rows = workbook(download(client, run, {}, preview(client, run), ["summary_ko", "explanation_ko"]))
+    reason = decision_explanation({"status": "completed", "result": result})
+    assert rows[0]["summary_ko"] == result["summary_ko"]
+    assert rows[0]["explanation_ko"] == (reason["reason_ko"] if reason else "")
+    assert rows[0]["explanation_ko"] != rows[0]["summary_ko"]
 
 
 def test_preview_and_payload_exclusion_do_not_decrypt_or_load_http(client, event_payload, monkeypatch):

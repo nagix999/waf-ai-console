@@ -20,7 +20,7 @@ from ..services.provider_options import (
 )
 from .contracts import (CONTRACT_ERRORS, EvidenceCorrectionOutput, WAFAnalysisOutput,
                         EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput,
-                        SemanticAssessmentOutput, legacy_output_schema)
+                        SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216, legacy_output_schema)
 from .evidence_editor import EvidenceEditorOutput, MAX_SECONDS as EDITOR_SECONDS, MAX_OUTPUT_TOKENS as EDITOR_TOKENS
 from .result_editor import ResultEditorOutput
 
@@ -326,10 +326,35 @@ def _retry_kind(error_code: str | None, provider_finish_reason: str | None) -> s
     return None
 
 
-def _retry_instructions(attempts: list[dict[str, Any]], max_output_tokens: int) -> str:
+_DEPENDENCY_ERRORS_V216 = frozenset({"decisive_verdict_disallows_missing_condition", "inconclusive_requires_unknown_severity"})
+
+
+def _dependency_feedback_v216(issues):
+    codes = {item.get("type") for item in issues if isinstance(item, dict)} & _DEPENDENCY_ERRORS_V216
+    if not codes:
+        return None
+    lines = []
+    if "decisive_verdict_disallows_missing_condition" in codes:
+        lines.append("확정 판정의 decision_issue.missing_condition_ko는 null이어야 한다.")
+    if "inconclusive_requires_unknown_severity" in codes:
+        lines.append("보류 판정의 threat_analysis.severity는 UNKNOWN이어야 한다.")
+    return ("\n".join(lines) + "\n원문을 다시 검토해 판정을 결정하고 그 판정에 맞춰 조건과 심각도를 작성한다. "
+            "검증을 통과하려고 판정·신뢰도를 바꾸거나 실제 미확인 조건을 무조건 삭제하지 않는다.")
+
+
+def _retry_instructions(attempts: list[dict[str, Any]], max_output_tokens: int,
+                        output_model: type[BaseModel] = WAFAnalysisOutput) -> str:
     previous = attempts[-1]
+    dependency = (_dependency_feedback_v216(previous["validation_issues"])
+                  if output_model is SecurityAnalysisOutputV216 and previous["retry_kind"] == "schema_correction" else None)
     if previous["retry_kind"] == "schema_correction":
-        feedback = _repair_instructions(previous["validation_issues"])
+        codes = {item.get("type") for item in previous["validation_issues"] if isinstance(item, dict)}
+        if dependency and codes <= _DEPENDENCY_ERRORS_V216:
+            feedback = "이전 출력의 판정 의존 필드가 서로 맞지 않는다. 같은 원본 입력과 필수 판정 기준으로 전체 JSON을 다시 작성한다.\n" + dependency
+        else:
+            feedback = _repair_instructions(previous["validation_issues"])
+            if dependency:
+                feedback += "\n\n" + dependency
     else:
         reason = previous["provider_finish_reason"]
         explanation = "출력 한도에 도달해" if reason in {"length", "max_tokens"} else "응답 생성 시간이 초과되어"
@@ -354,6 +379,12 @@ def _retry_instructions(attempts: list[dict[str, Any]], max_output_tokens: int) 
         )
     if level == 3:
         feedback += "\n불필요한 수식어·일반론·이미 다른 필드에서 한 설명을 빼고 모든 객체와 배열을 끝까지 닫는다."
+    if output_model in {SecurityAnalysisOutput, SecurityAnalysisOutputV216}:
+        # Keep pinned historical repair text intact while the smaller new
+        # contract never asks the model to reconstruct retired output fields.
+        feedback = feedback.replace("verdict, signature relation, severity와 tuning scope", "verdict, signature relation, severity와 supports")
+        feedback = feedback.replace("threat_analysis, signature_assessment, tuning_recommendation", "threat_analysis, signature_assessment")
+        feedback = feedback.replace("서로 다른 핵심 근거와 판정에 필요한 확인사항", "서로 다른 핵심 근거와 실제 보류 조건")
     return feedback
 
 
@@ -409,7 +440,7 @@ async def _execute_structured_agent(
     output_model: type[WAFAnalysisOutput] | type[EvidenceCorrectionOutput] = WAFAnalysisOutput,
 ) -> AgentCallResult:
     _validate_attempt_limit(output_validation_max_attempts)
-    if output_model not in {WAFAnalysisOutput, EvidenceCorrectionOutput, EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput, SemanticAssessmentOutput, EvidenceEditorOutput, ResultEditorOutput}:
+    if output_model not in {WAFAnalysisOutput, EvidenceCorrectionOutput, EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput, SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216, EvidenceEditorOutput, ResultEditorOutput}:
         raise ValueError("unsupported_agent_output_contract")
     if issubclass(output_model, EvidenceCorrectionOutput) and output_validation_max_attempts != 1:
         raise ValueError("evidence_correction_requires_single_attempt")
@@ -476,7 +507,7 @@ async def _execute_structured_agent(
         for attempt in range(1, output_validation_max_attempts + 1):
             repairing_output = attempt > 1
             run_instructions = (
-                f"{instructions}\n\n{_retry_instructions(attempts, profile.max_output_tokens)}"
+                f"{instructions}\n\n{_retry_instructions(attempts, profile.max_output_tokens, output_model)}"
                 if repairing_output
                 else instructions
             )

@@ -98,9 +98,9 @@ def test_moduagent_worker_uses_production_profile_and_stores_agent_steps(
     runs = client.get(f"/api/v1/analyses/{created['id']}/agent-runs").json()
     assert result["verdict"] == "true_positive"
     assert result["model_profile"] == "gemma4-prod"
-    assert result["result"]["schema_version"] == "waf-analysis-v2"
-    assert result["result"]["analyst_assessment"]["version"] == "analyst-assessment-v1"
-    assert result["result"]["analyst_assessment"]["evidence"][0]["supports"] == "context"
+    assert result["result"]["schema_version"] == "waf-analysis-v3"
+    assert "analyst_assessment" not in result["result"]
+    assert result["result"]["evidence"][0]["supports"] == "context"
     assert result["result"]["threat_analysis"]["severity"] == "HIGH"
     assert "uncertainties" not in result["result"]
     assert result["result"]["verifier"]["executed"] is False

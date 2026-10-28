@@ -65,15 +65,15 @@ def test_disagreement_keeps_policy_and_both_evidence_sides_not_primary_canonical
     assert ("Primary 판정", "정탐") in next(s.rows for s in report.sections if s.title == "세부 분석")
     assert ("Verifier 판정", "오탐") in next(s.rows for s in report.sections if s.title == "세부 분석")
     assert primary.threat_analysis.technique_ko not in text
-    assert {"공격 해석", "정상 해석"} <= {s.title for s in report.sections}
+    assert {"공격 요청 근거", "정상 요청 근거"} <= {s.title for s in report.sections}
     assert "공격 문법으로 해석" in text and "정상 데이터로 해석" in text
     assert detail == before
 
 
-@pytest.mark.parametrize("verdict,first", [("true_positive", "true_positive"), ("false_positive", "false_positive"), ("inconclusive", "true_positive")])
+@pytest.mark.parametrize("verdict,first", [("true_positive", "attack_request"), ("false_positive", "attack_request"), ("inconclusive", "attack_request")])
 def test_evidence_order_is_display_only(verdict, first):
     assert evidence_sections(verdict)[0][0] == first
-    assert {side for side, _ in evidence_sections(verdict)} == {"true_positive", "false_positive", "context", "unclassified"}
+    assert {side for side, _ in evidence_sections(verdict)} == {"attack_request", "normal_request", "context", "unclassified"}
 
 
 @pytest.mark.parametrize("verdict,label", [("true_positive", "정탐"), ("false_positive", "오탐")])

@@ -20,6 +20,9 @@ class VerifierPolicyContext:
     input_truncated: bool
     confidence_threshold: float = 0.75
     evidence_grounding_failed: bool = False
+    # None selects the pinned legacy rule. Explicit False is not inferred from
+    # evidence directions and must not silently fall back to that rule.
+    interpretation_conflict: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -49,7 +52,9 @@ def verifier_reasons(primary: WAFAnalysisOutput, context: VerifierPolicyContext)
         reasons.append("input_truncated")
     if primary.tuning_recommendation.recommended:
         reasons.append("tuning_recommended")
-    if primary.conflicting_evidence:
+    if context.interpretation_conflict is True:
+        reasons.append("interpretation_conflict")
+    elif context.interpretation_conflict is None and primary.conflicting_evidence:
         reasons.append("conflicting_evidence")
     if context.evidence_grounding_failed:
         reasons.append("evidence_grounding_failed")

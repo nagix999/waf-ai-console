@@ -137,6 +137,8 @@ def _base64_shape(value: str) -> bool:
 
 def _unicode_marker(value: str) -> bool:
     # Do not reinterpret an escaped backslash (e.g. a JSON literal \\u003c).
+    if "\\" not in value:
+        return False
     index = 0
     while index < len(value):
         if value[index] == "\\" and index + 1 < len(value):
@@ -395,6 +397,7 @@ def decode_payload(payload: str) -> dict:
     if _INCOMPLETE_ENTITY.search(text):
         _add_warning(result["warnings"], "incomplete_html_entity")
     candidates = 0
+    item_bytes = 0
     for start, end in _fragments(text):
         # A fragment cut at the scan boundary must not be presented as complete.
         if end == len(text) and len(payload) > len(text):
@@ -431,11 +434,17 @@ def decode_payload(payload: str) -> dict:
             "steps": steps,
             "warnings": warnings,
         }
-        result["items"].append(item)
-        if _serialized_size(result) > MAX_SERIALIZED_BYTES - _SERIALIZATION_RESERVE:
-            result["items"].pop()
+        # Keep the legacy ensure_ascii=True and default ', ' separators exactly.
+        # Re-encode only the small envelope when warnings change, not all items.
+        envelope_bytes = _serialized_size({**result, "items": []})
+        added_bytes = _serialized_size(item) + (2 if result["items"] else 0)
+        if envelope_bytes + item_bytes + added_bytes > MAX_SERIALIZED_BYTES - _SERIALIZATION_RESERVE:
             _add_warning(result["warnings"], "serialized_output_limit_reached")
             result["scan_truncated"] = True
             result["scanned_chars"] = end
             break
+        result["items"].append(item)
+        item_bytes += added_bytes
+    if _serialized_size(result) > MAX_SERIALIZED_BYTES:
+        raise ValueError("decoder_serialized_output_limit_exceeded")
     return result

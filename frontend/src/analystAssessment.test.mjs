@@ -8,7 +8,9 @@ import { buildAnalysisReport, decodeReportText } from "./analysisReport.js";
 const cases = JSON.parse(readFileSync(new URL("../../backend/tests/fixtures/analyst_assessment_cases.json", import.meta.url), "utf8"));
 for (const item of cases) test(`shared analyst presentation: ${item.name}`, () => {
   const before = JSON.stringify(item.result);
-  assert.deepEqual(assessmentView(item.result), item.expected);
+  const expected = item.expected && { ...item.expected, evidence: item.expected.evidence.map(row => ({ ...row,
+    supports: ({ true_positive: "attack_request", false_positive: "normal_request" })[row.supports] || row.supports })) };
+  assert.deepEqual(assessmentView(item.result), expected);
   assert.equal(JSON.stringify(item.result), before);
 });
 
@@ -34,7 +36,7 @@ test("markdown shows both evidence groups, linked hold issue, context and exact 
   input.result.primary = { verdict: "true_positive" };
   Object.defineProperty(input.result.primary, "input", { get() { throw Error("No raw role read"); } });
   const report = decodeReportText(buildAnalysisReport(input));
-  for (const label of ["공격 해석", "정상 해석", evidenceLabels.context, "판정에 필요한 확인", "관련 근거", "확인할 내용", "로그 발췌", "판단 이유", "같은 로그 발췌: 근거 2"]) assert.ok(report.includes(label), label);
+  for (const label of ["공격 요청 근거", "정상 요청 근거", evidenceLabels.context, "판정에 필요한 확인", "관련 근거", "확인할 내용", "로그 발췌", "판단 이유", "같은 로그 발췌: 근거 2"]) assert.ok(report.includes(label), label);
   for (const item of cases[0].expected.evidence) assert.ok(report.includes(item.interpretation_ko));
   assert.ok(!report.includes("연결할 수 없는 쟁점"));
   assert.ok(!report.includes("판단이 필요한 부분"));

@@ -23,7 +23,7 @@ def pdf_document(detail, *, decoding=None, include_appendix=False, theme="light"
     fields = "id event_id source_system status analysis_purpose ingest_channel company_name src_ip dest_ip src_port dest_port waf_vendor waf_action event_name signature created_at started_at completed_at total_elapsed_ms queue_wait_ms processing_duration_ms model_profile prompt_version verdict summary_ko severity input_truncated evaluation review_state error_code".split()
     clean = {key: detail[key] for key in fields if key in detail}
     result = detail.get("result") or {}
-    allowed = "schema_version verdict summary_ko confidence_score threat_analysis signature_assessment evidence analyst_guidance analyst_checks recommended_checks conflicting_evidence tuning_recommendation input_truncated analyst_assessment evidence_presentation follow_up_presentation".split()
+    allowed = "schema_version verdict summary_ko confidence_score threat_analysis signature_assessment evidence analyst_guidance analyst_checks recommended_checks conflicting_evidence tuning_recommendation input_truncated analyst_assessment evidence_presentation follow_up_presentation decision_issues interpretation_conflict".split()
     clean["result"] = {key: result[key] for key in allowed if key in result}
     def pick(value, keys):
         return {key: value[key] for key in keys.split() if key in value} if isinstance(value, dict) else {}

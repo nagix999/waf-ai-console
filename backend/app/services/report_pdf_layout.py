@@ -30,6 +30,8 @@ ACCENT = colors.HexColor("#147D64")
 LINE = colors.HexColor("#DEE7E4")
 PAPER = colors.HexColor("#F4F8F6")
 GROUPS = {
+    "공격 요청 근거": ("#B94235", "#FCF2EF"),
+    "정상 요청 근거": ("#16775E", "#EEF8F3"),
     "정탐 근거": ("#B94235", "#FCF2EF"),
     "오탐 근거": ("#16775E", "#EEF8F3"),
     "공격 해석": ("#B94235", "#FCF2EF"),
@@ -140,6 +142,8 @@ def evidence_card(title, rows, sheet):
     foreground, background = map(colors.HexColor, GROUPS[title])
     if sheet["theme"] == "dark":
         foreground, background = map(colors.HexColor, {
+            "공격 요청 근거": ("#FFA899", "#49332E"),
+            "정상 요청 근거": ("#8EDBC2", "#254339"),
             "정탐 근거": ("#FFA899", "#49332E"),
             "오탐 근거": ("#8EDBC2", "#254339"),
             "공격 해석": ("#FFA899", "#49332E"),
@@ -349,7 +353,8 @@ def render_pdf(document, *, theme="light"):
         heading = paragraph(f"{number:02d}   {section['title']}", sheet["section"])
         heading.bookmark = (f"section-{number}", section["title"])
         story.append(heading)
-        groups = evidence_groups(section["blocks"]) if section["title"] == "판정 근거" else [(None, section["blocks"])]
+        groups = evidence_groups(section["blocks"]) if section["title"] in {
+            "판정 근거", "보안 분석", "보안 분석 근거"} else [(None, section["blocks"])]
         for group_title, blocks in groups:
             if group_title is None:
                 for block in blocks:

@@ -1,6 +1,6 @@
 """Narrow normal-verdict guard; does not judge attack semantics or rewrite roles."""
 from .contracts import AgentVerdict, AnalystCheck, ThreatSeverity, TuningRecommendation
-from ..services.request_integrity import INTEGRITY_VERSION, NORMAL_GUARD_CODES
+from ..services.request_integrity import INTEGRITY_VERSION, INTEGRITY_V3_VERSION, NORMAL_GUARD_CODES
 from ..services.decision_explanation import input_limit_explanation
 
 
@@ -82,6 +82,6 @@ def apply_integrity_guard(output, assessment, raw, parsed):
         "analyst_checks": checks, "recommended_checks": recommended,
         "tuning_recommendation": TuningRecommendation(recommended=False),
     })
-    if assessment["version"] == INTEGRITY_VERSION:
+    if assessment["version"] in {INTEGRITY_VERSION, INTEGRITY_V3_VERSION}:
         revised = revised.model_copy(update={"summary_ko": input_limit_explanation(metadata["affected_issue_codes"])["reason_ko"]})
     return revised, metadata

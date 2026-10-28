@@ -1,5 +1,5 @@
 import asyncio
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile, status
 from pydantic import ValidationError
@@ -24,7 +24,7 @@ from ..schemas import (
     UploadResponse,
 )
 from ..security import CurrentPrincipal, Principal, require_scope
-from ..services.analysis import AnalysisIngestError, fetch_analysis, to_detail, to_summary
+from ..services.analysis import AnalysisIngestError, fetch_analysis, fetch_analysis_status, to_detail, to_summary
 from ..services.analysis_query import AnalysisFilters, filtered_evaluation_summary, find_analyses
 from ..services.timing import run_duration_ms, step_duration_ms
 from ..services.payload_decoding import decode_payload
@@ -48,6 +48,28 @@ def require_source(principal: Principal) -> str:
 def visible_source(principal: Principal) -> str | None:
     from ..services.analysis_access import ServiceAnalysisScope
     return None if "admin" in principal.scopes else ServiceAnalysisScope(require_source(principal), principal.purpose)
+
+
+def response_result_version(principal: Principal, requested: str | None) -> str:
+    # Existing collectors keep their v2 wire shape unless explicitly migrated.
+    return requested or ("v3" if "admin" in principal.scopes else "v2")
+
+
+async def wait_for_analysis(db: Session, identifier: str, source, wait_seconds: int):
+    """Poll a scalar status; assemble reviews/labels/retries only once at return."""
+    deadline = asyncio.get_running_loop().time() + wait_seconds
+    current = fetch_analysis_status(db, identifier, source) if wait_seconds else None
+    while wait_seconds and current in {"pending", "processing"}:
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            break
+        await asyncio.sleep(min(0.25, remaining))
+        current = fetch_analysis_status(db, identifier, source)
+    db.expire_all()
+    row = fetch_analysis(db, identifier, source)
+    if row is None:
+        raise HTTPException(404, "analysis_not_found")
+    return row
 
 
 def begin_analysis_read_snapshot(db: Session) -> None:
@@ -96,6 +118,7 @@ async def create_analysis(
     principal: Annotated[Principal, Depends(require_scope("ingest"))],
     wait_seconds: int = Query(default=0, ge=0, le=60, description="응답에서 분석 완료를 기다릴 시간(초). 테스트명이나 실행 시간 제한이 아닙니다."),
     test_run_id: str | None = Query(default=None, max_length=36, description="Test 키 전용. POST /api/v1/test-sessions 응답의 id를 전달합니다. 테스트명·임의 ID는 사용할 수 없으며 생략하면 테스트를 자동 생성합니다."),
+    result_version: Literal["v2", "v3"] | None = Query(default=None, description="서비스 키는 기본 v2 호환 응답입니다. v3를 선택하면 엄격한 새 결과 계약을 반환합니다. 과거 결과는 원래 버전을 유지합니다."),
 ) -> AnalysisDetail:
     from ..services.initial_assessment import FIELDS
     if set(FIELDS).intersection(payload.model_fields_set) and not (
@@ -103,7 +126,7 @@ async def create_analysis(
     ):
         raise HTTPException(422, "initial_assessment_service_key_required")
     if principal.purpose == "test":
-        if set(request.query_params) - {"wait_seconds", "test_run_id"}:
+        if set(request.query_params) - {"wait_seconds", "test_run_id", "result_version"}:
             raise HTTPException(422, "unsupported_query_parameter")
         from ..services.test_api import ingest
         from .validation_datasets import errors
@@ -113,17 +136,12 @@ async def create_analysis(
         item = items[0][0]
         if not item.analysis_id:
             raise HTTPException(413 if item.error_code == "payload_too_large" else 422, item.error_code or "invalid_test_event")
-        row = fetch_analysis(db, item.analysis_id, visible_source(principal))
-        deadline = asyncio.get_running_loop().time() + wait_seconds
-        while wait_seconds and row.status in {"pending", "processing"} and asyncio.get_running_loop().time() < deadline:
-            await asyncio.sleep(0.25)
-            db.expire_all()
-            row = fetch_analysis(db, item.analysis_id, visible_source(principal))
+        row = await wait_for_analysis(db, item.analysis_id, visible_source(principal), wait_seconds)
         row._test_run_id = run.id
         if row.status in {"pending", "processing"}:
             response.status_code = 202
-        return to_detail(row, request.app.state.crypto)
-    return await submit_analysis(payload, request, response, db, principal, wait_seconds, "production", "service_api")
+        return to_detail(row, request.app.state.crypto, result_version=response_result_version(principal, result_version))
+    return await submit_analysis(payload, request, response, db, principal, wait_seconds, "production", "service_api", result_version=result_version)
 
 
 @router.post(
@@ -139,8 +157,9 @@ async def create_test_analysis(
     name: str = Query(..., min_length=1, max_length=120),
     idempotency_key: str = Query(..., min_length=8, max_length=120),
     wait_seconds: int = Query(default=0, ge=0, le=60),
+    result_version: Literal["v2", "v3"] | None = Query(default=None),
 ) -> AnalysisDetail:
-    if set(request.query_params) - {"wait_seconds", "name", "idempotency_key"}:
+    if set(request.query_params) - {"wait_seconds", "name", "idempotency_key", "result_version"}:
         raise HTTPException(422, "unsupported_query_parameter")
     from .test_runs import submit
     from ..models import TestRunItem
@@ -150,24 +169,19 @@ async def create_test_analysis(
     if item.analysis_id is None:
         raise HTTPException(413 if item.error_code == "payload_too_large" else 422,
                             item.error_code or "invalid_test_event")
-    row = fetch_analysis(db, item.analysis_id)
-    if wait_seconds:
-        deadline = asyncio.get_running_loop().time() + wait_seconds
-        while row.status in {"pending", "processing"} and asyncio.get_running_loop().time() < deadline:
-            await asyncio.sleep(0.25)
-            db.expire_all()
-            row = fetch_analysis(db, item.analysis_id)
+    row = await wait_for_analysis(db, item.analysis_id, None, wait_seconds)
     row._test_run_id = run.id
     if row.status in {"pending", "processing"}:
         response.status_code = 202
-    return to_detail(row, request.app.state.crypto)
+    return to_detail(row, request.app.state.crypto, result_version=response_result_version(principal, result_version))
 
 
 async def submit_analysis(
     payload: AnalysisRequest, request: Request, response: Response, db: Session,
     principal: Principal, wait_seconds: int, purpose: str, channel: str,
+    *, result_version: str | None = None,
 ) -> AnalysisDetail:
-    if set(request.query_params) - {"wait_seconds"}:
+    if set(request.query_params) - {"wait_seconds", "result_version"}:
         raise HTTPException(status_code=422, detail="unsupported_query_parameter")
     try:
         row, _duplicate, _label_state = enqueue_with_expected_label(
@@ -182,19 +196,10 @@ async def submit_analysis(
         )
     except AnalysisIngestError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.issues or exc.code) from None
-    row = fetch_analysis(db, row.id, visible_source(principal))
-    if wait_seconds:
-        deadline = asyncio.get_running_loop().time() + wait_seconds
-        while row.status in {"pending", "processing"} and asyncio.get_running_loop().time() < deadline:
-            await asyncio.sleep(0.25)
-            db.expire_all()
-            refreshed = fetch_analysis(db, row.id)
-            if refreshed is None:
-                break
-            row = refreshed
+    row = await wait_for_analysis(db, row.id, visible_source(principal), wait_seconds)
     if row.status in {"pending", "processing"}:
         response.status_code = status.HTTP_202_ACCEPTED
-    return to_detail(row, request.app.state.crypto)
+    return to_detail(row, request.app.state.crypto, result_version=response_result_version(principal, result_version))
 
 
 @router.get("/analyses", response_model=AnalysisListResponse)
@@ -216,12 +221,14 @@ def get_analysis(
     analysis_id: str, db: DbSession,
     principal: Annotated[Principal, Depends(require_scope("ingest"))],
     request: Request = None,
+    result_version: Literal["v2", "v3"] | None = Query(default=None),
 ) -> AnalysisDetail:
     begin_analysis_read_snapshot(db)
     row = fetch_analysis(db, analysis_id, visible_source(principal))
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="analysis_not_found")
-    return to_detail(row, request.app.state.crypto if request is not None else None)
+    return to_detail(row, request.app.state.crypto if request is not None else None,
+                     result_version=response_result_version(principal, result_version))
 
 
 @router.get("/analyses/{analysis_id}/event", response_model=RawEventResponse)

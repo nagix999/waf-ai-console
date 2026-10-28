@@ -5,6 +5,7 @@ import json
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
+from pydantic import ValidationError
 
 from ..models import Analysis, Review
 from ..schemas import AnalysisDetail, AnalysisInput, AnalysisSummary
@@ -73,19 +74,26 @@ def to_summary(analysis: Analysis) -> AnalysisSummary:
     )
 
 
-def to_detail(analysis: Analysis, crypto: CryptoService | None = None) -> AnalysisDetail:
+def to_detail(analysis: Analysis, crypto: CryptoService | None = None, *, result_version: str = "v3") -> AnalysisDetail:
     metadata = None
     if crypto and (analysis.input_schema_version_id or analysis.input_schema_snapshot_ciphertext):
         try:
             metadata = schema_metadata(read_schema_snapshot(crypto, analysis))
         except InputSchemaError:
             metadata = {"version_id": analysis.input_schema_version_id, "status": "unavailable"}
+    result = analysis.result_json if isinstance(analysis.result_json, dict) else None
+    if result is not None and result.get("schema_version") == "waf-analysis-v3":
+        from ..result_contracts import legacy_result_projection, validate_new_result, StoredResultInvalid
+        try:
+            result = legacy_result_projection(result) if result_version == "v2" else validate_new_result(result)
+        except (ValidationError, ValueError, TypeError, KeyError):
+            raise StoredResultInvalid() from None
     return AnalysisDetail(
         **to_summary(analysis).model_dump(),
         # Preserve the existing object-or-null public contract even when an old
         # row contains malformed JSON shapes. Never rewrite the stored value;
         # evaluation separately excludes these as unknown provenance.
-        result=analysis.result_json if isinstance(analysis.result_json, dict) else None,
+        result=result,
         prompt_version=analysis.prompt_version,
         prompt_policy_version_id=analysis.prompt_policy_version_id,
         input_schema_metadata=metadata,
@@ -261,6 +269,15 @@ def fetch_analysis(db: Session, analysis_id: str, source_system: str | None = No
         attach_test_run_ids(db, [row])
         attach_retry_ids(db, [row])
     return row
+
+
+def fetch_analysis_status(db: Session, analysis_id: str, source_system=None) -> str | None:
+    """Admission polling needs neither encrypted inputs nor review/evaluation IO."""
+    query = select(Analysis.status).where(Analysis.id == analysis_id)
+    if source_system is not None:
+        from .analysis_access import source_condition
+        query = query.where(source_condition(source_system))
+    return db.scalar(query)
 
 
 def attach_retry_ids(db: Session, rows: list[Analysis]) -> None:

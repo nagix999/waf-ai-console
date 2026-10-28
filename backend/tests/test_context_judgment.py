@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from app.agent.evidence_candidates import SELECTION_RULES_VERSIONS
-from app.agent.prompts import FIXED_INSTRUCTIONS, FIXED_RULES_VERSION, PRIMARY_INSTRUCTIONS
+from app.agent.legacy_prompts_v214 import FIXED_INSTRUCTIONS, FIXED_RULES_VERSION, PRIMARY_INSTRUCTIONS
 from test_evidence_selection import build, resolver, selected
 from app.agent.evidence_candidates import resolve_selection
 

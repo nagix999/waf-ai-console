@@ -1,8 +1,8 @@
 """Pin optional editor independently from the mandatory decision roles."""
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from ..agent.evidence_editor import instructions_hash
-from ..agent.result_editor import INSTRUCTIONS, VERSION
+from ..agent.evidence_editor import (instructions_hash, CANONICAL_INSTRUCTIONS as INSTRUCTIONS,
+                                     CANONICAL_VERSION as VERSION)
 from ..models import AgentConfiguration, VLLMProfile
 from .agent_configuration import profile_metadata, validate_role_profile
 
@@ -48,6 +48,7 @@ def capture_editor_profile(profile, *, db=None):
                 version = expected["version"]
                 instructions = {evidence_editor.VERSION: evidence_editor.INSTRUCTIONS,
                     result_editor.LEGACY_VERSION: result_editor.LEGACY_INSTRUCTIONS,
+                    result_editor.VERSION: result_editor.INSTRUCTIONS,
                     VERSION: INSTRUCTIONS}[version]
                 if instructions_hash(instructions) != expected["instructions_hash"]:
                     raise ValueError()

@@ -290,7 +290,45 @@ curl --silent --show-error --fail-with-body \
 
 ### 분석가 확인 안내와 관리자 디코딩 조회
 
-새 결과는 `analyst_checks`에 최대 5개 `{source_ko, check_ko, why_ko}`를 추가할 수 있다. 각각 확인할 자료(240자), 확인할 내용(800자), 판단에 도움이 되는 이유·구분 조건(800자)다. `recommended_checks`는 유지한다. 서버의 `result.analyst_guidance={summary_ko, checks, limitations}`는 최종 판정을 바꾸지 않고 분석가용 안내를 제공한다. 기존 결과에는 이 필드가 없을 수 있다. 연동 판정은 여전히 최종 `verdict`이며 새 안내가 재판정이나 확인 완료를 뜻하지 않는다.
+다음 `analyst_checks` 안내는 v2 및 과거 결과 계약이다. 해당 결과는 최대 5개 `{source_ko, check_ko, why_ko}`를 제공할 수 있다. 각각 확인할 자료(240자), 확인할 내용(800자), 판단에 도움이 되는 이유·구분 조건(800자)다. 서버의 `result.analyst_guidance={summary_ko, checks, limitations}`는 최종 판정을 바꾸지 않고 분석가용 안내를 제공한다. 기존 결과에는 이 필드가 없을 수 있다. 연동 판정은 여전히 최종 `verdict`이며 새 안내가 재판정이나 확인 완료를 뜻하지 않는다.
+
+#### 결과 v3 선택과 기존 연동 호환
+
+`POST /api/v1/analyses` 및 `GET /api/v1/analyses/{analysis_id}`는 선택 query `result_version=v2|v3`를 받는다. 서비스 키의 기본 응답은 기존 v2 호환 형식이며, 관리자 UI는 새 결과의 v3를 기본 사용한다. 이 옵션은 응답 형식만 선택하며 지침 변경·모델 재호출·운영 반영을 하지 않는다. 과거 지침으로 생성한 결과는 `v3`를 요청해도 당시 버전을 유지한다.
+
+```http
+GET /api/v1/analyses/{analysis_id}?result_version=v3
+X-API-Key: YOUR_SERVICE_API_KEY
+```
+
+후보 고정 지침 `waf-system-v2.15`의 새 결과는 `schema_version=waf-analysis-v3`이다. 결과 및 하위 객체의 미정의 필드는 거부하며, `result.evidence`가 유일한 근거 목록이다. 아래는 관련 필드만 발췌한 예시다.
+
+```json
+{
+  "schema_version": "waf-analysis-v3",
+  "verdict": "true_positive",
+  "summary_ko": "요청 파라미터에서 SQL 조건을 우회하는 논리식과 주석 구문이 함께 확인됩니다.",
+  "evidence": [{
+    "evidence_id": "e1",
+    "field": "payload.query",
+    "excerpt": "q=' OR 1=1 --",
+    "interpretation_ko": "참인 논리식을 삽입하고 뒤의 SQL을 주석 처리하려는 구문입니다. 실제 SQL 실행이나 침해 성공까지 입증하지는 않습니다.",
+    "supports": "attack_request",
+    "origins": [{"role": "primary", "index": 0, "source_id": "c1"}],
+    "source_spans": [{"start": 12, "end": 25}]
+  }],
+  "decision_issues": [],
+  "interpretation_conflict": false
+}
+```
+
+- `supports`는 `attack_request`(공격 요청 근거), `normal_request`(정상 요청 근거), `context`(참고 내용) 중 필수 값이다. 최종 정오탐·침해 성공과는 별개이며 근거 개수나 WAF 조치로 판정하지 않는다.
+- 역할별 선택은 최대 5개, 양 역할의 원문 대조된 근거는 최대 10개다. 최종 정책의 기존 최대 5개 근거는 `policy.decision_evidence_ids`로 연결한다. 역할 기록도 중복 목록 대신 `evidence_ids`를 사용한다.
+- 실제 미확인 조건은 `decision_issues`의 `point_ko/evidence_ids/missing_condition_ko/origins`에 기록한다. 기술적 보류는 `diagnostics`로 설명하며 업무 자료 부족으로 추정하지 않는다.
+- v3에는 `analyst_assessment`, `tuning_recommendation`, `analyst_checks`, `recommended_checks`, `conflicting_evidence`가 없다. 분석 요약은 요청 내용만 담고 최종 보류 사유는 별도로 표시한다.
+- `interpretation_conflict`는 실제로 양립하기 어려운 해석이 남았다는 명시적 신호다. 양쪽 근거의 존재를 곧 충돌로 해석하지 않는다. 튜닝 전용 검증 조건의 제거는 `policy.retired_verifier_triggers`에 기록하며 다른 검증 조건과 실패·불일치 보류는 유지한다.
+- v2 호환 응답은 기존 필드를 유지한 읽기 전용 변환이다. 제거된 확인 목록은 빈 배열, 튜닝 제안은 비활성 값이며 별도 LLM이 생성한 결과가 아니다. 변환 결과를 저장하거나 재평가 입력으로 사용하지 않는다. 외부 연동은 v3의 필드·enum·최대 개수에 맞춘 뒤 명시적으로 전환한다.
+- 웹·Markdown·PDF·Excel의 근거 분류는 같다. 새 Excel 컬럼은 `evidence_attack_request`, `evidence_normal_request`, `evidence_context`이며 각 최대 5개·`\n---\n` 구분을 유지한다. 구 선택 컬럼명은 입력 별칭으로 받되 다운로드 헤더는 새 영문명이다.
 
 v2.4는 보류에서 판정을 구분하는 확인 1~3개, 확정 판정에서는 영향 범위·대응 안전성 등에 유용한 선택적 후속 확인만 1~2개 요청한다. 확정 판정의 기본값은 두 확인 목록 모두 빈 배열이다. `analyst_guidance.checks=[]`도 명시적인 빈 목록으로 취급하며 이전 필드로 재채우지 않는다. 신뢰도 숫자로 확인 필요 여부를 결정하지 않는다. UI와 보고서의 추가 확인은 마지막에 배치한다. 같은 출처·원문·해석의 완전 중복 근거는 최종 결합에서 제거하되 개별 Agent 출력과 기존 결과는 보존한다. 문장 유사도로 반대 해석이나 다른 출처를 삭제하지 않는다.
 

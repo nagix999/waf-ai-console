@@ -512,8 +512,8 @@ pre { max-width: 100%; overflow: auto; padding: 13px; border-radius: 8px; backgr
 .evidence-sides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .evidence-side { min-width: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
 .evidence-side > h3 { margin: 0; padding: 12px 16px; background: var(--raised); font-size: 14px; }
-.evidence-true_positive > h3 { color: var(--danger); background: var(--danger-soft); }
-.evidence-false_positive > h3 { color: var(--ok); background: var(--ok-soft); }
+.evidence-attack_request > h3 { color: var(--danger); background: var(--danger-soft); }
+.evidence-normal_request > h3 { color: var(--ok); background: var(--ok-soft); }
 .evidence-context, .evidence-unclassified { grid-column: 1 / -1; }
 .evidence-item { padding: 16px; min-width: 0; }
 .evidence-item .evidence-heading { margin-bottom: 12px; }

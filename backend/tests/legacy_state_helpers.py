@@ -8,6 +8,18 @@ from app.models import AgentConfiguration, VLLMProfile
 from app.services.input_schemas import activate_schema_version, get_schema_state
 
 
+def pin_legacy_v214(monkeypatch):
+    """Exercise immutable old wire/check/editor contracts, not newest defaults."""
+    from app.agent import legacy_prompts_v214, result_editor
+    from app.services import prompt_snapshots, evidence_editor
+    original = prompt_snapshots._build_snapshot
+    def build_snapshot(version, crypto, *, origin="enqueue", rules=None):
+        return original(version, crypto, origin=origin, rules=rules or legacy_prompts_v214)
+    monkeypatch.setattr(prompt_snapshots, "_build_snapshot", build_snapshot)
+    monkeypatch.setattr(evidence_editor, "VERSION", result_editor.VERSION)
+    monkeypatch.setattr(evidence_editor, "INSTRUCTIONS", result_editor.INSTRUCTIONS)
+
+
 def seed_production(client, profile):
     identifier = profile["id"] if isinstance(profile, dict) else profile
     with client.app.state.session_factory() as db:

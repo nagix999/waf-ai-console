@@ -155,6 +155,12 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
             response.headers["Cache-Control"] = "no-store"
         return response
 
+    from .result_contracts import StoredResultInvalid
+
+    @app.exception_handler(StoredResultInvalid)
+    async def invalid_stored_result(_request: Request, _exc: StoredResultInvalid) -> JSONResponse:
+        return JSONResponse(status_code=503, content={"detail": "analysis_result_invalid"})
+
     @app.exception_handler(RequestValidationError)
     async def sanitized_validation_error(_request: Request, exc: RequestValidationError) -> JSONResponse:
         details = [

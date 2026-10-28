@@ -190,10 +190,12 @@ def test_legacy_unversioned_queue_uses_original_default_not_new_active(client, e
 
 def test_packaged_production_template_is_the_documented_source():
     root = Path(__file__).resolve().parents[2]
-    if not (root / "docs/Production_API_v0.1.md").exists():
-        # The backend-only Docker context has its own deployable copy.
-        return
-    assert (root / "docs/Production_API_v0.1.md").read_bytes() == (root / "backend/app/data/production_api.md").read_bytes()
+    # Ignored local design/history files are not a deployment dependency or a
+    # second authoritative copy. The frontend and API use the packaged source.
+    document = (root / "backend/app/data/production_api.md").read_text()
+    assert "result_version=v3" in document and "waf-analysis-v3" in document
+    if (root / "frontend/src/apiDocument.js").exists():
+        assert "backend/app/data/production_api.md" in (root / "frontend/src/apiDocument.js").read_text()
 
 
 def test_live_document_requires_ingest_credentials(client, service_headers):

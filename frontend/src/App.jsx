@@ -38,7 +38,8 @@ import { evaluationOutcomes, isMockAnalysis, labelSources, referenceVerdicts } f
 import { createDetailLoader, emptyDetailState } from "./detailLoader.js";
 import { analystSummary, analystText, finalValue, isTechnicalText } from "./analystView.js";
 import DetailTabs from "./DetailTabs.jsx";
-import { DecisionHero, DecisionContext, EvidenceCards, DecisionConditions, TechnicalInterpretation, PolicySuggestion, EvidenceWorkspace, ExecutionView } from "./AnalysisDecision.jsx";
+import { DecisionHero, DecisionContext, EvidenceCards, DecisionConditions, FinalDecisionReason, TechnicalInterpretation, PolicySuggestion, EvidenceWorkspace, ExecutionView } from "./AnalysisDecision.jsx";
+import { isResultV3 } from "./assessmentData.js";
 import { decisionTab } from "./decisionDetail.js";
 import "./inferenceDetail.css";
 import QuickValidationDialog from "./QuickValidationDialog.jsx";
@@ -531,8 +532,10 @@ export function ResultView({ detail, onViewInput, onExecution, includePolicy = t
   if (!detail.result || detail.status !== "completed") return null;
   return <div className="decision-main-stack">
     <EvidenceCards detail={detail} onViewInput={onViewInput} />
-    <DecisionConditions detail={detail} onViewInput={onViewInput} />
+    {!isResultV3(detail.result) && <DecisionConditions detail={detail} onViewInput={onViewInput} />}
     <TechnicalInterpretation detail={detail} onExecution={onExecution} />
+    <FinalDecisionReason detail={detail} />
+    {isResultV3(detail.result) && <DecisionConditions detail={detail} onViewInput={onViewInput} />}
     {includePolicy && <PolicySuggestion detail={detail} />}
   </div>;
 }

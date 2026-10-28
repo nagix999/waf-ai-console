@@ -1,21 +1,26 @@
 import { analystText } from "./analystText.js";
 import { presentationItems } from "./evidencePresentation.js";
 
-export const evidenceLabels = { true_positive: "정탐 근거", false_positive: "오탐 근거", context: "참고 내용", unclassified: "구분 미기록" };
+export const evidenceLabels = { attack_request: "공격 요청 근거", normal_request: "정상 요청 근거", context: "참고 내용", unclassified: "구분 미기록" };
 export const evidenceNotice = "로그에서 확인한 발췌와 그에 대한 해석입니다. 근거 개수로 판정을 결정하지 않습니다.";
-export const legacyEvidenceNotice = "기존 분석에는 정탐·오탐 근거 구분이 기록되지 않았습니다.";
+export const legacyEvidenceNotice = "기존 분석에는 공격·정상 요청 근거 구분이 기록되지 않았습니다.";
 const record = value => value !== null && typeof value === "object" && !Array.isArray(value);
 const list = value => Array.isArray(value) ? value : [];
+export const isResultV3 = result => result?.schema_version === "waf-analysis-v3";
 
 // Allowlist only the saved presentation record. Never classify older evidence
 // from a verdict, or read intermediate role outputs to manufacture a cause.
 export function assessmentView(result) {
-  const assessment = result?.analyst_assessment;
-  if (!record(assessment) || assessment.version !== "analyst-assessment-v1") return null;
+  const modern = isResultV3(result);
+  const assessment = modern ? result : result?.analyst_assessment;
+  if (!record(assessment) || (!modern && assessment.version !== "analyst-assessment-v1")) return null;
   const evidence = [], seen = new Map(), references = new Map();
   for (const item of presentationItems(assessment, result.evidence_presentation)) {
     if (!record(item) || !["field", "excerpt", "interpretation_ko"].every(key => typeof item[key] === "string" && item[key].trim())) continue;
-    const supports = typeof item.supports === "string" && Object.hasOwn(evidenceLabels, item.supports) ? item.supports : "unclassified";
+    // Historical directions were recorded by the model. Translate only those
+    // explicit values; never infer a direction from prose or the final verdict.
+    const direction = modern ? item.supports : ({ true_positive: "attack_request", false_positive: "normal_request", context: "context" })[item.supports];
+    const supports = typeof direction === "string" && Object.hasOwn(evidenceLabels, direction) ? direction : "unclassified";
     const key = JSON.stringify([item.field, item.excerpt, item.interpretation_ko, supports]);
     if (!seen.has(key)) {
       seen.set(key, { number: evidence.length + 1, field: item.field, excerpt: item.excerpt, interpretation_ko: analystText(item.interpretation_ko), supports });

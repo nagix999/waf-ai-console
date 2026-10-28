@@ -3,7 +3,8 @@ import { useR5Words, verdictText } from "./R5Evaluation.jsx";
 import { useConsolePreferences } from "./consolePreferences.jsx";
 import { analysisNotices, analystFieldLabel, analystGuidance, analystItems, analystSummary, analystText, finalValue, hasTuningContent } from "./analystView.js";
 import { assessmentView } from "./analystAssessment.js";
-import { provisionalAnalysisNotice } from "./decisionExplanation.js";
+import { decisionExplanation, provisionalAnalysisNotice } from "./decisionExplanation.js";
+import { isResultV3 } from "./assessmentData.js";
 import { decisionConditions, detailEvidence } from "./decisionDetail.js";
 import { disagreementNotice, evidenceSections, legacySignatureNotice, severityMeaning, signatureSummary, verifierDisagreed, wafObservation } from "./decisionSemantics.js";
 import { formatDate, formatDuration, executionDuration } from "./analysisView.js";
@@ -20,7 +21,7 @@ import "./analysisDecision.css";
 
 function Direction({ value, label }) {
   const w = useR5Words();
-  return <span className={`decision-direction direction-${value}`}>{label ? w(...label) : ({ true_positive: w("정탐 근거", "Attack evidence"), false_positive: w("오탐 근거", "Benign evidence"), context: w("참고 내용", "Context"), unclassified: w("구분 미기록", "Unclassified") })[value]}</span>;
+  return <span className={`decision-direction direction-${value}`}>{label ? w(...label) : ({ attack_request: w("공격 요청 근거", "Attack request evidence"), normal_request: w("정상 요청 근거", "Normal request evidence"), context: w("참고 내용", "Context"), unclassified: w("구분 미기록", "Unclassified") })[value]}</span>;
 }
 
 export function DecisionHero({ detail }) {
@@ -54,8 +55,9 @@ export function EvidenceCards({ detail, onViewInput }) {
     <div className="decision-evidence-content"><span className="sr-only">{w("원문 발췌", "Source excerpt")}</span><code dir="ltr">{item.excerpt}</code><p>{analystText(item.interpretation_ko)}</p>{!!item.related_numbers.length && <small className="muted">{w("같은 로그 발췌", "Same excerpt")}: {item.related_numbers.join(" · ")}</small>}</div>
     {onViewInput && item.field && item.excerpt && <button type="button" className="text-button evidence-input-link" onClick={() => onViewInput(item)}>{w("원문에서 보기", "View source")} →</button>}
   </article>)}</div>;
-  return <section className="panel decision-evidence-panel"><div className="panel-head-inline"><h2>{w("판정 근거", "Decision evidence")}</h2>{onViewInput && <NavigationAction onClick={() => onViewInput(null)}>{w("전체 근거·원문", "All evidence & input")}</NavigationAction>}</div>
-    {!classified && !!items.length && <p className="muted">{w("기존 분석에는 정탐·오탐 근거 구분이 기록되지 않았습니다.", "This older analysis has no recorded evidence directions.")}</p>}
+  return <section className="panel decision-evidence-panel"><div className="panel-head-inline"><h2>{isResultV3(detail.result) ? w("보안 분석 근거", "Security analysis evidence") : w("판정 근거", "Decision evidence")}</h2>{onViewInput && <NavigationAction onClick={() => onViewInput(null)}>{w("전체 근거·원문", "All evidence & input")}</NavigationAction>}</div>
+    {!classified && !!items.length && <p className="muted">{w("기존 분석에는 공격·정상 요청 근거 구분이 기록되지 않았습니다.", "This older analysis has no recorded evidence directions.")}</p>}
+    {classified && <p className="muted">{w("공격 요청 근거는 공격 성공을 뜻하지 않으며, 근거 개수로 최종 판정을 결정하지 않습니다.", "Attack request evidence does not establish attack success. Evidence counts do not determine the final decision.")}</p>}
     {groups.map(group => group.side === "context" ? <details className="decision-context-evidence" key={group.side}><summary><Direction value={group.side} label={group.label} /> <span>{group.items.length}</span></summary>{rows(group)}</details> : <section className={`decision-evidence-group evidence-${group.side}`} key={group.side}><h3><Direction value={group.side} label={group.label} /></h3>{rows(group)}</section>)}
     {!items.length && <p className="muted">{w("저장된 판정 근거가 없습니다. 이것만으로 공격이 없다고 볼 수는 없습니다.", "No decision evidence is recorded. This does not establish that the request is benign.")}</p>}
   </section>;
@@ -67,9 +69,23 @@ export function DecisionConditions({ detail, onViewInput }) {
   return <section className="panel decision-conditions">
     {conditions.sections.map((section, index) => <div key={section.key} className="decision-check-group" data-purpose={section.key}><h2>{w(...section.title)}</h2>
       {section.introduction && <p className="muted">{w(section.introduction, section.introductionEn || section.introduction)}</p>}
-      {index === 0 && wafObservation(detail.waf_action) && <p className="muted">{w(...wafObservation(detail.waf_action))}</p>}
+      {!isResultV3(detail.result) && index === 0 && wafObservation(detail.waf_action) && <p className="muted">{w(...wafObservation(detail.waf_action))}</p>}
       {section.items.length ? <ol>{section.items.map((item, index) => <li key={index}><h3>{item.title}</h3>{item.notes.map(note => <p key={note}>{note}</p>)}{item.checks.map((check, i) => <div className="decision-check-source" key={i}><strong>{check.source_ko}</strong>{check.why_ko !== item.title && !item.notes.includes(check.why_ko) && <p>{check.why_ko}</p>}</div>)}{!!item.evidence_numbers.length && <div className="decision-related">{w("관련 근거", "Related evidence")} {item.evidence_numbers.map(number => { const source = evidence.find(row => row.number === number); return source && onViewInput ? <button type="button" className="text-button" key={number} onClick={() => onViewInput(source)}>{number}</button> : <span key={number}>{number}</span>; })}</div>}</li>)}</ol> : section.empty && <p className="muted">{section.empty}</p>}
     </div>)}
+  </section>;
+}
+
+export function FinalDecisionReason({ detail }) {
+  const w = useR5Words();
+  if (!isResultV3(detail.result) || detail.status !== "completed" || isMockAnalysis(detail)) return null;
+  const held = finalValue(detail, "verdict") === "inconclusive", explanation = held ? decisionExplanation(detail) : null;
+  // Decisive results are explained by their linked evidence. Do not manufacture
+  // a second generic rationale or generate another summary on the client.
+  if (!explanation) return null;
+  const issues = held ? (assessmentView(detail.result)?.issues || []).filter(issue => !issue.missing_condition_ko) : [];
+  return <section className="panel decision-final-reason"><h2>{w("최종 판정 이유", "Final decision reasons")}</h2>
+    <p>{explanation.reason_ko}</p>
+    {!!issues.length && <ul>{issues.map((issue, index) => <li key={index}>{issue.point_ko}<small className="muted"> · {w("관련 근거", "Related evidence")} {issue.evidence_numbers.join(" · ")}</small></li>)}</ul>}
   </section>;
 }
 
@@ -87,7 +103,7 @@ function ThreatFields({ threat, verdict }) {
 
 export function TechnicalInterpretation({ detail, onExecution }) {
   const w = useR5Words(), result = detail.result, threat = result?.threat_analysis, signature = result?.signature_assessment;
-  const guidance = analystGuidance(detail), circumstances = analystItems(result?.conflicting_evidence);
+  const guidance = analystGuidance(detail), circumstances = isResultV3(result) ? [] : analystItems(result?.conflicting_evidence);
   const disagreed = verifierDisagreed(detail), verdict = finalValue(detail, "verdict");
   const issues = ["true_positive", "false_positive"].includes(verdict) ? assessmentView(result)?.issues || [] : [];
   return <section className="panel decision-technical"><details><summary>{w("기술 해석 펼치기", "Technical interpretation")}</summary>
@@ -109,7 +125,9 @@ export function TechnicalInterpretation({ detail, onExecution }) {
 }
 
 export function PolicySuggestion({ detail }) {
-  const w = useR5Words(), tuning = detail.result?.tuning_recommendation;
+  const w = useR5Words();
+  if (isResultV3(detail.result)) return null;
+  const tuning = detail.result?.tuning_recommendation;
   if (!hasTuningContent(tuning)) return null;
   return <section className="panel decision-policy"><details><summary>{w("정책 검토 제안", "Policy review suggestion")}{!tuning.recommended && <small>{w("주의사항", "Cautions")}</small>}</summary><dl className="decision-definitions">{[[w("범위", "Scope"), tuning.scope], [w("제안", "Suggestion"), tuning.proposal_ko], [w("변경 시 주의사항", "Risks"), tuning.risk_ko], [w("적용 전 확인", "Before applying"), tuning.validation_ko]].filter(([, value]) => analystText(value, "")).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{analystText(value)}</dd></div>)}</dl><p className="muted">{w("WAF 설정은 자동 변경하지 않습니다.", "WAF settings are never changed automatically.")}</p></details></section>;
 }

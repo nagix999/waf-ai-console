@@ -28,11 +28,11 @@
 .decision-evidence-panel > .panel-head-inline { gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
 .decision-evidence-group + .decision-evidence-group { margin-top: 18px; }
 .decision-evidence-group > h3 { margin: 0 0 12px; background: var(--raised); padding: 8px 10px; border-radius: 7px; }
-.decision-evidence-group.evidence-true_positive > h3 { background: var(--danger-soft); }
-.decision-evidence-group.evidence-false_positive > h3 { background: var(--ok-soft); }
+.decision-evidence-group.evidence-attack_request > h3 { background: var(--danger-soft); }
+.decision-evidence-group.evidence-normal_request > h3 { background: var(--ok-soft); }
 .decision-direction { font-size: 11px; font-weight: 700; color: var(--muted); }
-.direction-true_positive { color: var(--danger); }
-.direction-false_positive { color: var(--ok); }
+.direction-attack_request { color: var(--danger); }
+.direction-normal_request { color: var(--ok); }
 .decision-evidence-row { display: grid; grid-template-columns: 115px minmax(0, 1fr); column-gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--line); }
 .decision-evidence-row:first-child { padding-top: 0; }
 .decision-evidence-row:last-child { padding-bottom: 0; border-bottom: 0; }

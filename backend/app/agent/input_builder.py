@@ -85,7 +85,9 @@ def truncate_payload(payload: str, max_chars: int, signature: str | None = None)
     return text, text != payload
 
 
-def _select_payload(payload: str, max_chars: int, signature: str | None) -> tuple[str, list[tuple[int, int]]]:
+def _select_payload(
+    payload: str, max_chars: int, signature: str | None, *, signature_index: int | None = None,
+) -> tuple[str, list[tuple[int, int]]]:
     """Select exact continuous source spans, retaining their original offsets."""
     max_chars = max(0, max_chars)
     if len(payload) <= max_chars:
@@ -93,7 +95,8 @@ def _select_payload(payload: str, max_chars: int, signature: str | None) -> tupl
     if max_chars <= len(TRUNCATION_MARKER):
         return payload[:max_chars], [(0, max_chars)]
     usable = max_chars - len(TRUNCATION_MARKER) * 2
-    signature_index = payload.lower().find(signature.lower()) if signature else -1
+    if signature_index is None:
+        signature_index = payload.lower().find(signature.lower()) if signature else -1
     if usable >= 100 and signature_index > usable // 2 and signature_index < len(payload) - usable // 3:
         head_size = int(usable * 0.45)
         signature_size = int(usable * 0.25)
@@ -123,9 +126,13 @@ def _bounded_payload(payload: str, budget: int, signature: str | None) -> tuple[
     low, high = 0, min(len(payload), budget - 2)
     fitted = ""
     retained = []
+    # Reuse the exact legacy lowercase-search index throughout this fit. Do not
+    # translate Unicode lowercase offsets: that would change retained sources
+    # for pinned executions whose lowercase form expands a character.
+    signature_index = payload.lower().find(signature.lower()) if signature else -1
     while low <= high:
         middle = (low + high) // 2
-        candidate, spans = _select_payload(payload, middle, signature)
+        candidate, spans = _select_payload(payload, middle, signature, signature_index=signature_index)
         if len(_serialize(candidate)) <= budget:
             fitted, low = candidate, middle + 1
             retained = spans
@@ -146,6 +153,8 @@ def _decoding_hints(decoding: dict[str, Any], raw_payload: str, spans: list[tupl
         "raw_source_field": "payload",
         "source_offsets": "original_payload_characters_end_exclusive",
     }
+    base_chars = len(_serialize(result))
+    item_chars = 0
     for item in decoding.get("items", []):
         start, end = item["start"], item["end"]
         # Offset membership matters: a duplicate substring elsewhere in the
@@ -153,11 +162,15 @@ def _decoding_hints(decoding: dict[str, Any], raw_payload: str, spans: list[tupl
         if raw_payload[start:end] != item["original"] or not any(a <= start < end <= b for a, b in spans):
             result["omitted_items"] = True
             continue
-        candidate = {**result, "items": [*result["items"], item]}
-        if len(_serialize(candidate)) <= budget:
+        added_chars = len(_serialize(item)) + (1 if result["items"] else 0)
+        # The only changing envelope field is false -> true (one char shorter).
+        if base_chars - int(result["omitted_items"]) + item_chars + added_chars <= budget:
             result["items"].append(item)
+            item_chars += added_chars
         else:
             result["omitted_items"] = True
+    if result["items"] and len(_serialize(result)) > budget:
+        raise ValueError("agent_context_budget_too_small")
     return result
 
 

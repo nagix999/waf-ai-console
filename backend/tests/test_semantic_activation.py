@@ -2,7 +2,7 @@
 import copy
 
 import pytest
-from app.agent import legacy_prompts_v212, legacy_prompts_v213
+from app.agent import legacy_prompts_v212, legacy_prompts_v213, legacy_prompts_v214, legacy_prompts_v215
 from app.agent import result_editor
 from app.models import Analysis, ProductionPromotion, TestRun as AnalysisTestRun
 from app.services.candidate_configurations import configuration_digest
@@ -28,7 +28,7 @@ def legacy_baseline(client, rules=legacy_prompts_v212):
         return copy.deepcopy(snapshot)
 
 
-@pytest.mark.parametrize("rules", [legacy_prompts_v212, legacy_prompts_v213])
+@pytest.mark.parametrize("rules", [legacy_prompts_v212, legacy_prompts_v213, legacy_prompts_v214, legacy_prompts_v215])
 def test_legacy_production_stays_pinned_until_official_candidate_is_promoted(client, event_payload, candidate, rules):
     before = legacy_baseline(client, rules)
     current = client.get(BASE).json()
@@ -36,7 +36,7 @@ def test_legacy_production_stays_pinned_until_official_candidate_is_promoted(cli
     old = client.post("/api/v1/analyses", json=event_payload).json()
     assert old["prompt_version"].startswith(rules.PROMPT_VERSION + "/")
     run = qualified(client, event_payload, candidate)
-    assert run["configuration_snapshot"]["prompt"]["fixed_rules_version"] == "waf-system-v2.14"
+    assert run["configuration_snapshot"]["prompt"]["fixed_rules_version"] == "waf-system-v2.16"
     assert client.get(BASE).json()["snapshot"] == before
     review = client.get(f"{BASE}/preflight/{run['id']}").json()
     assert review["eligible"], review["checks"]
@@ -44,7 +44,7 @@ def test_legacy_production_stays_pinned_until_official_candidate_is_promoted(cli
         "expected_production_configuration_hash": current["configuration_hash"], "acknowledge_schema_change": True})
     assert response.status_code == 200, response.text
     new = client.post("/api/v1/analyses", json={**event_payload, "event_id": "after-promotion", "vendor_score": 2}).json()
-    assert new["prompt_version"].startswith("waf-judgment-v2.14/")
+    assert new["prompt_version"].startswith("waf-judgment-v2.16/")
     with client.app.state.session_factory() as db:
         old_snapshot = load_analysis_prompt(db.get(Analysis, old["id"]), client.app.state.crypto)
         new_snapshot = load_analysis_prompt(db.get(Analysis, new["id"]), client.app.state.crypto)
@@ -65,7 +65,7 @@ def test_corrupt_approval_never_falls_back_to_latest_rules(client, candidate):
             pin_analysis_prompt(db, client.app.state.crypto, Analysis(analysis_purpose="production"))
 
 
-def test_production_editor_preserves_v2_instructions_while_candidate_uses_v3(client, candidate):
+def test_production_editor_preserves_old_instructions_while_candidate_is_evidence_only(client, candidate):
     from app.models import VLLMProfile
     snapshot = legacy_baseline(client)
     with client.app.state.session_factory() as db:
@@ -81,4 +81,4 @@ def test_production_editor_preserves_v2_instructions_while_candidate_uses_v3(cli
         pinned = capture_editor_profile(profile, db=db)
         assert pinned.version == "result-editor-v2"
         assert pinned.instructions == result_editor.LEGACY_INSTRUCTIONS
-        assert capture_editor_profile(profile).version == "result-editor-v3"
+        assert capture_editor_profile(profile).version == "evidence-editor-v2"

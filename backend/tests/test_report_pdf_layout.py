@@ -124,6 +124,28 @@ def test_grouping_preserves_blocks_and_explicit_support_only():
     assert blocks == before
 
 
+@pytest.mark.parametrize("title", ["판정 근거", "보안 분석", "보안 분석 근거"])
+@pytest.mark.parametrize("theme", ["light", "dark"])
+def test_canonical_evidence_headers_keep_direction_colors_in_pdf(monkeypatch, title, theme):
+    source = document()
+    source["sections"][0] = {"title": title, "blocks": [
+        {"type": "heading", "level": 3, "text": "공격 요청 근거"},
+        {"type": "code", "text": "synthetic attack excerpt"},
+        {"type": "heading", "level": 3, "text": "정상 요청 근거"},
+        {"type": "paragraph", "text": "가상 정상 요청 해석입니다."},
+    ]}
+    original, observed = renderer.evidence_card, []
+    def capture(name, rows, sheet):
+        card = original(name, rows, sheet)
+        observed.append((name, card.group_heading_style.textColor))
+        return card
+    monkeypatch.setattr(renderer, "evidence_card", capture)
+    assert renderer.render_pdf(source, theme=theme).startswith(b"%PDF-")
+    palette = ("#B94235", "#16775E") if theme == "light" else ("#FFA899", "#8EDBC2")
+    assert observed == [(name, renderer.colors.HexColor(color)) for name, color in zip(
+        ("공격 요청 근거", "정상 요청 근거"), palette)]
+
+
 def test_card_repeats_heading_and_color_when_split_without_changing_original():
     renderer.register_fonts()
     sheet = renderer.styles()

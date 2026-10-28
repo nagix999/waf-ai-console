@@ -55,14 +55,14 @@ test("pending and failed results never masquerade as final decisions", () => {
 });
 test("evidence keeps opposing interpretations and source numbers; legacy evidence stays unclassified", () => {
   const detail = fixture(), items = detailEvidence(detail.result);
-  assert.deepEqual(items.map(item => item.supports), ["true_positive", "false_positive", "context"]);
+  assert.deepEqual(items.map(item => item.supports), ["attack_request", "normal_request", "context"]);
   assert.deepEqual(items[0].related_numbers, [2]);
   assert.equal(detailEvidence({ verdict: "true_positive", evidence: [{ field: "payload", excerpt: "x", interpretation_ko: "y" }] })[0].supports, "unclassified");
 });
 test("reference evidence is folded, attack and benign evidence stay visible and inert", () => {
   const detail = fixture(); detail.result.analyst_assessment.evidence[0].excerpt = '<script>window.hostile=true</script>';
   const html = render(EvidenceCards, { detail, onViewInput() {} });
-  assert.match(html, /공격 해석/); assert.match(html, /정상 해석/);
+  assert.match(html, /공격 요청 근거/); assert.match(html, /정상 요청 근거/);
   assert.match(html, /<details class="decision-context-evidence">/);
   assert.match(html, /&lt;script&gt;/); assert.doesNotMatch(html, /<script/);
 });
@@ -165,7 +165,7 @@ test("disagreement keeps both evidence sides, exposes role verdicts and never in
   assert.match(html, /자동 분석 해석이 서로 달랐습니다/); assert.match(html, /Primary/); assert.match(html, /Verifier/);
   assert.doesNotMatch(html, /기술 해석 문구|Primary 해석 기록|Verifier 해석 기록/);
   assert.match(html, /실행 상세/);
-  assert.match(render(EvidenceCards, { detail }), /공격 해석/); assert.match(render(EvidenceCards, { detail }), /정상 해석/);
+  assert.match(render(EvidenceCards, { detail }), /공격 요청 근거/); assert.match(render(EvidenceCards, { detail }), /정상 요청 근거/);
   assert.doesNotMatch(decodeReportText(buildAnalysisReport(detail)), /기술 해석 문구/);
   assert.equal(JSON.stringify(detail), before);
   detail.result.primary.threat_analysis = { ...detail.result.threat_analysis, technique_ko: "역할별 기록" };

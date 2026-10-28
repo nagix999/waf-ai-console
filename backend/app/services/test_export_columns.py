@@ -31,15 +31,15 @@ DEFINITIONS = (
     ("severity", "심각도", "저장된 위협 심각도입니다. 판정의 정확도와는 다릅니다.", "HIGH", "result"),
     ("confidence_score", "판정 신뢰도", "AI 분석에 저장된 신뢰도이며 실제 정확도를 보장하지 않습니다.", "0.95", "result"),
     ("threat_category", "위협 유형", "저장된 위협 분류입니다.", "sql_injection", "result"),
-    ("explanation_ko", "판정 설명", "저장된 결과 설명입니다. 이전 형식은 탐지 비교 설명을 사용합니다.", "입력 구문과 요청 목적을 비교해 판단했습니다.", "result"),
+    ("explanation_ko", "판정 설명", "v3 보류는 저장된 진단 사유를 표시합니다. 별도 설명이 없는 확정 결과는 비어 있으며, 이전 형식은 저장된 설명 또는 탐지 비교 설명을 사용합니다.", "원문 근거의 대조를 통과하지 못해 판정을 확정하지 않았습니다.", "result"),
     ("technique_ko", "공격 방식", "요청에서 해석한 공격 방식입니다.", "쿼리 조건을 우회하려는 구문입니다.", "result"),
     ("potential_impact_ko", "예상 영향", "공격이 성립했을 때의 영향이며 실제 침해 성공을 뜻하지 않습니다.", "취약한 처리 경로에서는 정보 노출이 발생할 수 있습니다.", "result"),
     ("signature_relation", "탐지 내용과 요청의 관계", "탐지 설명과 요청 내용의 관계입니다. exact/partial/mismatch/unknown을 사용합니다.", "exact", "result"),
     ("matched_points", "탐지와 일치하는 부분", "탐지 설명과 요청의 일치점을 JSON 배열로 제공합니다.", '["탐지 대상 구문이 요청에 있습니다."]', "result"),
     ("mismatched_points", "탐지와 다른 부분", "탐지 설명과 요청의 차이점을 JSON 배열로 제공합니다.", "[]", "result"),
     ("comparison_limit_ko", "탐지 비교의 제한", "입력 범위 등 탐지 비교 시 고려할 제한입니다.", "대상 애플리케이션의 처리 방식은 로그에 없습니다.", "result"),
-    ("evidence_true_positive", "주요 정탐 근거", "웹 표시 순서의 정탐 근거 최대 5개입니다. 여러 항목은 줄바꿈 --- 줄바꿈으로 구분합니다.", "위치: payload\n로그 발췌: sample\n판단 이유: 공격 구문의 위치를 확인했습니다.", "result"),
-    ("evidence_false_positive", "주요 오탐 근거", "웹 표시 순서의 오탐 근거 최대 5개입니다. 여러 항목은 줄바꿈 --- 줄바꿈으로 구분합니다.", "위치: payload\n로그 발췌: sample\n판단 이유: 정상 입력 문맥을 확인했습니다.", "result"),
+    ("evidence_attack_request", "주요 공격 요청 근거", "공격 요청으로 해석할 근거 최대 5개입니다. 최종 정탐이나 침해 성공을 뜻하지 않으며, 여러 항목은 줄바꿈 --- 줄바꿈으로 구분합니다.", "위치: payload\n로그 발췌: sample\n판단 이유: 공격 구문의 위치를 확인했습니다.", "result"),
+    ("evidence_normal_request", "주요 정상 요청 근거", "정상 요청으로 해석할 근거 최대 5개입니다. 최종 오탐 판정과는 구분하며, 여러 항목은 줄바꿈 --- 줄바꿈으로 구분합니다.", "위치: payload\n로그 발췌: sample\n판단 이유: 정상 입력 문맥을 확인했습니다.", "result"),
     ("evidence_context", "주요 참고 내용", "웹 표시 순서의 참고 근거 최대 5개입니다. 방향이 없는 과거 근거도 포함하며 여러 항목은 줄바꿈 --- 줄바꿈으로 구분합니다.", "위치: waf_action\n로그 발췌: D\n판단 이유: WAF 차단 관측값입니다.", "result"),
     ("expected_verdict", "접수 당시 기대 판정", "업로드·요청 시 제공한 최초 답안입니다. 참고 판정을 수정해도 그대로 유지합니다.", "true_positive", "evaluation"),
     ("reference_verdict", "평가 기준 답안", "최신/접수 당시/저장 평가/공식 답안 중 선택한 비교 기준입니다.", "false_positive", "evaluation"),
@@ -48,7 +48,8 @@ DEFINITIONS = (
     ("initial_probability", "외부 1차 판정 신뢰도", "외부 1차 판정 클래스의 신뢰도(0~1)입니다. 최종 AI 신뢰도와 같은 척도가 아닙니다.", "0.9", "evaluation"),
     ("initial_model_version", "외부 1차 모델 버전", "요청 시 전달한 외부 1차 모델의 버전입니다.", "external-model-v1", "evaluation"),
 )
-EVIDENCE_COLUMNS = ("evidence_true_positive", "evidence_false_positive", "evidence_context")
+EVIDENCE_COLUMNS = ("evidence_attack_request", "evidence_normal_request", "evidence_context")
+LEGACY_COLUMN_ALIASES = {"evidence_true_positive": EVIDENCE_COLUMNS[0], "evidence_false_positive": EVIDENCE_COLUMNS[1]}
 
 
 def column_catalog(extra_fields, definitions=()):

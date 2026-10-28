@@ -25,6 +25,12 @@ from agent_selection_helpers import model_output
 pytestmark = pytest.mark.usefixtures("registered_vllm_target")
 
 
+@pytest.fixture(autouse=True)
+def pinned_legacy_output(monkeypatch):
+    from legacy_state_helpers import pin_legacy_v214
+    pin_legacy_v214(monkeypatch)
+
+
 def assessment():
     return {"version": "analyst-assessment-v1", "evidence": [
         {"evidence_id": "e1", "field": "payload.query", "excerpt": "q=test", "supports": "false_positive", "interpretation_ko": "일반 검색 값입니다."},

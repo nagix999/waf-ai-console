@@ -1,6 +1,6 @@
 // Read-only parity with backend/app/services/hold_review.py. No role outputs,
 // payload reparsing, inferred environment facts or invented missing conditions.
-import { assessmentView } from "./assessmentData.js";
+import { assessmentView, isResultV3 } from "./assessmentData.js";
 
 function location(field) {
   field = field.startsWith("event.") ? field.slice(6) : field;
@@ -18,6 +18,7 @@ export function holdReview(detail, decision) {
     || !["assessment_pending", "model_abstained", "reason_unrecorded", "input_limited"].includes(decision.code)) return { issues: [], checks: [] };
   const view = assessmentView(result);
   if (!view) return { issues: [], checks: [] };
+  if (isResultV3(result)) return { issues: view.issues, checks: [] };
   let issues = [...view.issues];
   if (!issues.length && decision.code === "assessment_pending") {
     const groups = new Map();
