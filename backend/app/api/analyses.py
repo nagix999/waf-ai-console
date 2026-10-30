@@ -51,7 +51,7 @@ def visible_source(principal: Principal) -> str | None:
 
 
 def response_result_version(principal: Principal, requested: str | None) -> str:
-    # Existing collectors keep their v2 wire shape unless explicitly migrated.
+    # POST retains its service-key v2 default; GET supplies its own v3 default.
     return requested or ("v3" if "admin" in principal.scopes else "v2")
 
 
@@ -221,7 +221,7 @@ def get_analysis(
     analysis_id: str, db: DbSession,
     principal: Annotated[Principal, Depends(require_scope("ingest"))],
     request: Request = None,
-    result_version: Literal["v2", "v3"] | None = Query(default=None),
+    result_version: Literal["v2", "v3"] = Query(default="v3", description="분석 조회는 기본 v3 응답입니다. v2를 지정하면 기존 호환 형식으로 반환합니다. 과거 저장 결과는 원래 버전을 유지합니다."),
 ) -> AnalysisDetail:
     begin_analysis_read_snapshot(db)
     row = fetch_analysis(db, analysis_id, visible_source(principal))

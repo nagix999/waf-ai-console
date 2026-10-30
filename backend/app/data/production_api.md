@@ -294,10 +294,10 @@ curl --silent --show-error --fail-with-body \
 
 #### 결과 v3 선택과 기존 연동 호환
 
-`POST /api/v1/analyses` 및 `GET /api/v1/analyses/{analysis_id}`는 선택 query `result_version=v2|v3`를 받는다. 서비스 키의 기본 응답은 기존 v2 호환 형식이며, 관리자 UI는 새 결과의 v3를 기본 사용한다. 이 옵션은 응답 형식만 선택하며 지침 변경·모델 재호출·운영 반영을 하지 않는다. 과거 지침으로 생성한 결과는 `v3`를 요청해도 당시 버전을 유지한다.
+`POST /api/v1/analyses` 및 `GET /api/v1/analyses/{analysis_id}`는 선택 query `result_version=v2|v3`를 받는다. **GET 단건 조회의 기본값은 서비스 키·관리자 모두 `v3`**이며 `result_version=v3`는 생략할 수 있다. 기존 호환 형식이 필요하면 `result_version=v2`를 명시한다. POST 접수 응답은 기존 동작을 유지해 서비스 키 기본 v2, 관리자 기본 v3다. 이 옵션은 응답 형식만 선택하며 지침 변경·모델 재호출·운영 반영을 하지 않는다. 과거 지침으로 생성한 결과는 기본 조회 또는 `v3` 요청에서도 당시 버전을 유지한다.
 
 ```http
-GET /api/v1/analyses/{analysis_id}?result_version=v3
+GET /api/v1/analyses/{analysis_id}
 X-API-Key: YOUR_SERVICE_API_KEY
 ```
 
@@ -327,7 +327,7 @@ X-API-Key: YOUR_SERVICE_API_KEY
 - 실제 미확인 조건은 `decision_issues`의 `point_ko/evidence_ids/missing_condition_ko/origins`에 기록한다. 기술적 보류는 `diagnostics`로 설명하며 업무 자료 부족으로 추정하지 않는다.
 - v3에는 `analyst_assessment`, `tuning_recommendation`, `analyst_checks`, `recommended_checks`, `conflicting_evidence`가 없다. 분석 요약은 요청 내용만 담고 최종 보류 사유는 별도로 표시한다.
 - `interpretation_conflict`는 실제로 양립하기 어려운 해석이 남았다는 명시적 신호다. 양쪽 근거의 존재를 곧 충돌로 해석하지 않는다. 제외된 검증 조건은 `policy.retired_verifier_triggers`에 기록한다. v2.15/v2.16은 `tuning_recommended`, v2.17 후보는 여기에 `parser_incomplete`를 포함하고 `policy.verifier_policy_version=security-analysis-policy-v2`를 기록한다. v2.17에서도 파싱 상태·경고·진단, 다른 검증 조건과 실패·불일치 보류는 유지한다. 코드 배포만으로 기존 운영·재실행 정책이 바뀌지는 않는다.
-- v2 호환 응답은 기존 필드를 유지한 읽기 전용 변환이다. 제거된 확인 목록은 빈 배열, 튜닝 제안은 비활성 값이며 별도 LLM이 생성한 결과가 아니다. 변환 결과를 저장하거나 재평가 입력으로 사용하지 않는다. 외부 연동은 v3의 필드·enum·최대 개수에 맞춘 뒤 명시적으로 전환한다.
+- v2 호환 응답은 기존 필드를 유지한 읽기 전용 변환이다. 제거된 확인 목록은 빈 배열, 튜닝 제안은 비활성 값이며 별도 LLM이 생성한 결과가 아니다. 변환 결과를 저장하거나 재평가 입력으로 사용하지 않는다. 외부 연동은 GET 기본 v3의 필드·enum·최대 개수에 맞춰야 하며, 기존 형식이 필요하면 `result_version=v2`를 명시한다. POST 접수 응답의 기본값은 변경하지 않는다.
 - 웹·Markdown·PDF·Excel의 근거 분류는 같다. 새 Excel 컬럼은 `evidence_attack_request`, `evidence_normal_request`, `evidence_context`이며 각 최대 5개·`\n---\n` 구분을 유지한다. 구 선택 컬럼명은 입력 별칭으로 받되 다운로드 헤더는 새 영문명이다.
 
 v2.4는 보류에서 판정을 구분하는 확인 1~3개, 확정 판정에서는 영향 범위·대응 안전성 등에 유용한 선택적 후속 확인만 1~2개 요청한다. 확정 판정의 기본값은 두 확인 목록 모두 빈 배열이다. `analyst_guidance.checks=[]`도 명시적인 빈 목록으로 취급하며 이전 필드로 재채우지 않는다. 신뢰도 숫자로 확인 필요 여부를 결정하지 않는다. UI와 보고서의 추가 확인은 마지막에 배치한다. 같은 출처·원문·해석의 완전 중복 근거는 최종 결합에서 제거하되 개별 Agent 출력과 기존 결과는 보존한다. 문장 유사도로 반대 해석이나 다른 출처를 삭제하지 않는다.

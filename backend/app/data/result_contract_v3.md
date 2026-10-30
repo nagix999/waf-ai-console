@@ -95,10 +95,11 @@ request parameter or additional model-output field is introduced.
 
 ## Service API transition
 
-Existing service keys default to a **v2 compatibility response** at
-`POST /api/v1/analyses` and `GET /api/v1/analyses/{id}`. To request the canonical
-new response, pass `result_version=v3`. `result_version=v2` explicitly requests
-compatibility. Administrator UI requests default to canonical v3. This setting
+`GET /api/v1/analyses/{id}` defaults to **canonical v3** for both service keys
+and administrators. `result_version=v3` is optional; explicitly pass
+`result_version=v2` to request the compatibility response. POST behavior is
+unchanged: service keys default to v2 compatibility at `POST /api/v1/analyses`,
+with `result_version=v3` available as an opt-in; administrators default to v3. This setting
 changes serialization only; it neither selects instructions nor reruns a model.
 Stored legacy results retain their original version even if v3 is requested.
 

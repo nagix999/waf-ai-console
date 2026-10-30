@@ -171,24 +171,73 @@ def test_pdf_formatter_keeps_only_canonical_issues_and_diagnostics():
     assert "PRIVATE-ROLE-SNAPSHOT" not in str(document)
 
 
-def test_service_response_defaults_v2_admin_and_opt_in_read_canonical(client, event_payload, service_headers):
+@pytest.mark.parametrize("purpose", ["production", "test"])
+def test_analysis_get_defaults_v3_and_explicit_v2_preserves_saved_result(client, event_payload, service_headers, purpose):
+    if purpose == "test":
+        from app.api_key_schemas import ServiceApiKeyCreate
+        from app.services.service_api_keys import issue_key
+        with client.app.state.session_factory() as db:
+            _, raw = issue_key(db, ServiceApiKeyCreate(name="Synthetic v3 Test", source_system="synthetic-v3-test",
+                purpose="test", scopes=["ingest"]), "synthetic-fixture")
+            db.commit()
+        service_headers = {"x-api-key": raw}
     response = client.post("/api/v1/analyses", json=event_payload, headers=service_headers)
+    assert response.status_code == 202
     identifier = response.json()["id"]
     canonical = result_fixture()
     with client.app.state.session_factory() as db:
         row = db.get(Analysis, identifier)
         row.result_json, row.status, row.verdict = canonical, "completed", "false_positive"
         db.commit()
-    old = client.get(f"/api/v1/analyses/{identifier}", headers=service_headers)
+    for query in ("", "?result_version=v3"):
+        new = client.get(f"/api/v1/analyses/{identifier}{query}", headers=service_headers)
+        assert new.status_code == 200
+        # FastAPI includes declared optional nulls in its response model.
+        assert AnalysisResultV3.model_validate(new.json()["result"]).model_dump(mode="json") == (
+            AnalysisResultV3.model_validate(canonical).model_dump(mode="json"))
+    old = client.get(f"/api/v1/analyses/{identifier}?result_version=v2", headers=service_headers)
     assert old.status_code == 200
     assert old.json()["result"]["schema_version"] == "waf-analysis-v2"
-    new = client.get(f"/api/v1/analyses/{identifier}?result_version=v3", headers=service_headers)
-    assert new.status_code == 200
-    assert new.json()["result"]["schema_version"] == "waf-analysis-v3"
+    if purpose == "production":
+        # Changing GET does not implicitly change the POST compatibility default.
+        posted = client.post("/api/v1/analyses", json=event_payload, headers=service_headers)
+        assert posted.status_code == 200
+        assert posted.json()["result"]["schema_version"] == "waf-analysis-v2"
+        posted_v3 = client.post("/api/v1/analyses?result_version=v3", json=event_payload, headers=service_headers)
+        assert posted_v3.status_code == 200
+        assert posted_v3.json()["result"]["schema_version"] == "waf-analysis-v3"
     assert client.post("/api/v1/auth/login", json={"username": "admin", "password": "test-password"}).status_code == 200
     assert client.get(f"/api/v1/analyses/{identifier}").json()["result"]["schema_version"] == "waf-analysis-v3"
     with client.app.state.session_factory() as db:
         assert db.get(Analysis, identifier).result_json == canonical
+
+
+@pytest.mark.parametrize("version", ["waf-analysis-v1", "waf-analysis-v2"])
+def test_analysis_get_keeps_historical_versions_for_every_response_selection(client, event_payload, service_headers, version):
+    identifier = client.post("/api/v1/analyses", json=event_payload, headers=service_headers).json()["id"]
+    historical = {"schema_version": version, "future": {"keep": True}}
+    with client.app.state.session_factory() as db:
+        row = db.get(Analysis, identifier)
+        row.status, row.result_json = "completed", historical
+        db.commit()
+    for query in ("", "?result_version=v3", "?result_version=v2"):
+        response = client.get(f"/api/v1/analyses/{identifier}{query}", headers=service_headers)
+        assert response.status_code == 200
+        assert response.json()["result"] == historical
+    with client.app.state.session_factory() as db:
+        assert db.get(Analysis, identifier).result_json == historical
+
+
+def test_openapi_analysis_get_declares_v3_default_without_changing_post_default(client):
+    paths = client.get("/openapi.json").json()["paths"]
+    get_parameters = paths["/api/v1/analyses/{analysis_id}"]["get"]["parameters"]
+    get_version = next(parameter for parameter in get_parameters if parameter["name"] == "result_version")
+    assert get_version["schema"]["default"] == "v3"
+    assert get_version["schema"]["enum"] == ["v2", "v3"]
+    assert get_version["required"] is False
+    post_parameters = paths["/api/v1/analyses"]["post"]["parameters"]
+    post_version = next(parameter for parameter in post_parameters if parameter["name"] == "result_version")
+    assert post_version["schema"].get("default") is None
 
 
 def test_wait_polls_only_status_and_assembles_detail_once(client, event_payload, service_headers, monkeypatch):
