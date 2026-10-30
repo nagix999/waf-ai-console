@@ -76,17 +76,17 @@ def test_stub_parser_is_visible_while_running_and_measures_actual_work(
     client, event_payload, service_headers, settings, monkeypatch, fake_clock,
 ):
     item_id = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()["id"]
-    original_parser = worker.parse_http_payload
+    original_parser = worker.apply_parser_snapshot
 
-    def parser(payload):
+    def parser(payload, snapshot, *, waf_vendor=None):
         with client.app.state.session_factory() as observer:
             running = observer.scalar(select(AgentStep).where(AgentStep.step_type == "parser"))
             assert running.status == "running"
             assert running.completed_at is None
         fake_clock.advance(250)
-        return original_parser(payload)
+        return original_parser(payload, snapshot, waf_vendor=waf_vendor)
 
-    monkeypatch.setattr(worker, "parse_http_payload", parser)
+    monkeypatch.setattr(worker, "apply_parser_snapshot", parser)
     with client.app.state.session_factory() as db:
         analysis = db.get(Analysis, item_id)
         analysis.created_at = fake_clock.now
@@ -228,7 +228,7 @@ def test_parser_exception_closes_step_and_its_run_without_raw_error_content(
         fake_clock.advance(700)
         raise RuntimeError("synthetic secret must not appear in metadata")
 
-    monkeypatch.setattr(worker, "parse_http_payload", parser)
+    monkeypatch.setattr(worker, "apply_parser_snapshot", lambda payload, snapshot, **kwargs: parser(payload))
     with client.app.state.session_factory() as db:
         analysis = worker.claim_next(db, "timing-worker", 300)
         with pytest.raises(RuntimeError) as error:

@@ -50,6 +50,7 @@ import PromptSettings from "./PromptSettings.jsx";
 import ConcurrencySettings from "./ConcurrencySettings.jsx";
 import InputSchemaSettings, { InputSchemaMetadata } from "./InputSchemaSettings.jsx";
 import InternalEgressSettings from "./InternalEgressSettings.jsx";
+import ParserManagement from "./ParserManagement.jsx";
 import ServiceApiKeys from "./ServiceApiKeys.jsx";
 import FullValidationDialog, { DatasetEvaluation } from "./FullValidationDialog.jsx";
 import ModelCheckDetail from "./ModelCheckDetail.jsx";
@@ -550,7 +551,7 @@ export function Settings({ onProductionChange, onViewDataset, tab: controlledTab
     <button type="button" role="tab" aria-selected={tab === "schema"} onClick={() => setTab("schema")}>입력 스키마</button>
     <button type="button" role="tab" aria-selected={tab === "egress"} onClick={() => setTab("egress")}>내부 연결 허용</button>
     <button type="button" role="tab" aria-selected={tab === "keys"} onClick={() => setTab("keys")}>서비스 API Key</button>
-  </div>}{tab === "models" ? <ModelSettings onProductionChange={onProductionChange} onConfigureAgents={() => setTab("agents")} onInternalEgress={() => setTab("egress")} onViewDataset={onViewDataset} /> : ["agents", "prompts"].includes(tab) ? <ReadOnlyAgentRoles /> : tab === "instructions" ? <PromptSettings /> : tab === "concurrency" ? <ConcurrencySettings /> : tab === "schema" ? <InputSchemaSettings /> : tab === "egress" ? <InternalEgressSettings /> : <ServiceApiKeys />}</div>;
+  </div>}{tab === "models" ? <ModelSettings onProductionChange={onProductionChange} onConfigureAgents={() => setTab("agents")} onInternalEgress={() => setTab("egress")} onViewDataset={onViewDataset} /> : ["agents", "prompts"].includes(tab) ? <ReadOnlyAgentRoles /> : tab === "instructions" ? <PromptSettings /> : tab === "concurrency" ? <ConcurrencySettings /> : tab === "schema" ? <InputSchemaSettings /> : tab === "parsers" ? <ParserManagement /> : tab === "egress" ? <InternalEgressSettings /> : <ServiceApiKeys />}</div>;
 }
 
 export function ModelSettings({ onProductionChange, onInternalEgress, onViewDataset, onConfigureAgents }) {

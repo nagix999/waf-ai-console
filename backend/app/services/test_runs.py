@@ -17,6 +17,7 @@ from .internal_egress import allowed_targets_from_db
 from .initial_assessment import split_admission
 from .prompt_snapshots import load_analysis_prompt, pin_analysis_prompt
 from .input_schemas import InputSchemaError, get_schema_version, pin_schema
+from .parser_versions import ParserVersionError, copy_parser_snapshot, pin_parser
 from .upload_expected_labels import enqueue_test_upload_row
 from .uploads import UploadFormatError, extract_test_upload_row, normalize_upload_row
 from .vllm_profiles import assignment_block_reason, normalize_and_validate_profile_url, profile_fingerprint, validate_profile_provider_settings
@@ -124,6 +125,16 @@ def create_run_record(db, crypto, settings, *, name, idempotency_key, request_ha
     except InputSchemaError as exc:
         raise AnalysisIngestError(exc.code, exc.status_code) from None
     from .candidate_configurations import pin_configuration
+    try:
+        pin_parser(db, crypto, run, version_id=(candidate.parser_version_id or "generic-http-v3") if candidate else "generic-http-v3",
+                   selection_origin="candidate" if candidate else "test")
+        if model_test is not None:
+            # Candidate model qualification must remain fixed to its original
+            # parser even while Production moves to a newer version.
+            pin_parser(db, crypto, model_test, version_id="generic-http-v3", selection_origin="test")
+            copy_parser_snapshot(model_test, run)
+    except ParserVersionError as exc:
+        raise AnalysisIngestError(exc.code, exc.status_code) from None
     pin_configuration(run, crypto)
     db.add(run)
     db.flush()
@@ -134,6 +145,7 @@ def pin_item_prompt(analysis, run):
     analysis.prompt_snapshot_ciphertext = run.prompt_snapshot_ciphertext
     analysis.prompt_policy_version_id = run.prompt_policy_version_id
     analysis.prompt_version = run.prompt_version
+    copy_parser_snapshot(run, analysis)
 
 
 def add_run_items(db, crypto, settings, run, rows, *, ai_visible=None, source_ref="test-upload:expected_verdict", trusted_items=None, source_kind="synthetic_expected", actor_kind="admin_session", allow_initial_assessment=False):
@@ -219,7 +231,7 @@ def enqueue_named_run(db, crypto, settings, *, name, idempotency_key, rows, kind
             document = {"name": name, "kind": kind, "rows": rows, "filename": filename}
             # Preserve old replay hashes when the optional candidate is absent.
             if candidate_configuration is not None:
-                document["candidate_configuration"] = candidate_configuration.model_dump(mode="json")
+                document["candidate_configuration"] = candidate_configuration.request_document()
             serialized = json.dumps(document,
                                     sort_keys=True, ensure_ascii=False, allow_nan=False)
             digest = hashlib.sha256(serialized.encode()).hexdigest()

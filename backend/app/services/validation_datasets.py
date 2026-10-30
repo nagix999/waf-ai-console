@@ -283,7 +283,7 @@ def execute_dataset(db, crypto, settings, identifier, payload, actor):
     if payload.dataset_revision_id:
         request_parts.append({"dataset_revision_id": payload.dataset_revision_id})
     if payload.candidate_configuration is not None:
-        request_parts.append(payload.candidate_configuration.model_dump(mode="json"))
+        request_parts.append(payload.candidate_configuration.request_document())
     if payload.evaluation_mode == "ground_truth":
         request_parts.append({"evaluation_mode": "ground_truth"})
     request_hash = digest(request_parts)

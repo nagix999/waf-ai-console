@@ -6,10 +6,11 @@ never fall through to the permissive historical-result reader.
 from copy import deepcopy
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, model_serializer, model_validator
 
 from .agent.contracts import (AgentVerdict, SignatureAssessmentV2, StrictContract,
                               ThreatAnalysis, ThreatSeverity)
+from .parser_schemas import ParserOptions
 
 
 class StoredResultInvalid(ValueError):
@@ -179,6 +180,28 @@ class EditorMetadata(StrictContract):
     presentation_status: Literal["skipped", "completed", "fallback"]
 
 
+class ParserMetadata(StrictContract):
+    version_id: str = Field(min_length=1, max_length=36)
+    engine_version: Literal["generic-http-v3", "http-capture-v1"]
+    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    options: ParserOptions | None = None
+
+    @model_validator(mode="after")
+    def bundled_options_only(self):
+        from .services.parser_engine import validate_options
+        if self.options is not None:
+            validate_options(self.engine_version, self.options.model_dump())
+        return self
+
+    @model_serializer(mode="wrap")
+    def public_identifiers_only(self, handler):
+        # Accept historical full metadata without re-writing stored results,
+        # but never expose cross-vendor routing definitions in result APIs.
+        document = handler(self)
+        document.pop("options", None)
+        return document
+
+
 class ResultAgent(StrictContract):
     role_profiles: RoleProfiles
     framework: Literal["moduagent"]
@@ -194,6 +217,7 @@ class ResultAgent(StrictContract):
     external_data_approved: bool
     thinking_enabled: bool | None
     evidence_editor: EditorMetadata | None = None
+    parser: ParserMetadata | None = None
 
 
 class AnalystGuidanceV3(StrictContract):

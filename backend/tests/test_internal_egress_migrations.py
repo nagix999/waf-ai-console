@@ -89,7 +89,7 @@ def test_fresh_head_contains_empty_egress_table(tmp_path, monkeypatch):
     engine = build_engine(url)
     try:
         with engine.connect() as connection:
-            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0028_review_categories"
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0029_parser_management"
             assert connection.scalar(text("SELECT COUNT(*) FROM internal_egress_targets")) == 0
     finally:
         engine.dispose()

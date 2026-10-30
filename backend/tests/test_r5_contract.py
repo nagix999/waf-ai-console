@@ -126,7 +126,7 @@ def test_defaults_are_full_guarded_and_not_production(client, candidate, event_p
     run = direct(client, {**event_payload, "vendor_score": 1}, candidate).json()
     assert run["test_purpose"] == "development"
     template = client.get(f"/api/v1/test-runs/{run['id']}/clone-template").json()
-    assert template["candidate_configuration"] == candidate
+    assert template["candidate_configuration"] == {**candidate, "parser_version_id": "generic-http-v3"}
     assert template["resource_validity"]["valid"]
 
 

@@ -10,6 +10,7 @@ from .evidence_editor import EditorSnapshot, capture_editor_profile
 from .input_schemas import read_schema_snapshot
 from .prompt_policies import get_policy_version, read_policy_text
 from .prompt_snapshots import load_analysis_prompt
+from .parser_versions import parser_metadata, read_parser_snapshot
 
 
 def resolve_profiles(db, crypto, candidate):
@@ -28,14 +29,17 @@ def configuration_digest(snapshot):
                                     allow_nan=False, separators=(",", ":")).encode()).hexdigest()
 
 
-def snapshot_from_run(run, crypto):
+def snapshot_from_run(run, crypto, *, include_parser=None):
     """Use the queued instructions, never the currently deployed prompt code."""
     prompt = load_analysis_prompt(run, crypto)
     schema = read_schema_snapshot(crypto, run)
     editor = EditorSnapshot.model_validate_json(crypto.decrypt_text(run.evidence_editor_snapshot_ciphertext)) if run.evidence_editor_snapshot_ciphertext else None
     verifier = run.profile_metadata["verifier_profile"]
-    return {
-        "schema_version": 1,
+    if include_parser is None:
+        stored = run.configuration_snapshot_json
+        include_parser = not (isinstance(stored, dict) and stored.get("schema_version") == 1)
+    snapshot = {
+        "schema_version": 2 if include_parser else 1,
         "primary": {"profile_id": run.profile_id, "profile_fingerprint": run.profile_fingerprint},
         "verifier": {"profile_id": verifier["model_profile_id"], "profile_fingerprint": verifier["profile_fingerprint"]},
         "evidence_editor": {"enabled": editor is not None, "profile_id": editor.profile_id if editor else None,
@@ -48,6 +52,9 @@ def snapshot_from_run(run, crypto):
         "input_schema": {"version_id": schema["version_id"], "content_hash": schema["content_hash"]},
         "verifier_confidence_threshold": run.profile_metadata["verifier_confidence_threshold"],
     }
+    if include_parser:
+        snapshot["parser"] = parser_metadata(read_parser_snapshot(crypto, run))
+    return snapshot
 
 
 def pin_configuration(run, crypto):
@@ -63,6 +70,8 @@ def verify_configuration(run, crypto, analysis=None):
         if run.execution_mode != "moduagent" or not run.configuration_hash or not isinstance(run.configuration_snapshot_json, dict):
             raise ValueError()
         actual = snapshot_from_run(run, crypto)
+        if actual["schema_version"] == 1 and read_parser_snapshot(crypto, run)["version_id"] != "generic-http-v3":
+            raise ValueError()
         if actual != run.configuration_snapshot_json or not hmac.compare_digest(configuration_digest(actual), run.configuration_hash):
             raise ValueError()
         if analysis is not None:
@@ -75,6 +84,10 @@ def verify_configuration(run, crypto, analysis=None):
                 raise ValueError()
             queued_schema = read_schema_snapshot(crypto, analysis)
             if any(queued_schema[key] != actual["input_schema"][key] for key in ("version_id", "content_hash")):
+                raise ValueError()
+            queued_parser = parser_metadata(read_parser_snapshot(crypto, analysis))
+            run_parser = parser_metadata(read_parser_snapshot(crypto, run))
+            if queued_parser != run_parser:
                 raise ValueError()
         return actual
     except (KeyError, TypeError, ValueError, UnicodeError):

@@ -22,6 +22,7 @@ export function candidateIssue(catalog, value) {
   if (ids.some(id => !profiles.some(profile => profile.id === id && profile.can_assign === true))) return "현재 설정으로 전체 검증을 통과한 모델을 선택하세요.";
   if (!catalog.prompts.items.some(item => item.id === value.prompt_policy_version_id)
       || !catalog.schemas.items.some(item => item.id === value.input_schema_version_id)) return "저장된 지침과 입력 스키마 버전을 선택하세요.";
+  if (catalog.parsers && !catalog.parsers.items.some(item => item.id === (value.parser_version_id || "generic-http-v3"))) return "저장된 파서 버전을 선택하세요.";
   return "";
 }
 

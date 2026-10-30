@@ -3,7 +3,7 @@ from sqlalchemy import select
 
 from ..models import (AccessAudit, AgentConfiguration, Analysis, ProductionPromotion,
                       PromptPolicyState, PromptPolicyVersion, InputSchemaVersion, TestEvaluation, TestRun, VLLMProfile, ValidationDatasetItem,
-                      ValidationDatasetVersion)
+                      ValidationDatasetVersion, ParserJob)
 from .agent_configuration import configuration_document, profile_metadata, validate_role_profile, has_input_budget
 from .analysis import AnalysisIngestError
 from .candidate_configurations import configuration_digest, snapshot_from_run, verify_configuration
@@ -16,13 +16,16 @@ from .prompt_policies import get_active_policy, get_policy_version, read_policy_
 from .prompt_snapshots import pin_analysis_prompt
 from .test_runs import describe_run, write_lock
 from .vllm_profiles import profile_fingerprint
+from .parser_versions import (BASELINE_ID, activate_parser_version, ensure_parser_state,
+                              legacy_parser_snapshot, parser_metadata, pin_parser)
 
 
 def fail(code):
     raise AnalysisIngestError(code, 409)
 
 
-def live_snapshot(db, crypto, settings, *, roles=None, prompt_id=None, schema_id=None):
+def live_snapshot(db, crypto, settings, *, roles=None, prompt_id=None, schema_id=None,
+                  parser_id=None, include_parser=None):
     production = roles is None and prompt_id is None
     roles = roles or configuration_document(db)["assignments"]["production"]
     primary = db.get(VLLMProfile, roles["primary_profile_id"]) if roles["primary_profile_id"] else None
@@ -36,9 +39,20 @@ def live_snapshot(db, crypto, settings, *, roles=None, prompt_id=None, schema_id
             "verifier_confidence_threshold": settings.verifier_confidence_threshold})
     pin_analysis_prompt(db, crypto, temporary, version_id=prompt_id, production=production)
     pin_schema(db, crypto, temporary, version=get_schema_version(db, schema_id) if schema_id else None)
+    state = ensure_parser_state(db)
+    pin_parser(db, crypto, temporary, version_id=parser_id or state.active_version_id,
+               selection_origin="production" if production else "candidate")
+    if include_parser is None:
+        latest = db.scalar(select(ProductionPromotion).order_by(
+            ProductionPromotion.created_at.desc(), ProductionPromotion.id.desc()).limit(1))
+        # Preserve historical five-component promotion hashes while the
+        # original parser remains active. An untracked parser change must
+        # instead be visible as drift, never hidden by the legacy shape.
+        include_parser = not (latest and latest.snapshot_json.get("schema_version") == 1
+                              and state.active_version_id == BASELINE_ID)
     editor = capture_editor_profile(editor_profile, db=db if production else None) if editor_profile else None
     temporary.evidence_editor_snapshot_ciphertext = crypto.encrypt_text(editor.model_dump_json()) if editor else None
-    return snapshot_from_run(temporary, crypto)
+    return snapshot_from_run(temporary, crypto, include_parser=include_parser)
 
 
 def ensure_baseline(db, crypto, settings):
@@ -102,7 +116,8 @@ def preflight(db, crypto, settings, identifier):
     current = current_configuration(db, crypto, settings)
     checks = []
     def check(code, passed):
-        remedies = {"tested_profiles_still_valid": "open_llm_profile", "tested_instructions_still_current": "open_instructions"}
+        remedies = {"tested_profiles_still_valid": "open_llm_profile", "tested_instructions_still_current": "open_instructions",
+                    "parser_structure_reviewed": "open_parsers"}
         checks.append({"code": code, "passed": bool(passed), "remediation": None if passed else
             {"kind": remedies.get(code, "rerun_test"), "resource_id": None if code in remedies else run.id}})
     try:
@@ -147,12 +162,15 @@ def preflight(db, crypto, settings, identifier):
                         raise ValueError("model_profile_api_key_unavailable")
                 if role != "evidence_editor" and not has_input_budget(profile, read_policy_text(get_policy_version(db, snapshot["prompt"]["policy_version_id"]), crypto)):
                     raise ValueError("agent_context_budget_too_small")
+            parser = snapshot.get("parser")
             candidate_now = live_snapshot(db, crypto, settings, roles={
                 "primary_profile_id": snapshot["primary"]["profile_id"],
                 "verifier_profile_id": snapshot["verifier"]["profile_id"],
                 "evidence_editor_enabled": snapshot["evidence_editor"]["enabled"],
                 "evidence_editor_profile_id": snapshot["evidence_editor"]["profile_id"]},
-                prompt_id=snapshot["prompt"]["policy_version_id"], schema_id=snapshot["input_schema"]["version_id"])
+                prompt_id=snapshot["prompt"]["policy_version_id"], schema_id=snapshot["input_schema"]["version_id"],
+                parser_id=parser["version_id"] if parser else BASELINE_ID,
+                include_parser=snapshot["schema_version"] >= 2)
             same_instructions = candidate_now == snapshot
         except ValueError:
             valid_profiles = False
@@ -160,6 +178,25 @@ def preflight(db, crypto, settings, identifier):
         valid_profiles = False
     check("tested_profiles_still_valid", valid_profiles)
     check("tested_instructions_still_current", same_instructions)
+    baseline_parser = parser_metadata(legacy_parser_snapshot())
+    current_parser = current["snapshot"].get("parser", baseline_parser)
+    candidate_parser = snapshot.get("parser", baseline_parser) if snapshot else None
+    parser_changed = bool(candidate_parser and candidate_parser != current_parser)
+    parser_reviewed = not parser_changed
+    if parser_changed:
+        # A completed offline comparison is not Ground Truth and does not
+        # replace the official model evaluation above. Human review must be
+        # explicitly recorded; an LLM suggestion can never satisfy this gate.
+        for recorded in db.scalars(select(ParserJob.summary_json).where(ParserJob.kind == "comparison",
+                ParserJob.status == "completed", ParserJob.candidate_version_id == candidate_parser["version_id"],
+                ParserJob.baseline_version_id == current_parser["version_id"])):
+            summary = recorded if isinstance(recorded, dict) else {}
+            count = summary.get("sample_count")
+            if (summary.get("structure_reviewed") is True and summary.get("all_valid_source_spans") is True
+                    and type(count) is int and count > 0):
+                parser_reviewed = True
+                break
+    check("parser_structure_reviewed", parser_reviewed)
     schema = schema_diff(db, crypto, current["snapshot"]["input_schema"]["version_id"],
         snapshot["input_schema"]["version_id"]) if snapshot and same_instructions else {
             "schema_changed": False, "field_diff": [], "compatibility_warnings": []}
@@ -170,6 +207,7 @@ def preflight(db, crypto, settings, identifier):
         "candidate_configuration_hash": run.configuration_hash, "current": current,
         "checks": checks, "eligible": all(c["passed"] for c in checks), **schema,
         "evaluation": official_document(evaluation), "baseline_evaluation": official_document(baseline_eval),
+        "parser_changed": parser_changed,
         "comparable": bool(left_gt and right_gt and left_gt.get("comparison_key") and
             left_gt.get("comparison_key") == right_gt.get("comparison_key") and baseline_eval.metrics_version == evaluation.metrics_version)}
 
@@ -210,6 +248,7 @@ def promote(db, crypto, settings, payload, actor):
     schema = get_schema_state(db, crypto)
     if schema.active_version_id != snapshot["input_schema"]["version_id"]:
         activate_schema_version(db, crypto, snapshot["input_schema"]["version_id"], schema.revision, actor)
+    activate_parser_version(db, snapshot.get("parser", {}).get("version_id", BASELINE_ID))
     row = ProductionPromotion(kind="promotion", source_test_run_id=payload.candidate_test_run_id,
         evaluation_id=review["evaluation"]["id"], previous_configuration_hash=review["current"]["configuration_hash"],
         configuration_hash=review["candidate_configuration_hash"], snapshot_json=snapshot, actor_id=actor)
@@ -219,7 +258,7 @@ def promote(db, crypto, settings, payload, actor):
         resource_id=row.id, before=review["current"]["snapshot"], after=snapshot)
     db.add(AccessAudit(actor_kind="admin_session", actor_id=actor, action="promote_production",
         resource_type="production_configuration", resource_id=row.id))
-    # Catch accidental drift before committing all five components.
+    # Catch accidental drift before committing all six components.
     if configuration_digest(live_snapshot(db, crypto, settings)) != row.configuration_hash:
         fail("promotion_snapshot_mismatch")
     db.commit()

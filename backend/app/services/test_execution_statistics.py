@@ -13,6 +13,8 @@ VERSION = "test-execution-summary-v1"
 PARSER_WARNING_CODES = (
     "request_protocol_not_recognized", "request_target_not_recognized", "headers_terminator_missing",
     "request_line_not_recognized", "escaped_line_endings_not_decoded", "header_line_not_recognized",
+    "capture_inspection_limit", "capture_line_endings_ambiguous",
+    "capture_serialization_unverified",
 )
 VERIFIER_REASON_CODES = (
     "primary_inconclusive", "low_confidence", "signature_not_exact", "true_positive_but_allowed",

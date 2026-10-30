@@ -7,6 +7,7 @@ from .candidate_configurations import resolve_profiles
 from .input_schemas import get_schema_version, load_definition
 from .test_runs import write_lock
 from .change_events import record_change
+from .parser_versions import ParserVersionError, pin_parser
 
 FIELDS = tuple(CandidateConfiguration.model_fields)
 
@@ -14,6 +15,10 @@ FIELDS = tuple(CandidateConfiguration.model_fields)
 def validate(db, crypto, value):
     resolve_profiles(db, crypto, value)
     load_definition(get_schema_version(db, value.input_schema_version_id), crypto)
+    try:
+        pin_parser(db, crypto, TestRun(), version_id=value.parser_version_id or "generic-http-v3", selection_origin="test")
+    except ParserVersionError as exc:
+        raise AnalysisIngestError(exc.code, exc.status_code) from None
 
 
 def document(db, crypto):
@@ -66,6 +71,7 @@ def clone_template(db, crypto, run_id):
             evidence_editor_profile_id=snapshot["evidence_editor"]["profile_id"],
             prompt_policy_version_id=snapshot["prompt"]["policy_version_id"],
             input_schema_version_id=snapshot["input_schema"]["version_id"])
+        value["parser_version_id"] = snapshot.get("parser", {}).get("version_id", "generic-http-v3")
         validate(db, crypto, CandidateConfiguration.model_validate(value))
         validity = {"valid": True}
     except (ValueError, KeyError, TypeError) as exc:

@@ -158,6 +158,12 @@ def assess_request_integrity(raw: str, parsed: dict, *, version: str = INTEGRITY
         raise ValueError("request_integrity_version_unsupported")
     result = {"version": version, "status": "not_checked", "issues": [], "limitations": []}
 
+    # Recognizing a configured log serialization does not reconstruct the
+    # request's wire bytes. Never compare its escaped body as a wire length.
+    if parsed.get("capture_format", {}).get("line_endings", "actual") != "actual":
+        result["limitations"].append("capture_serialization_not_wire_format")
+        return result
+
     def limitation(code):
         if code not in result["limitations"]:
             result["limitations"].append(code)

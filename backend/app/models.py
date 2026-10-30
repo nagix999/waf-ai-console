@@ -139,6 +139,8 @@ class Analysis(Base):
     retry_idempotency_key: Mapped[str | None] = mapped_column(String(120), unique=True)
     execution_snapshot_ciphertext: Mapped[str | None] = mapped_column(Text)
     internal_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
+    parser_version_id: Mapped[str | None] = mapped_column(ForeignKey("parser_versions.id", ondelete="RESTRICT"))
+    parser_snapshot_json: Mapped[dict | None] = mapped_column(JSON)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
@@ -428,6 +430,8 @@ class VLLMTestRun(Base):
     mode: Mapped[str] = mapped_column(String(20), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default=ModelTestStatus.pending.value, nullable=False)
     profile_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    parser_version_id: Mapped[str | None] = mapped_column(ForeignKey("parser_versions.id", ondelete="RESTRICT"))
+    parser_snapshot_json: Mapped[dict | None] = mapped_column(JSON)
     include_dataset: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
     dataset_version: Mapped[str | None] = mapped_column(String(80))
     dataset_hash: Mapped[str | None] = mapped_column(String(64))
@@ -458,6 +462,7 @@ class TestConfigurationDefaults(Base):
     evidence_editor_profile_id: Mapped[str | None] = mapped_column(ForeignKey("vllm_profiles.id", ondelete="RESTRICT"))
     prompt_policy_version_id: Mapped[str] = mapped_column(ForeignKey("prompt_policy_versions.id", ondelete="RESTRICT"), nullable=False)
     input_schema_version_id: Mapped[str] = mapped_column(ForeignKey("input_schema_versions.id", ondelete="RESTRICT"), nullable=False)
+    parser_version_id: Mapped[str | None] = mapped_column(ForeignKey("parser_versions.id", ondelete="RESTRICT"))
     revision: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
@@ -499,6 +504,8 @@ class TestRun(Base):
     profile_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     configuration_snapshot_json: Mapped[dict | None] = mapped_column(JSON)
     configuration_hash: Mapped[str | None] = mapped_column(String(64))
+    parser_version_id: Mapped[str | None] = mapped_column(ForeignKey("parser_versions.id", ondelete="RESTRICT"))
+    parser_snapshot_json: Mapped[dict | None] = mapped_column(JSON)
     evaluation_mode: Mapped[str] = mapped_column(String(24), default="reference", server_default="reference", nullable=False)
     approved_item_version_ids: Mapped[list[str] | None] = mapped_column(JSON)
     metrics_version: Mapped[str | None] = mapped_column(String(64))
@@ -534,6 +541,54 @@ class TestRunItem(Base):
     case_name: Mapped[str | None] = mapped_column(String(240))
     ingest_status: Mapped[str] = mapped_column(String(24), nullable=False)
     error_code: Mapped[str | None] = mapped_column(String(120))
+
+
+class ParserVersion(Base):
+    """Immutable, executable only by the bundled bounded parser engines."""
+    __tablename__ = "parser_versions"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    engine_version: Mapped[str] = mapped_column(String(40), nullable=False)
+    options_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    parent_id: Mapped[str | None] = mapped_column(ForeignKey("parser_versions.id", ondelete="RESTRICT"))
+    description_ciphertext: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class ParserConfiguration(Base):
+    __tablename__ = "parser_configuration"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_parser_configuration_singleton"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    active_version_id: Mapped[str] = mapped_column(ForeignKey("parser_versions.id", ondelete="RESTRICT"), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
+class ParserJob(Base):
+    """Admin diagnostics. Source selections and all model text stay encrypted."""
+    __tablename__ = "parser_jobs"
+    __table_args__ = (Index("ix_parser_jobs_status_created", "status", "created_at"),
+                     CheckConstraint("kind IN ('comparison', 'suggestion')", name="ck_parser_job_kind"),
+                     CheckConstraint("status IN ('pending', 'running', 'completed', 'failed')", name="ck_parser_job_status"))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), default="pending", nullable=False)
+    baseline_version_id: Mapped[str | None] = mapped_column(ForeignKey("parser_versions.id", ondelete="RESTRICT"))
+    candidate_version_id: Mapped[str | None] = mapped_column(ForeignKey("parser_versions.id", ondelete="RESTRICT"))
+    profile_id: Mapped[str | None] = mapped_column(ForeignKey("vllm_profiles.id", ondelete="RESTRICT"))
+    profile_fingerprint: Mapped[str | None] = mapped_column(String(64))
+    request_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    result_ciphertext: Mapped[str | None] = mapped_column(Text)
+    encryption_key_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    summary_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(120))
+    lease_owner: Mapped[str | None] = mapped_column(String(255))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class ServiceApiKey(Base):

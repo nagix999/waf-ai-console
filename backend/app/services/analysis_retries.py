@@ -20,6 +20,7 @@ from .label_fields import LABEL_FIELDS
 from .vllm_profiles import (TargetNotAllowedError, assignment_block_reason, normalize_and_validate_profile_url,
                            profile_fingerprint, validate_profile_provider_settings)
 from .evidence_editor import EditorSnapshot
+from .parser_versions import copy_parser_snapshot, parser_metadata, read_parser_snapshot
 
 
 class RetryError(ValueError):
@@ -43,10 +44,13 @@ class ExecutionSnapshot(BaseModel):
     source_system: str
     event_id: str
     event_fingerprint: str | None
+    # Safe, fixed-enum configuration only. Historical v1-v3 always mean the
+    # immutable generic-http-v3 parser, never an active or latest version.
+    parser: dict | None = None
 
     @model_validator(mode="after")
     def validate_roles(self):
-        if self.schema_version not in {1, 2, 3}:
+        if self.schema_version not in {1, 2, 3, 4}:
             raise ValueError("execution_snapshot_version_invalid")
         if self.schema_version >= 2 and (not self.verifier_profile_id or not self.verifier_profile_fingerprint):
             raise ValueError("execution_snapshot_verifier_missing")
@@ -54,19 +58,22 @@ class ExecutionSnapshot(BaseModel):
             raise ValueError("execution_snapshot_roles_invalid")
         if self.schema_version < 3 and self.evidence_editor is not None:
             raise ValueError("execution_snapshot_editor_invalid")
+        if (self.schema_version == 4) != (self.parser is not None):
+            raise ValueError("execution_snapshot_parser_invalid")
         return self
 
 
-def make_execution_snapshot(analysis, profile, prompt, threshold, verifier_profile=None, evidence_editor=None) -> ExecutionSnapshot:
+def make_execution_snapshot(analysis, profile, prompt, threshold, verifier_profile=None, evidence_editor=None, *, crypto=None) -> ExecutionSnapshot:
     verifier_profile = verifier_profile or profile
     return ExecutionSnapshot(
-        schema_version=3, verifier_profile_id=verifier_profile.id, evidence_editor=evidence_editor,
+        schema_version=4, verifier_profile_id=verifier_profile.id, evidence_editor=evidence_editor,
         verifier_profile_fingerprint=profile_fingerprint(verifier_profile),
         execution_mode="moduagent", profile_id=profile.id, profile_fingerprint=profile_fingerprint(profile),
         verifier_confidence_threshold=threshold, instructions_hash=prompt.instructions_hash,
         input_schema_version_id=analysis.input_schema_version_id,
         source_system=analysis.source_system, event_id=analysis.event_id,
         event_fingerprint=analysis.event_fingerprint,
+        parser=parser_metadata(read_parser_snapshot(crypto, analysis)),
     )
 
 
@@ -74,12 +81,18 @@ def validate_snapshot_binding(analysis, crypto, snapshot):
     try:
         prompt = load_analysis_prompt(analysis, crypto)
         read_schema_snapshot(crypto, analysis)
+        parser = parser_metadata(read_parser_snapshot(crypto, analysis))
     except (PromptSnapshotError, InputSchemaError, ValueError):
         raise RetryError("retry_input_or_prompt_snapshot_unavailable") from None
     if (snapshot.instructions_hash != prompt.instructions_hash
             or snapshot.input_schema_version_id != analysis.input_schema_version_id
             or snapshot.source_system != analysis.source_system or snapshot.event_id != analysis.event_id
             or snapshot.event_fingerprint != analysis.event_fingerprint):
+        raise RetryError("retry_execution_snapshot_invalid")
+    if snapshot.schema_version >= 4:
+        if snapshot.parser != parser:
+            raise RetryError("retry_execution_snapshot_invalid")
+    elif parser["version_id"] != "generic-http-v3":
         raise RetryError("retry_execution_snapshot_invalid")
     validate_event_integrity(analysis, crypto)
     return snapshot
@@ -269,6 +282,7 @@ def enqueue_retry(db, crypto, settings, analysis_id, request, actor, *, commit=T
                    retry_of_analysis_id=original.id, retry_idempotency_key=request.idempotency_key,
                    execution_snapshot_ciphertext=crypto.encrypt_text(snapshot.model_dump_json()),
                    model_profile=_profile.name, status="pending")
+    copy_parser_snapshot(original, row)
     db.add(row)
     from .test_runs import analysis_test_run
     run = analysis_test_run(db, original) if original.analysis_purpose == "test" else None

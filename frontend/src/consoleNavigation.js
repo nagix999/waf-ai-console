@@ -3,11 +3,11 @@ import { initialListState } from "./analysisView.js";
 export const consoleGroups = [
   { key: "overview", icon: "dashboard", items: ["status"] },
   { key: "evaluate", icon: "test", items: ["runs", "groundTruth", "quality"] },
-  { key: "configure", icon: "settings", items: ["profiles", "agents", "instructions", "schema"] },
+  { key: "configure", icon: "settings", items: ["profiles", "agents", "instructions", "schema", "parsers"] },
   { key: "operate", icon: "analyses", items: ["runtime", "history", "changes"] },
   { key: "connect", icon: "server", items: ["api", "keys", "targets"] },
 ];
-const settings = { profiles: "models", agents: "agents", instructions: "instructions", concurrency: "concurrency", keys: "keys", schema: "schema", targets: "egress" };
+const settings = { profiles: "models", agents: "agents", instructions: "instructions", concurrency: "concurrency", keys: "keys", schema: "schema", parsers: "parsers", targets: "egress" };
 export function consoleDestination(state, key) {
   if (["promote", "runtime"].includes(key)) return { ...state, page: key };
   if (["concurrency", "diagnostics"].includes(key)) return { ...state, page: "runtime" };

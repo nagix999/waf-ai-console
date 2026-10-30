@@ -32,7 +32,7 @@ def test_stop_migration_additive_and_reversible_without_history(tmp_path, monkey
     command.upgrade(config, "head")
     command.upgrade(config, "head")
     with engine.connect() as db:
-        assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0028_review_categories"
+        assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0029_parser_management"
         fields = {row["name"]: row for row in inspect(db).get_columns("test_runs")}
         assert fields["stopped_at"]["nullable"] and fields["stopped_by"]["nullable"]
         assert db.execute(text("PRAGMA foreign_key_check")).all() == []

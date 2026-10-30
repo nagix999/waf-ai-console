@@ -45,7 +45,7 @@ from .models import (
 )
 from .services.crypto import CryptoService
 from .services.internal_egress import allowed_targets_from_db, lock_egress_mutation
-from .services.http_parser import HTTP_PARSER_VERSION, parse_http_payload
+from .services.parser_versions import apply_parser_snapshot, parser_metadata, read_parser_snapshot
 from .services.test_execution_statistics import fixed_codes, PARSER_WARNING_CODES, VERIFIER_REASON_CODES
 from .services.request_integrity import (
     INTEGRITY_VERSION, LEGACY_INTEGRITY_VERSION, INTEGRITY_RULES_VERSIONS,
@@ -386,12 +386,20 @@ def _decode_payload_step(db: Session, crypto: CryptoService, run: AgentRun, raw_
     return decoding
 
 
+def _public_parser_metadata(snapshot):
+    # Analysis results are available to source-scoped service keys. Routing
+    # profiles belong only in administrator configuration and execution history.
+    metadata = parser_metadata(snapshot)
+    return {key: metadata[key] for key in ("version_id", "engine_version", "content_hash")}
+
+
 def process_stub(db: Session, crypto: CryptoService, analysis: Analysis) -> None:
     if analysis.retry_of_analysis_id:
         raise WorkerExecutionError("retry_requires_moduagent_mode")
     with measured_run(db, analysis) as run:
         with measured_step(db, crypto, run, 1, "input", "이벤트 입력 검증") as step:
             schema_snapshot = pin_schema(db, crypto, analysis, selection_origin="legacy_default")
+            parser_snapshot = read_parser_snapshot(crypto, analysis)
             step_output(crypto, step, {"input_schema": schema_snapshot}, {
                 "input_schema": schema_metadata(schema_snapshot), "llm_called": False,
             })
@@ -413,9 +421,10 @@ def process_stub(db: Session, crypto: CryptoService, analysis: Analysis) -> None
         with measured_step(
             db, crypto, run, 2, "parser", "범용 HTTP 파싱", {"payload": raw_payload}
         ) as step:
-            parsed = parse_http_payload(raw_payload)
+            parsed = apply_parser_snapshot(raw_payload, parser_snapshot, waf_vendor=analysis.waf_vendor)
             step_output(crypto, step, parsed, {
-                "parser_version": HTTP_PARSER_VERSION,
+                "parser_version": parser_snapshot["engine_version"],
+                "parser": parser_metadata(parser_snapshot),
                 "parse_status": parsed["parse_status"],
                 "parser_warning_codes": fixed_codes(parsed.get("warnings"), PARSER_WARNING_CODES),
                 "fallback_llm_used": False,
@@ -427,6 +436,7 @@ def process_stub(db: Session, crypto: CryptoService, analysis: Analysis) -> None
         ) as step:
             result = _stub_result()
             result["agent"]["input_schema"] = schema_metadata(schema_snapshot)
+            result["agent"]["parser"] = _public_parser_metadata(parser_snapshot)
             step_output(crypto, step, result)
             analysis.verdict = Verdict.inconclusive.value
             analysis.severity = ThreatSeverity.UNKNOWN.value
@@ -791,6 +801,7 @@ def _process_moduagent_steps(
         # History only: definitions never enter system/user messages. An old
         # unversioned queued event uses the original default, not today's rules.
         schema_snapshot = pin_schema(db, crypto, analysis, selection_origin="legacy_default")
+        parser_snapshot = read_parser_snapshot(crypto, analysis)
         step_output(crypto, step, {"input_schema": schema_snapshot}, {
             "input_schema": schema_metadata(schema_snapshot),
         })
@@ -904,7 +915,7 @@ def _process_moduagent_steps(
         else:
             editor_snapshot = capture_editor(db, analysis.analysis_purpose, profile)
         if pinned_execution is None:
-            execution = make_execution_snapshot(analysis, profile, prompt, verifier_confidence_threshold, verifier_profile, editor_snapshot)
+            execution = make_execution_snapshot(analysis, profile, prompt, verifier_confidence_threshold, verifier_profile, editor_snapshot, crypto=crypto)
             analysis.execution_snapshot_ciphertext = crypto.encrypt_text(execution.model_dump_json())
             # Persist before parsing/context/Primary failures can lose provenance.
             # The measured-step commit also persists this; the early commit is
@@ -924,18 +935,20 @@ def _process_moduagent_steps(
             "verifier_confidence_threshold": verifier_confidence_threshold,
             **profile_metadata,
             "verifier_profile": verifier_metadata,
+            "parser": parser_metadata(parser_snapshot),
         })
 
     integrity = None
     with measured_step(
         db, crypto, run, 2, "parser", "범용 HTTP 파싱", {"payload": raw_payload}
     ) as step:
-        parsed = parse_http_payload(raw_payload)
+        parsed = apply_parser_snapshot(raw_payload, parser_snapshot, waf_vendor=analysis.waf_vendor)
         if prompt.fixed_rules_version in INTEGRITY_RULES_VERSIONS:
             integrity = assess_request_integrity(raw_payload, parsed,
                 version=integrity_version_for_rules(prompt.fixed_rules_version))
         step_output(crypto, step, {**parsed, **({"request_integrity": integrity} if integrity is not None else {})}, {
-            "parser_version": HTTP_PARSER_VERSION,
+            "parser_version": parser_snapshot["engine_version"],
+            "parser": parser_metadata(parser_snapshot),
             "parse_status": parsed["parse_status"],
             "parser_warning_codes": fixed_codes(parsed.get("warnings"), PARSER_WARNING_CODES),
             "fallback_llm_used": False,
@@ -1126,6 +1139,7 @@ def _process_moduagent_steps(
                 "role_profiles": {"primary": profile_metadata, "verifier": verifier_metadata},
                 "framework": "moduagent",
                 "input_schema": schema_metadata(schema_snapshot),
+                "parser": _public_parser_metadata(parser_snapshot),
                 "framework_version": primary.telemetry.get("framework_version"),
                 "execution": "standard",
                 "tools": [],

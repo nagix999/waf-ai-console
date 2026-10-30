@@ -133,7 +133,7 @@ def test_distinct_roles_same_input_bounded_repair_encrypted_history(client, even
         worker.process_moduagent(db, client.app.state.crypto, analysis, "", .75)
         snapshot = load_execution_snapshot(analysis, client.app.state.crypto)
         assert snapshot.verifier_profile_id == verifier["id"]
-        assert snapshot.schema_version == 3
+        assert snapshot.schema_version == 4
         assert analysis.result_json["diagnostics"]["roles"]["primary"]["repair_recovered"]
         assert analysis.result_json["agent"]["role_profiles"]["verifier"]["model_profile_id"] == verifier["id"]
     assert [call["agent_name"] for call in calls] == ["waf-primary", "waf-primary-evidence-repair", "waf-verifier"]

@@ -3,6 +3,7 @@
 Each job owns its Session and lease. No Session/ORM object crosses threads.
 """
 import logging
+import asyncio
 import signal
 import uuid
 from time import monotonic
@@ -11,7 +12,7 @@ from contextlib import contextmanager
 from datetime import timedelta
 from threading import Event, Thread
 
-from sqlalchemy import select, update
+from sqlalchemy import select, update, or_
 
 from ..models import Analysis, utcnow
 from .concurrency import MAX_ANALYSES_PER_PURPOSE
@@ -117,6 +118,21 @@ def run_model_test(session_factory, crypto, settings, identifier, owner):
             worker.process_vllm_test(db, crypto, run, "")
 
 
+def run_parser_job(session_factory, crypto, settings, worker_id):
+    from .parser_jobs import process_pending_parser_job
+    with session_factory() as db:
+        engine = db.get_bind()
+    return asyncio.run(process_pending_parser_job(settings, engine, crypto, worker_id=worker_id))
+
+
+def pending_parser_job(session_factory):
+    from ..models import ParserJob
+    with session_factory() as db:
+        return db.scalar(select(ParserJob.id).where(ParserJob.kind == "suggestion", or_(
+            ParserJob.status == "pending", (ParserJob.status == "running") & (ParserJob.lease_expires_at <= utcnow())
+        )).limit(1)) is not None
+
+
 def serve(session_factory, crypto, settings, worker_id, *, stop=None, install_signals=True):
     from .. import worker
     stop = stop if stop is not None else Event()
@@ -125,6 +141,7 @@ def serve(session_factory, crypto, settings, worker_id, *, stop=None, install_si
         for signum in (signal.SIGINT, signal.SIGTERM):
             previous[signum] = signal.signal(signum, lambda *_: stop.set())
     jobs, model_job, turn = set(), None, 0
+    administration_turn = 0
     next_evaluation_check, evaluation_cursor = 0, None
     next_runtime_heartbeat = 0
     capacity = MAX_ANALYSES_PER_PURPOSE * 2
@@ -178,12 +195,24 @@ def serve(session_factory, crypto, settings, worker_id, *, stop=None, install_si
                             dispatched = True
                     turn += 1
                 if settings.worker_role in {"model_test", "both"} and model_job is None and not stop.is_set():
+                    # Share the existing single administrative slot, alternating
+                    # model qualification and parser suggestions to avoid starvation.
+                    parser_ready = pending_parser_job(session_factory)
+                    if parser_ready and administration_turn % 2:
+                        model_job = pool.submit(run_parser_job, session_factory, crypto, settings, worker_id)
+                        administration_turn += 1
+                        continue
                     with session_factory() as db:
                         run = worker.claim_next_vllm_test(db, f"{worker_id}:{uuid.uuid4()}", settings.vllm_test_lease_seconds)
                         args = (run.id, run.lease_owner) if run else None
                     if args:
                         model_job = pool.submit(run_model_test, session_factory, crypto, settings, *args)
                         dispatched = True
+                        administration_turn += 1
+                    elif parser_ready:
+                        model_job = pool.submit(run_parser_job, session_factory, crypto, settings, worker_id)
+                        dispatched = True
+                        administration_turn += 1
                 if not dispatched:
                     stop.wait(settings.worker_poll_seconds)
         # SIGTERM stops admission, then drains jobs until the runtime kills us.

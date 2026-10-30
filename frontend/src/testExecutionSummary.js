@@ -22,6 +22,9 @@ const warnings = Object.freeze({
   request_line_not_recognized: ["요청 시작 줄 미인식", "Request line not recognized"],
   escaped_line_endings_not_decoded: ["문자로 저장된 줄바꿈은 변환하지 않음", "Literal newline escapes left unchanged"],
   header_line_not_recognized: ["일부 헤더 형식 미인식", "Some header lines not recognized"],
+  capture_inspection_limit: ["파싱 검사 한도 도달", "Parsing inspection limit reached"],
+  capture_line_endings_ambiguous: ["줄바꿈 형식이 섞여 있음", "Mixed line ending formats"],
+  capture_serialization_unverified: ["문자 줄바꿈 해석·전송 원문 확인 필요", "Serialized line endings interpreted; wire input unverified"],
 });
 
 const object = value => value !== null && typeof value === "object" && !Array.isArray(value);

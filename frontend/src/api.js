@@ -27,6 +27,14 @@ async function request(path, options = {}) {
 }
 
 export const api = {
+  parsers: (options = {}) => request("/api/v1/admin/parsers", { ...options, cache: "no-store" }),
+  parser: (id, options = {}) => request(`/api/v1/admin/parsers/${encodeURIComponent(id)}`, { ...options, cache: "no-store" }),
+  createParser: payload => request("/api/v1/admin/parsers", { method: "POST", body: JSON.stringify(payload), cache: "no-store" }),
+  compareParsers: payload => request("/api/v1/admin/parsers/comparisons", { method: "POST", body: JSON.stringify(payload), cache: "no-store" }),
+  suggestParser: payload => request("/api/v1/admin/parsers/suggestions", { method: "POST", body: JSON.stringify(payload), cache: "no-store" }),
+  parserJobs: (query = {}, options = {}) => request(`/api/v1/admin/parsers/jobs?${new URLSearchParams(query)}`, { ...options, cache: "no-store" }),
+  parserJob: (id, options = {}) => request(`/api/v1/admin/parsers/jobs/${encodeURIComponent(id)}`, { ...options, cache: "no-store" }),
+  reviewParserComparison: id => request(`/api/v1/admin/parsers/jobs/${encodeURIComponent(id)}/review`, { method: "POST", body: JSON.stringify({ confirmed: true }), cache: "no-store" }),
   testDefaults: (options = {}) => request("/api/v1/admin/test-configuration-defaults", { ...options, cache: "no-store" }),
   saveTestDefaults: payload => request("/api/v1/admin/test-configuration-defaults", { method: "PATCH", body: JSON.stringify(payload) }),
   cloneTest: (id, options = {}) => request(`/api/v1/test-runs/${encodeURIComponent(id)}/clone-template`, { ...options, cache: "no-store" }),

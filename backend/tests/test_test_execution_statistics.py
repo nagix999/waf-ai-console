@@ -334,12 +334,12 @@ def test_large_cohort_fetches_only_small_sql_aggregates_and_never_loads_or_decry
 def test_new_worker_metadata_records_only_fixed_parser_warnings(client, event_payload, monkeypatch):
     login(client)
     run = upload(client, [event_payload])
-    original = worker.parse_http_payload
-    def fake_parser(payload):
-        value = original(payload)
+    original = worker.apply_parser_snapshot
+    def fake_parser(payload, snapshot, **kwargs):
+        value = original(payload, snapshot, **kwargs)
         value["warnings"] = [PARSER_WARNING_CODES[0], CANARY, {CANARY: CANARY}]
         return value
-    monkeypatch.setattr(worker, "parse_http_payload", fake_parser)
+    monkeypatch.setattr(worker, "apply_parser_snapshot", fake_parser)
     with client.app.state.session_factory() as db:
         row = db.get(Analysis, run["items"][0]["analysis_id"])
         worker.process_stub(db, client.app.state.crypto, row)

@@ -15,6 +15,7 @@ from .prompt_snapshots import PromptSnapshot, PromptSnapshotError, load_analysis
 from .prompt_policies import PromptPolicyError
 from .evaluation import attach_evaluations
 from .input_schemas import InputSchemaError, pin_schema, read_schema_snapshot, schema_metadata, validate_event
+from .parser_versions import ParserVersionError, pin_parser
 from ..evaluation_schemas import EvaluationMetadata
 
 
@@ -169,6 +170,8 @@ def enqueue_analysis(
     # Pin the complete instructions with the new event. Duplicate submissions
     # above retain the original version and do not acquire the current policy.
     try:
+        pin_parser(db, crypto, row, version_id=None if analysis_purpose == "production" else "generic-http-v3",
+                   selection_origin="production" if analysis_purpose == "production" else "test")
         if schema_snapshot is None:
             snapshot = pin_schema(db, crypto, row)
         else:
@@ -189,7 +192,7 @@ def enqueue_analysis(
             row.prompt_version = prompt_snapshot.prompt_version
             row.prompt_snapshot_ciphertext = crypto.encrypt_text(prompt_snapshot.model_dump_json())
             load_analysis_prompt(row, crypto)
-    except InputSchemaError as exc:
+    except (InputSchemaError, ParserVersionError) as exc:
         if commit:
             db.rollback()
         raise AnalysisIngestError(exc.code, exc.status_code) from None

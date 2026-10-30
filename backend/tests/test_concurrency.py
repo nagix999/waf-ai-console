@@ -226,15 +226,15 @@ def test_single_worker_process_runs_ten_real_pipelines_concurrently(runtime, mon
     seed(runtime, 10)
     configure(runtime, production=10, limit=10)
     entered, guard, release_work, stop = [], Lock(), Event(), Event()
-    original_parser = worker.parse_http_payload
-    def paused_parser(payload):
+    original_parser = worker.apply_parser_snapshot
+    def paused_parser(payload, snapshot, **kwargs):
         with guard:
             entered.append(True)
             if len(entered) == 10:
                 release_work.set(); stop.set()
         assert release_work.wait(10), "worker did not execute ten analyses concurrently"
-        return original_parser(payload)
-    monkeypatch.setattr(worker, "parse_http_payload", paused_parser)
+        return original_parser(payload, snapshot, **kwargs)
+    monkeypatch.setattr(worker, "apply_parser_snapshot", paused_parser)
     runner = Thread(target=serve, args=(runtime[2], runtime[3], runtime[0], "fixture-worker"),
                     kwargs={"stop": stop, "install_signals": False})
     runner.start()
@@ -403,14 +403,14 @@ def test_running_worker_picks_up_increase_then_stops_admission_and_drains(runtim
     configure(runtime, production=1)
     stop, first, second, finish = Event(), Event(), Event(), Event()
     guard, entered = Lock(), []
-    parse = worker.parse_http_payload
-    def paused(payload):
+    parse = worker.apply_parser_snapshot
+    def paused(payload, snapshot, **kwargs):
         with guard:
             entered.append(True)
             (first if len(entered) == 1 else second).set()
         assert finish.wait(10)
-        return parse(payload)
-    monkeypatch.setattr(worker, "parse_http_payload", paused)
+        return parse(payload, snapshot, **kwargs)
+    monkeypatch.setattr(worker, "apply_parser_snapshot", paused)
     runner = Thread(target=serve, args=(runtime[2], runtime[3], runtime[0], "live-config-fixture"),
                     kwargs={"stop": stop, "install_signals": False})
     runner.start()

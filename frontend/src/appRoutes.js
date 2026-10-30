@@ -1,12 +1,13 @@
 // Only screen names, tab enums and server-generated UUIDs belong in URLs.
 // Search terms, form drafts, API responses and secrets stay out of this module.
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const settingsTabs = new Set(["models", "agents", "instructions", "concurrency", "schema", "egress", "keys"]);
+const settingsTabs = new Set(["models", "agents", "instructions", "concurrency", "schema", "parsers", "egress", "keys"]);
 const runtimePages = new Set(["quality", "diagnostics", "deployment", "changes"]);
 const detailTabs = new Set(["result", "agent", "raw", "json", "report"]);
 const canonical = {
   "#overview": "#dashboard", "#configure/llm-profiles": "#settings/models",
   "#configure/agent-roles": "#settings/agents", "#configure/instructions": "#settings/instructions",
+  "#configure/parsers": "#settings/parsers",
   "#evaluate/tests": "#analyses/test", "#evaluate/tests/new": "#test",
   "#evaluate/tests/items": "#analyses/test/items",
   "#evaluate/ground-truth": "#datasets", "#evaluate/production-evaluation": "#runtime/quality",

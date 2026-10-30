@@ -76,7 +76,7 @@ def test_fresh_and_existing_upgrade_preserves_reviews_and_ciphertext(tmp_path, m
     command.upgrade(config, "head")
     command.upgrade(config, "head")
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0028_review_categories"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0029_parser_management"
         check_structure(connection)
         if existing:
             assert connection.execute(text(f"SELECT {HISTORICAL_COLUMNS} FROM reviews ORDER BY id")).all() == before_reviews
@@ -109,6 +109,8 @@ def test_nonempty_categories_prevent_lossy_downgrade(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError, match="review_categories_history_requires_current_schema"):
         command.downgrade(config, "0027_review_feedback")
     with engine.connect() as connection:
+        # The unused parser migration can downgrade, but feedback history must
+        # still stop the next step at its own revision rather than the new head.
         assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0028_review_categories"
         assert connection.execute(text("SELECT * FROM reviews")).all() == before
         assert connection.execute(text("PRAGMA foreign_key_check")).all() == []
