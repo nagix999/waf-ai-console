@@ -142,7 +142,8 @@ def test_real_provider_wire_order_and_retry_use_candidate_contract_without_relax
 
 
 @pytest.mark.parametrize("revision,contract", [(None, SecurityAnalysisOutput), ("waf-system-v2.15", SecurityAnalysisOutput),
-                                                ("waf-system-v2.16", SecurityAnalysisOutputV216)])
+                                                ("waf-system-v2.16", SecurityAnalysisOutputV216),
+                                                ("waf-system-v2.17", SecurityAnalysisOutputV216)])
 @pytest.mark.parametrize("repair", [False, True])
 def test_grounded_selection_uses_exact_pinned_revision_for_primary_and_verifier(monkeypatch, revision, contract, repair):
     calls = []
@@ -174,5 +175,5 @@ def test_unknown_security_revision_fails_before_any_model_call(monkeypatch):
     monkeypatch.setattr(worker, "execute_structured_agent", unexpected)
     with pytest.raises(worker.WorkerExecutionError, match="unsupported_security_output_contract"):
         worker._execute_grounded_agent(analysis=Analysis(extra_fields={}), raw_payload=RAW, parsed=parse_http_payload(RAW),
-            input_truncated=False, security_analysis_enabled=True, fixed_rules_version="waf-system-v2.17",
+            input_truncated=False, security_analysis_enabled=True, fixed_rules_version="waf-system-v2.18",
             user_input=build().text)

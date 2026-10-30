@@ -349,7 +349,7 @@ def test_new_worker_metadata_records_only_fixed_parser_warnings(client, event_pa
 
 
 @pytest.mark.parametrize("partial", [False, True])
-def test_new_model_worker_records_policy_without_changing_verifier_gating(client, event_payload, monkeypatch, registered_vllm_target, partial):
+def test_new_model_worker_records_parser_diagnostics_without_parser_only_verifier(client, event_payload, monkeypatch, registered_vllm_target, partial):
     from test_test_retries import fixture_run as model_run
     from test_security_analysis_v3 import output
     if partial:
@@ -367,6 +367,13 @@ def test_new_model_worker_records_policy_without_changing_verifier_gating(client
         db.commit()
         worker.process_moduagent(db, client.app.state.crypto, row, "", .75)
         policy = db.scalar(select(AgentStep.metadata_json).where(AgentStep.step_type == "policy"))
-    assert len(calls) == (2 if partial else 1)
-    assert policy["execute_verifier"] is partial
-    assert policy["verifier_reason_codes"] == (["parser_incomplete"] if partial else [])
+        diagnostics = row.result_json["diagnostics"]
+        db.commit()
+        value = execution_summary(db, select(Analysis.id.label("analysis_id")).where(Analysis.id == row.id))
+    assert len(calls) == 1
+    assert policy["execute_verifier"] is False
+    assert policy["verifier_reason_codes"] == []
+    assert ("parser_incomplete" in diagnostics["input_signals"]) is partial
+    assert value["parser"]["partial" if partial else "success"] == 1
+    assert value["verifier"]["not_executed"] == 1
+    assert value["verifier"]["parser_triggered"] == value["verifier"]["parser_only"] == 0

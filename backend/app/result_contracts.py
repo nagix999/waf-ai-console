@@ -145,7 +145,7 @@ class ResultPolicy(StrictContract):
     disagreement_or_failure_becomes_inconclusive: Literal[True]
     decision_evidence_ids: list[str] = Field(max_length=5)
     verifier_policy_version: str
-    retired_verifier_triggers: list[Literal["tuning_recommended"]]
+    retired_verifier_triggers: list[Literal["tuning_recommended", "parser_incomplete"]]
 
 
 class ProfileMetadata(StrictContract):

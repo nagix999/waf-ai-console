@@ -8,6 +8,16 @@ RETIRED_VERIFIER_TRIGGERS = ["tuning_recommended"]
 SUPPORTS = {"true_positive": "attack_request", "false_positive": "normal_request", "context": "context"}
 
 
+def verifier_policy_metadata(fixed_rules_version):
+    from .policy import parser_status_triggers_verifier
+
+    diagnostic_only = not parser_status_triggers_verifier(fixed_rules_version)
+    return {
+        "verifier_policy_version": "security-analysis-policy-v2" if diagnostic_only else VERIFIER_POLICY_VERSION,
+        "retired_verifier_triggers": [*RETIRED_VERIFIER_TRIGGERS, *(["parser_incomplete"] if diagnostic_only else [])],
+    }
+
+
 def canonical_evidence(primary, verifier):
     assessment = build_analyst_assessment(primary, verifier)
     evidence = [{**item, "supports": SUPPORTS[item["supports"]],

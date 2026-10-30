@@ -650,9 +650,9 @@ def _execute_grounded_agent(*, analysis, raw_payload, parsed, input_truncated,
     document = json.loads(kwargs["user_input"])
     catalog = document.get("evidence_candidates")
     selecting = isinstance(catalog, dict) and catalog.get("version") == SELECTION_VERSION
-    if security_analysis_enabled and fixed_rules_version not in {"waf-system-v2.15", "waf-system-v2.16"}:
+    if security_analysis_enabled and fixed_rules_version not in {"waf-system-v2.15", "waf-system-v2.16", "waf-system-v2.17"}:
         raise WorkerExecutionError("unsupported_security_output_contract")
-    security_model = SecurityAnalysisOutputV216 if fixed_rules_version == "waf-system-v2.16" else SecurityAnalysisOutput
+    security_model = SecurityAnalysisOutput if fixed_rules_version == "waf-system-v2.15" else SecurityAnalysisOutputV216
     selection_model = (security_model if security_analysis_enabled else SemanticAssessmentOutput if semantic_enabled
                        else EvidenceAssessmentOutput if assessment_enabled else EvidenceSelectionOutput)
     repair_instructions = SELECTION_REPAIR_INSTRUCTIONS if selecting else REPAIR_INSTRUCTIONS
@@ -1031,6 +1031,7 @@ def _process_moduagent_steps(
             evidence_grounding_failed=bool(primary.telemetry.get("evidence_grounding", {}).get("rejected_count")),
             interpretation_conflict=(any(record.get("assessment", {}).get("interpretation_conflict") is True
                 for record in primary.grounding_history) if security_analysis_enabled else None),
+            fixed_rules_version=prompt.fixed_rules_version,
         )
         reasons = verifier_reasons(primary.output, policy_context)
         if affected_normal_findings(primary.output, agent_input.request_integrity, raw_payload, parsed):
@@ -1154,7 +1155,7 @@ def _process_moduagent_steps(
         })
         if security_analysis_enabled:
             from .agent.security_analysis import (canonical_evidence, conflict_observed, decision_evidence_ids,
-                guidance, observational_summary, role_result, VERIFIER_POLICY_VERSION, RETIRED_VERIFIER_TRIGGERS)
+                guidance, observational_summary, role_result, verifier_policy_metadata)
             from .result_contracts import validate_new_result
             evidence, issues, omitted = canonical_evidence(primary, verifier)
             summary = observational_summary(primary, verifier, finalization, integrity_metadata)
@@ -1166,7 +1167,7 @@ def _process_moduagent_steps(
                 primary=role_result(primary, "primary", evidence, issues))
             result["verifier"]["output"] = role_result(verifier, "verifier", evidence, issues)
             result["policy"].update(decision_evidence_ids=decision_evidence_ids(final_output, evidence),
-                verifier_policy_version=VERIFIER_POLICY_VERSION, retired_verifier_triggers=RETIRED_VERIFIER_TRIGGERS)
+                **verifier_policy_metadata(prompt.fixed_rules_version))
             result = validate_new_result(result)
         step_output(crypto, step, result, {
             "agreement": finalization.agreement, "verifier_executed": finalization.verifier_executed,

@@ -74,12 +74,14 @@ def test_parser_status_is_recorded_without_claiming_an_extractor_call(
         if mode == "stub":
             assert calls == []
         else:
-            assert [call["agent_name"] for call in calls] == (
-                ["waf-primary"] if parse_status == "success" else ["waf-primary", "waf-verifier"]
-            )
+            # v2.17 records parser diagnostics without making the same input
+            # go through a second model solely because parsing was incomplete.
+            assert [call["agent_name"] for call in calls] == ["waf-primary"]
+            assert analysis.result_json["policy"]["fixed_rules_version"] == "waf-system-v2.17"
+            assert analysis.result_json["verifier"]["executed"] is False
+            assert analysis.result_json["verifier"]["reasons"] == []
             for call in calls:
                 document = json.loads(call["user_input"])
                 assert document["event"]["payload"] == raw
                 assert document["generic_http_parser_hints"]["parse_status"] == parse_status
-            if parse_status != "success":
-                assert "parser_incomplete" in analysis.result_json["verifier"]["reasons"]
+            assert ("parser_incomplete" in analysis.result_json["diagnostics"]["input_signals"]) is (parse_status != "success")

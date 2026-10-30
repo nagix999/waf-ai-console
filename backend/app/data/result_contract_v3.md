@@ -5,11 +5,11 @@ Production configuration upgrade. The implementation starts from `eea2527`.
 
 ## New executions
 
-Candidates pinned to `waf-system-v2.15` or `waf-system-v2.16` generate
+Candidates pinned to `waf-system-v2.15`, `waf-system-v2.16` or `waf-system-v2.17` generate
 `waf-analysis-v3`. Approved
 Production instructions, already queued jobs and failed-job retries retain
 their encrypted pinned instructions. In particular, v2.14 remains available
-unchanged; the v2.15 prompt module is also frozen byte-for-byte. Test and
+unchanged; the v2.15 and v2.16 prompt modules are also frozen byte-for-byte. Test and
 Production share the selected instruction content; changing
 Production still requires an approved official evaluation and administrator
 review/apply.
@@ -70,9 +70,28 @@ interpretations. It replaces the free-text conflict-list trigger, not a test
 for the presence of both support directions. The policy version is
 `security-analysis-policy-v1`. The retired advisory-only trigger
 `tuning_recommended` is recorded in `policy.retired_verifier_triggers`.
-All other existing verifier triggers and failure/disagreement hold rules remain.
+For v2.15/v2.16 all other existing verifier triggers and failure/disagreement
+hold rules remain.
 Performance comparisons must report call-count changes separately from per-call
 generation or local processing improvements.
+
+### Parser status is diagnostic-only in v2.17
+
+The v2.17 candidate retains the exact v2.16 model instructions, result schema,
+input-integrity checks and parser engines. Its server trigger policy is
+`security-analysis-policy-v2`; `policy.retired_verifier_triggers` contains
+`tuning_recommended` and `parser_incomplete`. Both `partial` and `failed` remain
+visible in parser history, warnings and `diagnostics.input_signals`, but no
+longer independently request Verifier execution. Other triggers, source
+grounding, integrity guards and failure/disagreement holds are unchanged.
+
+The fixed rules revision is pinned in the existing encrypted snapshot and
+candidate configuration digest. Older/unknown revisions keep the legacy
+parser trigger. Approved Production, queued jobs and retries are not silently
+upgraded by deployment. Apply this policy through official evaluation and
+administrator review/promotion; synthetic offline tests do not establish
+operational accuracy or latency savings. No migration, new dependency, public
+request parameter or additional model-output field is introduced.
 
 ## Service API transition
 

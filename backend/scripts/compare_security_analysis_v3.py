@@ -108,7 +108,8 @@ def frozen_diagnostic_revision():
 def wire_model_for_revision(revision):
     models = {"waf-system-v2.14": SemanticAssessmentOutput,
               "waf-system-v2.15": SecurityAnalysisOutput,
-              "waf-system-v2.16": SecurityAnalysisOutputV216}
+              "waf-system-v2.16": SecurityAnalysisOutputV216,
+              "waf-system-v2.17": SecurityAnalysisOutputV216}
     try:
         return models[revision.FIXED_RULES_VERSION]
     except KeyError:

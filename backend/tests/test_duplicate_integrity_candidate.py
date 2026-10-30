@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.agent import legacy_prompts_v215, prompts
+from app.agent import legacy_prompts_v215, legacy_prompts_v216, prompts
 from app.agent.input_integrity import apply_integrity_guard
 from app.services.http_parser import parse_http_payload
 from app.services.json_duplicate_values import SAME_CODE, DIFFERENT_CODE, UNCOMPARABLE_CODE
@@ -114,6 +114,7 @@ def test_repeated_keys_in_different_objects_are_not_mixed():
     ("waf-system-v2.14", INTEGRITY_VERSION),
     ("waf-system-v2.15", INTEGRITY_VERSION),
     ("waf-system-v2.16", INTEGRITY_V3_VERSION),
+    ("waf-system-v2.17", INTEGRITY_V3_VERSION),
 ])
 def test_integrity_version_selection_preserves_old_execution(version, expected):
     assert integrity_version_for_rules(version) == expected
@@ -127,7 +128,9 @@ def test_candidate_observation_count_is_bounded_without_inventing_absence():
 
 
 @pytest.mark.usefixtures("registered_vllm_target")
-@pytest.mark.parametrize("rules,version", [(legacy_prompts_v215, INTEGRITY_VERSION), (prompts, INTEGRITY_V3_VERSION)])
+@pytest.mark.parametrize("rules,version", [(legacy_prompts_v215, INTEGRITY_VERSION),
+                                         (legacy_prompts_v216, INTEGRITY_V3_VERSION),
+                                         (prompts, INTEGRITY_V3_VERSION)])
 def test_worker_keeps_pinned_v215_input_and_candidate_uses_new_observation(
     client, event_payload, service_headers, monkeypatch, rules, version,
 ):

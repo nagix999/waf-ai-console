@@ -13,6 +13,15 @@ from .contracts import (
 from .evidence_deduplication import deduplicate_evidence
 
 
+PARSER_DIAGNOSTICS_ONLY_RULES_VERSIONS = frozenset({"waf-system-v2.17"})
+
+
+def parser_status_triggers_verifier(fixed_rules_version: str | None) -> bool:
+    # Unknown/missing revisions retain the old safety policy. A code deployment
+    # must not alter approved, queued or retried executions of earlier rules.
+    return fixed_rules_version not in PARSER_DIAGNOSTICS_ONLY_RULES_VERSIONS
+
+
 @dataclass(frozen=True)
 class VerifierPolicyContext:
     waf_action: str
@@ -23,6 +32,7 @@ class VerifierPolicyContext:
     # None selects the pinned legacy rule. Explicit False is not inferred from
     # evidence directions and must not silently fall back to that rule.
     interpretation_conflict: bool | None = None
+    fixed_rules_version: str | None = None
 
 
 @dataclass(frozen=True)
@@ -46,7 +56,8 @@ def verifier_reasons(primary: WAFAnalysisOutput, context: VerifierPolicyContext)
         reasons.append("true_positive_but_allowed")
     if primary.verdict == AgentVerdict.false_positive and context.waf_action == "D":
         reasons.append("false_positive_but_denied")
-    if context.parser_status in {"partial", "failed"}:
+    if (context.parser_status in {"partial", "failed"}
+            and parser_status_triggers_verifier(context.fixed_rules_version)):
         reasons.append("parser_incomplete")
     if context.input_truncated or primary.input_truncated:
         reasons.append("input_truncated")
