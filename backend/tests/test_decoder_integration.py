@@ -68,7 +68,7 @@ def test_many_hints_are_selected_whole_not_clipped_into_fictitious_transformatio
 
 def test_decoder_read_is_admin_audited_and_does_not_modify_existing_analysis(client, event_payload, service_headers):
     event_payload["payload"] = RAW
-    analysis_id = client.post("/api/v1/analyses", json=event_payload, headers=service_headers).json()["id"]
+    analysis_id = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload, headers=service_headers).json()["id"]
     path = f"/api/v1/analyses/{analysis_id}/event"
     assert client.get(path, headers=service_headers).status_code == 403
     with client.app.state.session_factory() as db:
@@ -98,7 +98,7 @@ def test_worker_uses_identical_tool_hints_in_independent_calls_and_keeps_artifac
 ):
     event_payload["payload"] = raw
     event_payload["waf_action"] = "A"  # Existing policy requests an independent verifier.
-    analysis_id = client.post("/api/v1/analyses", json=event_payload, headers=service_headers).json()["id"]
+    analysis_id = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload, headers=service_headers).json()["id"]
     calls = []
 
     async def fake_execute(**kwargs):

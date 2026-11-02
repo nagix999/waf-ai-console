@@ -53,7 +53,7 @@ def test_moduagent_worker_uses_production_profile_and_stores_agent_steps(
         "GET /search?q=%27+OR+1%3D1-- HTTP/1.1\r\n"
         "Host: example.internal\r\nCookie: session=fixture\r\n\r\n"
     )
-    created = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload).json()
     with client.app.state.session_factory() as db:
         db.add(
             VLLMProfile(
@@ -136,7 +136,7 @@ def test_moduagent_worker_uses_production_profile_and_stores_agent_steps(
 def test_ungrounded_decisive_evidence_is_downgraded_and_verified(
     client, event_payload, service_headers, settings, monkeypatch, field, excerpt,
 ):
-    created = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload).json()
     with client.app.state.session_factory() as db:
         db.add(
             VLLMProfile(
@@ -189,7 +189,7 @@ def test_ungrounded_decisive_evidence_is_downgraded_and_verified(
 def test_input_builder_failure_keeps_only_allowlisted_error_code(
     client, event_payload, service_headers, settings, monkeypatch, budget_failure,
 ):
-    created = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload).json()
 
     async def unexpected_model_call(**_kwargs):
         pytest.fail("A rejected input budget must not invoke the model")

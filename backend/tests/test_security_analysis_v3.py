@@ -191,7 +191,7 @@ def test_real_executor_uses_closed_v3_schema_and_corrects_invalid_output(monkeyp
 def test_worker_persists_only_canonical_v3_and_observational_summary(
     client, event_payload, service_headers, monkeypatch, verifier_verdict):
     event_payload["payload"] = RAW
-    created = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload).json()
     calls = []
     async def fake(**kwargs):
         calls.append(kwargs)
@@ -238,7 +238,7 @@ def test_canonical_editor_is_evidence_only_and_skips_unnecessary_calls(client, e
     login_admin(client)
     primary = create_verified(client, "synthetic-v3-editor")
     assert configure(client, primary, primary).status_code == 200
-    created = client.post("/api/v1/analyses", json={**event_payload, "payload": RAW}).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", json={**event_payload, "payload": RAW}).json()
     calls = []
     async def fake(**kwargs):
         kwargs["egress_check"]()

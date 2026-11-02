@@ -136,7 +136,7 @@ def test_service_results_hide_other_vendor_routes_but_admin_trace_keeps_them(
     with client.app.state.session_factory() as db:
         activate_parser_version(db, identifier)  # Synthetic setup only.
         db.commit()
-    created = client.post("/api/v1/analyses", json=event_payload, headers=service_headers)
+    created = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload, headers=service_headers)
     assert created.status_code == 202, created.text
     analysis_id = created.json()["id"]
     with client.app.state.session_factory() as db:

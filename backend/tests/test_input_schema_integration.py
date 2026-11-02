@@ -52,12 +52,12 @@ def test_live_contract_and_ingestion_change_together(client, event_payload):
         "type": "integer", "required": True, "minimum": 1, "maximum": 9})
     valid = {**event_payload, "risk_rank": 3}
     activate(client, version, valid)
-    rejected = client.post("/api/v1/analyses", json=event_payload)
+    rejected = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload)
     assert rejected.status_code == 422
     assert rejected.json()["detail"][0]["field"] == "risk_rank"
-    bad = client.post("/api/v1/analyses", json={**valid, "risk_rank": "PRIVATE-SYNTHETIC"})
+    bad = client.post("/api/v1/analyses?wait_seconds=0", json={**valid, "risk_rank": "PRIVATE-SYNTHETIC"})
     assert bad.status_code == 422 and "PRIVATE-SYNTHETIC" not in bad.text
-    accepted = client.post("/api/v1/analyses", json=valid)
+    accepted = client.post("/api/v1/analyses?wait_seconds=0", json=valid)
     assert accepted.status_code == 202
     assert accepted.json()["input_schema_metadata"]["content_hash"] == version["content_hash"]
     docs = client.get("/api/v1/production-api")
@@ -76,17 +76,17 @@ def test_live_contract_and_ingestion_change_together(client, event_payload):
 
 def test_duplicate_and_old_test_keep_pinned_schema_after_change_and_rollback(client, event_payload):
     login(client)
-    original = client.post("/api/v1/analyses", json=event_payload).json()
+    original = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()
     old_version = client.get(BASE).json()["items"][0]
     test = client.post("/api/v1/test-runs", json={"name": "이전 테스트", "idempotency_key": "schema-test-original",
         "event": event_payload}).json()
     version = new_version(client, {"name": "tenant", "type": "string", "required": True})
     activate(client, version, {**event_payload, "tenant": "example"})
-    duplicate = client.post("/api/v1/analyses", json=event_payload)
+    duplicate = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload)
     assert duplicate.status_code == 202
     assert duplicate.json()["id"] == original["id"]
     assert duplicate.json()["input_schema_metadata"] == original["input_schema_metadata"]
-    bad = client.post("/api/v1/analyses", json={**event_payload, "event_id": "new-required"})
+    bad = client.post("/api/v1/analyses?wait_seconds=0", json={**event_payload, "event_id": "new-required"})
     assert bad.status_code == 422
     with client.app.state.session_factory() as db:
         run = db.get(NamedTestRun, test["id"])
@@ -94,7 +94,7 @@ def test_duplicate_and_old_test_keep_pinned_schema_after_change_and_rollback(cli
         assert old["version_id"] == original["input_schema_metadata"]["version_id"]
         assert "tenant" not in {field["name"] for field in old["fields"]}
     activate(client, old_version, event_payload)
-    assert client.post("/api/v1/analyses", json={**event_payload, "event_id": "after-rollback"}).status_code == 202
+    assert client.post("/api/v1/analyses?wait_seconds=0", json={**event_payload, "event_id": "after-rollback"}).status_code == 202
     assert client.get("/openapi.json").json()["info"]["x-input-schema"]["version_id"] == old_version["id"]
 
 
@@ -115,7 +115,7 @@ def test_required_optional_field_absence_is_not_silently_defaulted(client, event
         assert client.post(route, json=missing).status_code == 422
     # Required does not imply non-null when nullable remains enabled.
     explicit = {**missing, "src_port": None, "event_id": "explicit-null"}
-    assert client.post("/api/v1/analyses", json=explicit).status_code == 202
+    assert client.post("/api/v1/analyses?wait_seconds=0", json=explicit).status_code == 202
 
 
 def test_inference_records_encrypted_field_history_without_sending_definitions(client, event_payload, monkeypatch, registered_vllm_target):
@@ -124,7 +124,7 @@ def test_inference_records_encrypted_field_history_without_sending_definitions(c
     version = new_version(client, {"name": "zone", "type": "string", "description": marker})
     event = {**event_payload, "zone": "synthetic-zone"}
     activate(client, version, event)
-    created = client.post("/api/v1/analyses", json=event).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", json=event).json()
     later = new_version(client, {"name": "required_after_submission", "type": "boolean", "required": True})
     activate(client, later, {**event_payload, "required_after_submission": True})
     with client.app.state.session_factory() as db:
@@ -158,7 +158,7 @@ def test_inference_records_encrypted_field_history_without_sending_definitions(c
 @pytest.mark.parametrize("corruption", ["cipher", "missing"])
 def test_corrupt_schema_fails_before_any_model_call(client, event_payload, monkeypatch, corruption):
     login(client)
-    client.post("/api/v1/analyses", json=event_payload)
+    client.post("/api/v1/analyses?wait_seconds=0", json=event_payload)
     async def forbidden(**kwargs):
         pytest.fail("A corrupt schema must not reach an LLM")
     monkeypatch.setattr(worker, "execute_structured_agent", forbidden)
@@ -172,7 +172,7 @@ def test_corrupt_schema_fails_before_any_model_call(client, event_payload, monke
 
 def test_legacy_unversioned_queue_uses_original_default_not_new_active(client, event_payload):
     login(client)
-    created = client.post("/api/v1/analyses", json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()
     with client.app.state.session_factory() as db:
         row = db.get(Analysis, created["id"])
         row.input_schema_version_id = row.input_schema_snapshot_ciphertext = None

@@ -64,7 +64,7 @@ def login(client):
 
 def stored_analysis(client, event_payload):
     login(client)
-    response = client.post("/api/v1/analyses", json=event_payload)
+    response = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload)
     assert response.status_code == 202
     id = response.json()["id"]
     with client.app.state.session_factory() as db:

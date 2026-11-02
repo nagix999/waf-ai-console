@@ -233,7 +233,7 @@ def test_older_pinned_execution_keeps_its_protocol_after_deployment(client, even
         contract_description = "field/excerpt exact citation" if revision == "2.6" else "source_id selection"
         old.setattr(prompts, "build_role_instructions", lambda policy: (
             "synthetic-old-primary: " + contract_description, "synthetic-old-verifier: " + contract_description))
-        created = client.post("/api/v1/analyses", json=event_payload).json()
+        created = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()
     calls = []
     async def fake(**kwargs):
         calls.append(kwargs)

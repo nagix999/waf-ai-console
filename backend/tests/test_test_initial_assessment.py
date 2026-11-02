@@ -32,7 +32,7 @@ def web_request(event, **extra):
 @pytest.mark.parametrize("surface", ["web", "inline", "legacy", "service"])
 def test_single_initial_is_stored_without_evidence_or_answer_contamination(client, event_payload, test_key, surface):
     if surface == "service":
-        response = client.post("/api/v1/analyses", json={**event_payload, **INITIAL, "expected_verdict": "false_positive"}, headers=test_key)
+        response = client.post("/api/v1/analyses?wait_seconds=0", json={**event_payload, **INITIAL, "expected_verdict": "false_positive"}, headers=test_key)
         identifier = response.json().get("id")
     else:
         login(client)
@@ -95,13 +95,13 @@ def test_single_retry_preserves_initial_without_using_it_as_reference(client, ev
 @pytest.mark.parametrize("session", [False, True])
 @pytest.mark.parametrize("first,second", [(INITIAL, INITIAL), ({}, INITIAL), (INITIAL, {}), (INITIAL, {**INITIAL, "initial_probability": .9}), (INITIAL, {**INITIAL, "initial_model_version": "changed"})])
 def test_service_replay_checks_initial_metadata_including_omission(client, event_payload, test_key, session, first, second):
-    query = {}
+    query = {"wait_seconds": 0}
     if session:
         run = client.post("/api/v1/test-sessions", json={"name": "fixture", "idempotency_key": str(uuid.uuid4())}, headers=test_key).json()
         query["test_run_id"] = run["id"]
-    response = client.post("/api/v1/analyses", params=query, json={**event_payload, **first}, headers=test_key)
+    response = client.post("/api/v1/analyses?wait_seconds=0", params=query, json={**event_payload, **first}, headers=test_key)
     assert response.status_code == 202, response.text
-    repeated = client.post("/api/v1/analyses", params=query, json={**event_payload, **second}, headers=test_key)
+    repeated = client.post("/api/v1/analyses?wait_seconds=0", params=query, json={**event_payload, **second}, headers=test_key)
     if first == second:
         assert repeated.status_code == 202 and repeated.json()["id"] == response.json()["id"]
     else:

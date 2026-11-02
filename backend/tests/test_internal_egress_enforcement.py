@@ -72,7 +72,7 @@ def test_profile_update_enable_test_and_promote_recheck_db(client, registered_vl
 
 
 def test_analysis_worker_ignores_legacy_allowlist_before_dispatch(client, event_payload, service_headers, monkeypatch):
-    created = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload).json()
     monkeypatch.setattr("app.worker.execute_structured_agent", lambda **kw: pytest.fail("Must fail before model call"))
     with client.app.state.session_factory() as db:
         db.add(VLLMProfile(name="synthetic", base_url="http://10.0.0.10:8000/v1", model_name="synthetic", status="production"))

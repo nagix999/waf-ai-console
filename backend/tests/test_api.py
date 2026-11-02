@@ -11,9 +11,9 @@ def test_health_is_public(client):
 
 
 def test_analysis_enqueue_is_idempotent_and_payload_is_encrypted(client, event_payload, service_headers):
-    first = client.post("/api/v1/analyses", headers=service_headers, json=event_payload)
+    first = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload)
     assert first.status_code == 202
-    second = client.post("/api/v1/analyses", headers=service_headers, json=event_payload)
+    second = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload)
     assert second.status_code == 202
     assert second.json()["id"] == first.json()["id"]
 
@@ -24,7 +24,7 @@ def test_analysis_enqueue_is_idempotent_and_payload_is_encrypted(client, event_p
 
 
 def test_raw_payload_requires_admin_session(client, event_payload, service_headers):
-    created = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload).json()
     denied = client.get(f"/api/v1/analyses/{created['id']}/event", headers=service_headers)
     assert denied.status_code == 403
 
@@ -39,7 +39,7 @@ def test_raw_payload_requires_admin_session(client, event_payload, service_heade
 
 
 def test_review_is_append_only_and_idempotent(client, event_payload, service_headers):
-    created = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload).json()
     review = {
         "external_review_id": "review-001",
         "event_id": event_payload["event_id"],
@@ -72,7 +72,7 @@ def test_csv_upload_accepts_multiple_rows(client, event_payload, service_headers
 
 
 def test_stub_worker_creates_visible_agent_history(client, event_payload, service_headers, settings):
-    created = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload).json()
     crypto = CryptoService(settings.data_encryption_key, settings.encryption_key_version)
     with client.app.state.session_factory() as db:
         process_stub(db, crypto, db.get(Analysis, created["id"]))

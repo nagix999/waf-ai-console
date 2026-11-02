@@ -65,7 +65,7 @@ def test_metadata_and_reference_are_not_event_or_prompt_input(client, event_payl
         assert row.prompt_snapshot_ciphertext == saved.prompt_snapshot_ciphertext
         assert item["evaluation"]["reference_label"]["verdict"] == "false_positive"
         assert item["difficulty"] == "hard"
-    production = client.post("/api/v1/analyses", json={**event_payload, "test_category": "not-model-data"})
+    production = client.post("/api/v1/analyses?wait_seconds=0", json={**event_payload, "test_category": "not-model-data"})
     assert production.status_code == 422
 
 

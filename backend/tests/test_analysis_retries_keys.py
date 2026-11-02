@@ -35,7 +35,7 @@ def profile_fixture(client, *, is_test=False):
 
 
 def failed_fixture(client, event, profile_id):
-    response = client.post("/api/v1/analyses", json=event)
+    response = client.post("/api/v1/analyses?wait_seconds=0", json=event)
     assert response.status_code == 202, response.text
     identifier = response.json()["id"]
     with client.app.state.session_factory() as db:
@@ -64,8 +64,8 @@ def key_fixture(client, name):
 def test_key_attribution_first_admission_only_including_upload_and_deletion(client, event_payload):
     first_id, first_headers = key_fixture(client, "first")
     second_id, second_headers = key_fixture(client, "second")
-    original = client.post("/api/v1/analyses", headers=first_headers, json=event_payload).json()
-    replay = client.post("/api/v1/analyses", headers=second_headers, json=event_payload).json()
+    original = client.post("/api/v1/analyses?wait_seconds=0", headers=first_headers, json=event_payload).json()
+    replay = client.post("/api/v1/analyses?wait_seconds=0", headers=second_headers, json=event_payload).json()
     assert replay["id"] == original["id"] and replay["service_api_key_id"] == first_id
     uploaded = client.post("/api/v1/uploads", headers=second_headers, files={
         "file": ("synthetic.json", json.dumps([{**event_payload, "event_id": "second-event"}]).encode()),
@@ -93,7 +93,7 @@ def test_key_attribution_first_admission_only_including_upload_and_deletion(clie
 
 
 def test_retry_and_key_delete_are_admin_only_and_cost_ack_is_required(client, event_payload, service_headers):
-    identifier = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()["id"]
+    identifier = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload).json()["id"]
     for suffix, method in (("retry-eligibility", "get"), ("retry", "post")):
         kwargs = {"json": {"idempotency_key": "synthetic-key", "cost_acknowledged": True}} if method == "post" else {}
         assert getattr(client, method)(f"/api/v1/analyses/{identifier}/{suffix}", **kwargs).status_code == 401
@@ -131,8 +131,8 @@ def test_retry_keeps_failure_and_pinned_context_idempotency_and_original_ingest(
     assert client.get("/api/v1/analyses").json()["total"] == 1
     assert client.get("/api/v1/analyses?include_retries=true").json()["total"] == 2
     assert client.get("/api/v1/dashboard/summary").json()["counts"]["total"] == 1
-    assert client.post("/api/v1/analyses", json=event_payload).json()["id"] == identifier
-    assert client.post("/api/v1/analyses", json={**event_payload, "payload": "changed synthetic"}).status_code == 409
+    assert client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()["id"] == identifier
+    assert client.post("/api/v1/analyses?wait_seconds=0", json={**event_payload, "payload": "changed synthetic"}).status_code == 409
     calls = []
     async def execute(**kwargs):
         kwargs["egress_check"]()
@@ -186,7 +186,7 @@ def test_worker_pins_context_before_primary_failure_and_rechecks_after_enqueue(c
     login(client)
     client.app.state.settings.agent_mode = "moduagent"
     profile_id = profile_fixture(client)
-    identifier = client.post("/api/v1/analyses", json=event_payload).json()["id"]
+    identifier = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()["id"]
     async def fail(**kwargs):
         return AgentCallResult(None, None, None, None, "synthetic-failure", "synthetic-error", {})
     monkeypatch.setattr(worker, "execute_structured_agent", fail)
@@ -335,7 +335,7 @@ def test_key_dashboard_metrics_and_daily_trend_share_scope_and_null_denominators
     other_id, other_headers = key_fixture(client, "other synthetic")
     identifiers = []
     for number, credential in enumerate((headers, headers, headers, other_headers)):
-        row = client.post("/api/v1/analyses", headers=credential, json={**event_payload, "event_id": f"daily-{number}"}).json()
+        row = client.post("/api/v1/analyses?wait_seconds=0", headers=credential, json={**event_payload, "event_id": f"daily-{number}"}).json()
         identifiers.append(row["id"])
     with client.app.state.session_factory() as db:
         for number, identifier in enumerate(identifiers):

@@ -116,8 +116,8 @@ def test_promotion_updates_live_contract_and_preserves_old_execution_snapshots(c
     assert response.status_code == 200
     assert client.get("/api/v1/admin/input-schemas").json()["active_version_id"] == candidate["input_schema_version_id"]
     assert client.get("/api/v1/admin/prompt-policies").json()["active_version_id"] == candidate["prompt_policy_version_id"]
-    assert client.post("/api/v1/analyses", json={**event_payload, "event_id": "requires-new-field"}).status_code == 422
-    assert client.post("/api/v1/analyses", json={**event_payload, "event_id": "new-contract-ok", "vendor_score": 4}).status_code == 202
+    assert client.post("/api/v1/analyses?wait_seconds=0", json={**event_payload, "event_id": "requires-new-field"}).status_code == 422
+    assert client.post("/api/v1/analyses?wait_seconds=0", json={**event_payload, "event_id": "new-contract-ok", "vendor_score": 4}).status_code == 202
     with client.app.state.session_factory() as db:
         analysis = db.get(Analysis, run["items"][0]["analysis_id"])
         assert (analysis.prompt_snapshot_ciphertext, analysis.input_schema_snapshot_ciphertext) == pinned
@@ -198,8 +198,8 @@ def test_runtime_key_filter_and_activity_redaction(client, event_payload):
     renamed = client.patch(f"{KEYS}/{first['item']['id']}", json={"name": "renamed"})
     assert renamed.status_code == 200, renamed.text
     logout(client)
-    first_analysis = client.post("/api/v1/analyses", json=event_payload, headers=headers(first)).json()
-    client.post("/api/v1/analyses", json=event_payload, headers=headers(second))
+    first_analysis = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload, headers=headers(first)).json()
+    client.post("/api/v1/analyses?wait_seconds=0", json=event_payload, headers=headers(second))
     login(client)
     runtime = client.get(f"/api/v1/admin/runtime/status?purpose=production&service_api_key_id={first['item']['id']}")
     assert runtime.status_code == 200, runtime.text

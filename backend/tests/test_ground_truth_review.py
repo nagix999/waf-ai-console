@@ -105,7 +105,7 @@ def test_return_to_draft_and_review_filter_have_exact_counts(client, event_paylo
 
 
 def test_import_keeps_reference_provenance_across_review_and_edit(client, event_payload):
-    production = client.post("/api/v1/analyses", json=event_payload, headers=key(client, "production")).json()
+    production = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload, headers=key(client, "production")).json()
     login(client)
     save_reference(client, [production["id"]], "inconclusive")
     with client.app.state.session_factory() as db:

@@ -26,7 +26,7 @@ def test_parser_status_is_recorded_without_claiming_an_extractor_call(
     client, event_payload, service_headers, settings, monkeypatch, mode, raw, parse_status,
 ):
     event_payload["payload"] = raw
-    created = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload).json()
     calls = []
 
     async def fake_execute(**kwargs):

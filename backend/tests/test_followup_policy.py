@@ -88,7 +88,7 @@ def test_worker_orders_policy_after_guard_before_editor_and_preserves_role_histo
     client.app.state.settings.agent_mode = "moduagent"
     primary, editor = create_verified(client, "policy-primary"), create_verified(client, "policy-editor")
     assert configure(client, primary, editor).status_code == 200
-    created = client.post("/api/v1/analyses", json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()
     calls = []
     async def execute(**kwargs):
         kwargs["egress_check"]()

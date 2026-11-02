@@ -155,9 +155,11 @@ proxy_set_header X-Forwarded-Proto https;
 proxy_set_header X-Forwarded-For $remote_addr;
 proxy_set_header X-Real-IP $remote_addr;
 proxy_set_header Forwarded "";
-proxy_read_timeout 75s;
+proxy_read_timeout 660s;
 client_max_body_size 11m;
 ```
+
+분석 POST는 기본 300초, 최대 600초 동안 응답을 기다립니다. WAF 웹 프록시와 바깥쪽 모든 프록시의 read timeout은 660초 이상, 연동 클라이언트의 전체 timeout은 전송 시간까지 고려해 690초 이상을 초기값으로 맞추세요. 값을 늘려도 모델 처리시간 제한이나 성공률이 바뀌지는 않습니다. 기존 배포의 생성된 프록시 정책도 아래 명령으로 다시 생성·확인하고 해당 프록시에 적용해야 합니다.
 
 프록시 로그에는 요청 본문·Cookie·인증 헤더를 기록하지 않습니다. Docker Gateway 컨테이너의 `127.0.0.1`은 호스트가 아니므로 위 전달 방식을 그대로 사용할 수 없습니다.
 
@@ -217,11 +219,13 @@ DB migration `0029_parser_management`는 파서 버전·현재 선택·암호화
 
 ## API와 결과 공유
 
-- 분석 접수: `POST /api/v1/analyses` — 비동기 처리, `wait_seconds`로 최대 60초 대기.
-- 상태·결과 조회: `GET /api/v1/analyses/{analysis_id}` — 기본 v3, 기존 호환 응답은 `result_version=v2`.
-- 피드백: `POST /api/v1/analyses/{analysis_id}/reviews` — 근거 부족·근거 불일치·설명 오류·영향 과장·심각도 부적절·기타의 복수 선택과 선택 의견.
+- 분석 접수: `POST /api/v1/analyses` — 기본 300초 대기, 선택형 `wait_seconds=0~600`. `0`은 즉시 반환합니다. 새 v3 결과는 `result_version=v3`를 지정하며 기존 POST 기본 응답 v2는 유지합니다.
+- 상태·결과 조회: `GET /api/v1/analyses/by-event?event_id=...` — 외부 이벤트 ID로 조회하며 기본 v3입니다. 내부 ID 기반 기존 조회와 `result_version=v2` 호환 응답도 유지합니다.
+- 피드백: `POST /api/v1/reviews` — `event_id`, 선택형 피드백 항목·의견·작성자만 전달합니다. 분석·리뷰 ID는 서버가 관리하며 같은 분석·작성자·항목·의견의 재전송은 중복 저장하지 않습니다. 기존 ID 기반 리뷰 경로는 호환용으로 유지합니다.
 - API 키는 Production/Test 용도와 source·권한 범위를 구분합니다. 관리자 전용 원문·Agent 이력을 서비스 키로 조회할 수 없습니다.
 - 실행 중인 서비스의 **연동 → Production API**에서 현재 스키마의 정의서와 PDF를 확인합니다. Swagger는 `/docs`, OpenAPI는 `/openapi.json`입니다.
+
+HTTP 연결이 끊겨도 DB에 접수된 분석은 worker가 계속 처리합니다. 통신 장애로 접수·응답 여부가 불명확하면 같은 `event_id`와 동일한 전체 입력으로 재전송하세요. 기존 작업을 반환하거나 남은 처리 완료를 기다리며 새 분석을 만들지 않습니다. 대기 기한 내 미완료는 `202`이고, 이후 결과를 받으려면 별도 조회나 동일 요청 재전송이 필요합니다. 실패한 분석의 재전송은 재실행이 아닙니다. Test의 서로 다른 실행에 같은 이벤트가 있으면 조회·리뷰에 `test_run_id`를 지정해야 합니다. 관리자 `/test-analyses`의 기존 기본 0초·최대 60초는 유지합니다.
 
 배포용 [API 정의서 원본](backend/app/data/production_api.md)은 소스에 포함됩니다. 루트 `docs/`는 로컬 설계·배포·검증 기록용으로 Git 추적에서 제외하며, 서비스 빌드나 API 정의서 제공에 필요하지 않습니다.
 

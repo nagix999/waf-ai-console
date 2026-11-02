@@ -41,7 +41,7 @@ def test_queue_pins_encrypted_instructions_and_duplicate_retains_original(client
     login(client)
     # Ordinary ingestion tests prompt pinning independently of named test-run
     # profile snapshots, which have their own focused regression coverage.
-    original = client.post("/api/v1/analyses", json=event_payload).json()
+    original = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()
     with client.app.state.session_factory() as db:
         row = db.get(Analysis, original["id"])
         cipher_before = row.prompt_snapshot_ciphertext
@@ -51,11 +51,11 @@ def test_queue_pins_encrypted_instructions_and_duplicate_retains_original(client
         assert FIXED_INSTRUCTIONS in snapshot.primary_instructions
         assert snapshot.reserved_tokens == 4096 + len(DEFAULT_POLICY_TEXT.encode("utf-8"))
     newer = create_and_activate(client)
-    duplicate = client.post("/api/v1/analyses", json=event_payload).json()
+    duplicate = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()
     assert duplicate["id"] == original["id"]
     assert duplicate["prompt_version"] == original["prompt_version"]
     assert duplicate["prompt_policy_version_id"] != newer["id"]
-    created = client.post("/api/v1/analyses", json={**event_payload, "event_id": "second-event"}).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", json={**event_payload, "event_id": "second-event"}).json()
     assert created["prompt_policy_version_id"] == newer["id"]
     with client.app.state.session_factory() as db:
         assert db.get(Analysis, original["id"]).prompt_snapshot_ciphertext == cipher_before
@@ -75,7 +75,7 @@ def fake_output():
 
 def test_worker_and_verifier_use_queued_snapshot_after_activation_and_code_change(client, event_payload, monkeypatch):
     login(client)
-    created = client.post("/api/v1/analyses", json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()
     with client.app.state.session_factory() as db:
         original = load_analysis_prompt(db.get(Analysis, created["id"]), client.app.state.crypto)
         db.add(VLLMProfile(name="synthetic-profile", base_url="http://10.0.0.10:8000/v1", model_name="synthetic-model", status="production"))
@@ -120,7 +120,7 @@ def test_worker_and_verifier_use_queued_snapshot_after_activation_and_code_chang
 @pytest.mark.parametrize("corruption", ["invalid_cipher", "changed_role", "missing_snapshot", "missing_both"])
 def test_snapshot_corruption_fails_before_model_call(client, event_payload, monkeypatch, corruption):
     login(client)
-    created = client.post("/api/v1/analyses", json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()
     calls = []
 
     async def execute(**kwargs):
@@ -146,7 +146,7 @@ def test_snapshot_corruption_fails_before_model_call(client, event_payload, monk
 
 def test_legacy_unpinned_event_is_marked_as_selected_at_execution(client, event_payload, monkeypatch):
     login(client)
-    created = client.post("/api/v1/analyses", json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()
     with client.app.state.session_factory() as db:
         row = db.get(Analysis, created["id"])
         row.prompt_snapshot_ciphertext = None
@@ -171,7 +171,7 @@ def test_policy_is_literal_text_and_roles_remain_separate():
 
 def test_small_context_fails_before_llm_and_preserves_pinned_policy(client, event_payload, monkeypatch):
     login(client)
-    created = client.post("/api/v1/analyses", json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()
     calls = []
 
     async def execute(**kwargs):
@@ -203,6 +203,6 @@ def test_editable_policy_reserve_reduces_input_budget_without_modifying_payload(
 
 @pytest.mark.parametrize("name", ["prompt_policy_version_id", "prompt_snapshot_ciphertext", "policy_version_id", "policy_text", "fixed_rules_version", "primary_instructions", "verifier_instructions"])
 def test_ingest_cannot_select_or_override_policy(client, event_payload, service_headers, name):
-    response = client.post("/api/v1/analyses", headers=service_headers, json={**event_payload, name: "private-override"})
+    response = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json={**event_payload, name: "private-override"})
     assert response.status_code == 422
     assert "private-override" not in response.text

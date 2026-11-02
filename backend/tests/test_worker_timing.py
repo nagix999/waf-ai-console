@@ -75,7 +75,7 @@ def test_legacy_and_interrupted_steps_never_claim_measured_duration():
 def test_stub_parser_is_visible_while_running_and_measures_actual_work(
     client, event_payload, service_headers, settings, monkeypatch, fake_clock,
 ):
-    item_id = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()["id"]
+    item_id = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload).json()["id"]
     original_parser = worker.apply_parser_snapshot
 
     def parser(payload, snapshot, *, waf_vendor=None):
@@ -110,7 +110,7 @@ def test_primary_duration_includes_real_corrective_retry_and_grounding(
     client, event_payload, service_headers, settings, monkeypatch, fake_clock, repair_succeeds,
 ):
     event_payload["payload"] = "GET /?q=%27+OR+1%3D1-- HTTP/1.1\r\nHost: synthetic.internal\r\n\r\n"
-    item_id = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()["id"]
+    item_id = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload).json()["id"]
     with client.app.state.session_factory() as db:
         db.add(VLLMProfile(
             name="timing-profile", base_url="http://10.0.0.10:8000/v1", model_name="synthetic-model",
@@ -185,7 +185,7 @@ def test_primary_duration_includes_real_corrective_retry_and_grounding(
 def test_lease_recovery_preserves_first_start_and_marks_abandoned_timing_unknown(
     client, event_payload, service_headers, settings, fake_clock, operation_raises,
 ):
-    item_id = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()["id"]
+    item_id = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload).json()["id"]
     crypto = CryptoService(settings.data_encryption_key, settings.encryption_key_version)
     with client.app.state.session_factory() as db:
         analysis = db.get(Analysis, item_id)
@@ -222,7 +222,7 @@ def test_lease_recovery_preserves_first_start_and_marks_abandoned_timing_unknown
 def test_parser_exception_closes_step_and_its_run_without_raw_error_content(
     client, event_payload, service_headers, settings, monkeypatch, fake_clock,
 ):
-    item_id = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()["id"]
+    item_id = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload).json()["id"]
 
     def parser(_payload):
         fake_clock.advance(700)
@@ -247,7 +247,7 @@ def test_parser_exception_closes_step_and_its_run_without_raw_error_content(
 def test_delayed_old_claim_cannot_create_run_after_replacement_claim(
     client, event_payload, service_headers, settings, fake_clock, replacement_completed,
 ):
-    item_id = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()["id"]
+    item_id = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload).json()["id"]
     crypto = CryptoService(settings.data_encryption_key, settings.encryption_key_version)
     with client.app.state.session_factory() as old_db:
         old_analysis = worker.claim_next(old_db, "same-worker-id", 1)

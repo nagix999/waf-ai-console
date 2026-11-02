@@ -18,7 +18,7 @@ def setup(client, event_payload, purpose="production", status="completed"):
     with client.app.state.session_factory() as db:
         key, raw = issue_key(db, ServiceApiKeyCreate(name="삭제 확인용 키", source_system="fixture-source", scopes=["ingest"], purpose=purpose), "fixture")
         db.commit(); key_id = key.id
-    result = client.post("/api/v1/analyses", headers={"x-api-key": raw}, json={**event_payload, "expected_verdict": "true_positive"})
+    result = client.post("/api/v1/analyses?wait_seconds=0", headers={"x-api-key": raw}, json={**event_payload, "expected_verdict": "true_positive"})
     assert result.status_code == 202
     identifier = result.json()["id"]
     with client.app.state.session_factory() as db:
@@ -63,7 +63,7 @@ def test_preserve_is_default_and_deleted_key_cannot_purge_later(client, event_pa
     with client.app.state.session_factory() as db:
         assert db.get(Analysis, analysis_id) and db.query(AnalysisLabel).count() == 1
     client.post("/api/v1/auth/logout")
-    assert client.post("/api/v1/analyses", headers={"x-api-key": raw}, json=event_payload).status_code == 401
+    assert client.post("/api/v1/analyses?wait_seconds=0", headers={"x-api-key": raw}, json=event_payload).status_code == 401
 
 
 @pytest.mark.parametrize("status", ["pending", "processing"])

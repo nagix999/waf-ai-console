@@ -26,6 +26,8 @@ from ..schemas import (
 from ..security import CurrentPrincipal, Principal, require_scope
 from ..services.analysis import AnalysisIngestError, fetch_analysis, fetch_analysis_status, to_detail, to_summary
 from ..services.analysis_query import AnalysisFilters, filtered_evaluation_summary, find_analyses
+from ..services.analysis_access import ServiceAnalysisScope
+from ..services.event_lookup import EventLookupError, lookup_event_analysis
 from ..services.timing import run_duration_ms, step_duration_ms
 from ..services.payload_decoding import decode_payload
 from ..services.uploads import UploadFormatError, extract_test_upload_row, normalize_upload_row, parse_upload
@@ -46,7 +48,6 @@ def require_source(principal: Principal) -> str:
 
 
 def visible_source(principal: Principal) -> str | None:
-    from ..services.analysis_access import ServiceAnalysisScope
     return None if "admin" in principal.scopes else ServiceAnalysisScope(require_source(principal), principal.purpose)
 
 
@@ -56,15 +57,30 @@ def response_result_version(principal: Principal, requested: str | None) -> str:
 
 
 async def wait_for_analysis(db: Session, identifier: str, source, wait_seconds: int):
-    """Poll a scalar status; assemble reviews/labels/retries only once at return."""
+    """Wait after durable admission; never retain a DB connection while asleep."""
     deadline = asyncio.get_running_loop().time() + wait_seconds
-    current = fetch_analysis_status(db, identifier, source) if wait_seconds else None
+
+    def read_status():
+        try:
+            return fetch_analysis_status(db, identifier, source)
+        finally:
+            # A SELECT opens a Session transaction and checks out a connection.
+            # Close each short read even when the HTTP wait is cancelled. The
+            # Session remains reusable; the independently committed job does not
+            # belong to this HTTP connection and must never be cancelled here.
+            db.close()
+
+    if wait_seconds:
+        # Callers commit admission before this function. In particular, release
+        # any duplicate Test-session lookup lock before entering a long wait.
+        db.close()
+    current = read_status() if wait_seconds else None
     while wait_seconds and current in {"pending", "processing"}:
         remaining = deadline - asyncio.get_running_loop().time()
         if remaining <= 0:
             break
         await asyncio.sleep(min(0.25, remaining))
-        current = fetch_analysis_status(db, identifier, source)
+        current = read_status()
     db.expire_all()
     row = fetch_analysis(db, identifier, source)
     if row is None:
@@ -116,7 +132,7 @@ async def create_analysis(
     response: Response,
     db: DbSession,
     principal: Annotated[Principal, Depends(require_scope("ingest"))],
-    wait_seconds: int = Query(default=0, ge=0, le=60, description="응답에서 분석 완료를 기다릴 시간(초). 테스트명이나 실행 시간 제한이 아닙니다."),
+    wait_seconds: int = Query(default=300, ge=0, le=600, description="응답에서 분석 완료를 기다릴 시간(초). 기본 300초, 최대 600초이며 0이면 즉시 반환합니다. 테스트명이나 실행 시간 제한이 아닙니다. 기한이 지나거나 연결이 끊겨도 접수된 분석은 계속 처리합니다."),
     test_run_id: str | None = Query(default=None, max_length=36, description="Test 키 전용. POST /api/v1/test-sessions 응답의 id를 전달합니다. 테스트명·임의 ID는 사용할 수 없으며 생략하면 테스트를 자동 생성합니다."),
     result_version: Literal["v2", "v3"] | None = Query(default=None, description="서비스 키는 기본 v2 호환 응답입니다. v3를 선택하면 엄격한 새 결과 계약을 반환합니다. 과거 결과는 원래 버전을 유지합니다."),
 ) -> AnalysisDetail:
@@ -214,6 +230,28 @@ def list_analyses(
         items=[to_summary(row) for row in rows], total=total, limit=filters.limit, offset=filters.offset,
         evaluation_summary=filtered_evaluation_summary(db, filters, visible_source(principal)),
     )
+
+
+@router.get("/analyses/by-event", response_model=AnalysisDetail)
+def get_analysis_by_event(
+    request: Request,
+    response: Response,
+    db: DbSession,
+    principal: Annotated[Principal, Depends(require_scope("ingest"))],
+    event_id: str = Query(..., min_length=1, max_length=255),
+    test_run_id: str | None = Query(default=None, min_length=1, max_length=36),
+    result_version: Literal["v2", "v3"] = Query(default="v3"),
+) -> AnalysisDetail:
+    if set(request.query_params) - {"event_id", "test_run_id", "result_version"}:
+        raise HTTPException(422, "unsupported_query_parameter")
+    source = ServiceAnalysisScope(require_source(principal), principal.purpose)
+    begin_analysis_read_snapshot(db)
+    try:
+        row = lookup_event_analysis(db, event_id, source=source, test_run_id=test_run_id)
+    except EventLookupError as exc:
+        raise HTTPException(exc.status_code, exc.code) from None
+    response.headers["Cache-Control"] = "no-store"
+    return to_detail(row, request.app.state.crypto, result_version=result_version)
 
 
 @router.get("/analyses/{analysis_id}", response_model=AnalysisDetail)

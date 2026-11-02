@@ -126,7 +126,7 @@ def test_missing_saved_version_rolls_back_the_whole_submission(client, event_pay
 def test_candidate_schema_validates_events_and_never_changes_production_admission(client, event_payload, candidate):
     response = direct(client, event_payload, candidate)
     assert response.status_code == 202 and response.json()["rejected"] == 1
-    assert client.post("/api/v1/analyses", json=event_payload).status_code == 202
+    assert client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).status_code == 202
     # Configuration is accepted only outside the event, not as model input.
     response = direct(client, {**event_payload, "vendor_score": 2, "candidate_configuration": candidate}, candidate)
     assert response.status_code == 202 and response.json()["rejected"] == 1
@@ -223,7 +223,7 @@ def test_explicit_candidate_is_not_silently_ignored_in_stub_mode(client, event_p
 @pytest.mark.parametrize("changed", ["prompt", "schema"])
 def test_candidate_blocks_individually_valid_but_different_item_snapshot(client, event_payload, candidate, changed):
     run = direct(client, {**event_payload, "vendor_score": 2}, candidate).json()
-    ordinary = client.post("/api/v1/analyses", json=event_payload).json()
+    ordinary = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()
     with client.app.state.session_factory() as db:
         analysis = db.get(Analysis, run["items"][0]["analysis_id"])
         other = db.get(Analysis, ordinary["id"])

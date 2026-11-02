@@ -24,13 +24,13 @@ from app.services.validation_datasets import digest
 def test_request_answer_is_attached_before_execution_and_never_in_model_input(client, event_payload, purpose, verdict):
     headers = key(client, purpose)
     body = {**event_payload, "expected_verdict": verdict}
-    first = client.post("/api/v1/analyses", headers=headers, json=body)
+    first = client.post("/api/v1/analyses?wait_seconds=0", headers=headers, json=body)
     assert first.status_code == 202, first.text
     result = first.json()
     assert result["analysis_purpose"] == purpose
     assert result["evaluation"]["reference_label"]["verdict"] == verdict
     assert result["evaluation"]["outcome"] == "pending"
-    repeated = client.post("/api/v1/analyses", headers=headers, json=body)
+    repeated = client.post("/api/v1/analyses?wait_seconds=0", headers=headers, json=body)
     assert repeated.status_code == 202 and repeated.json()["id"] == result["id"]
     assert repeated.json()["evaluation"]["reference_label"]["verdict"] == verdict
     with client.app.state.session_factory() as db:
@@ -55,7 +55,7 @@ def test_request_answer_is_attached_before_execution_and_never_in_model_input(cl
 @pytest.mark.parametrize("purpose", ["test", "production"])
 @pytest.mark.parametrize("value", ["bad-answer", "TRUE_POSITIVE", True, 1, {}, []])
 def test_bad_answer_rejects_without_enqueue(client, event_payload, purpose, value):
-    response = client.post("/api/v1/analyses", headers=key(client, purpose), json={**event_payload, "expected_verdict": value})
+    response = client.post("/api/v1/analyses?wait_seconds=0", headers=key(client, purpose), json={**event_payload, "expected_verdict": value})
     assert response.status_code == 422
     with client.app.state.session_factory() as db:
         assert db.query(Analysis).count() == db.query(AnalysisLabel).count() == 0
@@ -63,12 +63,12 @@ def test_bad_answer_rejects_without_enqueue(client, event_payload, purpose, valu
 
 def test_production_replay_conflict_and_omission_preserve_reference(client, event_payload):
     headers = key(client, "production")
-    plain = client.post("/api/v1/analyses", headers=headers, json=event_payload).json()
-    attached = client.post("/api/v1/analyses", headers=headers, json={**event_payload, "expected_verdict": "inconclusive"})
+    plain = client.post("/api/v1/analyses?wait_seconds=0", headers=headers, json=event_payload).json()
+    attached = client.post("/api/v1/analyses?wait_seconds=0", headers=headers, json={**event_payload, "expected_verdict": "inconclusive"})
     assert attached.status_code == 202 and attached.json()["id"] == plain["id"]
     for extra in ({}, {"expected_verdict": None}):
-        assert client.post("/api/v1/analyses", headers=headers, json={**event_payload, **extra}).json()["evaluation"]["reference_label"]["verdict"] == "inconclusive"
-    conflict = client.post("/api/v1/analyses", headers=headers, json={**event_payload, "expected_verdict": "false_positive"})
+        assert client.post("/api/v1/analyses?wait_seconds=0", headers=headers, json={**event_payload, **extra}).json()["evaluation"]["reference_label"]["verdict"] == "inconclusive"
+    conflict = client.post("/api/v1/analyses?wait_seconds=0", headers=headers, json={**event_payload, "expected_verdict": "false_positive"})
     assert conflict.status_code == 409 and conflict.json()["detail"] == "expected_verdict_conflict"
     with client.app.state.session_factory() as db:
         assert db.query(Analysis).count() == db.query(AnalysisLabel).count() == 1
@@ -139,7 +139,7 @@ def test_server_sort_orders_all_matching_analyses_before_pagination(client, even
     headers = key(client, "production")
     for name in ["C", "A", "B", "A"]:
         body = {**event_payload, "event_id": str(uuid.uuid4()), "company_name": name}
-        assert client.post("/api/v1/analyses", headers=headers, json=body).status_code == 202
+        assert client.post("/api/v1/analyses?wait_seconds=0", headers=headers, json=body).status_code == 202
     pages = [client.get("/api/v1/analyses", headers=headers, params={"sort_by": "company_name", "sort_order": "asc", "limit": 2, "offset": offset}).json() for offset in (0, 2)]
     assert [row["company_name"] for page in pages for row in page["items"]] == ["A", "A", "B", "C"]
     assert len({row["id"] for page in pages for row in page["items"]}) == 4
@@ -177,12 +177,12 @@ def test_latest_reference_available_before_run_finishes_but_snapshot_waits(clien
 def test_test_request_replay_preserves_legacy_normalized_identity(client, event_payload):
     headers = key(client, "test")
     minimal = {key: value for key, value in event_payload.items() if key not in {"signature", "event_name", "src_port", "dest_port"}}
-    first = client.post("/api/v1/analyses", headers=headers, json=minimal).json()
+    first = client.post("/api/v1/analyses?wait_seconds=0", headers=headers, json=minimal).json()
     legacy = AnalysisInput.model_validate(minimal).model_dump(mode="json")
     with client.app.state.session_factory() as db:
         assert db.get(Run, first["test_run_id"]).request_hash == digest([legacy])
     for body in (legacy, {**minimal, "expected_verdict": None}):
-        replay = client.post("/api/v1/analyses", headers=headers, json=body)
+        replay = client.post("/api/v1/analyses?wait_seconds=0", headers=headers, json=body)
         assert replay.status_code == 202 and replay.json()["id"] == first["id"]
 
 
@@ -193,7 +193,7 @@ def test_production_label_write_failure_rolls_back_analysis(client, event_payloa
             raise IntegrityError(None, None, Exception("fixture-label-write-failure"))
     event.listen(Session, "before_flush", fail_label)
     try:
-        response = client.post("/api/v1/analyses", headers=headers, json={**event_payload, "expected_verdict": "true_positive"})
+        response = client.post("/api/v1/analyses?wait_seconds=0", headers=headers, json={**event_payload, "expected_verdict": "true_positive"})
     finally:
         event.remove(Session, "before_flush", fail_label)
     assert response.status_code == 409

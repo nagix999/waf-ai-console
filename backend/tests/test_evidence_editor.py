@@ -152,7 +152,7 @@ def test_optional_editor_distinct_profile_original_result_and_encrypted_history(
     login_admin(client)
     primary, editor = create_verified(client, "editor-primary"), create_verified(client, "editor-other")
     assert configure(client, primary, editor).status_code == 200
-    created = client.post("/api/v1/analyses", json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()
     calls = install_calls(monkeypatch, mode)
     if mode == "revoked":
         with client.app.state.session_factory() as db:
@@ -222,7 +222,7 @@ def test_retry_retains_original_editor_after_current_assignment_disabled(client,
     client.app.state.settings.agent_mode = "moduagent"
     primary, editor = create_verified(client, "retry-primary"), create_verified(client, "retry-editor")
     assert configure(client, primary, editor).status_code == 200
-    created = client.post("/api/v1/analyses", json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()
     async def fail(**kwargs):
         return AgentCallResult(None, "synthetic-failure", None, "error", None, "output_validation_failed", {})
     monkeypatch.setattr(worker, "execute_structured_agent", fail)
@@ -248,7 +248,7 @@ def test_editor_never_swallows_lost_lease(client, event_payload, monkeypatch):
     login_admin(client)
     primary = create_verified(client, "lease-editor-primary")
     assert configure(client, primary, None).status_code == 200
-    created = client.post("/api/v1/analyses", json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()
     install_calls(monkeypatch, "lost")
     with client.app.state.session_factory() as db:
         analysis = db.get(Analysis, created["id"])

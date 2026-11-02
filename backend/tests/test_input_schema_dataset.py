@@ -94,7 +94,7 @@ def test_incompatible_dataset_rolls_back_all_new_members_without_changing_old_da
     client, registered_vllm_target, event_payload, monkeypatch, incompatibility, expected_attempts,
 ):
     login(client)
-    existing = client.post("/api/v1/analyses", json=event_payload)
+    existing = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload)
     assert existing.status_code == 202, existing.text
     existing_id = existing.json()["id"]
     events, _ = load_dataset()

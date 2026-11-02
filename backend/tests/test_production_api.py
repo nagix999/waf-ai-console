@@ -13,7 +13,7 @@ def login(client):
 
 
 def test_server_assigns_purpose_and_channel(client, event_payload, service_headers):
-    production = client.post("/api/v1/analyses", json=event_payload, headers=service_headers)
+    production = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload, headers=service_headers)
     assert production.status_code == 202
     assert production.json()["analysis_purpose"] == "production"
     assert production.json()["ingest_channel"] == "service_api"
@@ -31,12 +31,12 @@ def test_server_assigns_purpose_and_channel(client, event_payload, service_heade
     assert (detail["analysis_purpose"], detail["ingest_channel"]) == ("test", "file_upload")
     # Named test runs use their own source, so Production receives the same
     # external event ID without colliding with an unrelated test execution.
-    ordinary = client.post("/api/v1/analyses", json=event_payload)
+    ordinary = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload)
     assert ordinary.status_code == 202 and ordinary.json()["id"] != lab.json()["id"]
     legacy_payload = {**event_payload, "event_id": "synthetic-legacy-test"}
     with client.app.state.session_factory() as db:
         enqueue_analysis(db, client.app.state.crypto, "admin-ui", AnalysisInput.model_validate(legacy_payload), analysis_purpose="test", ingest_channel="test_lab")
-    collision = client.post("/api/v1/analyses", json=legacy_payload)
+    collision = client.post("/api/v1/analyses?wait_seconds=0", json=legacy_payload)
     assert collision.status_code == 409
     assert collision.json()["detail"] == "event_purpose_conflict"
 
@@ -44,7 +44,7 @@ def test_server_assigns_purpose_and_channel(client, event_payload, service_heade
 @pytest.mark.parametrize("field", ["source_system", "analysis_purpose", "ingest_channel", "verdict", "model_profile", "severity"])
 def test_control_fields_are_rejected_without_echoing_values(client, event_payload, service_headers, field):
     marker = "synthetic-secret-control-value"
-    response = client.post("/api/v1/analyses", headers=service_headers, json={**event_payload, field: marker})
+    response = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json={**event_payload, field: marker})
     assert response.status_code == 422
     assert marker not in response.text
     assert "server_control_fields_not_allowed" in response.text
@@ -54,12 +54,12 @@ def test_control_fields_are_rejected_without_echoing_values(client, event_payloa
 
 
 def test_duplicate_checks_normalized_content_and_preserves_legacy(client, event_payload, service_headers):
-    first = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()
-    normalized = client.post("/api/v1/analyses", headers=service_headers, json={**event_payload, "waf_action": "d"})
+    first = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload).json()
+    normalized = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json={**event_payload, "waf_action": "d"})
     assert normalized.status_code == 202
     assert normalized.json()["id"] == first["id"]
     for field, value in (("payload", "synthetic-changed-payload"), ("signature", "changed"), ("future_vendor_field", "changed")):
-        conflict = client.post("/api/v1/analyses", headers=service_headers, json={**event_payload, field: value})
+        conflict = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json={**event_payload, field: value})
         assert conflict.status_code == 409
         assert conflict.json()["detail"] == "event_id_conflict"
         assert value not in conflict.text
@@ -69,16 +69,16 @@ def test_duplicate_checks_normalized_content_and_preserves_legacy(client, event_
         row.event_fingerprint = None
         row.result_json = {"schema_version": "waf-analysis-v1", "uncertainties": ["synthetic"], "future": {"keep": True}}
         db.commit()
-    legacy = client.post("/api/v1/analyses", headers=service_headers, json=event_payload)
+    legacy = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload)
     assert legacy.status_code == 202
     assert legacy.json()["analysis_purpose"] == "legacy_unknown"
     assert legacy.json()["result"]["future"] == {"keep": True}
     assert legacy.json()["result"]["uncertainties"] == ["synthetic"]
-    assert client.post("/api/v1/analyses", headers=service_headers, json={**event_payload, "payload": "changed"}).status_code == 409
+    assert client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json={**event_payload, "payload": "changed"}).status_code == 409
 
 
 def test_service_can_only_read_and_review_own_source(client, event_payload, service_headers):
-    own = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()
+    own = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload).json()
     with client.app.state.session_factory() as db:
         other, _ = enqueue_analysis(db, client.app.state.crypto, "other-parser", AnalysisInput.model_validate(event_payload))
         other_id = other.id
@@ -97,10 +97,10 @@ def test_service_can_only_read_and_review_own_source(client, event_payload, serv
 def test_utf8_payload_limit_and_upload_row_rejections(client, event_payload, service_headers):
     client.app.state.settings.payload_max_bytes = 6
     exact = {**event_payload, "payload": "한글"}
-    first = client.post("/api/v1/analyses", headers=service_headers, json=exact)
+    first = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=exact)
     assert first.status_code == 202
     oversized = {**exact, "event_id": "too-large", "payload": "한글x"}
-    response = client.post("/api/v1/analyses", headers=service_headers, json=oversized)
+    response = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=oversized)
     assert response.status_code == 413
     assert response.json()["detail"] == "payload_too_large"
     conflict = {**exact, "payload": "다름"}
@@ -115,8 +115,8 @@ def test_utf8_payload_limit_and_upload_row_rejections(client, event_payload, ser
 
 
 def test_review_duplicate_cannot_change_content_or_target(client, event_payload, service_headers):
-    first = client.post("/api/v1/analyses", json=event_payload, headers=service_headers).json()
-    second = client.post("/api/v1/analyses", json={**event_payload, "event_id": "evt-2"}, headers=service_headers).json()
+    first = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload, headers=service_headers).json()
+    second = client.post("/api/v1/analyses?wait_seconds=0", json={**event_payload, "event_id": "evt-2"}, headers=service_headers).json()
     review = {"external_review_id": "review-1", "event_id": event_payload["event_id"], "feedback_categories": ["insufficient_evidence"]}
     endpoint = f"/api/v1/analyses/{first['id']}/reviews"
     assert client.post(endpoint, json=review, headers=service_headers).status_code == 201

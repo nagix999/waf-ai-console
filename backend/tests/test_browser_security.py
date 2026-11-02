@@ -233,7 +233,7 @@ def test_same_origin_ui_test_submission_is_still_usable(browser_client, browser_
 
 def test_cookie_free_service_ingest_upload_and_review_need_no_origin(browser_client, browser_service_headers, browser_event):
     assert not browser_client.cookies and "origin" not in browser_client.headers
-    created = browser_client.post("/api/v1/analyses", json=browser_event, headers=browser_service_headers)
+    created = browser_client.post("/api/v1/analyses?wait_seconds=0", json=browser_event, headers=browser_service_headers)
     assert created.status_code == 202
     assert created.json()["source_system"] == "synthetic-browser-source"
     assert created.json()["analysis_purpose"] == "production"
@@ -250,10 +250,10 @@ def test_cookie_free_service_ingest_upload_and_review_need_no_origin(browser_cli
 def test_cookie_and_api_key_keep_session_priority_and_do_not_update_key_on_csrf(browser_client, browser_service_headers, browser_event):
     login(browser_client)
     before = stored_rows(browser_client)
-    response = browser_client.post("/api/v1/analyses", json=browser_event, headers=browser_service_headers)
+    response = browser_client.post("/api/v1/analyses?wait_seconds=0", json=browser_event, headers=browser_service_headers)
     assert_csrf(response, "csrf_origin_required")
     assert stored_rows(browser_client) == before
-    response = browser_client.post("/api/v1/analyses", json=browser_event,
+    response = browser_client.post("/api/v1/analyses?wait_seconds=0", json=browser_event,
         headers={**browser_service_headers, "Origin": PUBLIC_ORIGIN})
     assert response.status_code == 202
     assert response.json()["source_system"] == "admin-ui"

@@ -145,7 +145,7 @@ def test_worker_keeps_pinned_v215_input_and_candidate_uses_new_observation(
     selected = rules
     event_payload["payload"] = request('{"page":2,"page":2}')
     with patch.object(prompt_snapshots, "_build_snapshot", snapshot):
-        created = client.post("/api/v1/analyses", headers=service_headers, json=event_payload)
+        created = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload)
     assert created.status_code == 202, created.text
     inputs = []
     async def fake(**kwargs):

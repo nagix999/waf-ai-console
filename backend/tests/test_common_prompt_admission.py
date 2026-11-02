@@ -88,7 +88,7 @@ def install_profiles(client):
 def test_test_and_production_pin_the_same_active_policy_and_fixed_rules(client, event_payload, kind):
     login(client)
     saved, current = save_policy(client)
-    production = client.post("/api/v1/analyses", json=event_payload)
+    production = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload)
     response = submit(client, event_payload, kind=kind, expected=True)
     assert production.status_code == response.status_code == 202
     run = response.json()
@@ -120,7 +120,7 @@ def test_shared_activation_affects_only_new_admission_and_keeps_legacy_request_h
     login(client)
     saved, current = save_policy(client)
     key = str(uuid.uuid4())
-    production = client.post("/api/v1/analyses", json=event_payload).json()
+    production = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()
     first = submit(client, event_payload, kind=kind, key=key).json()
     previous_document = {"name": NAME, "kind": kind, "rows": [event_payload],
                          "filename": "synthetic.json" if kind == "upload" else None}
@@ -133,10 +133,10 @@ def test_shared_activation_affects_only_new_admission_and_keeps_legacy_request_h
     activate(client, saved["id"])
     replay = submit(client, event_payload, kind=kind, key=key).json()
     assert (replay["id"], replay["prompt_policy_version_id"]) == (first["id"], current["active_version_id"])
-    duplicate = client.post("/api/v1/analyses", json=event_payload).json()
+    duplicate = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()
     assert (duplicate["id"], duplicate["prompt_policy_version_id"]) == (production["id"], current["active_version_id"])
     newer = submit(client, event_payload, kind=kind).json()
-    new_production = client.post("/api/v1/analyses", json={**event_payload, "event_id": "synthetic-new-production"}).json()
+    new_production = client.post("/api/v1/analyses?wait_seconds=0", json={**event_payload, "event_id": "synthetic-new-production"}).json()
     assert newer["prompt_policy_version_id"] == new_production["prompt_policy_version_id"] == saved["id"]
     with client.app.state.session_factory() as db:
         assert db.get(NamedRun, first["id"]).prompt_snapshot_ciphertext == frozen
@@ -172,7 +172,7 @@ def test_corrupt_common_active_policy_fails_both_admission_paths_safely(client, 
     with client.app.state.session_factory() as db:
         db.get(PromptPolicyVersion, current["active_version_id"]).policy_ciphertext = "SYNTHETIC_PRIVATE_CORRUPTION"
         db.commit()
-    production = client.post("/api/v1/analyses", json=event_payload)
+    production = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload)
     test = submit(client, event_payload, kind=kind)
     assert production.status_code == test.status_code == 503
     assert production.json()["detail"] == test.json()["detail"] == "prompt_policy_content_unavailable"
@@ -186,7 +186,7 @@ def test_different_llm_roles_execute_identical_frozen_prompts_after_activation(c
     login(client)
     production_id, test_id = install_profiles(client)
     client.app.state.settings.agent_mode = "moduagent"
-    production = client.post("/api/v1/analyses", json=event_payload).json()
+    production = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()
     run = submit(client, event_payload, expected=True).json()
     analysis_ids = {production["id"], run["items"][0]["analysis_id"]}
     with client.app.state.session_factory() as db:

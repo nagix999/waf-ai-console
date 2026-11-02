@@ -1,6 +1,6 @@
 # Production WAF Analysis API v0.2.0
 
-기준일: 2026-10-27. 내부 WAF 수집기와 분석가 시스템을 위한 REST 계약이다.
+기준일: 2026-11-02. 내부 WAF 수집기와 분석가 시스템을 위한 REST 계약이다.
 이 문서는 실제 구현을 기준으로 한다. 상위 설계서의 미구현 재분석·범용 배치·모델 비교 API와 구분한다. 별도 참고 Label 연결과 테스트 파일 답안 비교는 아래 계약을 사용한다. 설정의 선택형 150건 후보 검증은 [별도 정의서](Model_Validation_Dataset_v0.1.md)를 따른다.
 
 ## 연결과 인증
@@ -71,7 +71,7 @@ Test 키로 같은 `/analyses`, `/uploads`를 호출하면 Test 모델·동시 �
 | `name` | `POST /test-sessions`의 JSON 본문 | 화면에 표시할 테스트명. 생략하면 UUID 형태의 이름 자동 생성 |
 | `idempotency_key` | 같은 JSON 본문 | 테스트 생성 요청의 재전송 중복 방지 키. 새 테스트는 새 키 사용 |
 | `test_run_id` | `/analyses`·`/uploads`의 쿼리 | 서버가 이미 생성한 테스트의 `id`. 테스트명이나 임의의 ID를 넣는 곳이 아님 |
-| `wait_seconds` | `/analyses`의 쿼리 | 응답에서 분석 완료를 기다릴 시간(0~60초). 테스트명·실행 시간 제한과 무관 |
+| `wait_seconds` | `/analyses`의 선택 쿼리 | 응답에서 분석 완료를 기다릴 시간. 생략 시 300초, 0~600초 허용. 테스트명·모델 실행 시간 제한과 무관 |
 
 호출 경로는 `/api/v1/analyses`다. `/api/v1.analyses`가 아니다. 아래 예제의 모든 요청에는 같은 연동 시스템의 **Test용 키**를 `X-API-Key` 헤더로 전달한다.
 
@@ -94,7 +94,7 @@ Content-Type: application/json
 2. 반환된 `id`로 분석을 접수한다. 요청 본문에는 아래 '단건 분석 접수'에서 정의한 이벤트 JSON을 넣는다. 여러 건을 같은 테스트로 묶으려면 동일한 `test_run_id`를 사용한다.
 
 ```http
-POST /api/v1/analyses?wait_seconds=60&test_run_id=11111111-1111-4111-8111-111111111111
+POST /api/v1/analyses?result_version=v3&test_run_id=11111111-1111-4111-8111-111111111111
 X-API-Key: <TEST_API_KEY>
 Content-Type: application/json
 ```
@@ -122,12 +122,16 @@ X-API-Key: <TEST_API_KEY>
 ## 단건 분석 접수
 
 ```http
-POST /api/v1/analyses?wait_seconds=0
+POST /api/v1/analyses?result_version=v3
 X-API-Key: <SERVICE_API_KEY>
 Content-Type: application/json
 ```
 
-`wait_seconds`는 정수 0~60, 기본 0이다. worker는 HTTP 요청과 독립적으로 실행된다. 대기 시간 만료나 클라이언트 연결 종료가 접수된 작업을 취소하지 않는다.
+`wait_seconds`는 선택 쿼리이며 **생략 시 300초**, 정수 **0~600초**를 허용한다. `0`은 완료를 기다리지 않고 현재 상태를 반환한다. 이 시간은 HTTP 응답 대기시간이지 분석 실행 제한시간이 아니다. Production/Test 키 모두 같은 기준을 사용한다. 관리자 전용 `/test-analyses`의 기존 기본 0초·최대 60초는 유지한다.
+
+접수 트랜잭션을 DB에 반영한 뒤 완료를 기다린다. worker는 HTTP 요청과 독립적으로 실행하므로 대기 시간 만료나 클라이언트 연결 종료가 **DB에 접수된** 작업을 취소하지 않는다. 전송 중 연결이 끊겨 접수 여부를 모르면 동일 `event_id`와 동일한 전체 입력으로 재전송한다. 아직 접수되지 않았으면 새로 접수하고, 이미 접수됐으면 기존 작업을 기다리거나 완료 결과를 반환한다. 연결이 끊긴 뒤 아무 요청도 보내지 않으면 결과를 나중에 전달받을 수는 없다. webhook이나 연결 종료 후 응답 전달 기능은 제공하지 않는다.
+
+최대 대기를 지원하려면 WAF 웹·Gateway·외부 reverse proxy의 read timeout을 모두 **660초 이상**, 연동 클라이언트의 전체 timeout을 업로드 시간도 고려해 **690초 이상**으로 맞춘다. 이는 최대 600초에 각각 여유를 둔 초기값이며 실제 전송·응답 크기에 맞게 조정한다. 기본값이 0초에서 300초로 바뀌었으므로 기존 즉시 접수 연동은 `wait_seconds=0`을 명시한다. timeout을 늘려도 모델 실행 예산이나 최종 판정 정책은 바뀌지 않는다.
 
 <!-- INPUT_SCHEMA_START -->
 아래는 출고 기본 스키마다. 현재 적용한 필드 정의는 인증된 `GET /api/v1/production-api`와 웹 UI의 Production API, `/openapi.json`에서 확인한다. 설정 → 입력 스키마에서 새 버전을 적용하면 새 접수 검증과 이 문서의 온라인 필드 정의에 즉시 반영된다. 저장소의 이 파일은 기본 계약을 설명하는 템플릿이다.
@@ -175,9 +179,9 @@ Content-Type: application/json
 }
 ```
 
-## 접수 응답과 polling
+## 접수 응답과 결과 확인
 
-POST는 `AnalysisDetail` 객체를 반환한다. 내부 분석 ID의 필드명은 `id`이며 `analysis_id`, `status_url` 필드는 없다. 아래는 핵심 필드만 발췌한 예시다.
+POST는 `AnalysisDetail` 객체를 반환한다. 내부 분석 ID의 필드명은 `id`이며 `analysis_id`, `status_url` 필드는 없다. 기존 응답 호환성을 위해 `id`를 유지하지만, 외부 시스템은 이를 저장하지 않고 `event_id`로 조회·리뷰를 연동할 수 있다. 아래는 대기 기한 내 완료되지 않은 경우의 핵심 필드만 발췌한 예시다.
 
 ```json
 {
@@ -202,12 +206,24 @@ POST는 `AnalysisDetail` 객체를 반환한다. 내부 분석 ID의 필드명�
 | 202 | `pending` 또는 `processing` |
 | 200 | `completed` 또는 `failed` (완료된 중복 접수 포함) |
 
-조회는 `GET /api/v1/analyses/{id}`를 사용한다. 조회 성공은 진행 상태와 무관하게 HTTP 200이다.
+완료를 기다리는 연동은 POST 한 번으로 `200 + completed + result`를 받는다. 통신 장애 때만 동일 요청을 재전송하며 주기적인 polling은 필요하지 않다. 다만 대기 기한 내 미완료라 `202`를 받았거나 연결이 끊겼다면, 나중에 같은 입력을 재전송하거나 아래 이벤트 ID 조회를 호출해야 최종 결과를 받을 수 있다. 재전송은 새로운 분석이나 실패 재실행을 만들지 않는다.
 
-1. 접수 응답의 `id`를 저장한다.
-2. `pending`, `processing`이면 1초 후 조회하고 간격을 2~5초로 늘린다. 여러 클라이언트는 약간의 무작위 지연을 추가할 수 있다.
-3. `completed`이면 최종 결과를 사용한다.
-4. `failed`이면 `error_code`, `error_message`를 처리한다.
+### 이벤트 ID로 조회
+
+```http
+GET /api/v1/analyses/by-event?event_id=evt-prod-20260905-000001
+X-API-Key: <SERVICE_API_KEY>
+```
+
+| 쿼리 | 필수 | 규칙 |
+| --- | --- | --- |
+| `event_id` | O | 1~255자. API Key의 용도·연동 범위에서 조회 |
+| `result_version` | X | 기본 `v3`, 기존 호환 형식은 `v2` |
+| `test_run_id` | X | Test 키 전용. 같은 이벤트가 여러 테스트에 있으면 해당 테스트 ID 지정 |
+
+응답은 POST와 같은 `AnalysisDetail`이다. 조회 성공은 진행 상태와 무관하게 HTTP 200이고, 미존재·다른 연동 범위는 404 `analysis_not_found`다. Test에서 동일 이벤트가 여러 테스트에 있으면 409 `test_event_ambiguous`이며 임의로 최신 테스트를 고르지 않는다. Production 키에 `test_run_id`를 보내면 422다. 재실행이 있더라도 POST가 반환하는 원본 분석을 기준으로 조회하며 성공한 재실행 결과로 조용히 대체하지 않는다.
+
+내부 ID 기반 기존 `GET /api/v1/analyses/{id}`도 호환 경로로 유지한다. 필요하면 기존 방식으로 `pending`·`processing`일 때 2~5초 간격의 조회를 구현할 수 있지만 필수 연동 방식은 아니다. `completed`이면 최종 결과를 사용하고, `failed`이면 `error_code`, `error_message`를 처리한다.
 
 `completed + inconclusive`는 정상 완료된 보류 판정이다. HTTP 200이나 `confidence_score`만으로 성공·공격 여부를 결정하지 않는다. webhook과 서비스 키를 통한 임의 재분석은 제공하지 않는다. 관리자는 `GET /analyses/{id}/retry-eligibility`로 실패 당시 설정의 보존 여부를 확인하고 별도 `POST /analyses/{id}/retry`로 실패 재실행을 요청할 수 있다. 기존 실패는 보존하며 당시 설정을 확인할 수 없으면 현재 모델로 대체하지 않고 차단한다.
 
@@ -215,19 +231,21 @@ POST는 `AnalysisDetail` 객체를 반환한다. 내부 분석 ID의 필드명�
 
 ```bash
 curl --silent --show-error --fail-with-body \
-  -X POST "${WAF_API_BASE_URL}/api/v1/analyses?wait_seconds=0" \
+  --max-time 690 \
+  -X POST "${WAF_API_BASE_URL}/api/v1/analyses?result_version=v3" \
   -H "X-API-Key: ${WAF_API_KEY}" \
   -H "Content-Type: application/json" \
   --data-binary @synthetic-event.json
 
 curl --silent --show-error --fail-with-body \
   -H "X-API-Key: ${WAF_API_KEY}" \
-  "${WAF_API_BASE_URL}/api/v1/analyses/${WAF_ANALYSIS_ID}"
+  --get --data-urlencode "event_id=evt-prod-20260905-000001" \
+  "${WAF_API_BASE_URL}/api/v1/analyses/by-event"
 ```
 
 ## 완료 결과와 버전
 
-상세 응답에는 목록 필드와 `result`, `prompt_version`, 선택 정책 ID인 `prompt_policy_version_id`(기존 데이터는 null), `model_profile`, 오류 정보가 포함된다. 접수 응답의 프롬프트는 선택된 지침이며 실제 LLM 실행 완료를 뜻하지 않는다. 새 판정은 `result.schema_version="waf-analysis-v2"`다. 아래는 `result`의 핵심 필드 예시이며 서버가 Primary/Verifier·정책·실행 메타데이터도 덧붙인다.
+상세 응답에는 목록 필드와 `result`, `prompt_version`, 선택 정책 ID인 `prompt_policy_version_id`(기존 데이터는 null), `model_profile`, 오류 정보가 포함된다. 접수 응답의 프롬프트는 선택된 지침이며 실제 LLM 실행 완료를 뜻하지 않는다. 결과 버전은 실행에 고정된 지침과 응답의 `result_version` 선택을 따른다. 아래는 **v2 호환 응답**의 핵심 필드 예시이며 서버가 Primary/Verifier·정책·실행 메타데이터도 덧붙인다. 새 v3 근거 분류·보류 조건은 아래 '결과 v3 선택과 기존 연동 호환' 절을 따른다. 과거 결과를 최신 결과로 추정하거나 다시 작성하지 않는다.
 
 모델 공급자는 관리자가 등록한 Production LLM 프로필(`vllm` / `openai`)로 결정한다. 접수 요청에서 provider나 외부 주소를 지정하지 않는다. 새 실제 분석의 `result.agent`에는 `llm_provider`, `model_name`, `model_profile_id`, `profile_fingerprint`, `external_data_approved`를 함께 기록한다. OpenAI의 `thinking_enabled`는 null이며 추론 비활성화 사실을 뜻하지 않는다. 이전 결과의 미기록 항목은 추정하지 않는다. OpenAI Production을 사용할 경우 마스킹하지 않은 payload·Cookie 등이 외부로 전송되므로 관리자 승인과 사내 반출 정책 확인이 선행되어야 한다.
 
@@ -294,7 +312,7 @@ curl --silent --show-error --fail-with-body \
 
 #### 결과 v3 선택과 기존 연동 호환
 
-`POST /api/v1/analyses` 및 `GET /api/v1/analyses/{analysis_id}`는 선택 query `result_version=v2|v3`를 받는다. **GET 단건 조회의 기본값은 서비스 키·관리자 모두 `v3`**이며 `result_version=v3`는 생략할 수 있다. 기존 호환 형식이 필요하면 `result_version=v2`를 명시한다. POST 접수 응답은 기존 동작을 유지해 서비스 키 기본 v2, 관리자 기본 v3다. 이 옵션은 응답 형식만 선택하며 지침 변경·모델 재호출·운영 반영을 하지 않는다. 과거 지침으로 생성한 결과는 기본 조회 또는 `v3` 요청에서도 당시 버전을 유지한다.
+`POST /api/v1/analyses`, `GET /api/v1/analyses/by-event` 및 기존 `GET /api/v1/analyses/{analysis_id}`는 선택 query `result_version=v2|v3`를 받는다. **GET 단건 조회의 기본값은 `v3`**이며 `result_version=v3`는 생략할 수 있다. 기존 호환 형식이 필요하면 `result_version=v2`를 명시한다. POST 접수 응답은 기존 동작을 유지해 서비스 키 기본 v2, 관리자 기본 v3다. 이 옵션은 응답 형식만 선택하며 지침 변경·모델 재호출·운영 반영을 하지 않는다. 과거 지침으로 생성한 결과는 기본 조회 또는 `v3` 요청에서도 당시 버전을 유지한다.
 
 ```http
 GET /api/v1/analyses/{analysis_id}
@@ -482,7 +500,66 @@ Test·Production 키로 호출하는 `/analyses`·`/uploads`와 관리자 `/test
 
 ## 분석가 리뷰
 
-2026-10-27부터 리뷰는 좋아요/싫어요 대신 **복수 선택형 피드백 항목**을 받는다. 경로와 `review` 권한, source/용도 격리, 추가형 이력 정책은 유지한다.
+리뷰는 **복수 선택형 피드백 항목**과 선택 의견을 받는다. 새 연동은 `event_id`를 사용하고 분석·리뷰 ID는 서버가 관리한다. `review` 권한, source/용도 격리와 추가형 이력 정책은 유지한다.
+
+### 이벤트 ID로 리뷰 등록
+
+```http
+POST /api/v1/reviews
+X-API-Key: <SERVICE_API_KEY>
+Content-Type: application/json
+```
+
+```json
+{
+  "event_id": "evt-prod-20260905-000001",
+  "feedback_categories": ["insufficient_evidence", "exaggerated_impact"],
+  "analyst_id": "analyst-7",
+  "comment": "공격 시도는 확인되지만 침해 성공으로 단정할 근거는 부족합니다."
+}
+```
+
+| 필드 | 필수 | 타입·규칙 |
+| --- | --- | --- |
+| `event_id` | O | 문자열, 1~255자. API Key의 용도·연동 범위에서 분석을 찾음 |
+| `feedback_categories` | X | 아래 여섯 값 중 중복 없이 최대 6개. 생략 시 `[]` |
+| `analyst_id` | X | 문자열, 최대 255자 또는 null |
+| `comment` | X | 문자열 또는 null. 기타 의견도 같은 필드 사용 |
+
+`feedback_categories`의 null·문자열·중복·미지원 값은 422다. 항목과 의견은 각각 선택이며 둘 다 생략해도 접수한다. `other` 선택 시에도 의견은 필수가 아니다. 요청에 `analysis_id`, `review_id`, `external_review_id`, `ai_visible`, `decision`, `rating` 또는 정의되지 않은 필드를 넣으면 422로 거부한다. 기존 AI 열람 이력은 보존하며 새 경로에서는 AI 열람 여부를 수집하지 않는다. 참고 답안·Ground Truth의 별도 AI 열람 여부와는 관계없다.
+
+Test에서 같은 이벤트가 여러 테스트에 있으면 `POST /api/v1/reviews?test_run_id=<서버가_발급한_테스트_ID>`로 대상을 지정한다. 생략해 여러 테스트가 일치하면 409 `test_event_ambiguous`다. Production 키의 `test_run_id`는 422, 미존재·다른 연동 범위의 이벤트는 404 `analysis_not_found`다. GET 이벤트 조회·동일 요청 POST와 같은 원본 분석에 연결하며, 재실행 결과로 대상을 임의 변경하지 않는다.
+
+응답에는 외부 이벤트 ID·피드백 항목·작성자·의견·작성 시각만 반환한다.
+
+```json
+{
+  "event_id": "evt-prod-20260905-000001",
+  "feedback_categories": ["insufficient_evidence", "exaggerated_impact"],
+  "analyst_id": "analyst-7",
+  "comment": "공격 시도는 확인되지만 침해 성공으로 단정할 근거는 부족합니다.",
+  "created_at": "2026-11-02T04:00:00Z"
+}
+```
+
+신규는 201, **동일 분석 실행·작성자·항목 집합·의견**의 재전송은 200과 기존 기록을 반환한다. 항목 순서는 무시하고 생략한 선택값은 기본값과 동일하게 처리한다. 의견 문자열이나 작성자 등 내용이 달라지면 기존 리뷰를 덮어쓰지 않고 새 이력으로 추가한다. 공백·문장 의미를 임의로 바꾸어 중복으로 판단하지 않는다. `analyst_id`를 생략하면 서로 다른 작성자를 구분할 수 없으며, 의도적으로 똑같은 의견을 다시 제출해도 새 이력은 생기지 않는다. 외부 리뷰 ID나 `Idempotency-Key`를 요구하지 않는다.
+
+### 피드백 항목
+
+| 값 | 표시명 | 선택 기준 |
+| --- | --- | --- |
+| `insufficient_evidence` | 근거 부족 | 판정을 뒷받침하는 증거가 충분하지 않음 |
+| `evidence_mismatch` | 근거 불일치 | 제시한 근거가 실제 로그와 맞지 않음 |
+| `explanation_error` | 설명 오류 | 로그나 공격 구문의 의미를 잘못 해석함 |
+| `exaggerated_impact` | 영향 과장 | 공격 시도를 침해 성공이나 실제 피해로 단정함 |
+| `inappropriate_severity` | 심각도 부적절 | 심각도가 실제보다 높거나 낮음 |
+| `other` | 기타 | 위 항목에 해당하지 않는 의견 |
+
+항목 배열은 위 표의 고정 순서로 반환한다. 리뷰는 모델 입력·학습 데이터·참고 답안·공식 정답으로 사용하지 않으며 판정·평가 지표를 바꾸지 않는다. 수정·삭제 API는 없고 내용이 달라지면 새 추가 이력으로 남긴다.
+
+### 기존 ID 기반 호환 경로
+
+다음 경로는 기존 연동을 위해 유지한다. 새 연동에서 아래 내부 ID·외부 리뷰 ID·AI 열람 여부를 관리할 필요는 없다. 2026-10-27 도입한 복수 선택형 피드백 계약과 이전 값 보존 규칙을 유지한다.
 
 ```http
 POST /api/v1/analyses/{id}/reviews
@@ -611,22 +688,23 @@ GET /api/v1/analyses/{id}/evaluation-labels
 
 집계 필드는 total(전체), labeled(Label 존재), evaluable(비교 가능), matches(일치), outcomes(상태별 건수), source_groups(출처 종류 × AI 열람 여부)다. 그룹의 판정 일치율은 `matches / evaluable`로, 테스트 기대 보류와 실제 보류가 같으면 일치에 포함하고 확정 참고값에 대한 AI 보류는 분모에 남는다. 이진 확정판정 coverage는 `binary_decided / binary_evaluable`이며 기대 보류 Label은 양쪽에서 제외한다. 분모가 0이면 비율을 산출하지 않는다. 그룹의 false_negatives, false_positives, abstained, expected_abstention_matches, expected_abstention_mismatches를 함께 확인한다.
 
-정답 파일은 분석 접수 파일과 분리한다. 분석 요청에 정답을 섞으면 평가 정보가 모델 입력으로 유입될 수 있으므로 별도 연결 경로만 사용한다. 이미 실행된 분석에 정답이 포함되었던 경우에는 사후 연결로 과거 모델 입력이 정화되지 않는다. 저장된 과거 원문·fingerprint·Agent 이력은 변경하지 않는다.
+참고 판정은 최상위 `expected_verdict` 또는 별도 연결 경로로 전달한다. 서버는 허용된 최상위 참고 판정을 이벤트와 분리해 저장하며 모델에 전달하지 않는다. payload 본문이나 임의 중첩 필드에 답안을 섞어 보내지 않는다. 이미 실행된 분석에 정답이 포함되었던 경우에는 사후 Label 연결로 과거 모델 입력이 정화되지 않는다. 저장된 과거 원문·fingerprint·Agent 이력은 변경하지 않는다.
 
 ## 멱등성과 오류
 
-이벤트 멱등키는 `(source_system, event_id)`다. 별도 `Idempotency-Key` 헤더는 사용하지 않는다. 서버가 정규화된 전체 이벤트 내용의 fingerprint를 계산한다. 같은 목적·내용은 기존 ID와 분석을 반환하고, 내용 또는 목적 충돌은 409다. 기존 미분류 이벤트의 재전송은 내용이 같으면 기존 미분류 행을 유지한다.
+Production 이벤트 멱등키는 `(source_system, event_id)`다. Test는 서버가 만든 테스트 영역 내에서 이벤트를 구분하며 여러 테스트의 같은 이벤트를 임의로 합치지 않는다. 별도 `Idempotency-Key` 헤더는 사용하지 않는다. 서버가 정규화된 전체 이벤트 내용의 fingerprint를 계산한다. 같은 목적·내용은 기존 ID와 분석을 반환하고, 내용 또는 목적 충돌은 409다. 기존 미분류 이벤트의 재전송은 내용이 같으면 기존 미분류 행을 유지한다. 외부 1차 판정·참고 답안의 별도 재전송 충돌 규칙도 적용한다.
 
 | 상태 | 처리 |
 | --- | --- |
 | 401 | 키 누락·불일치: `authentication_required` |
 | 403 | 권한 부족: `scope_required:<scope>` |
 | 404 | 분석 없음 또는 다른 소스: `analysis_not_found` |
-| 409 | 이벤트 내용/목적 충돌, 리뷰 대상·내용 충돌 |
+| 409 | 이벤트 내용/목적 충돌, Test 이벤트 대상 중복(`test_event_ambiguous`), 기존 ID 기반 리뷰 대상·내용 충돌 또는 내부 리뷰 키 충돌(`review_content_conflict`) |
 | 413 | 단건 payload 또는 업로드 제한 초과 |
 | 422 | 필드/범위/예약 필드/파일 형식 오류 |
+| 503 | 리뷰 저장소 일시 사용 불가(`review_storage_unavailable`) 또는 저장 결과 검증 실패(`analysis_result_invalid`) |
 | 500 | 예상하지 못한 서버 처리 오류 |
 
 애플리케이션에서 처리한 HTTP 오류는 `{"detail": "error_code"}` 또는 검증 상세 배열(`field`, `type`, `message`)을 반환한다. 예상하지 못한 500이나 프록시가 반환한 413 등은 JSON이 아닐 수 있으므로 클라이언트는 상태 코드와 Content-Type도 확인한다. 모델 실행 실패는 HTTP 오류와 별개로 분석 본문의 `status="failed"`, `error_code`, `error_message`에 기록한다. API Key, 원문 payload와 모델 응답을 오류 로그에 넣지 않는다.
 
-네트워크 오류로 접수 여부가 불명확하면 동일 Event ID와 같은 내용으로 재전송한다. 401/403/409/413/422는 입력·권한 문제를 해결한 후 재요청한다. 완료된 failed 이벤트를 같은 ID로 재접수해도 새로운 분석은 시작되지 않는다.
+네트워크 오류로 접수 여부가 불명확하면 동일 Event ID와 같은 전체 내용으로 재전송한다. 접수된 작업은 HTTP 대기 기한 만료·연결 종료 후에도 계속 진행한다. 새 이벤트 기반 리뷰는 같은 대상 실행·작성자·항목·의견이면 기존 이력을 반환한다. 401/403/409/413/422는 입력·권한 문제를 해결한 후 재요청한다. 완료된 failed 이벤트를 같은 ID로 재접수해도 새로운 분석은 시작되지 않는다.

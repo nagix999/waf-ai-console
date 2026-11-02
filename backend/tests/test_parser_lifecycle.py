@@ -136,12 +136,12 @@ def test_existing_production_hash_remains_legacy_until_a_new_promotion(client, c
 
 def test_new_admission_uses_production_parser_but_previously_queued_and_legacy_do_not(client, event_payload):
     login(client)
-    original = client.post("/api/v1/analyses", json=event_payload).json()["id"]
+    original = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()["id"]
     identifier = version(client)
     with client.app.state.session_factory() as db:
         activate_parser_version(db, identifier)  # Synthetic fixture, not an API bypass.
         db.commit()
-    newer = client.post("/api/v1/analyses", json={**event_payload, "event_id": "new-capture"}).json()["id"]
+    newer = client.post("/api/v1/analyses?wait_seconds=0", json={**event_payload, "event_id": "new-capture"}).json()["id"]
     with client.app.state.session_factory() as db:
         old = db.get(Analysis, original)
         new = db.get(Analysis, newer)

@@ -181,7 +181,7 @@ def test_analysis_get_defaults_v3_and_explicit_v2_preserves_saved_result(client,
                 purpose="test", scopes=["ingest"]), "synthetic-fixture")
             db.commit()
         service_headers = {"x-api-key": raw}
-    response = client.post("/api/v1/analyses", json=event_payload, headers=service_headers)
+    response = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload, headers=service_headers)
     assert response.status_code == 202
     identifier = response.json()["id"]
     canonical = result_fixture()
@@ -200,10 +200,10 @@ def test_analysis_get_defaults_v3_and_explicit_v2_preserves_saved_result(client,
     assert old.json()["result"]["schema_version"] == "waf-analysis-v2"
     if purpose == "production":
         # Changing GET does not implicitly change the POST compatibility default.
-        posted = client.post("/api/v1/analyses", json=event_payload, headers=service_headers)
+        posted = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload, headers=service_headers)
         assert posted.status_code == 200
         assert posted.json()["result"]["schema_version"] == "waf-analysis-v2"
-        posted_v3 = client.post("/api/v1/analyses?result_version=v3", json=event_payload, headers=service_headers)
+        posted_v3 = client.post("/api/v1/analyses?wait_seconds=0&result_version=v3", json=event_payload, headers=service_headers)
         assert posted_v3.status_code == 200
         assert posted_v3.json()["result"]["schema_version"] == "waf-analysis-v3"
     assert client.post("/api/v1/auth/login", json={"username": "admin", "password": "test-password"}).status_code == 200
@@ -214,7 +214,7 @@ def test_analysis_get_defaults_v3_and_explicit_v2_preserves_saved_result(client,
 
 @pytest.mark.parametrize("version", ["waf-analysis-v1", "waf-analysis-v2"])
 def test_analysis_get_keeps_historical_versions_for_every_response_selection(client, event_payload, service_headers, version):
-    identifier = client.post("/api/v1/analyses", json=event_payload, headers=service_headers).json()["id"]
+    identifier = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload, headers=service_headers).json()["id"]
     historical = {"schema_version": version, "future": {"keep": True}}
     with client.app.state.session_factory() as db:
         row = db.get(Analysis, identifier)
@@ -265,7 +265,7 @@ def test_wait_polls_only_status_and_assembles_detail_once(client, event_payload,
 
 
 def test_invalid_new_stored_result_does_not_use_legacy_fallback_or_echo_payload(client, event_payload, service_headers):
-    identifier = client.post("/api/v1/analyses", json=event_payload, headers=service_headers).json()["id"]
+    identifier = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload, headers=service_headers).json()["id"]
     invalid = result_fixture()
     invalid["not_declared"] = "SYNTHETIC-PRIVATE-MARKER"
     with client.app.state.session_factory() as db:

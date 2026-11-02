@@ -125,7 +125,8 @@ if ($waf_valid_forwarded_ip = 0) { return 400; }
 # A list, port suffix, or noncanonical spelling must not reach the API.
 if ($http_x_forwarded_for != $remote_addr) { return 400; }
 '''
-    proxy = f'''proxy_read_timeout 75s;
+    proxy = f'''# API response wait is bounded at 600 seconds, plus a 60-second proxy margin.
+proxy_read_timeout 660s;
 proxy_set_header Host {authority};
 proxy_set_header X-Forwarded-Host {authority};
 proxy_set_header X-Forwarded-Proto https;

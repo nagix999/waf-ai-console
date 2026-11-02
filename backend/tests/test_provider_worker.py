@@ -33,7 +33,7 @@ def test_openai_worker_preserves_independent_verifier_and_provider_snapshot(
     client, settings, event_payload, service_headers, monkeypatch, verifier_outcome,
 ):
     event_payload["waf_action"] = "A"  # An allowed TP must invoke the verifier.
-    created = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload).json()
     crypto = CryptoService(settings.data_encryption_key, settings.encryption_key_version)
     with client.app.state.session_factory() as db:
         profile = openai_profile(crypto)
@@ -100,7 +100,7 @@ def test_openai_worker_preserves_independent_verifier_and_provider_snapshot(
 def test_worker_rejects_invalid_openai_profiles_before_any_model_call(
     client, settings, event_payload, service_headers, monkeypatch, case,
 ):
-    created = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload).json()
     crypto = CryptoService(settings.data_encryption_key, settings.encryption_key_version)
     overrides = {
         "approval": {"external_data_approved": False},
@@ -152,7 +152,7 @@ def test_model_test_worker_checks_openai_approval_before_dispatch(client, settin
 def test_failed_openai_call_still_records_selected_model_profile(
     client, settings, event_payload, service_headers, monkeypatch,
 ):
-    created = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload).json()
     crypto = CryptoService(settings.data_encryption_key, settings.encryption_key_version)
 
     async def failure(**kwargs):

@@ -123,7 +123,7 @@ def test_worker_partial_snapshot_selects_version_for_both_roles_and_all_history(
     with monkeypatch.context() as pinned:
         pinned.setattr(prompts, "FIXED_RULES_VERSION", f"waf-system-v{revision}")
         pinned.setattr(prompts, "PROMPT_VERSION", f"waf-judgment-v{revision}")
-        created = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()
+        created = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload).json()
     calls = []
 
     async def fake(**kwargs):

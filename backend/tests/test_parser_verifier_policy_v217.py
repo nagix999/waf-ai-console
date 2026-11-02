@@ -85,7 +85,7 @@ def test_pinned_worker_keeps_raw_parser_history_but_changes_only_new_verifier_ro
     rules_module, expected_calls, policy_version, retired,
 ):
     event_payload["payload"] = raw
-    response = client.post("/api/v1/analyses", headers=service_headers, json=event_payload)
+    response = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload)
     assert response.status_code == 202, response.text
     identifier = response.json()["id"]
     calls = []

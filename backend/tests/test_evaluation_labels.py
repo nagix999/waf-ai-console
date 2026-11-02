@@ -12,7 +12,7 @@ from test_model_profiles import login_admin
 
 
 def seed(client, event_payload, service_headers, event_id="label-event", verdict="true_positive", **changes):
-    response = client.post("/api/v1/analyses", headers=service_headers, json={**event_payload, "event_id": event_id})
+    response = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json={**event_payload, "event_id": event_id})
     assert response.status_code == 202
     analysis_id = response.json()["id"]
     with client.app.state.session_factory() as db:
@@ -249,7 +249,7 @@ def test_bounded_json_parser_safe_failures(content, code):
 
 @pytest.mark.parametrize("field", ["label", "expected_verdict", "expected_severity", "ground_truth", "evaluation", "reference_label", "difficulty", "case_name"])
 def test_new_inline_label_metadata_is_rejected_not_silently_stripped(client, event_payload, service_headers, field):
-    response = client.post("/api/v1/analyses", headers=service_headers, json={**event_payload, field: "SYNTHETIC_SECRET"})
+    response = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json={**event_payload, field: "SYNTHETIC_SECRET"})
     assert response.status_code == 422
     assert ("literal_error" if field == "expected_verdict" else "evaluation_labels_require_separate_attachment") in response.text
     assert "SYNTHETIC_SECRET" not in response.text

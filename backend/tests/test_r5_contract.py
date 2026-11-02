@@ -30,10 +30,10 @@ def test_test_key_initial_allowed_but_nested_metadata_rejected(client, event_pay
         _, key = issue_key(db, ServiceApiKeyCreate(name="Test only", source_system="fixture-test", scopes=["ingest"], purpose="test"), "fixture")
         db.commit()
     initial = {"initial_verdict": "false_positive", "initial_probability": .5}
-    result = client.post("/api/v1/analyses", json={**event_payload, **initial}, headers={"x-api-key": key})
+    result = client.post("/api/v1/analyses?wait_seconds=0", json={**event_payload, **initial}, headers={"x-api-key": key})
     assert result.status_code == 202
     assert result.json()["initial_assessment"]["verdict"] == "false_positive"
-    assert client.post("/api/v1/analyses", json={**event_payload, "extra_fields": initial}, headers={"x-api-key": key}).status_code == 422
+    assert client.post("/api/v1/analyses?wait_seconds=0", json={**event_payload, "extra_fields": initial}, headers={"x-api-key": key}).status_code == 422
 
 
 def test_import_uses_fixed_reference_not_model_and_preserves_source(client, event_payload):
@@ -73,7 +73,7 @@ def test_import_expiry_and_revision_conflict_are_atomic(client, event_payload):
 
 def test_initial_metadata_is_separate_and_duplicate_is_exact(client, event_payload, service_headers):
     initial = {"initial_verdict": "false_positive", "initial_probability": .93, "initial_model_version": "fixture-v1"}
-    result = client.post("/api/v1/analyses", json={**event_payload, **initial}, headers=service_headers)
+    result = client.post("/api/v1/analyses?wait_seconds=0", json={**event_payload, **initial}, headers=service_headers)
     assert result.status_code == 202, result.text
     identifier = result.json()["id"]
     with client.app.state.session_factory() as db:
@@ -82,9 +82,9 @@ def test_initial_metadata_is_separate_and_duplicate_is_exact(client, event_paylo
         assert row.event_fingerprint == event_fingerprint(AnalysisInput.model_validate(event_payload).model_dump(mode="json"))
         assert "initial_verdict" not in client.app.state.crypto.decrypt_text(row.prompt_snapshot_ciphertext)
     assert result.json()["initial_assessment"]["comparison"] == "pending"
-    assert client.post("/api/v1/analyses", json={**event_payload, **initial}, headers=service_headers).json()["id"] == identifier
-    assert client.post("/api/v1/analyses", json=event_payload, headers=service_headers).status_code == 409
-    assert client.post("/api/v1/analyses", json={**event_payload, **initial, "initial_probability": .8}, headers=service_headers).status_code == 409
+    assert client.post("/api/v1/analyses?wait_seconds=0", json={**event_payload, **initial}, headers=service_headers).json()["id"] == identifier
+    assert client.post("/api/v1/analyses?wait_seconds=0", json=event_payload, headers=service_headers).status_code == 409
+    assert client.post("/api/v1/analyses?wait_seconds=0", json={**event_payload, **initial, "initial_probability": .8}, headers=service_headers).status_code == 409
     with client.app.state.session_factory() as db:
         row = db.get(Analysis, identifier)
         row.status, row.verdict = "completed", "true_positive"
@@ -101,13 +101,13 @@ def test_initial_metadata_is_separate_and_duplicate_is_exact(client, event_paylo
     {"initial_verdict": "true_positive", "initial_probability": True},
 ])
 def test_invalid_initial_pair_rejected(client, event_payload, service_headers, initial):
-    assert client.post("/api/v1/analyses", json={**event_payload, **initial}, headers=service_headers).status_code == 422
+    assert client.post("/api/v1/analyses?wait_seconds=0", json={**event_payload, **initial}, headers=service_headers).status_code == 422
 
 
 def test_initial_rejected_in_admin_and_ground_truth(client, event_payload):
     login(client)
     initial = {"initial_verdict": "true_positive", "initial_probability": .8}
-    assert client.post("/api/v1/analyses", json={**event_payload, **initial}).status_code == 422
+    assert client.post("/api/v1/analyses?wait_seconds=0", json={**event_payload, **initial}).status_code == 422
     dataset = create_dataset(client)
     assert save(client, dataset, {**event_payload, **initial}).status_code == 422
     assert save(client, dataset, {**event_payload, "extra_fields": initial}).status_code == 422

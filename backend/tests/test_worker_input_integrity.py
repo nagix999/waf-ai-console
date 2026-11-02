@@ -24,7 +24,7 @@ def test_integrity_hints_and_guard_preserve_independent_roles_and_history(
 ):
     raw = request(headers="Content-Length: 80\r\nCookie: SENSITIVE_CANARY\r\n")
     event_payload.update(payload=raw, waf_action="D" if primary_verdict == "true_positive" else "A")
-    created = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload).json()
     calls = []
 
     async def fake(**kwargs):
@@ -87,7 +87,7 @@ def test_integrity_hints_and_guard_preserve_independent_roles_and_history(
 @pytest.mark.usefixtures("registered_vllm_target")
 def test_unrelated_normal_query_does_not_force_verifier_or_hold(client, event_payload, service_headers, monkeypatch):
     event_payload.update(payload=request(headers="Content-Length: 80\r\n"), waf_action="A")
-    created = client.post("/api/v1/analyses", headers=service_headers, json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", headers=service_headers, json=event_payload).json()
     calls = []
 
     async def fake(**kwargs):

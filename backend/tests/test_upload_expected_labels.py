@@ -159,7 +159,7 @@ def test_production_upload_and_direct_requests_attach_answers(client, event_payl
     assert production["accepted"] == production["label_attached"] == 1
     assert production["rejected"] == 0
     for path in ("/api/v1/analyses", "/api/v1/test-analyses"):
-        params = {"name": "답안 격리 검증", "idempotency_key": "synthetic-direct-answer"} if path.endswith("/test-analyses") else None
+        params = {"name": "답안 격리 검증", "idempotency_key": "synthetic-direct-answer"} if path.endswith("/test-analyses") else {"wait_seconds": 0}
         response = client.post(path, params=params, json=payload, headers=service_headers if path.endswith("/analyses") else None)
         assert response.status_code == 202, response.text
         assert response.json()["evaluation"]["reference_label"]["verdict"] == "true_positive"

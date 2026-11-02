@@ -33,7 +33,7 @@ def test_legacy_production_stays_pinned_until_official_candidate_is_promoted(cli
     before = legacy_baseline(client, rules)
     current = client.get(BASE).json()
     assert current["snapshot"] == before
-    old = client.post("/api/v1/analyses", json=event_payload).json()
+    old = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()
     assert old["prompt_version"].startswith(rules.PROMPT_VERSION + "/")
     run = qualified(client, event_payload, candidate)
     assert run["configuration_snapshot"]["prompt"]["fixed_rules_version"] == "waf-system-v2.17"
@@ -43,7 +43,7 @@ def test_legacy_production_stays_pinned_until_official_candidate_is_promoted(cli
     response = client.post(f"{BASE}/promote", json={"candidate_test_run_id": run["id"],
         "expected_production_configuration_hash": current["configuration_hash"], "acknowledge_schema_change": True})
     assert response.status_code == 200, response.text
-    new = client.post("/api/v1/analyses", json={**event_payload, "event_id": "after-promotion", "vendor_score": 2}).json()
+    new = client.post("/api/v1/analyses?wait_seconds=0", json={**event_payload, "event_id": "after-promotion", "vendor_score": 2}).json()
     assert new["prompt_version"].startswith("waf-judgment-v2.17/")
     with client.app.state.session_factory() as db:
         old_snapshot = load_analysis_prompt(db.get(Analysis, old["id"]), client.app.state.crypto)

@@ -79,13 +79,13 @@ def test_authentication_scopes_source_and_same_source_idempotency(client, event_
     identity = client.get("/api/v1/auth/me", headers=headers(alpha)).json()
     assert identity["kind"] == "service_api_key" and identity["source_system"] == "parser-alpha"
     assert identity["scopes"] == ["ingest", "review"]
-    created = client.post("/api/v1/analyses", headers=headers(alpha), json=event_payload)
+    created = client.post("/api/v1/analyses?wait_seconds=0", headers=headers(alpha), json=event_payload)
     assert created.status_code == 202
     result = created.json()
     assert result["analysis_purpose"] == "production" and result["ingest_channel"] == "service_api"
-    again = client.post("/api/v1/analyses", headers=headers(alpha_ingest), json=event_payload)
+    again = client.post("/api/v1/analyses?wait_seconds=0", headers=headers(alpha_ingest), json=event_payload)
     assert again.status_code == 202 and again.json()["id"] == result["id"]
-    beta_result = client.post("/api/v1/analyses", headers=headers(beta), json=event_payload)
+    beta_result = client.post("/api/v1/analyses?wait_seconds=0", headers=headers(beta), json=event_payload)
     assert beta_result.status_code == 202 and beta_result.json()["id"] != result["id"]
     assert client.get("/api/v1/analyses", headers=headers(alpha)).json()["total"] == 1
     assert client.get("/api/v1/analyses?source_system=parser-beta", headers=headers(alpha)).json()["total"] == 0
@@ -93,7 +93,7 @@ def test_authentication_scopes_source_and_same_source_idempotency(client, event_
     assert client.get(f"/api/v1/analyses/{result['id']}", headers=headers(alpha_ingest)).status_code == 200
     for key, expected in ((alpha_review, 403), (alpha_ingest, 200)):
         assert client.get("/api/v1/analyses", headers=headers(key)).status_code == expected
-    assert client.post("/api/v1/analyses", headers=headers(alpha_review), json=event_payload).status_code == 403
+    assert client.post("/api/v1/analyses?wait_seconds=0", headers=headers(alpha_review), json=event_payload).status_code == 403
     review = {"external_review_id": "synthetic-review", "event_id": event_payload["event_id"], "feedback_categories": ["insufficient_evidence"]}
     review_url = f"/api/v1/analyses/{result['id']}/reviews"
     assert client.post(review_url, headers=headers(alpha_ingest), json=review).status_code == 403
@@ -143,7 +143,7 @@ def test_rename_conflicts_and_idempotent_revocation_preserve_history(client, eve
     assert renamed.json()["scopes"] == issued["item"]["scopes"]
     assert issued["api_key"] not in renamed.text and original_hash not in renamed.text
     logout(client)
-    created = client.post("/api/v1/analyses", headers=headers(issued), json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", headers=headers(issued), json=event_payload).json()
     login(client)
     revoked = client.post(f"{BASE}/{key_id}/revoke")
     assert revoked.status_code == 200 and revoked.json()["revoked_at"].endswith("Z")

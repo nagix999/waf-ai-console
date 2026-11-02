@@ -38,6 +38,17 @@ class PolicyTests(unittest.TestCase):
         self.assertNotIn("allow ", result)
         self.assertNotIn("172.30.251.0/24", result)
 
+    def test_every_bundled_proxy_allows_the_maximum_api_response_wait(self):
+        configurations = {
+            "rendered production proxy": policy.render(policy.validate(sample()))["proxy.conf"],
+            "development proxy": (MODULE.parents[2] / "frontend" / "nginx.conf").read_text(),
+            "gateway example": MODULE.with_name("gateway-waf.server.conf.example").read_text(),
+        }
+        for name, configuration in configurations.items():
+            with self.subTest(name=name):
+                self.assertIn("proxy_read_timeout 660s;", configuration)
+                self.assertNotIn("proxy_read_timeout 75s;", configuration)
+
     def test_empty_settings_fail_closed(self):
         for key in policy.FIELDS:
             with self.subTest(key=key), self.assertRaises(policy.PolicyError):

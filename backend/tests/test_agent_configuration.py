@@ -126,7 +126,7 @@ def test_distinct_roles_same_input_bounded_repair_encrypted_history(client, even
         db.scalar(select(VLLMTestRun).where(VLLMTestRun.profile_id == row.id)).profile_fingerprint = profile_fingerprint(row)
         db.commit()
     seed_production_roles(client, primary["id"], verifier["id"])
-    created = client.post("/api/v1/analyses", json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()
     calls = install_calls(monkeypatch, repair=True)
     with client.app.state.session_factory() as db:
         analysis = db.get(Analysis, created["id"])
@@ -188,7 +188,7 @@ def test_diagnostics_count_old_and_new_versions_without_rewriting_history(client
                 ("evidence-repair-v2", "failed", None)]
     originals = {}
     for index, (version, status, verdict) in enumerate(fixtures):
-        identifier = client.post("/api/v1/analyses", json={**event_payload, "event_id": f"diagnostic-fixture-{index}"}).json()["id"]
+        identifier = client.post("/api/v1/analyses?wait_seconds=0", json={**event_payload, "event_id": f"diagnostic-fixture-{index}"}).json()["id"]
         document = {"diagnostics": {"version": version, "inconclusive_reasons": ["primary_evidence_rejected"],
                      "roles": {"primary": {"repair_attempted": True, "repair_recovered": False}}}}
         with client.app.state.session_factory() as db:
@@ -226,7 +226,7 @@ def test_failed_retry_keeps_both_original_roles_after_reassignment(client, event
     primary, verifier = create_verified(client, "fixture-primary"), create_verified(client, "fixture-verifier")
     replacement = create_verified(client, "fixture-replacement")
     seed_production_roles(client, primary["id"], verifier["id"])
-    created = client.post("/api/v1/analyses", json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()
 
     async def fail(**kwargs):
         kwargs["egress_check"]()
@@ -257,7 +257,7 @@ def test_revoked_verifier_is_blocked_before_transport_without_profile_fallback(c
     login_admin(client)
     primary, verifier = create_verified(client, "fixture-primary"), create_verified(client, "fixture-verifier")
     seed_production_roles(client, primary["id"], verifier["id"])
-    created = client.post("/api/v1/analyses", json=event_payload).json()
+    created = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()
     transported = []
 
     async def execute(**kwargs):

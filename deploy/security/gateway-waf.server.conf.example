@@ -26,7 +26,8 @@ server {
 
   location / {
     proxy_pass http://$waf_web_target;
-    proxy_read_timeout 75s;
+    # API response wait is bounded at 600 seconds; allow a proxy margin.
+    proxy_read_timeout 660s;
     proxy_set_header Host $host;
     proxy_set_header X-Forwarded-Host $host;
     proxy_set_header X-Forwarded-For $remote_addr;

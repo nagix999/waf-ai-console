@@ -10,6 +10,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from . import __version__
 from .api.analyses import router as analyses_router
+from .api.event_reviews import router as event_reviews_router
 from .api.analysis_exports import router as analysis_exports_router
 from .api.auth import router as auth_router
 from .api.agent_settings import router as agent_settings_router
@@ -80,10 +81,12 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         title=settings.app_name,
         version=__version__,
         description=(
-            "WAF analysis ingestion and polling API. Service clients use X-API-Key. "
+            "WAF analysis ingestion, event lookup and feedback API. Service clients use X-API-Key. "
             "POST /api/v1/analyses uses the service key's Production/Test purpose. "
-            "Test keys may group submissions with /api/v1/test-sessions. Use the returned id for polling and "
-            "check status (pending/processing/completed/failed), not only HTTP status. "
+            "Test keys may group submissions with /api/v1/test-sessions. POST waits up to 300 seconds by default "
+            "(wait_seconds=0..600); committed jobs continue after disconnection. Use event_id at "
+            "GET /api/v1/analyses/by-event and POST /api/v1/reviews; internal IDs need not be managed. "
+            "Check status (pending/processing/completed/failed), not only HTTP status. "
             "Live integration contract: GET /api/v1/production-api. "
             "Packaged template: backend/app/data/production_api.md in the project."
         ),
@@ -106,6 +109,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
     app.include_router(auth_router, prefix="/api/v1")
     app.include_router(agent_settings_router, prefix="/api/v1")
     app.include_router(analyses_router, prefix="/api/v1", responses=ANALYSIS_ERROR_RESPONSES)
+    app.include_router(event_reviews_router, prefix="/api/v1", responses=ANALYSIS_ERROR_RESPONSES)
     app.include_router(analysis_exports_router, prefix="/api/v1")
     app.include_router(dashboard_router, prefix="/api/v1", responses=ANALYSIS_ERROR_RESPONSES)
     app.include_router(model_profiles_router, prefix="/api/v1")
