@@ -650,7 +650,7 @@ def _execute_grounded_agent(*, analysis, raw_payload, parsed, input_truncated,
     document = json.loads(kwargs["user_input"])
     catalog = document.get("evidence_candidates")
     selecting = isinstance(catalog, dict) and catalog.get("version") == SELECTION_VERSION
-    if security_analysis_enabled and fixed_rules_version not in {"waf-system-v2.15", "waf-system-v2.16", "waf-system-v2.17"}:
+    if security_analysis_enabled and fixed_rules_version not in {"waf-system-v2.15", "waf-system-v2.16", "waf-system-v2.17", "waf-system-v2.18"}:
         raise WorkerExecutionError("unsupported_security_output_contract")
     security_model = SecurityAnalysisOutput if fixed_rules_version == "waf-system-v2.15" else SecurityAnalysisOutputV216
     selection_model = (security_model if security_analysis_enabled else SemanticAssessmentOutput if semantic_enabled

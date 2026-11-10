@@ -8,7 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from app import worker
-from app.agent import legacy_prompts_v214, legacy_prompts_v215, legacy_prompts_v216, prompts
+from app.agent import legacy_prompts_v214, legacy_prompts_v215, legacy_prompts_v216, legacy_prompts_v217, prompts
 from app.agent.contracts import SecurityAnalysisOutput, SecurityAnalysisOutputV216
 from app.agent.executor import AgentCallResult
 from app.agent.policy import VerifierPolicyContext, verifier_reasons, finalize_with_verifier
@@ -147,7 +147,8 @@ def test_nonretired_verifier_conditions_are_unchanged(verdict, action, status, t
 
 
 def test_pinned_v214_module_and_candidate_versions_are_separate():
-    assert prompts.FIXED_RULES_VERSION == "waf-system-v2.17"
+    assert prompts.FIXED_RULES_VERSION == "waf-system-v2.18"
+    assert legacy_prompts_v217.FIXED_RULES_VERSION == "waf-system-v2.17"
     assert legacy_prompts_v216.FIXED_RULES_VERSION == "waf-system-v2.16"
     assert legacy_prompts_v215.FIXED_RULES_VERSION == "waf-system-v2.15"
     assert legacy_prompts_v214.FIXED_RULES_VERSION == "waf-system-v2.14"
@@ -155,7 +156,9 @@ def test_pinned_v214_module_and_candidate_versions_are_separate():
     assert hashlib.sha256(Path(legacy_prompts_v214.__file__).read_bytes()).hexdigest() == "88cca42412a29e8b366eaa3cb5d291ff6faccf31e491763fa3a228b9c42adb68"
     assert hashlib.sha256(Path(legacy_prompts_v215.__file__).read_bytes()).hexdigest() == "6308f189fbf5a9ed94e35738eb3fc8aaf697f374979deb6fdc454be03a72dd32"
     assert hashlib.sha256(Path(legacy_prompts_v216.__file__).read_bytes()).hexdigest() == "ab6d92f743a6dca339376dc61bd6535bf9c32a83693449d21d19ebeb649cc4f7"
-    assert prompts.build_role_instructions("synthetic policy") == legacy_prompts_v216.build_role_instructions("synthetic policy")
+    assert hashlib.sha256(Path(legacy_prompts_v217.__file__).read_bytes()).hexdigest() == "ea92530a480ad9a4bc5f4674467ee4b2f10d11d54bfbe273f00a3d935a5f0e3f"
+    assert legacy_prompts_v217.build_role_instructions("synthetic policy") == legacy_prompts_v216.build_role_instructions("synthetic policy")
+    assert prompts.build_role_instructions("synthetic policy") != legacy_prompts_v217.build_role_instructions("synthetic policy")
     assert len(prompts.FIXED_INSTRUCTIONS) < len(legacy_prompts_v214.FIXED_INSTRUCTIONS)
 
 

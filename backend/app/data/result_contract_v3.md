@@ -5,11 +5,11 @@ Production configuration upgrade. The implementation starts from `eea2527`.
 
 ## New executions
 
-Candidates pinned to `waf-system-v2.15`, `waf-system-v2.16` or `waf-system-v2.17` generate
+Candidates pinned to `waf-system-v2.15`, `waf-system-v2.16`, `waf-system-v2.17` or `waf-system-v2.18` generate
 `waf-analysis-v3`. Approved
 Production instructions, already queued jobs and failed-job retries retain
 their encrypted pinned instructions. In particular, v2.14 remains available
-unchanged; the v2.15 and v2.16 prompt modules are also frozen byte-for-byte. Test and
+unchanged; the v2.15, v2.16 and v2.17 prompt modules are also frozen byte-for-byte. Test and
 Production share the selected instruction content; changing
 Production still requires an approved official evaluation and administrator
 review/apply.
@@ -92,6 +92,27 @@ upgraded by deployment. Apply this policy through official evaluation and
 administrator review/promotion; synthetic offline tests do not establish
 operational accuracy or latency savings. No migration, new dependency, public
 request parameter or additional model-output field is introduced.
+
+### Shared judgment guidance candidate v2.18
+
+V2.18 changes only the shared judgment definitions, analysis guidance and the
+normal-evidence instruction. A missing attack technique is not itself normal
+request evidence; malicious probing and unauthorized-access attempts are also
+considered in the request context. A management path or filename alone does not
+establish an attack, and concrete normal data does not always require separate
+business specifications or proof of authorization.
+
+Role-specific text, editable policy defaults, input budgeting, source candidates,
+source grounding, repair, result schemas and wire order, parser engines,
+request-integrity-v3, evidence editing and the v2.17 server policy are unchanged.
+V2.18 also keeps parser status diagnostic-only with
+`security-analysis-policy-v2`. The original v2.17 module is preserved as
+`legacy_prompts_v217.py`; approved Production snapshots, queued work and retries
+keep their original instructions. Deployment alone does not apply this candidate
+to an approved Production configuration. Official evaluation and administrator
+review/promotion remain mandatory. No actual-model quality validation,
+operational application or redeployment has been performed for this change;
+offline contract checks do not demonstrate improved judgment quality.
 
 ## Service API transition
 

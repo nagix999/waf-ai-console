@@ -74,10 +74,10 @@ def test_parser_status_is_recorded_without_claiming_an_extractor_call(
         if mode == "stub":
             assert calls == []
         else:
-            # v2.17 records parser diagnostics without making the same input
-            # go through a second model solely because parsing was incomplete.
+            # v2.18 retains v2.17 routing: incomplete parsing alone must not
+            # send the same input through a second model.
             assert [call["agent_name"] for call in calls] == ["waf-primary"]
-            assert analysis.result_json["policy"]["fixed_rules_version"] == "waf-system-v2.17"
+            assert analysis.result_json["policy"]["fixed_rules_version"] == "waf-system-v2.18"
             assert analysis.result_json["verifier"]["executed"] is False
             assert analysis.result_json["verifier"]["reasons"] == []
             for call in calls:

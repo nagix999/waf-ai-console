@@ -13,7 +13,7 @@ from .contracts import (
 from .evidence_deduplication import deduplicate_evidence
 
 
-PARSER_DIAGNOSTICS_ONLY_RULES_VERSIONS = frozenset({"waf-system-v2.17"})
+PARSER_DIAGNOSTICS_ONLY_RULES_VERSIONS = frozenset({"waf-system-v2.17", "waf-system-v2.18"})
 
 
 def parser_status_triggers_verifier(fixed_rules_version: str | None) -> bool:

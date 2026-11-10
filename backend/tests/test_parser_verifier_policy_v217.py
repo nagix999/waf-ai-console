@@ -21,20 +21,22 @@ NEW_RULES = "waf-system-v2.17"
 
 
 @pytest.mark.parametrize("status", ["partial", "failed"])
-def test_new_rules_keep_parser_incompleteness_diagnostic_only(status):
-    context = VerifierPolicyContext("D", status, False, fixed_rules_version=NEW_RULES)
+@pytest.mark.parametrize("version", [NEW_RULES, "waf-system-v2.18"])
+def test_new_rules_keep_parser_incompleteness_diagnostic_only(status, version):
+    context = VerifierPolicyContext("D", status, False, fixed_rules_version=version)
     assert verifier_reasons(output(), context) == []
 
 
 @pytest.mark.parametrize("status", ["partial", "failed"])
 @pytest.mark.parametrize("version", [None, "waf-system-v2.14", "waf-system-v2.15",
-                                    "waf-system-v2.16", "waf-system-v2.18", "unknown"])
+                                    "waf-system-v2.16", "waf-system-v2.19", "unknown"])
 def test_missing_legacy_and_unknown_versions_retain_original_parser_trigger(status, version):
     context = VerifierPolicyContext("D", status, False, fixed_rules_version=version)
     assert verifier_reasons(output(), context) == ["parser_incomplete"]
 
 
 @pytest.mark.parametrize("status", ["partial", "failed"])
+@pytest.mark.parametrize("version", [NEW_RULES, "waf-system-v2.18"])
 @pytest.mark.parametrize("case,expected", [
     ("hold", "primary_inconclusive"),
     ("confidence", "low_confidence"),
@@ -49,7 +51,7 @@ def test_missing_legacy_and_unknown_versions_retain_original_parser_trigger(stat
     ("grounding", "evidence_grounding_failed"),
     ("legacy_tuning", "tuning_recommended"),
 ])
-def test_only_parser_trigger_is_removed_and_other_reasons_are_unchanged(status, case, expected):
+def test_only_parser_trigger_is_removed_and_other_reasons_are_unchanged(status, version, case, expected):
     primary = output(
         verdict="inconclusive" if case == "hold" else "false_positive" if case == "denied_normal" else "true_positive",
         confidence=.4 if case == "confidence" else .93,
@@ -63,7 +65,7 @@ def test_only_parser_trigger_is_removed_and_other_reasons_are_unchanged(status, 
         "A" if case == "allowed_attack" else "D", status, case == "context_truncation",
         evidence_grounding_failed=case == "grounding",
         interpretation_conflict=True if case == "conflict" else None,
-        fixed_rules_version=NEW_RULES,
+        fixed_rules_version=version,
     )
     assert verifier_reasons(primary, context) == [expected]
     legacy = verifier_reasons(primary, replace(context, fixed_rules_version="waf-system-v2.16"))
@@ -78,6 +80,7 @@ def test_only_parser_trigger_is_removed_and_other_reasons_are_unchanged(status, 
 ])
 @pytest.mark.parametrize("rules_module,expected_calls,policy_version,retired", [
     ("prompts", 1, "security-analysis-policy-v2", ["tuning_recommended", "parser_incomplete"]),
+    ("legacy_prompts_v217", 1, "security-analysis-policy-v2", ["tuning_recommended", "parser_incomplete"]),
     ("legacy_prompts_v216", 2, "security-analysis-policy-v1", ["tuning_recommended"]),
 ])
 def test_pinned_worker_keeps_raw_parser_history_but_changes_only_new_verifier_routing(
