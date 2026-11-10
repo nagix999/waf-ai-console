@@ -184,6 +184,8 @@ def test_diagnostics_count_old_and_new_versions_without_rewriting_history(client
     login_admin(client)
     fixtures = [("evidence-repair-v1", "completed", "true_positive"),
                 ("evidence-repair-v2", "completed", "inconclusive"),
+                ("evidence-selection-v1", "completed", "true_positive"),
+                ("evidence-selection-v2", "completed", "inconclusive"),
                 ("unrecognized-version", "completed", "inconclusive"),
                 ("evidence-repair-v2", "failed", None)]
     originals = {}
@@ -197,9 +199,9 @@ def test_diagnostics_count_old_and_new_versions_without_rewriting_history(client
             db.commit()
         originals[identifier] = document
     result = client.get(URL + "/diagnostics").json()
-    assert result["counts"]["completed"] == 3 and result["counts"]["failed"] == 1
-    assert result["counts"]["measured"] == 2 and result["counts"]["inconclusive"] == 1
-    assert result["counts"]["primary_repair_attempted"] == 2
+    assert result["counts"]["completed"] == 5 and result["counts"]["failed"] == 1
+    assert result["counts"]["measured"] == 4 and result["counts"]["inconclusive"] == 2
+    assert result["counts"]["primary_repair_attempted"] == 4
     assert result["unmeasured_completed"] == 1 and result["inconclusive_rate"] == .5
     with client.app.state.session_factory() as db:
         assert {identifier: db.get(Analysis, identifier).result_json for identifier in originals} == originals

@@ -200,6 +200,7 @@ def build_agent_input(
     prompt_reserved_tokens: int = PROMPT_SCHEMA_RESERVED_TOKENS,
     evidence_selection: bool = False,
     request_integrity: dict[str, Any] | None = None,
+    fixed_rules_version: str | None = None,
 ) -> AgentInput:
     if not isinstance(prompt_reserved_tokens, int) or isinstance(prompt_reserved_tokens, bool) or prompt_reserved_tokens < PROMPT_SCHEMA_RESERVED_TOKENS:
         raise ValueError("agent_context_budget_too_small")
@@ -270,6 +271,7 @@ def build_agent_input(
             raw_payload, document["event"], parsed, retained_spans,
             document.get("decoded_payload_hints"), candidate_budget,
             original_event=event,
+            fixed_rules_version=fixed_rules_version,
         )
     text = _serialize(document)
     return AgentInput(

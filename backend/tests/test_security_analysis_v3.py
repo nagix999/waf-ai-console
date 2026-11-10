@@ -147,7 +147,7 @@ def test_nonretired_verifier_conditions_are_unchanged(verdict, action, status, t
 
 
 def test_pinned_v214_module_and_candidate_versions_are_separate():
-    assert prompts.FIXED_RULES_VERSION == "waf-system-v2.18"
+    assert prompts.FIXED_RULES_VERSION == "waf-system-v2.19"
     assert legacy_prompts_v217.FIXED_RULES_VERSION == "waf-system-v2.17"
     assert legacy_prompts_v216.FIXED_RULES_VERSION == "waf-system-v2.16"
     assert legacy_prompts_v215.FIXED_RULES_VERSION == "waf-system-v2.15"

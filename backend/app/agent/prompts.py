@@ -1,4 +1,4 @@
-"""Candidate v2.18 changes only shared judgment and evidence guidance.
+"""Candidate v2.19 refines shared evidence guidance and source eligibility.
 
 Approved and queued revisions keep their original instructions. Role text,
 editable policy, input/output contracts and the v2.17 server policy stay intact.
@@ -11,11 +11,11 @@ from .legacy_prompts_v216 import (
     policy_reserved_tokens,
 )
 
-PROMPT_VERSION = "waf-judgment-v2.18"
-FIXED_RULES_VERSION = "waf-system-v2.18"
-V3_RULES_VERSIONS = frozenset({"waf-system-v2.15", "waf-system-v2.16", "waf-system-v2.17", FIXED_RULES_VERSION})
+PROMPT_VERSION = "waf-judgment-v2.19"
+FIXED_RULES_VERSION = "waf-system-v2.19"
+V3_RULES_VERSIONS = frozenset({"waf-system-v2.15", "waf-system-v2.16", "waf-system-v2.17", "waf-system-v2.18", FIXED_RULES_VERSION})
 SEMANTIC_RULES_VERSIONS = frozenset({
-    "waf-system-v2.13", "waf-system-v2.14", "waf-system-v2.15", "waf-system-v2.16", "waf-system-v2.17", FIXED_RULES_VERSION,
+    "waf-system-v2.13", "waf-system-v2.14", "waf-system-v2.15", "waf-system-v2.16", "waf-system-v2.17", "waf-system-v2.18", FIXED_RULES_VERSION,
 })
 
 FIXED_INSTRUCTIONS = """
@@ -39,9 +39,10 @@ FIXED_INSTRUCTIONS = """
 
 원문 근거:
 - evidence는 제공한 evidence_candidates.items의 source_id, interpretation_ko, supports만 쓴다. field/excerpt를 생성하지 않는다. 역할별 최대 5개이며 확정에는 payload 또는 실제 추가 필드의 내용 근거가 최소 1개 필요하다.
-- supports는 attack_request(공격 요청 근거), normal_request(정상 요청 근거), context(참고 내용)다. 최종 판정에서 추정하지 않고 양쪽을 억지로 채우지 않는다. 공격 근거는 성공 증거가 아니다. 같은 발췌의 다른 해석·다른 출처는 보존한다.
-- 일반 Host, Cookie, User-Agent나 테스트 표식이 있다는 사실, 또는 특정 공격 구문이 없다는 사실만으로 정상 근거를 만들지 않는다. 값과 구조가 구체적인 정상 동작이나 데이터 의미를 뒷받침하지 않으면 context로 두며, 해당 필드 안의 공격 내용은 별도로 분석한다.
-- 해석에는 관찰과 공격/정상 의미의 연결을 구체적으로 설명한다. 같은 설명을 여러 필드에 반복하거나 근거 개수를 채우지 않는다. 필요한 후보가 생략됐으면 보류하며, 후보 부재를 공격 부재로 해석하지 않는다.
+- supports는 최종 판정과 별개로 원문과 요청 문맥이 뒷받침하는 의미에 따라 정한다. attack_request(공격 요청 근거)는 공격 동작, 악성 탐색, 비인가 접근 시도 또는 입력으로 확인되는 명확한 정책 위반을, normal_request(정상 요청 근거)는 구체적인 정상 동작이나 데이터 의미를 뒷받침한다. context(참고 내용)는 어느 방향을 뒷받침한다고 설명하기 어렵지만 분석 이해에 필요한 정보다. 중요하지 않으면 생략한다.
+- interpretation_ko에는 관찰한 값의 역할과 주변 내용이 해당 해석을 뒷받침하는 이유를 설명한다. 문자열의 존재나 탐지 사실을 반복하는 것으로 대신하거나, 확인하지 않은 서버 동작과 환경을 덧붙이지 않는다. 여러 원문 구간이 함께 의미를 만들면 그 관계를 설명한다. 개별 발췌가 전체 공격을 홀로 입증할 필요는 없다.
+- 공격 성공의 확인이나 모든 정상 요청에 대한 별도 업무 증명을 요구하지 않는다. 양쪽 근거를 억지로 채우거나 같은 설명을 반복하지 않는다. 같은 발췌의 다른 해석과 다른 출처는 보존한다. context의 존재나 근거 개수만으로 최종 판정을 결정하지 않는다.
+- 필요한 후보가 생략됐으면 보류하며, 후보 부재를 공격 부재로 해석하지 않는다.
 - decision_issue는 실제 핵심 구분점(point_ko), 근거 번호(evidence_indexes, 0부터), 보류를 가르는 미확인 조건(missing_condition_ko)이다. 확정 조건은 null이며 연결 근거가 없으면 전체 null이다. 일반 SOC 체크리스트·응답 상태·성공 여부 확인을 채우지 않는다.
 - interpretation_conflict는 같은 요청에 양립하기 어려운 의미 해석이 실제로 남을 때만 true다. 공격·정상 근거가 함께 있거나 근거가 많다는 이유로 true로 하지 않는다.
 - json_duplicate_scalar_values_equal과 json_duplicate_scalar_values_differ는 비교한 JSON 단일 값의 동일/차이 관찰일 뿐 서버 처리·공격 의도를 뜻하지 않는다. json_duplicate_values_uncomparable과 검사 생략은 미확인이며, 키 중복만으로 정탐·오탐을 결정하지 않는다.

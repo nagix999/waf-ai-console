@@ -5,11 +5,12 @@ Production configuration upgrade. The implementation starts from `eea2527`.
 
 ## New executions
 
-Candidates pinned to `waf-system-v2.15`, `waf-system-v2.16`, `waf-system-v2.17` or `waf-system-v2.18` generate
+Candidates pinned to `waf-system-v2.15`, `waf-system-v2.16`, `waf-system-v2.17`,
+`waf-system-v2.18` or `waf-system-v2.19` generate
 `waf-analysis-v3`. Approved
 Production instructions, already queued jobs and failed-job retries retain
 their encrypted pinned instructions. In particular, v2.14 remains available
-unchanged; the v2.15, v2.16 and v2.17 prompt modules are also frozen byte-for-byte. Test and
+unchanged; the v2.15, v2.16, v2.17 and v2.18 prompt modules are also frozen byte-for-byte. Test and
 Production share the selected instruction content; changing
 Production still requires an approved official evaluation and administrator
 review/apply.
@@ -113,6 +114,39 @@ to an approved Production configuration. Official evaluation and administrator
 review/promotion remain mandatory. No actual-model quality validation,
 operational application or redeployment has been performed for this change;
 offline contract checks do not demonstrate improved judgment quality.
+
+### Evidence guidance and identifier exclusion candidate v2.19
+
+V2.19 updates the shared `supports` and `interpretation_ko` guidance and uses
+`evidence-selection-v2` for its source catalog. Catalog v2 keeps the v1 item
+shape, source-ID output contract and source-occurrence checks. It excludes only
+the event's top-level `event_id`, `source_system`, `company_name` and `waf_vendor`
+from citation candidates. Their values remain in the existing bounded model
+event input, stored history and UI; existing parser inputs are unchanged. This
+is not masking or input deletion. Occurrences inside payload text and identically named fields inside
+`extra_fields` are not excluded. Signature, event name, WAF action, IP addresses
+and ports remain eligible under the existing bounds and source checks.
+
+The new exclusion policy is selected only for executions explicitly pinned to
+`waf-system-v2.19`. Earlier source-selection revisions, including v2.18, retain
+catalog v1 and their original instructions. Unknown revisions do not opt into the new
+exclusion policy. The catalog still allows at most 48 items, each excerpt at
+most 300 characters, under the existing 8,192-character maximum catalog budget.
+For v2.19, a missing or mismatched catalog fails before the model call with
+`evidence_selection_catalog_invalid`; it cannot fall back to field/excerpt output.
+Candidate omission is not evidence of attack absence. Removing four known
+identifiers does not classify all custom fields or establish semantic evidence
+correctness.
+
+The server does not rewrite support directions according to field names, add
+a field-purpose classifier or introduce extra model calls. Editable policy,
+role-specific text, public result schemas, parser engines, integrity checks,
+grounding and repair, final-verdict policy and evidence editing remain unchanged.
+V2.19 retains the v2.17 diagnostic-only parser policy. Approved Production,
+queued work and retries are not upgraded by deployment; official evaluation
+and administrator review/promotion are required. Actual-model quality testing,
+Production activation and redeployment have not been performed for this change.
+No DB migration, public API schema change or new dependency is introduced.
 
 ## Service API transition
 

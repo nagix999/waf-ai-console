@@ -21,7 +21,7 @@ NEW_RULES = "waf-system-v2.17"
 
 
 @pytest.mark.parametrize("status", ["partial", "failed"])
-@pytest.mark.parametrize("version", [NEW_RULES, "waf-system-v2.18"])
+@pytest.mark.parametrize("version", [NEW_RULES, "waf-system-v2.18", "waf-system-v2.19"])
 def test_new_rules_keep_parser_incompleteness_diagnostic_only(status, version):
     context = VerifierPolicyContext("D", status, False, fixed_rules_version=version)
     assert verifier_reasons(output(), context) == []
@@ -29,14 +29,14 @@ def test_new_rules_keep_parser_incompleteness_diagnostic_only(status, version):
 
 @pytest.mark.parametrize("status", ["partial", "failed"])
 @pytest.mark.parametrize("version", [None, "waf-system-v2.14", "waf-system-v2.15",
-                                    "waf-system-v2.16", "waf-system-v2.19", "unknown"])
+                                    "waf-system-v2.16", "waf-system-v2.20", "unknown"])
 def test_missing_legacy_and_unknown_versions_retain_original_parser_trigger(status, version):
     context = VerifierPolicyContext("D", status, False, fixed_rules_version=version)
     assert verifier_reasons(output(), context) == ["parser_incomplete"]
 
 
 @pytest.mark.parametrize("status", ["partial", "failed"])
-@pytest.mark.parametrize("version", [NEW_RULES, "waf-system-v2.18"])
+@pytest.mark.parametrize("version", [NEW_RULES, "waf-system-v2.18", "waf-system-v2.19"])
 @pytest.mark.parametrize("case,expected", [
     ("hold", "primary_inconclusive"),
     ("confidence", "low_confidence"),
@@ -81,6 +81,7 @@ def test_only_parser_trigger_is_removed_and_other_reasons_are_unchanged(status, 
 @pytest.mark.parametrize("rules_module,expected_calls,policy_version,retired", [
     ("prompts", 1, "security-analysis-policy-v2", ["tuning_recommended", "parser_incomplete"]),
     ("legacy_prompts_v217", 1, "security-analysis-policy-v2", ["tuning_recommended", "parser_incomplete"]),
+    ("legacy_prompts_v218", 1, "security-analysis-policy-v2", ["tuning_recommended", "parser_incomplete"]),
     ("legacy_prompts_v216", 2, "security-analysis-policy-v1", ["tuning_recommended"]),
 ])
 def test_pinned_worker_keeps_raw_parser_history_but_changes_only_new_verifier_routing(

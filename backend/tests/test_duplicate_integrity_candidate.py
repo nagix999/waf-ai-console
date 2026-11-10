@@ -116,6 +116,7 @@ def test_repeated_keys_in_different_objects_are_not_mixed():
     ("waf-system-v2.16", INTEGRITY_V3_VERSION),
     ("waf-system-v2.17", INTEGRITY_V3_VERSION),
     ("waf-system-v2.18", INTEGRITY_V3_VERSION),
+    ("waf-system-v2.19", INTEGRITY_V3_VERSION),
 ])
 def test_integrity_version_selection_preserves_old_execution(version, expected):
     assert integrity_version_for_rules(version) == expected

@@ -640,8 +640,9 @@ def _execute_grounded_agent(*, analysis, raw_payload, parsed, input_truncated,
     from .agent.contracts import (EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput,
                                  SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216)
     from .agent.evidence_candidates import (
-        VERSION as SELECTION_VERSION, REPAIR_INSTRUCTIONS as SELECTION_REPAIR_INSTRUCTIONS,
-        resolve_selection, apply_selection_corrections,
+        REPAIR_INSTRUCTIONS as SELECTION_REPAIR_INSTRUCTIONS,
+        resolve_selection, apply_selection_corrections, selection_version_for_rules,
+        IDENTIFIER_FILTER_RULES_VERSIONS,
     )
     from .agent.grounding_repair import (
         REPAIR_INSTRUCTIONS, REPAIR_VERSION, apply_corrections, correction_input,
@@ -649,9 +650,14 @@ def _execute_grounded_agent(*, analysis, raw_payload, parsed, input_truncated,
     )
     document = json.loads(kwargs["user_input"])
     catalog = document.get("evidence_candidates")
-    selecting = isinstance(catalog, dict) and catalog.get("version") == SELECTION_VERSION
-    if security_analysis_enabled and fixed_rules_version not in {"waf-system-v2.15", "waf-system-v2.16", "waf-system-v2.17", "waf-system-v2.18"}:
+    selection_version = selection_version_for_rules(fixed_rules_version)
+    selecting = isinstance(catalog, dict) and catalog.get("version") == selection_version
+    if security_analysis_enabled and fixed_rules_version not in {"waf-system-v2.15", "waf-system-v2.16", "waf-system-v2.17", "waf-system-v2.18", "waf-system-v2.19"}:
         raise WorkerExecutionError("unsupported_security_output_contract")
+    if fixed_rules_version in IDENTIFIER_FILTER_RULES_VERSIONS and not selecting:
+        # Never bypass the pinned exclusion policy via legacy field/excerpt
+        # output when a new execution's catalog is missing or mismatched.
+        raise WorkerExecutionError("evidence_selection_catalog_invalid")
     security_model = SecurityAnalysisOutput if fixed_rules_version == "waf-system-v2.15" else SecurityAnalysisOutputV216
     selection_model = (security_model if security_analysis_enabled else SemanticAssessmentOutput if semantic_enabled
                        else EvidenceAssessmentOutput if assessment_enabled else EvidenceSelectionOutput)
@@ -753,7 +759,7 @@ def _execute_grounded_agent(*, analysis, raw_payload, parsed, input_truncated,
             grounding = {**call.telemetry["evidence_grounding"], "mode": "selected_raw_source",
                          "checked_count": len(original_selection.evidence), "rejected_count": len(issues)}
             call = replace(call, telemetry={**call.telemetry, "evidence_grounding": grounding})
-    retry = {"version": SELECTION_VERSION if selecting else REPAIR_VERSION,
+    retry = {"version": selection_version if selecting else REPAIR_VERSION,
              "mode": "source_selection" if selecting else "citations_only",
              "attempted": len(attempts) > 1, "attempt_count": len(attempts), "max_attempts": 2,
              "recovered": len(attempts) > 1 and call.succeeded and not attempts[-1]["issues"] and not requires_review,
@@ -969,6 +975,7 @@ def _process_moduagent_steps(
                 prompt_reserved_tokens=prompt.reserved_tokens + REPAIR_RESERVED_TOKENS,
                 evidence_selection=prompt.fixed_rules_version in SELECTION_RULES_VERSIONS,
                 request_integrity=integrity,
+                fixed_rules_version=prompt.fixed_rules_version,
             )
         except ValueError as exc:
             if exc.args == ("agent_context_budget_too_small",):

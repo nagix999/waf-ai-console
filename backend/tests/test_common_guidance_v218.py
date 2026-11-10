@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from app.agent import legacy_prompts_v216, legacy_prompts_v217, prompts
+from app.agent import legacy_prompts_v216, legacy_prompts_v217, legacy_prompts_v218 as prompts
 from app.agent.analyst_assessment import RULES_VERSIONS as ASSESSMENT_RULES
 from app.agent.contracts import SecurityAnalysisOutputV216
 from app.agent.evidence_candidates import SELECTION_RULES_VERSIONS
@@ -29,6 +29,7 @@ CURRENT = "waf-system-v2.18"
 FROZEN_FILES = [
     (legacy_prompts_v216, "ab6d92f743a6dca339376dc61bd6535bf9c32a83693449d21d19ebeb649cc4f7"),
     (legacy_prompts_v217, "ea92530a480ad9a4bc5f4674467ee4b2f10d11d54bfbe273f00a3d935a5f0e3f"),
+    (prompts, "e27f21f9b2bf8a9453bf9f0bd8a132a44a339f07ce5577126b6f5308c28636eb"),
 ]
 
 
@@ -132,7 +133,7 @@ def test_candidate_is_connected_to_all_existing_processing_contracts():
     for versions in (ASSESSMENT_RULES, SELECTION_RULES_VERSIONS, INTEGRITY_RULES_VERSIONS,
                      INTEGRITY_V3_RULES_VERSIONS, PARSER_DIAGNOSTICS_ONLY_RULES_VERSIONS):
         assert {"waf-system-v2.17", CURRENT} <= versions
-        assert "waf-system-v2.19" not in versions
+        assert "waf-system-v2.20" not in versions
     assert integrity_version_for_rules(CURRENT) == INTEGRITY_V3_VERSION
     assert integrity_version_for_rules("waf-system-v2.17") == INTEGRITY_V3_VERSION
 
@@ -154,7 +155,7 @@ def test_existing_v217_snapshot_stays_pinned_when_new_candidate_is_available(cli
     with client.app.state.session_factory() as db:
         policy = get_active_policy(db, crypto)
         old = _build_snapshot(policy, crypto, rules=legacy_prompts_v217)
-        current = _build_snapshot(policy, crypto)
+        current = _build_snapshot(policy, crypto, rules=prompts)
         assert old.policy_hash == current.policy_hash
         assert old.policy_version_id == current.policy_version_id
         assert old.reserved_tokens == current.reserved_tokens
