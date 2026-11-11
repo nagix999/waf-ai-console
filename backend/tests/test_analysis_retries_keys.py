@@ -19,6 +19,10 @@ from test_common_prompt_admission import activate, save_policy
 from test_prompt_snapshots import fake_output
 
 
+# Archived v2.20 worker replay; current runtime is covered by test_worker_v221.py.
+pytestmark = pytest.mark.usefixtures("legacy_v220_admissions")
+
+
 def login(client):
     assert client.post("/api/v1/auth/login", json={"username": "admin", "password": "test-password"}).status_code == 200
 

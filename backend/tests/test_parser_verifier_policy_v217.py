@@ -20,6 +20,10 @@ from test_moduagent_worker import primary_output
 NEW_RULES = "waf-system-v2.17"
 
 
+# Archived v2.20 worker replay; current runtime is covered by test_worker_v221.py.
+pytestmark = pytest.mark.usefixtures("legacy_v220_admissions")
+
+
 @pytest.mark.parametrize("status", ["partial", "failed"])
 @pytest.mark.parametrize("version", [NEW_RULES, "waf-system-v2.18", "waf-system-v2.19", "waf-system-v2.20"])
 def test_new_rules_keep_parser_incompleteness_diagnostic_only(status, version):
@@ -79,7 +83,7 @@ def test_only_parser_trigger_is_removed_and_other_reasons_are_unchanged(status, 
     ("failed", "synthetic non-HTTP payload"),
 ])
 @pytest.mark.parametrize("rules_module,expected_calls,policy_version,retired", [
-    ("prompts", 1, "security-analysis-policy-v2", ["tuning_recommended", "parser_incomplete"]),
+    ("legacy_prompts_v220", 1, "security-analysis-policy-v2", ["tuning_recommended", "parser_incomplete"]),
     ("legacy_prompts_v217", 1, "security-analysis-policy-v2", ["tuning_recommended", "parser_incomplete"]),
     ("legacy_prompts_v218", 1, "security-analysis-policy-v2", ["tuning_recommended", "parser_incomplete"]),
     ("legacy_prompts_v216", 2, "security-analysis-policy-v1", ["tuning_recommended"]),

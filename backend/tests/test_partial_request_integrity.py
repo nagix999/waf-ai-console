@@ -11,13 +11,17 @@ from app.agent.executor import AgentCallResult
 from app.agent.input_builder import build_agent_input
 from app.agent.input_integrity import apply_integrity_guard
 from app.models import AgentStep, Analysis, VLLMProfile
-from app.agent import prompts
+from app.agent import legacy_prompts_v220 as prompts
 from app.services.http_parser import parse_http_payload
 from app.services.request_integrity import (
     INTEGRITY_VERSION, LEGACY_INTEGRITY_VERSION, MAX_PAYLOAD_CHARS,
     assess_request_integrity, submitted_integrity,
 )
 from test_request_integrity import output, request
+
+
+# Archived v2.20 worker replay; current runtime is covered by test_worker_v221.py.
+pytestmark = pytest.mark.usefixtures("legacy_v220_admissions")
 
 
 def partial(body="", headers="Content-Length: 80\r\nContent-Type: application/json\r\n"):

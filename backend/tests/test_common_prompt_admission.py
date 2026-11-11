@@ -14,7 +14,7 @@ from sqlalchemy import func, select
 
 from app import worker
 from app.agent.executor import AgentCallResult
-from app.agent.prompts import FIXED_INSTRUCTIONS, FIXED_RULES_VERSION, PROMPT_VERSION, build_role_instructions
+from app.agent.legacy_prompts_v220 import FIXED_INSTRUCTIONS, FIXED_RULES_VERSION, PROMPT_VERSION, build_role_instructions
 from app.api.test_runs import upload_test_run
 from app.models import (
     Analysis, AnalysisLabel, PromptPolicyState, PromptPolicyVersion,
@@ -32,6 +32,10 @@ POLICIES = "/api/v1/admin/prompt-policies"
 TEST_RUNS = "/api/v1/test-runs"
 NAME = "합성 공통 프롬프트 회귀"
 OVERRIDE_FIELDS = ("prompt_policy_version_id", "fixed_rules_version", "prompt_template")
+
+
+# Archived v2.20 worker replay; current runtime is covered by test_worker_v221.py.
+pytestmark = pytest.mark.usefixtures("legacy_v220_admissions")
 
 
 def login(client):

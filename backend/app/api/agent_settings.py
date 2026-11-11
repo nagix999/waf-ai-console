@@ -105,7 +105,7 @@ def get_diagnostics(db: Db, _admin: Admin, response: Response,
     response.headers["Cache-Control"] = "no-store"
     begin_test_read_snapshot(db)
     value = lambda path: func.json_extract(Analysis.result_json, "$.diagnostics." + path)
-    measured = value("version").in_(DIAGNOSTIC_VERSIONS) & (Analysis.status == "completed")
+    measured = value("version").in_((*DIAGNOSTIC_VERSIONS, "evidence-selection-v4")) & (Analysis.status == "completed")
     count = lambda condition: func.coalesce(func.sum(case((condition, 1), else_=0)), 0)
     reasons = ("primary_evidence_rejected", "verifier_evidence_rejected", "primary_model_inconclusive",
                "verifier_model_inconclusive", "verifier_failed", "verdict_disagreement", "input_integrity_limited")

@@ -22,6 +22,10 @@ from test_moduagent_worker import primary_output
 RAW = "GET /?q=%3Cscript%3E HTTP/1.1\r\nHost: example.invalid\r\n\r\n"
 
 
+# Archived v2.20 worker replay; current runtime is covered by test_worker_v221.py.
+pytestmark = pytest.mark.usefixtures("legacy_v220_admissions")
+
+
 def build(raw=RAW, event=None, **kwargs):
     return build_agent_input(event or {}, raw, parse_http_payload(raw), 32768, 3072,
                              decoding=decode_payload(raw), evidence_selection=True, **kwargs)

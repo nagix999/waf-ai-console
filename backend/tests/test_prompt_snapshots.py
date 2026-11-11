@@ -3,7 +3,8 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from agent_selection_helpers import model_output
 
-from app import worker
+from app import worker, worker_v221
+from app.agent import legacy_prompts_v220
 from app.agent.contracts import WAFAnalysisOutput
 from app.agent.executor import AgentCallResult
 from app.agent.input_builder import build_agent_input
@@ -11,6 +12,7 @@ from app.agent.prompts import DEFAULT_POLICY_TEXT, FIXED_INSTRUCTIONS, build_rol
 from app.models import Analysis, PromptPolicyVersion, VLLMProfile
 from app.services.http_parser import parse_http_payload
 from app.services.prompt_snapshots import PromptSnapshotError, load_analysis_prompt
+from app.services.worker_runtime import process_moduagent
 
 pytestmark = pytest.mark.usefixtures("registered_vllm_target")
 
@@ -73,11 +75,17 @@ def fake_output():
     })
 
 
-def test_worker_and_verifier_use_queued_snapshot_after_activation_and_code_change(client, event_payload, monkeypatch):
+@pytest.mark.parametrize("rules", [legacy_prompts_v220, None], ids=["pinned-v220", "current-v221"])
+def test_worker_and_verifier_use_queued_snapshot_after_activation_and_code_change(client, event_payload, monkeypatch, rules):
+    if rules is not None:
+        # Recreate admission under the frozen revision, not a current snapshot
+        # whose provenance was rewritten after it had already been accepted.
+        monkeypatch.setattr("app.agent.prompts", rules)
     login(client)
     created = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()
     with client.app.state.session_factory() as db:
         original = load_analysis_prompt(db.get(Analysis, created["id"]), client.app.state.crypto)
+        assert original.fixed_rules_version == (rules.FIXED_RULES_VERSION if rules else "waf-system-v2.21")
         db.add(VLLMProfile(name="synthetic-profile", base_url="http://10.0.0.10:8000/v1", model_name="synthetic-model", status="production"))
         db.commit()
     newer = create_and_activate(client, "새 버전에서만 사용하는 별도 작성 지침.")
@@ -94,6 +102,7 @@ def test_worker_and_verifier_use_queued_snapshot_after_activation_and_code_chang
         )
 
     monkeypatch.setattr(worker, "execute_structured_agent", execute)
+    monkeypatch.setattr(worker_v221, "execute_structured_agent", execute)
     with client.app.state.session_factory() as db:
         row = worker.claim_next(db, "worker-one", 60)
         cipher_before = row.prompt_snapshot_ciphertext
@@ -102,8 +111,9 @@ def test_worker_and_verifier_use_queued_snapshot_after_activation_and_code_chang
         db.commit()
         reclaimed = worker.claim_next(db, "worker-two", 60)
         assert reclaimed.prompt_snapshot_ciphertext == cipher_before
-        worker.process_moduagent(db, client.app.state.crypto, reclaimed, "10.0.0.10:8000", 0.75)
+        process_moduagent(db, client.app.state.crypto, reclaimed, "10.0.0.10:8000", 0.75)
     assert len(calls) == 2
+    assert all(bool(call.get("structured_output_recovery")) == (rules is None) for call in calls)
     assert calls[0]["instructions"] == original.primary_instructions
     assert calls[1]["instructions"] == original.verifier_instructions
     assert calls[0]["user_input"] == calls[1]["user_input"]
@@ -128,6 +138,7 @@ def test_snapshot_corruption_fails_before_model_call(client, event_payload, monk
         raise AssertionError("model must not be called")
 
     monkeypatch.setattr(worker, "execute_structured_agent", execute)
+    monkeypatch.setattr(worker_v221, "execute_structured_agent", execute)
     with client.app.state.session_factory() as db:
         row = db.get(Analysis, created["id"])
         if corruption == "changed_role":
@@ -140,7 +151,7 @@ def test_snapshot_corruption_fails_before_model_call(client, event_payload, monk
                 row.prompt_policy_version_id = None
         db.commit()
         with pytest.raises(PromptSnapshotError, match="^prompt_snapshot_invalid$"):
-            worker.process_moduagent(db, client.app.state.crypto, row, "10.0.0.10:8000", 0.75)
+            process_moduagent(db, client.app.state.crypto, row, "10.0.0.10:8000", 0.75)
     assert calls == []
 
 
@@ -179,13 +190,14 @@ def test_small_context_fails_before_llm_and_preserves_pinned_policy(client, even
         raise AssertionError("insufficient context must not call a model")
 
     monkeypatch.setattr(worker, "execute_structured_agent", execute)
+    monkeypatch.setattr(worker_v221, "execute_structured_agent", execute)
     with client.app.state.session_factory() as db:
         db.add(VLLMProfile(name="small-synthetic", base_url="http://10.0.0.10:8000/v1", model_name="synthetic-model", context_window=8192, max_output_tokens=3072, status="production"))
         db.commit()
         row = db.get(Analysis, created["id"])
         cipher_before = row.prompt_snapshot_ciphertext
         with pytest.raises(worker.WorkerExecutionError, match="agent_context_budget_too_small"):
-            worker.process_moduagent(db, client.app.state.crypto, row, "10.0.0.10:8000", 0.75)
+            process_moduagent(db, client.app.state.crypto, row, "10.0.0.10:8000", 0.75)
         assert row.prompt_snapshot_ciphertext == cipher_before
     assert calls == []
 

@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.agent import legacy_prompts_v215, legacy_prompts_v216, prompts
+from app.agent import legacy_prompts_v215, legacy_prompts_v216, legacy_prompts_v220 as prompts
 from app.agent.input_integrity import apply_integrity_guard
 from app.services.http_parser import parse_http_payload
 from app.services.json_duplicate_values import SAME_CODE, DIFFERENT_CODE, UNCOMPARABLE_CODE
@@ -13,6 +13,10 @@ from app.services.request_integrity import (
     INTEGRITY_VERSION, LEGACY_INTEGRITY_VERSION, INTEGRITY_V3_VERSION,
     NORMAL_GUARD_CODES, assess_request_integrity, integrity_version_for_rules, submitted_integrity,
 )
+
+
+# Archived v2.20 worker replay; current runtime is covered by test_worker_v221.py.
+pytestmark = pytest.mark.usefixtures("legacy_v220_admissions")
 
 
 def request(body, headers="", *, media="application/json"):

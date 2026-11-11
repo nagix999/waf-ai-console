@@ -111,5 +111,13 @@ def test_new_shared_prompt_keeps_each_existing_protocol_enabled():
     from app.agent.evidence_candidates import SELECTION_RULES_VERSIONS
     from app.services.request_integrity import INTEGRITY_RULES_VERSIONS
 
-    for revision in ("waf-system-v2.10", FIXED_RULES_VERSION):
+    for revision in ("waf-system-v2.10", "waf-system-v2.20"):
         assert revision in RULES_VERSIONS & SELECTION_RULES_VERSIONS & INTEGRITY_RULES_VERSIONS
+    # The latest candidate has its own engine instead of mutating byte-pinned
+    # v2.20 registries. Its actual execution is covered by test_worker_v221.py.
+    from app.agent.execution_policy_v221 import INTEGRITY_RULES_VERSIONS as CURRENT_INTEGRITY
+    from app.agent.evidence_source_policy import RULES_VERSIONS as CURRENT_SELECTION
+    from app.agent.evidence_pipeline_v221 import RULES_VERSION
+    assert FIXED_RULES_VERSION == RULES_VERSION == "waf-system-v2.21"
+    assert FIXED_RULES_VERSION in CURRENT_INTEGRITY & CURRENT_SELECTION
+    assert FIXED_RULES_VERSION not in RULES_VERSIONS | SELECTION_RULES_VERSIONS | INTEGRITY_RULES_VERSIONS

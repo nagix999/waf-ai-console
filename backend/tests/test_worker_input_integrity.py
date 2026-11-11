@@ -11,6 +11,10 @@ from app.models import AgentStep, Analysis, VLLMProfile
 from test_request_integrity import output, request
 
 
+# Archived v2.20 worker replay; current runtime is covered by test_worker_v221.py.
+pytestmark = pytest.mark.usefixtures("legacy_v220_admissions")
+
+
 @pytest.mark.usefixtures("registered_vllm_target")
 @pytest.mark.parametrize("primary_verdict,verifier_verdict,expected,calls_expected,limited", [
     ("false_positive", "false_positive", "inconclusive", 2, True),

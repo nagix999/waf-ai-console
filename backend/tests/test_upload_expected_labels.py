@@ -26,6 +26,10 @@ from test_model_profiles import login_admin
 from test_moduagent_worker import primary_output
 
 
+# Archived v2.20 worker replay; current runtime is covered by test_worker_v221.py.
+pytestmark = pytest.mark.usefixtures("legacy_v220_admissions")
+
+
 def upload(client, rows, *, filename="events.json", path="/api/v1/test-uploads", headers=None, key=None):
     if filename.endswith(".csv"):
         output = io.StringIO()

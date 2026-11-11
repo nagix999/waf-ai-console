@@ -11,6 +11,10 @@ from app.worker import claim_next, mark_failed, process_moduagent
 
 pytestmark = pytest.mark.usefixtures("registered_vllm_target")
 
+# Archived v2.20 worker replay; current runtime is covered by test_worker_v221.py.
+pytestmark = [*(pytestmark if isinstance(pytestmark, list) else [pytestmark]),
+              pytest.mark.usefixtures("legacy_v220_admissions")]
+
 
 def primary_output(excerpt: str = "%27+OR+1%3D1--", field: str = "payload.query") -> WAFAnalysisOutput:
     return WAFAnalysisOutput.model_validate(

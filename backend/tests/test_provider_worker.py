@@ -16,6 +16,10 @@ from test_moduagent_worker import primary_output
 SYNTHETIC_KEY = "synthetic-openai-worker-key"
 
 
+# Archived v2.20 worker replay; current runtime is covered by test_worker_v221.py.
+pytestmark = pytest.mark.usefixtures("legacy_v220_admissions")
+
+
 def openai_profile(crypto, **overrides):
     values = {
         "name": "synthetic-openai-profile", "provider": "openai",

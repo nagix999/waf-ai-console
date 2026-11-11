@@ -19,6 +19,10 @@ from test_validation_data import add_item, create_dataset, forbid_model_calls, l
 
 pytestmark = pytest.mark.usefixtures("registered_vllm_target")
 
+# Archived v2.20 worker replay; current runtime is covered by test_worker_v221.py.
+pytestmark = [*(pytestmark if isinstance(pytestmark, list) else [pytestmark]),
+              pytest.mark.usefixtures("legacy_v220_admissions")]
+
 
 @pytest.fixture
 def candidate(client):

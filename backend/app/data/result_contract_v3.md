@@ -57,6 +57,52 @@ summary first but moves verdict-dependent severity and decision conditions
 after the verdict. This changes no pinned legacy schema or analyst-facing
 analysis-then-conclusion layout.
 
+## Candidate v2.21: output recovery and source roles
+
+The public `waf-analysis-v3` shape is unchanged. The new candidate reuses
+`SecurityAnalysisOutputV220` internally; no additional model fields or public
+analysis fields are introduced.
+
+- Complete JSON may lose a UTF-8 BOM or one whole Markdown JSON fence before
+  strict domain validation. Duplicate keys, non-finite numbers, incomplete JSON,
+  guessed values and ambiguous prefixes are not accepted. Existing retry,
+  generation budget, provider refusal and incomplete-response gates remain.
+- Internal source catalog v4 marks canonical `signature` / `event.signature`
+  metadata `allowed_supports=["context"]`. Both initial and corrected selection
+  are checked against server provenance. Unresolved directional uses and their
+  dependent claims are excluded, not silently relabeled. The signature remains
+  available for `signature_assessment`. Payload values and extension fields
+  with the same name or text are not removed.
+- `/@/` is a possible collection delimiter, not an attack indicator or a safe
+  allowlist. The shared instructions distinguish collection layout from actual
+  request values; raw data and parser behavior remain unchanged.
+- `input_truncated=true` is still recorded and may request independent
+  verification; it does not itself force `inconclusive`. Retained concrete
+  evidence may support a decisive result. Absence of visible attack text is not
+  sufficient normal-request evidence. Actual capture defects that affect normal
+  evidence, missing decisive context and required verification failure or
+  disagreement retain their existing restrictions.
+
+The immutable v2.20 implementation remains byte-identical. A dispatcher reads
+the encrypted prompt snapshot and chooses the original engine or an isolated
+v2.21 engine without monkeypatching module globals. New candidates pin the v2
+pipeline manifest; existing approvals, queued work, retries and old v1 manifests
+are not rewritten. Production still requires official evaluation and explicit
+administrator promotion. Runtime quality and speed require actual model tests.
+
+The unpromoted v2.21 candidate's instructions have also been compacted without
+changing this execution contract or any pipeline artifact. Shared fixed text is
+5,019 → 4,236 characters; full default Primary/Verifier instructions are
+4,546/4,570 characters (including whitespace, excluding event JSON and output
+schema). Saved administrator policies, roles and input-budget calculation are
+unchanged. `legacy_prompts_v221.py` preserves the original instruction file.
+The version label alone is not a content identity: `fixed_rules_hash` and
+`instructions_hash` distinguish the revisions. Queued work and retries retain
+their encrypted original instructions, and baseline reconstruction requires an
+exact, unique version/content-hash match. Missing or ambiguous matches fail
+closed. Existing evaluations and approvals do not qualify the compacted text.
+No actual model, tokenizer, latency or accuracy improvement is claimed.
+
 ## Submitted-source blocks and evidence links candidate v2.20
 
 V2.20 uses `agent-input-v2` and `evidence-selection-v3`. Every submitted

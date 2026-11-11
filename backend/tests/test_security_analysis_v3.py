@@ -8,7 +8,7 @@ import pytest
 from pydantic import ValidationError
 
 from app import worker
-from app.agent import legacy_prompts_v214, legacy_prompts_v215, legacy_prompts_v216, legacy_prompts_v217, legacy_prompts_v219, prompts
+from app.agent import legacy_prompts_v214, legacy_prompts_v215, legacy_prompts_v216, legacy_prompts_v217, legacy_prompts_v219, legacy_prompts_v220 as prompts
 from app.agent.contracts import SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220
 from app.agent.executor import AgentCallResult
 from app.agent.policy import VerifierPolicyContext, verifier_reasons, finalize_with_verifier
@@ -17,6 +17,10 @@ from app.models import Analysis, VLLMProfile
 from app.services.http_parser import parse_http_payload
 from app.services.provider_options import strict_json_schema
 from test_evidence_selection import RAW, build, patch
+
+
+# Archived v2.20 worker replay; current runtime is covered by test_worker_v221.py.
+pytestmark = pytest.mark.usefixtures("legacy_v220_admissions")
 
 
 def output(*supports, verdict="true_positive", conflict=False, source="c1", issue=None):

@@ -21,6 +21,10 @@ from app.agent.contracts import WAFAnalysisOutput
 from test_model_profiles import login_admin, profile_payload
 
 
+# Archived v2.20 worker replay; current runtime is covered by test_worker_v221.py.
+pytestmark = pytest.mark.usefixtures("legacy_v220_admissions")
+
+
 @pytest.fixture
 def settings(settings, tmp_path):
     # The real heartbeat runs in another thread. A :memory: StaticPool shares

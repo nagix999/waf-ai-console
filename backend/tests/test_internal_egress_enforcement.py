@@ -14,6 +14,10 @@ from test_model_profiles import login_admin, profile_payload
 from test_provider_test_runner import SyntheticCrypto, profile_for, successful_handler
 
 
+# Archived v2.20 worker replay; current runtime is covered by test_worker_v221.py.
+pytestmark = pytest.mark.usefixtures("legacy_v220_admissions")
+
+
 @pytest.mark.parametrize("url,allowed,expected", [
     ("http://10.0.0.10:8000", "10.0.0.10:8000", "http://10.0.0.10:8000/v1"),
     ("https://192.168.1.2/v1/", "192.168.1.2:443", "https://192.168.1.2:443/v1"),

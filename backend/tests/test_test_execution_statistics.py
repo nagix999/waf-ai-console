@@ -20,6 +20,10 @@ ABSENT = object()
 CANARY = "SYNTHETIC_PRIVATE_VALUE_MUST_NOT_LEAVE_SQL"
 
 
+# Archived v2.20 worker replay; current runtime is covered by test_worker_v221.py.
+pytestmark = pytest.mark.usefixtures("legacy_v220_admissions")
+
+
 def result(*reasons, executed=False, framework="moduagent", version="waf-analysis-v3"):
     return {"schema_version": version, "agent": {"framework": framework},
             "verifier": {"executed": executed, "reasons": list(reasons)}}

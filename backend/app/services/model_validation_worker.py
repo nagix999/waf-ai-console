@@ -118,7 +118,8 @@ def finish_failed(db, run_id, owner, code, *, skipped=False):
 
 
 def process_dataset_test(db, crypto, test_run, *, verifier_confidence_threshold=0.75):
-    from ..worker import _abandon_running_runs, mark_failed, process_moduagent
+    from ..worker import _abandon_running_runs, mark_failed
+    from .worker_runtime import process_moduagent
 
     run_id, owner = test_run.id, test_run.lease_owner
     if test_run.status != "running" or not owner:

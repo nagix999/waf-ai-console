@@ -47,8 +47,8 @@ class PromptSnapshot(BaseModel):
 
     @model_validator(mode="after")
     def pipeline_binding(self):
-        from ..agent.evidence_pipeline import RULES_VERSION, validate_pipeline_snapshot
-        if (self.schema_version == 2) != (self.fixed_rules_version == RULES_VERSION):
+        from ..agent.evidence_pipeline_v221 import RULES_VERSIONS, validate_pipeline_snapshot
+        if (self.schema_version == 2) != (self.fixed_rules_version in RULES_VERSIONS):
             raise ValueError("prompt_snapshot_invalid")
         validate_pipeline_snapshot(self.evidence_pipeline, self.fixed_rules_version)
         return self
@@ -93,7 +93,13 @@ def pin_analysis_prompt(
     else:
         # New candidates do not change Production's pinned system rules.
         version = get_policy_version(db, version_id) if version_id is not None else get_active_policy(db, crypto)
-        snapshot = _build_snapshot(version, crypto, origin=origin)
+        if origin == "legacy_execution":
+            # Rows admitted before snapshots retain the last legacy builder;
+            # new v2.21 admissions always pin at enqueue instead.
+            from ..agent import legacy_prompts_v220
+            snapshot = _build_snapshot(version, crypto, origin=origin, rules=legacy_prompts_v220)
+        else:
+            snapshot = _build_snapshot(version, crypto, origin=origin)
     analysis.prompt_policy_version_id = snapshot.policy_version_id
     analysis.prompt_version = snapshot.prompt_version
     analysis.prompt_snapshot_ciphertext = crypto.encrypt_text(snapshot.model_dump_json())
@@ -102,7 +108,7 @@ def pin_analysis_prompt(
 
 def _build_snapshot(version, crypto, *, origin="enqueue", rules=None):
     from ..agent import prompts
-    from ..agent.evidence_pipeline import pipeline_for_rules
+    from ..agent.evidence_pipeline_v221 import pipeline_for_rules
     rules = rules or prompts
     try:
         policy_text = read_policy_text(version, crypto)
@@ -138,6 +144,33 @@ def approved_production_record(db):
         .order_by(ProductionPromotion.created_at.asc(), ProductionPromotion.id.asc()).limit(1))
 
 
+def _baseline_rules(expected):
+    """Restore the exact approved text, not the latest text with its label.
+
+    The unpromoted v2.21 candidate was compacted without changing its execution
+    contract. Its original text remains available by the immutable content hash.
+    No approval or evaluation is migrated to the compacted instructions.
+    """
+    from ..agent import (
+        legacy_prompts_v212, legacy_prompts_v213, legacy_prompts_v214,
+        legacy_prompts_v215, legacy_prompts_v216, legacy_prompts_v217,
+        legacy_prompts_v218, legacy_prompts_v219, legacy_prompts_v220,
+        legacy_prompts_v221, prompts,
+    )
+    modules = dict.fromkeys((
+        legacy_prompts_v212, legacy_prompts_v213, legacy_prompts_v214,
+        legacy_prompts_v215, legacy_prompts_v216, legacy_prompts_v217,
+        legacy_prompts_v218, legacy_prompts_v219, legacy_prompts_v220,
+        legacy_prompts_v221, prompts,
+    ))
+    matches = [module for module in modules
+        if module.FIXED_RULES_VERSION == expected["fixed_rules_version"]
+        and _hash(module.FIXED_INSTRUCTIONS) == expected["fixed_rules_hash"]]
+    if len(matches) != 1:
+        raise PromptSnapshotError()
+    return matches[0]
+
+
 def approved_production_prompt(db, crypto):
     record = approved_production_record(db)
     if record is None:
@@ -147,15 +180,14 @@ def approved_production_prompt(db, crypto):
         if configuration_digest(record.snapshot_json) != record.configuration_hash:
             raise ValueError()
         expected = record.snapshot_json["prompt"]
-        from ..agent.evidence_pipeline import validate_pipeline_snapshot
+        from ..agent.evidence_pipeline_v221 import validate_pipeline_snapshot
         approved_pipeline = record.snapshot_json.get("evidence_pipeline")
         validate_pipeline_snapshot(approved_pipeline, expected["fixed_rules_version"])
         if record.kind == "promotion":
             run = db.get(TestRun, record.source_test_run_id)
             snapshot = load_analysis_prompt(run, crypto)
         else:
-            from ..agent import legacy_prompts_v212, legacy_prompts_v213, legacy_prompts_v214, legacy_prompts_v215, legacy_prompts_v216, legacy_prompts_v217, legacy_prompts_v218, legacy_prompts_v219, prompts
-            rules = {module.FIXED_RULES_VERSION: module for module in (legacy_prompts_v212, legacy_prompts_v213, legacy_prompts_v214, legacy_prompts_v215, legacy_prompts_v216, legacy_prompts_v217, legacy_prompts_v218, legacy_prompts_v219, prompts)}[expected["fixed_rules_version"]]
+            rules = _baseline_rules(expected)
             snapshot = _build_snapshot(get_policy_version(db, expected["policy_version_id"]), crypto, rules=rules)
         actual = {key: getattr(snapshot, key) for key in expected}
         if (actual != expected or snapshot.evidence_pipeline != approved_pipeline

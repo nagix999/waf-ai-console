@@ -71,6 +71,7 @@ def analysis_heartbeat(engine, identifier, owner, attempt, lease_seconds):
 
 def run_analysis(session_factory, crypto, settings, identifier, owner, attempt):
     from .. import worker
+    from .worker_runtime import process_moduagent
     with session_factory() as db:
         db.info["analysis_claim"] = (identifier, owner, attempt)
         try:
@@ -80,8 +81,8 @@ def run_analysis(session_factory, crypto, settings, identifier, owner, attempt):
                 if settings.agent_mode == "stub":
                     worker.process_stub(db, crypto, analysis)
                 else:
-                    worker.process_moduagent(db, crypto, analysis, "", settings.verifier_confidence_threshold,
-                                             request_check=monitor.check)
+                    process_moduagent(db, crypto, analysis, "", settings.verifier_confidence_threshold,
+                                     request_check=monitor.check)
             logger.info("analysis completed id=%s", identifier)
         except Exception as exc:
             logger.error("analysis failed id=%s error_type=%s", identifier, type(exc).__name__)

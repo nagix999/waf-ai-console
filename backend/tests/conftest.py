@@ -5,6 +5,25 @@ from app.config import Settings
 from app.main import create_app
 
 
+@pytest.fixture(autouse=True)
+def legacy_v220_admissions(monkeypatch, request):
+    """Replay archived worker contracts without replacing their runtime code.
+
+    v2.21 has its own execution, policy, recovery and mixed-runtime suites.
+    Tests that call the frozen worker directly must admit its frozen rules,
+    rather than asking an archived engine to execute the latest candidate.
+    """
+    # Autouse ordering makes the opt-in take effect before a client captures
+    # the initial Production baseline. Unmarked current-version suites stay on
+    # the actual latest candidate.
+    if not any("legacy_v220_admissions" in marker.args
+               for marker in request.node.iter_markers("usefixtures")):
+        return
+    import app.agent
+    from app.agent import legacy_prompts_v220
+    monkeypatch.setattr(app.agent, "prompts", legacy_prompts_v220)
+
+
 @pytest.fixture
 def settings() -> Settings:
     return Settings(

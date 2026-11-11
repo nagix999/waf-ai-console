@@ -21,6 +21,10 @@ from test_agent_configuration import install_calls
 
 pytestmark = pytest.mark.usefixtures("registered_vllm_target")
 
+# Archived v2.20 worker replay; current runtime is covered by test_worker_v221.py.
+pytestmark = [*(pytestmark if isinstance(pytestmark, list) else [pytestmark]),
+              pytest.mark.usefixtures("legacy_v220_admissions")]
+
 
 def bundle(client):
     options = {**DEFAULT_OPTIONS, "profiles": [

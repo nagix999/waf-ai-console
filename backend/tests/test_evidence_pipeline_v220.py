@@ -12,7 +12,7 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy import select
 
-from app.agent import evidence_pipeline, legacy_prompts_v219
+from app.agent import evidence_pipeline, legacy_prompts_v219, legacy_prompts_v220
 from app.models import Analysis, ProductionPromotion, TestRun as NamedRun, VLLMProfile
 from app.services.analysis import AnalysisIngestError
 from app.services.analysis_retries import (
@@ -30,6 +30,14 @@ from test_production_promotion import BASE as PRODUCTION_BASE, qualified
 from test_validation_data import login
 
 pytestmark = pytest.mark.usefixtures("registered_vllm_target")
+
+
+@pytest.fixture(autouse=True)
+def frozen_v220_candidate_rules(monkeypatch):
+    # These tests recreate the v2.20 release's actual candidate admission and
+    # promotion. Do not turn a v2.21 snapshot into v2.20 by rewriting hashes or
+    # encrypted provenance; select the frozen rules before admission instead.
+    monkeypatch.setattr("app.agent.prompts", legacy_prompts_v220)
 
 
 def build_prompt(client, *, legacy=False):

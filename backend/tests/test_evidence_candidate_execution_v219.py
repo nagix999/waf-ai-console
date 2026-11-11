@@ -18,6 +18,10 @@ from test_security_analysis_v3 import output
 IDENTIFIERS = {"source_system", "event_id", "company_name", "waf_vendor"}
 
 
+# Archived v2.20 worker replay; current runtime is covered by test_worker_v221.py.
+pytestmark = pytest.mark.usefixtures("legacy_v220_admissions")
+
+
 @pytest.mark.usefixtures("registered_vllm_target")
 @pytest.mark.parametrize("rules,catalog_version", [
     (legacy_prompts_v218, "evidence-selection-v1"),
