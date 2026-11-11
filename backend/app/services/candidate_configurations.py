@@ -38,6 +38,8 @@ def snapshot_from_run(run, crypto, *, include_parser=None):
     if include_parser is None:
         stored = run.configuration_snapshot_json
         include_parser = not (isinstance(stored, dict) and stored.get("schema_version") == 1)
+    if prompt.evidence_pipeline is not None:
+        include_parser = True
     snapshot = {
         "schema_version": 2 if include_parser else 1,
         "primary": {"profile_id": run.profile_id, "profile_fingerprint": run.profile_fingerprint},
@@ -54,6 +56,9 @@ def snapshot_from_run(run, crypto, *, include_parser=None):
     }
     if include_parser:
         snapshot["parser"] = parser_metadata(read_parser_snapshot(crypto, run))
+    if prompt.evidence_pipeline is not None:
+        snapshot["schema_version"] = 3
+        snapshot["evidence_pipeline"] = prompt.evidence_pipeline
     return snapshot
 
 

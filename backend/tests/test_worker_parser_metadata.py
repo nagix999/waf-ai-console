@@ -77,11 +77,13 @@ def test_parser_status_is_recorded_without_claiming_an_extractor_call(
             # v2.19 retains v2.17 routing: incomplete parsing alone must not
             # send the same input through a second model.
             assert [call["agent_name"] for call in calls] == ["waf-primary"]
-            assert analysis.result_json["policy"]["fixed_rules_version"] == "waf-system-v2.19"
+            assert analysis.result_json["policy"]["fixed_rules_version"] == "waf-system-v2.20"
             assert analysis.result_json["verifier"]["executed"] is False
             assert analysis.result_json["verifier"]["reasons"] == []
             for call in calls:
                 document = json.loads(call["user_input"])
-                assert document["event"]["payload"] == raw
+                assert "payload" not in document["event"]
+                assert "".join(item["excerpt"] for item in document["evidence_candidates"]["items"]
+                               if item["field"] == "payload") == raw
                 assert document["generic_http_parser_hints"]["parse_status"] == parse_status
             assert ("parser_incomplete" in analysis.result_json["diagnostics"]["input_signals"]) is (parse_status != "success")

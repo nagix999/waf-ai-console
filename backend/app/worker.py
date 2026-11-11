@@ -638,7 +638,8 @@ def _execute_grounded_agent(*, analysis, raw_payload, parsed, input_truncated,
                             submitted_payload_spans=None, assessment_enabled=False, semantic_enabled=False,
                             security_analysis_enabled=False, fixed_rules_version="waf-system-v2.15", **kwargs):
     from .agent.contracts import (EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput,
-                                 SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216)
+                                 SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216,
+                                 SecurityAnalysisOutputV220)
     from .agent.evidence_candidates import (
         REPAIR_INSTRUCTIONS as SELECTION_REPAIR_INSTRUCTIONS,
         resolve_selection, apply_selection_corrections, selection_version_for_rules,
@@ -652,13 +653,15 @@ def _execute_grounded_agent(*, analysis, raw_payload, parsed, input_truncated,
     catalog = document.get("evidence_candidates")
     selection_version = selection_version_for_rules(fixed_rules_version)
     selecting = isinstance(catalog, dict) and catalog.get("version") == selection_version
-    if security_analysis_enabled and fixed_rules_version not in {"waf-system-v2.15", "waf-system-v2.16", "waf-system-v2.17", "waf-system-v2.18", "waf-system-v2.19"}:
+    if security_analysis_enabled and fixed_rules_version not in {"waf-system-v2.15", "waf-system-v2.16", "waf-system-v2.17", "waf-system-v2.18", "waf-system-v2.19", "waf-system-v2.20"}:
         raise WorkerExecutionError("unsupported_security_output_contract")
     if fixed_rules_version in IDENTIFIER_FILTER_RULES_VERSIONS and not selecting:
         # Never bypass the pinned exclusion policy via legacy field/excerpt
         # output when a new execution's catalog is missing or mismatched.
         raise WorkerExecutionError("evidence_selection_catalog_invalid")
-    security_model = SecurityAnalysisOutput if fixed_rules_version == "waf-system-v2.15" else SecurityAnalysisOutputV216
+    linked = fixed_rules_version == "waf-system-v2.20"
+    security_model = (SecurityAnalysisOutputV220 if linked else SecurityAnalysisOutput
+                      if fixed_rules_version == "waf-system-v2.15" else SecurityAnalysisOutputV216)
     selection_model = (security_model if security_analysis_enabled else SemanticAssessmentOutput if semantic_enabled
                        else EvidenceAssessmentOutput if assessment_enabled else EvidenceSelectionOutput)
     repair_instructions = SELECTION_REPAIR_INSTRUCTIONS if selecting else REPAIR_INSTRUCTIONS
@@ -678,6 +681,7 @@ def _execute_grounded_agent(*, analysis, raw_payload, parsed, input_truncated,
     requires_review, resolution_count = False, 0
     skipped_reason, context_only = None, False
     interpretation_conflict = False
+    original_relations = []
     for attempt in range(2):
         try:
             call = asyncio.run(execute_structured_agent(**kwargs))
@@ -694,6 +698,8 @@ def _execute_grounded_agent(*, analysis, raw_payload, parsed, input_truncated,
             if selecting:
                 if not attempt:
                     original_selection = raw_output.legacy_bridge() if security_analysis_enabled else raw_output
+                    if linked:
+                        original_relations = [item.model_dump(mode="json") for item in raw_output.evidence_relations]
                     interpretation_conflict = bool(security_analysis_enabled and raw_output.interpretation_conflict)
                     selection = original_selection
                 else:
@@ -725,7 +731,8 @@ def _execute_grounded_agent(*, analysis, raw_payload, parsed, input_truncated,
                         "source_resolutions": resolutions,
                         "rejected_evidence": issues,
                         **({"assessment": {**selection.model_dump(mode="json", include={"evidence", "decision_issue"}),
-                            **({"interpretation_conflict": interpretation_conflict} if security_analysis_enabled else {})}}
+                            **({"interpretation_conflict": interpretation_conflict} if security_analysis_enabled else {}),
+                            **({"evidence_relations": original_relations} if linked else {})}}
                            if selecting and assessment_enabled and call.succeeded else {}),
                         **({"correction_user_input": kwargs["user_input"],
                             "correction_instructions": repair_instructions} if attempt else {})})
@@ -750,6 +757,29 @@ def _execute_grounded_agent(*, analysis, raw_payload, parsed, input_truncated,
                   # No nested schema-repair loop on this one extra model call.
                   "output_validation_max_attempts": 1,
                   "output_model": EvidenceSelectionCorrectionOutput if selecting else EvidenceCorrectionOutput}
+    relation_rejected = 0
+    if call.succeeded and linked and original_relations:
+        from .agent.evidence_relations import assert_relation_sources, EvidenceRelationsError
+        invalid_representatives = _invalid_relation_representatives(
+            original_relations, selection, resolutions, call.output)
+        if requires_review:
+            # Citation-only repair cannot certify an explanation that the
+            # correcting model explicitly says needs fresh interpretation.
+            invalid_representatives.update(item["representative_index"] for item in original_relations)
+        try:
+            assert_relation_sources(selection.model_dump(mode="json"), resolutions, relations=original_relations)
+        except EvidenceRelationsError:
+            invalid_representatives.update(item["representative_index"] for item in original_relations)
+            requires_review = True
+        if invalid_representatives:
+            # Keep the exact model/history output for audit, but never expose
+            # an integrated claim whose essential source did not survive.
+            history[-1]["excluded_relation_indexes"] = sorted(invalid_representatives)
+            accepted = [item for source, item in zip(resolutions, call.output.evidence, strict=True)
+                        if source["index"] not in invalid_representatives]
+            relation_rejected = len(call.output.evidence) - len(accepted)
+            call = replace(call, output=call.output.model_copy(update={"evidence": accepted}))
+            requires_review = True
     if call.succeeded:
         call = _ground_agent_call(call, analysis, raw_payload, parsed, sources=sources, force_inconclusive=requires_review)
         if security_analysis_enabled and (requires_review or call.telemetry["evidence_grounding"].get("downgraded_to_inconclusive")):
@@ -769,7 +799,31 @@ def _execute_grounded_agent(*, analysis, raw_payload, parsed, input_truncated,
              "attempts": attempts}
     return replace(call, grounding_history=history,
                    telemetry={**call.telemetry, "evidence_grounding_retry": retry,
+                              **({"evidence_relation_rejected_count": relation_rejected} if linked else {}),
                               "failure_category": failure_category(call)})
+
+
+def _invalid_relation_representatives(relations, selection, resolutions, output):
+    """Reject dependent claims, not just their missing quote. No semantic rules."""
+    resolved = {source["index"]: item for source, item in zip(resolutions, output.evidence, strict=True)}
+    invalid = set()
+    # At most five relationships and selections, so propagation is bounded.
+    for _ in range(5):
+        previous = set(invalid)
+        for relation in relations:
+            representative = relation["representative_index"]
+            indexes = [representative, *relation["related_indexes"]]
+            if any(index not in resolved or index in invalid for index in indexes):
+                invalid.add(representative)
+                continue
+            identities = {(resolved[index].field, resolved[index].excerpt,
+                           resolved[index].interpretation_ko, selection.evidence[index].supports)
+                          for index in indexes}
+            if len(identities) != len(indexes):
+                invalid.add(representative)
+        if previous == invalid:
+            break
+    return invalid
 
 
 def process_moduagent(
@@ -982,8 +1036,14 @@ def _process_moduagent_steps(
                 raise WorkerExecutionError("agent_context_budget_too_small") from None
             raise
         analysis.input_truncated = agent_input.input_truncated
+        pipeline_history = ({"evidence_pipeline": prompt.evidence_pipeline}
+                            if prompt.evidence_pipeline is not None else {})
+        pipeline_metadata = ({"evidence_pipeline_version": prompt.evidence_pipeline["version"],
+                              "evidence_pipeline_hash": prompt.evidence_pipeline["sha256"]}
+                             if prompt.evidence_pipeline is not None else {})
         step_output(crypto, step, {"user_input": agent_input.text,
-                                   "retained_payload_spans": agent_input.retained_payload_spans}, {
+                                   "retained_payload_spans": agent_input.retained_payload_spans,
+                                   **pipeline_history}, {
             "input_schema": schema_metadata(schema_snapshot),
             "decoder_version": DECODER_VERSION,
             "input_truncated": agent_input.input_truncated,
@@ -992,6 +1052,7 @@ def _process_moduagent_steps(
             "evidence_repair_reserved_tokens": REPAIR_RESERVED_TOKENS,
             "shared_role_input": True,
             "evidence_source_scope": "submitted_raw_spans",
+            **pipeline_metadata,
         })
 
     with measured_step(
@@ -1176,8 +1237,22 @@ def _process_moduagent_steps(
             result["policy"].update(decision_evidence_ids=decision_evidence_ids(final_output, evidence),
                 **verifier_policy_metadata(prompt.fixed_rules_version))
             result = validate_new_result(result)
-        step_output(crypto, step, result, {
+        encrypted_result = result
+        relation_metadata = {}
+        if prompt.fixed_rules_version == "waf-system-v2.20":
+            from .agent.evidence_relations import build_evidence_relations, EvidenceRelationsError
+            try:
+                links = build_evidence_relations(primary, verifier, evidence=result["evidence"])
+            except EvidenceRelationsError:
+                raise WorkerExecutionError("evidence_relations_invalid") from None
+            # Internal, encrypted administrator view only. Never extend the
+            # closed public result or turn an evidence link into a verdict.
+            encrypted_result = {**result, "evidence_relations": links}
+            relation_metadata = {"evidence_relations_version": links["version"],
+                                 "evidence_relation_group_count": len(links["groups"])}
+        step_output(crypto, step, encrypted_result, {
             "agreement": finalization.agreement, "verifier_executed": finalization.verifier_executed,
+            **relation_metadata,
         })
         analysis.verdict = final_output.verdict.value
         analysis.severity = final_output.threat_analysis.severity.value

@@ -6,7 +6,8 @@ tests still exercise an invalid source instead of accidentally choosing one.
 import json
 
 from app.agent.contracts import (EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput,
-                                 SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216)
+                                 SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216,
+                                 SecurityAnalysisOutputV220)
 from app.agent.evidence import EvidenceSourceResolver
 
 
@@ -14,12 +15,22 @@ def model_output(output, kwargs):
     if output is None:
         return None
     contract = kwargs.get("output_model")
-    if contract not in (EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput, SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216):
+    if contract not in (EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput, SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220):
         return output
     document = json.loads(kwargs["user_input"])
     event = document["event"]
-    sources = EvidenceSourceResolver(event["payload"], event)
     candidates = document["evidence_candidates"]["items"]
+    if "payload" in event:
+        raw = event["payload"]
+    else:
+        # Synthetic stubs only: retain exact offsets and visibly absent gaps,
+        # never concatenate head/tail into a fictitious complete request.
+        blocks = [item for item in candidates if item["field"] == "payload"]
+        characters = ["\x00"] * max((item["end"] for item in blocks), default=0)
+        for item in blocks:
+            characters[item["start"]:item["end"]] = item["excerpt"]
+        raw = "".join(characters)
+    sources = EvidenceSourceResolver(raw, event)
 
     def choose(item):
         if not sources.matches(item.field, item.excerpt):
@@ -32,11 +43,11 @@ def model_output(output, kwargs):
         value["corrections"] = [{"index": item.index, "source_id": choose(item)} for item in output.corrections]
     else:
         value["evidence"] = [{"source_id": choose(item), "interpretation_ko": item.interpretation_ko} for item in output.evidence]
-        if contract in (EvidenceAssessmentOutput, SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216):
+        if contract in (EvidenceAssessmentOutput, SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220):
             for item in value["evidence"]:
                 item["supports"] = "context"  # Explicit synthetic stub value, never inferred from verdict.
             value["decision_issue"] = None
-        if contract in (SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216):
+        if contract in (SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220):
             # Explicit synthetic contract adapter, not production backfill.
             relation = value["signature_assessment"]["relation"]
             value["signature_assessment"] = {
@@ -48,7 +59,7 @@ def model_output(output, kwargs):
             value["analyst_checks"] = [{**check, "purpose": check.get("purpose") or (
                 "decision_condition" if value["verdict"] == "inconclusive" else "impact_followup")} for check in value["analyst_checks"]]
             value["recommended_checks"] = []
-        if contract in (SecurityAnalysisOutput, SecurityAnalysisOutputV216):
+        if contract in (SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220):
             # The synthetic wire response is explicitly constructed for v3;
             # production never derives a direction from the final verdict.
             for retired in ("recommended_checks", "analyst_checks", "conflicting_evidence", "tuning_recommendation"):
@@ -56,4 +67,6 @@ def model_output(output, kwargs):
             value["interpretation_conflict"] = False
             if value["summary_ko"].strip().startswith(("정탐입니다", "오탐입니다", "판정을 보류", "현재 분석에서는 정탐", "현재 분석에서는 오탐")):
                 value["summary_ko"] = "요청에 포함된 값과 실제 사용 문맥을 비교했습니다."
+        if contract is SecurityAnalysisOutputV220:
+            value["evidence_relations"] = []
     return contract.model_validate(value)

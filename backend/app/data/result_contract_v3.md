@@ -6,11 +6,11 @@ Production configuration upgrade. The implementation starts from `eea2527`.
 ## New executions
 
 Candidates pinned to `waf-system-v2.15`, `waf-system-v2.16`, `waf-system-v2.17`,
-`waf-system-v2.18` or `waf-system-v2.19` generate
+`waf-system-v2.18`, `waf-system-v2.19` or `waf-system-v2.20` generate
 `waf-analysis-v3`. Approved
 Production instructions, already queued jobs and failed-job retries retain
 their encrypted pinned instructions. In particular, v2.14 remains available
-unchanged; the v2.15, v2.16, v2.17 and v2.18 prompt modules are also frozen byte-for-byte. Test and
+unchanged; the v2.15, v2.16, v2.17, v2.18 and v2.19 prompt modules are also frozen byte-for-byte. Test and
 Production share the selected instruction content; changing
 Production still requires an approved official evaluation and administrator
 review/apply.
@@ -56,6 +56,46 @@ order puts all analysis first; v2.16 keeps signature comparison, evidence and
 summary first but moves verdict-dependent severity and decision conditions
 after the verdict. This changes no pinned legacy schema or analyst-facing
 analysis-then-conclusion layout.
+
+## Submitted-source blocks and evidence links candidate v2.20
+
+V2.20 uses `agent-input-v2` and `evidence-selection-v3`. Every submitted
+payload character belongs to one exact source block of at most 300 characters;
+there is no additional `event.payload` copy. The full serialized input budget
+and the existing c1..c999 source ID format remain bounded. Omitted original
+ranges stay omitted and must not be read as adjacent. A complete source catalog
+does not mean the complete original payload fit the model context. Metadata
+candidate omission is explicitly distinguished from payload coverage. Decoder
+hints refer only to actual submitted source occurrences and remain derived,
+untrusted observations rather than execution evidence.
+
+The independent internal `SecurityAnalysisOutputV220` adds only bounded
+`evidence_relations` indexes. Integrated explanations live in the existing
+representative evidence's `interpretation_ko`; related evidence keeps its own
+direction and contribution. Both the representative and related sources count
+toward the existing five-item role limit. The server maps links through final
+corrected source IDs and canonical role origins. Missing essential sources,
+explicit reanalysis requests and ambiguous canonical self-links cannot leave
+an accepted integrated explanation without its required sources. Independent
+valid evidence and encrypted original outputs are preserved.
+
+The public v3 result and request schemas are unchanged. Links are stored only
+in the encrypted finalize output as `evidence-relations-v1`. An audited,
+administrator-only internal read endpoint returns validated references to the
+canonical evidence; it is not a service API Key capability or a public OpenAPI
+extension. An unavailable link record falls back to individual evidence in the
+UI, without inventing or discarding explanations. External v3 consumers receive
+the evidence and explanations, but not machine-readable link groups. The old
+same-source duplicate editor presentation is not repurposed as this structure.
+
+Prompt snapshot v2, candidate configuration v3 and execution snapshot v5 pin
+the `evidence-pipeline-v1` implementation manifest in existing storage. Changed
+artifacts invalidate the new candidate, baseline restoration and retry instead
+of silently changing their meaning. Older snapshots keep their original
+contracts and instructions. Parser engines and independent Verifier policy
+remain unchanged. No DB migration, new runtime dependency, default additional
+LLM call, or automatic Production activation is introduced. Offline synthetic
+tests do not establish real-model quality, token savings or latency reduction.
 
 ## Removed generation work
 

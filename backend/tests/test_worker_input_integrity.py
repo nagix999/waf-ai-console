@@ -72,7 +72,9 @@ def test_integrity_hints_and_guard_preserve_independent_roles_and_history(
     assert len(calls) == calls_expected
     for call in calls:
         document = json.loads(call["user_input"])
-        assert document["event"]["payload"] == raw
+        assert "payload" not in document["event"]
+        assert "".join(item["excerpt"] for item in document["evidence_candidates"]["items"]
+                       if item["field"] == "payload") == raw
         assert document["request_integrity"]["issues"]
         assert "expected_verdict" not in document["event"] and "primary" not in document
         assert "request_integrity" in call["instructions"]

@@ -21,7 +21,7 @@ NEW_RULES = "waf-system-v2.17"
 
 
 @pytest.mark.parametrize("status", ["partial", "failed"])
-@pytest.mark.parametrize("version", [NEW_RULES, "waf-system-v2.18", "waf-system-v2.19"])
+@pytest.mark.parametrize("version", [NEW_RULES, "waf-system-v2.18", "waf-system-v2.19", "waf-system-v2.20"])
 def test_new_rules_keep_parser_incompleteness_diagnostic_only(status, version):
     context = VerifierPolicyContext("D", status, False, fixed_rules_version=version)
     assert verifier_reasons(output(), context) == []
@@ -29,14 +29,14 @@ def test_new_rules_keep_parser_incompleteness_diagnostic_only(status, version):
 
 @pytest.mark.parametrize("status", ["partial", "failed"])
 @pytest.mark.parametrize("version", [None, "waf-system-v2.14", "waf-system-v2.15",
-                                    "waf-system-v2.16", "waf-system-v2.20", "unknown"])
+                                    "waf-system-v2.16", "waf-system-v2.21", "unknown"])
 def test_missing_legacy_and_unknown_versions_retain_original_parser_trigger(status, version):
     context = VerifierPolicyContext("D", status, False, fixed_rules_version=version)
     assert verifier_reasons(output(), context) == ["parser_incomplete"]
 
 
 @pytest.mark.parametrize("status", ["partial", "failed"])
-@pytest.mark.parametrize("version", [NEW_RULES, "waf-system-v2.18", "waf-system-v2.19"])
+@pytest.mark.parametrize("version", [NEW_RULES, "waf-system-v2.18", "waf-system-v2.19", "waf-system-v2.20"])
 @pytest.mark.parametrize("case,expected", [
     ("hold", "primary_inconclusive"),
     ("confidence", "low_confidence"),
@@ -139,7 +139,12 @@ def test_pinned_worker_keeps_raw_parser_history_but_changes_only_new_verifier_ro
     assert [call["agent_name"] for call in calls] == ["waf-primary"] + (["waf-verifier"] if expected_calls == 2 else [])
     for call in calls:
         document = json.loads(call["user_input"])
-        assert document["event"]["payload"] == raw
+        if rules.FIXED_RULES_VERSION == "waf-system-v2.20":
+            assert "payload" not in document["event"]
+            assert "".join(item["excerpt"] for item in document["evidence_candidates"]["items"]
+                           if item["field"] == "payload") == raw
+        else:
+            assert document["event"]["payload"] == raw
         assert document["generic_http_parser_hints"]["parse_status"] == status
         assert "primary" not in document
     if expected_calls == 2:

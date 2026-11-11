@@ -7,7 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from scripts import compare_security_analysis_v3 as comparison
-from app.agent.contracts import SecurityAnalysisOutput, SecurityAnalysisOutputV216, SemanticAssessmentOutput
+from app.agent.contracts import SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SemanticAssessmentOutput
 from app.agent.executor import AgentCallResult
 from app.config import Settings
 from app.database import Base, build_engine
@@ -58,7 +58,7 @@ def test_changed_frozen_contract_refuses_diagnostic_before_runtime(monkeypatch):
 
 def test_manifest_models_match_pinned_worker_contracts():
     assert comparison.wire_model_for_revision(comparison.frozen_diagnostic_revision()) is SecurityAnalysisOutput
-    assert comparison.wire_model_for_revision(comparison.prompts) is SecurityAnalysisOutputV216
+    assert comparison.wire_model_for_revision(comparison.prompts) is SecurityAnalysisOutputV220
     assert comparison.wire_model_for_revision(comparison.legacy_prompts_v214) is SemanticAssessmentOutput
     class Unknown:
         FIXED_RULES_VERSION = "unknown"
@@ -161,8 +161,11 @@ def test_mocked_comparison_preserves_source_and_aborts_quota(tmp_path, monkeypat
         if quota:
             return AgentCallResult(None, "synthetic-quota", None, "error", None, "synthetic-safe-error",
                                    {"error_summary": {"code": "openai_http_429"}})
-        if kwargs["output_model"] in {SecurityAnalysisOutput, SecurityAnalysisOutputV216}:
-            value = kwargs["output_model"].model_validate(output().model_dump(mode="json"))
+        if kwargs["output_model"] in {SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220}:
+            document = output().model_dump(mode="json")
+            if kwargs["output_model"] is SecurityAnalysisOutputV220:
+                document["evidence_relations"] = []
+            value = kwargs["output_model"].model_validate(document)
         elif kwargs["output_model"] is SemanticAssessmentOutput:
             value = SemanticAssessmentOutput.model_validate(output().legacy_bridge().model_dump(mode="json"))
         else:

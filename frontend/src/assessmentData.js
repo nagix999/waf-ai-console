@@ -10,20 +10,21 @@ export const isResultV3 = result => result?.schema_version === "waf-analysis-v3"
 
 // Allowlist only the saved presentation record. Never classify older evidence
 // from a verdict, or read intermediate role outputs to manufacture a cause.
-export function assessmentView(result) {
+export function assessmentView(result, { preserveEvidence = false } = {}) {
   const modern = isResultV3(result);
   const assessment = modern ? result : result?.analyst_assessment;
   if (!record(assessment) || (!modern && assessment.version !== "analyst-assessment-v1")) return null;
   const evidence = [], seen = new Map(), references = new Map();
-  for (const item of presentationItems(assessment, result.evidence_presentation)) {
+  for (const item of preserveEvidence && modern ? list(assessment.evidence) : presentationItems(assessment, result.evidence_presentation)) {
     if (!record(item) || !["field", "excerpt", "interpretation_ko"].every(key => typeof item[key] === "string" && item[key].trim())) continue;
     // Historical directions were recorded by the model. Translate only those
     // explicit values; never infer a direction from prose or the final verdict.
     const direction = modern ? item.supports : ({ true_positive: "attack_request", false_positive: "normal_request", context: "context" })[item.supports];
     const supports = typeof direction === "string" && Object.hasOwn(evidenceLabels, direction) ? direction : "unclassified";
-    const key = JSON.stringify([item.field, item.excerpt, item.interpretation_ko, supports]);
+    const key = JSON.stringify([item.field, item.excerpt, item.interpretation_ko, supports, ...(preserveEvidence && modern ? [item.evidence_id] : [])]);
     if (!seen.has(key)) {
       seen.set(key, { number: evidence.length + 1, field: item.field, excerpt: item.excerpt, interpretation_ko: analystText(item.interpretation_ko), supports });
+      if (preserveEvidence && modern) Object.assign(seen.get(key), { evidence_id: item.evidence_id, origins: item.origins });
       evidence.push(seen.get(key));
     }
     for (const id of item._evidence_ids || [item.evidence_id]) {

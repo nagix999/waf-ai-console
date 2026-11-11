@@ -31,7 +31,7 @@ function clock() {
 function harness(id = "synthetic-a", sharedClock = clock()) {
   const requests = [];
   const updates = [];
-  const api = Object.fromEntries(["analysis", "evaluationLabels", "agentRuns"].map((name) => [name, (requestedId, options) => new Promise((resolve, reject) => {
+  const api = Object.fromEntries(["analysis", "evaluationLabels", "agentRuns", "evidenceRelations"].map((name) => [name, (requestedId, options) => new Promise((resolve, reject) => {
     // Intentionally ignore abort at the transport layer to exercise stale-result
     // guards too, not just fetch's normal AbortError behavior.
     requests.push({ name, id: requestedId, signal: options.signal, resolve, reject, settled: false });
@@ -249,5 +249,50 @@ test("a stale running detail does not keep Agent polling forever while detail lo
   await h.answer("analysis", analysis("processing")); await h.answer("agentRuns", runs("running"));
   await h.clock.advance(3000);
   assert.ok(h.next("analysis")); assert.ok(h.next("agentRuns"));
+  h.loader.dispose(); assert.equal(h.clock.count, 0);
+});
+
+test("source links are lazy, terminal-v3 only, cached across evidence tabs and never fetch full Agent I/O", async () => {
+  const h = harness(); h.loader.start(); h.loader.setEvidenceVisible(true);
+  await h.answer("analysis", analysis("processing", { result: { schema_version: "waf-analysis-v3" } }));
+  await h.answer("evaluationLabels", history());
+  assert.equal(h.calls("evidenceRelations").length, 0);
+  await h.clock.advance(3000);
+  await h.answer("analysis", analysis("completed", { result: { schema_version: "waf-analysis-v3" } }));
+  await h.answer("evaluationLabels", history());
+  const mapping = { version: "evidence-relations-v1", groups: [] };
+  await h.answer("evidenceRelations", mapping);
+  h.loader.setEvidenceVisible(false); h.loader.setEvidenceVisible(true);
+  await h.clock.advance(60000);
+  assert.deepEqual(h.state.evidenceRelations, mapping);
+  assert.equal(h.calls("evidenceRelations").length, 1);
+  assert.equal(h.calls("agentRuns").length, 0);
+  h.loader.dispose();
+});
+
+test("legacy results never request source links", async () => {
+  const h = harness(); h.loader.start(); h.loader.setEvidenceVisible(true);
+  await h.answer("analysis", analysis("completed", { result: { schema_version: "waf-analysis-v2" } }));
+  await h.answer("evaluationLabels", history());
+  h.loader.refreshRelations();
+  assert.equal(h.calls("evidenceRelations").length, 0);
+  h.loader.dispose();
+});
+
+test("leaving source tabs aborts link reads and ignores late data; retry is independent of analysis", async () => {
+  const h = harness(); h.loader.start(); h.loader.setEvidenceVisible(true);
+  await h.answer("analysis", analysis("completed", { result: { schema_version: "waf-analysis-v3" } }));
+  await h.answer("evaluationLabels", history());
+  const stale = h.next("evidenceRelations");
+  h.loader.setEvidenceVisible(false);
+  assert.equal(stale.signal.aborted, true);
+  stale.resolve({ version: "stale", groups: [] }); await flush();
+  assert.equal(h.state.evidenceRelations, null);
+  h.loader.setEvidenceVisible(true); await h.fail("evidenceRelations", 403);
+  assert.ok(h.state.relationsError);
+  h.loader.refreshRelations();
+  await h.answer("evidenceRelations", { version: "evidence-relations-v1", groups: [] });
+  assert.equal(h.state.relationsError, "");
+  assert.equal(h.calls("analysis").length, 1);
   h.loader.dispose(); assert.equal(h.clock.count, 0);
 });

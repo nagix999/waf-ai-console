@@ -153,10 +153,15 @@ def test_worker_keeps_pinned_v215_input_and_candidate_uses_new_observation(
     async def fake(**kwargs):
         document = json.loads(kwargs["user_input"])
         inputs.append(document)
-        candidate = next(item for item in document["evidence_candidates"]["items"] if item["field"] == "payload.body")
+        body = '{"page":2,"page":2}'
+        candidate = next(item for item in document["evidence_candidates"]["items"]
+                         if item["field"] in {"payload", "payload.body"} and body in item["excerpt"])
         value = output("normal_request", verdict="false_positive", source=candidate["source_id"])
         value.summary_ko = "요청 본문의 페이지 번호가 같은 값으로 반복되어 있습니다."
-        value = kwargs["output_model"].model_validate(value.model_dump(mode="json"))
+        values = value.model_dump(mode="json")
+        if selected.FIXED_RULES_VERSION == "waf-system-v2.20":
+            values["evidence_relations"] = []
+        value = kwargs["output_model"].model_validate(values)
         return AgentCallResult(value, "synthetic-duplicate", None, "completed", None, None, {})
     monkeypatch.setattr(worker, "execute_structured_agent", fake)
     with client.app.state.session_factory() as db:

@@ -47,10 +47,11 @@ class ExecutionSnapshot(BaseModel):
     # Safe, fixed-enum configuration only. Historical v1-v3 always mean the
     # immutable generic-http-v3 parser, never an active or latest version.
     parser: dict | None = None
+    evidence_pipeline: dict | None = None
 
     @model_validator(mode="after")
     def validate_roles(self):
-        if self.schema_version not in {1, 2, 3, 4}:
+        if self.schema_version not in {1, 2, 3, 4, 5}:
             raise ValueError("execution_snapshot_version_invalid")
         if self.schema_version >= 2 and (not self.verifier_profile_id or not self.verifier_profile_fingerprint):
             raise ValueError("execution_snapshot_verifier_missing")
@@ -58,15 +59,19 @@ class ExecutionSnapshot(BaseModel):
             raise ValueError("execution_snapshot_roles_invalid")
         if self.schema_version < 3 and self.evidence_editor is not None:
             raise ValueError("execution_snapshot_editor_invalid")
-        if (self.schema_version == 4) != (self.parser is not None):
+        if (self.schema_version >= 4) != (self.parser is not None):
             raise ValueError("execution_snapshot_parser_invalid")
+        if (self.schema_version == 5) != (self.evidence_pipeline is not None):
+            raise ValueError("execution_snapshot_pipeline_invalid")
         return self
 
 
 def make_execution_snapshot(analysis, profile, prompt, threshold, verifier_profile=None, evidence_editor=None, *, crypto=None) -> ExecutionSnapshot:
     verifier_profile = verifier_profile or profile
     return ExecutionSnapshot(
-        schema_version=4, verifier_profile_id=verifier_profile.id, evidence_editor=evidence_editor,
+        schema_version=5 if prompt.evidence_pipeline is not None else 4,
+        evidence_pipeline=prompt.evidence_pipeline,
+        verifier_profile_id=verifier_profile.id, evidence_editor=evidence_editor,
         verifier_profile_fingerprint=profile_fingerprint(verifier_profile),
         execution_mode="moduagent", profile_id=profile.id, profile_fingerprint=profile_fingerprint(profile),
         verifier_confidence_threshold=threshold, instructions_hash=prompt.instructions_hash,
@@ -88,6 +93,8 @@ def validate_snapshot_binding(analysis, crypto, snapshot):
             or snapshot.input_schema_version_id != analysis.input_schema_version_id
             or snapshot.source_system != analysis.source_system or snapshot.event_id != analysis.event_id
             or snapshot.event_fingerprint != analysis.event_fingerprint):
+        raise RetryError("retry_execution_snapshot_invalid")
+    if snapshot.evidence_pipeline != prompt.evidence_pipeline:
         raise RetryError("retry_execution_snapshot_invalid")
     if snapshot.schema_version >= 4:
         if snapshot.parser != parser:

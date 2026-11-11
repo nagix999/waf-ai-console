@@ -11,6 +11,7 @@ export function emptyDetailState(id) {
     id, detail: null, error: "", loading: false,
     labelHistory: null, labelHistoryError: "", labelsLoading: false,
     runs: null, runsError: "", runsLoading: false,
+    evidenceRelations: null, relationsError: "", relationsLoading: false,
   };
 }
 
@@ -81,6 +82,8 @@ export function createDetailLoader({ id, api, onChange, setTimer = setTimeout, c
   let state = emptyDetailState(id);
   let disposed = false;
   let agentVisible = false;
+  let evidenceVisible = false;
+  const canReadRelations = () => state.detail?.status === "completed" && state.detail?.result?.schema_version === "waf-analysis-v3";
 
   function update(values) {
     if (disposed) return;
@@ -112,6 +115,10 @@ export function createDetailLoader({ id, api, onChange, setTimer = setTimeout, c
     (options) => api.agentRuns(id, options),
     "runs", "runsError", "runsLoading", () => agentVisible && isRunning(state.detail) && !state.error,
   );
+  const relations = makeResource(
+    options => api.evidenceRelations(id, options),
+    "evidenceRelations", "relationsError", "relationsLoading", () => false,
+  );
   const detail = makeResource(
     (options) => api.analysis(id, options),
     "detail", "error", "loading", () => isRunning(state.detail),
@@ -120,6 +127,7 @@ export function createDetailLoader({ id, api, onChange, setTimer = setTimeout, c
         // Read history once more after observing completion; an earlier history
         // response may still contain running steps from before the final commit.
         if (agentVisible) agent.refresh();
+        if (evidenceVisible && canReadRelations()) relations.refresh();
         if (previous && next.status !== previous.status && isTerminal(next)) labels.refresh();
       }
     },
@@ -138,20 +146,31 @@ export function createDetailLoader({ id, api, onChange, setTimer = setTimeout, c
       if (visible) agent.refresh();
       else agent.cancel();
     },
+    setEvidenceVisible(visible) {
+      if (disposed || visible === evidenceVisible) return;
+      evidenceVisible = visible;
+      if (visible && canReadRelations() && state.evidenceRelations === null && !state.relationsError) relations.refresh();
+      else if (!visible) relations.cancel();
+    },
     refresh() {
       if (disposed) return;
       detail.refresh();
       labels.refresh();
       if (agentVisible) agent.refresh();
+      if (evidenceVisible && canReadRelations()) relations.refresh();
     },
     refreshAgent() {
       if (!disposed && agentVisible) agent.refresh();
+    },
+    refreshRelations() {
+      if (!disposed && evidenceVisible && canReadRelations()) relations.refresh();
     },
     dispose() {
       disposed = true;
       detail.cancel();
       labels.cancel();
       agent.cancel();
+      relations.cancel();
     },
   };
 }

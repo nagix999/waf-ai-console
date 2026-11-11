@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 
 from app import worker
+from app.agent import legacy_prompts_v219
 from app.models import Analysis, ParserJob, ProductionPromotion, TestRun as Run
 from app.services.analysis_retries import RetryError, load_execution_snapshot
 from app.services.candidate_configurations import configuration_digest, verify_configuration
@@ -16,6 +17,8 @@ from app.services.parser_engine import CAPTURE_ENGINE, DEFAULT_OPTIONS
 from app.services.parser_versions import (BASELINE_ID, activate_parser_version, create_version,
                                          legacy_parser_snapshot, parser_metadata, pin_parser, read_parser_snapshot)
 from app.result_contracts import validate_new_result
+from app.services.prompt_policies import get_policy_version
+from app.services.prompt_snapshots import _build_snapshot
 from test_candidate_configurations import candidate, direct
 from test_production_promotion import BASE, qualified
 from test_validation_data import login
@@ -23,6 +26,15 @@ from test_analysis_retries_keys import failed_fixture, profile_fixture, retry
 from test_result_contract_v3 import result_fixture
 
 pytestmark = pytest.mark.usefixtures("registered_vllm_target")
+
+
+def historical_prompt(db, crypto, holder):
+    """Seed an actual historical contract, not a downgraded v2.20 artifact."""
+    prompt = _build_snapshot(get_policy_version(db, holder.prompt_policy_version_id), crypto,
+                             rules=legacy_prompts_v219)
+    holder.prompt_version = prompt.prompt_version
+    holder.prompt_snapshot_ciphertext = crypto.encrypt_text(prompt.model_dump_json())
+    return prompt
 
 
 def version(client):
@@ -49,7 +61,7 @@ def test_candidate_parser_is_pinned_per_run_and_item_not_applied(client, event_p
     response = direct(client, {**event_payload, "vendor_score": 2}, {**candidate, "parser_version_id": identifier})
     assert response.status_code == 202, response.text
     run = response.json()
-    assert run["configuration_snapshot"]["schema_version"] == 2
+    assert run["configuration_snapshot"]["schema_version"] == 3
     assert run["configuration_snapshot"]["parser"]["version_id"] == identifier
     assert client.get(BASE).json()["configuration_hash"] == before["configuration_hash"]
     with client.app.state.session_factory() as db:
@@ -82,12 +94,16 @@ def test_legacy_configuration_hash_survives_new_registry_and_rejects_hidden_pars
     new_id = version(client)
     with client.app.state.session_factory() as db:
         saved = db.get(Run, run["id"])
+        old_prompt = historical_prompt(db, client.app.state.crypto, saved)
         original = copy.deepcopy(saved.configuration_snapshot_json)
         original.pop("parser")
+        original.pop("evidence_pipeline")
+        original["prompt"] = {key: getattr(old_prompt, key) for key in original["prompt"]}
         original["schema_version"] = 1
         saved.configuration_snapshot_json, saved.configuration_hash = original, configuration_digest(original)
         saved.parser_version_id = saved.parser_snapshot_json = None
         item = db.get(Analysis, run["items"][0]["analysis_id"])
+        historical_prompt(db, client.app.state.crypto, item)
         item.parser_version_id = item.parser_snapshot_json = None
         assert verify_configuration(saved, client.app.state.crypto, item) == original
         pin_parser(db, None, saved, version_id=new_id, selection_origin="candidate")
@@ -126,6 +142,10 @@ def test_existing_production_hash_remains_legacy_until_a_new_promotion(client, c
         baseline = db.scalar(select(ProductionPromotion).limit(1))
         old = copy.deepcopy(current["snapshot"])
         old.pop("parser")
+        old.pop("evidence_pipeline")
+        prompt = _build_snapshot(get_policy_version(db, old["prompt"]["policy_version_id"]),
+                                 client.app.state.crypto, rules=legacy_prompts_v219)
+        old["prompt"] = {key: getattr(prompt, key) for key in old["prompt"]}
         old["schema_version"] = 1
         baseline.snapshot_json, baseline.configuration_hash = old, configuration_digest(old)
         db.commit()
@@ -169,7 +189,7 @@ def test_retry_copies_original_parser_not_new_production_selection(client, event
         assert child.parser_snapshot_json == parent.parser_snapshot_json
         assert child.parser_version_id == parent.parser_version_id == BASELINE_ID
         snapshot = load_execution_snapshot(child, client.app.state.crypto)
-        assert snapshot.schema_version == 4 and snapshot.parser["version_id"] == BASELINE_ID
+        assert snapshot.schema_version == 5 and snapshot.parser["version_id"] == BASELINE_ID
         child.parser_version_id = child.parser_snapshot_json = None
         # Removing a genuinely non-default selected parser must fail closed.
         pin_parser(db, None, child, version_id=selected, selection_origin="candidate")
@@ -184,9 +204,12 @@ def test_legacy_execution_snapshot_never_claims_a_new_parser(client, event_paylo
     selected = version(client)
     with client.app.state.session_factory() as db:
         parent = db.get(Analysis, original)
+        prompt = historical_prompt(db, client.app.state.crypto, parent)
         document = json.loads(client.app.state.crypto.decrypt_text(parent.execution_snapshot_ciphertext))
         document["schema_version"] = 3
         document.pop("parser")
+        document.pop("evidence_pipeline")
+        document["instructions_hash"] = prompt.instructions_hash
         parent.execution_snapshot_ciphertext = client.app.state.crypto.encrypt_text(json.dumps(document))
         assert load_execution_snapshot(parent, client.app.state.crypto).schema_version == 3
         parent.parser_version_id = parent.parser_snapshot_json = None

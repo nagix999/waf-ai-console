@@ -9,6 +9,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { decisionTab, detailEvidence, decisionConditions } from "./decisionDetail.js";
 import { buildAnalysisReport, decodeReportText } from "./analysisReport.js";
 import { evidenceSections, signatureSummary, verifierDisagreed } from "./decisionSemantics.js";
+import { relationFixture, relationMapping, sharedRelationFixture } from "../scripts/evidence-relations-fixture.mjs";
 
 const bundle = buildSync({ entryPoints: [fileURLToPath(new URL("./AnalysisDecision.jsx", import.meta.url))], bundle: true, write: false, platform: "node", format: "cjs", packages: "external", jsx: "automatic", loader: { ".css": "empty", ".md": "text" }, logLevel: "silent" });
 const module = { exports: {} };
@@ -71,6 +72,33 @@ test("malformed historical excerpts do not crash React or become fabricated evid
   assert.equal(detailEvidence(result).length, 1);
   const html = render(EvidenceCards, { detail: { status: "completed", result } });
   assert.match(html, /kept/); assert.doesNotMatch(html, /unexpected/);
+});
+test("linked evidence shows the representative interpretation once, inert related sources and unchanged directions", () => {
+  const result = relationFixture(), html = render(EvidenceCards, { detail: { status: "completed", result }, relations: relationMapping(), onViewInput() {} });
+  assert.equal(html.split(result.evidence[1].interpretation_ko).length - 1, 1);
+  assert.equal(html.split(result.evidence[3].interpretation_ko).length - 1, 1);
+  assert.match(html, /함께 본 원문/); assert.match(html, /1차 분석/); assert.match(html, /추가 검증/);
+  assert.match(html, /direction-context/); assert.match(html, /direction-attack_request/); assert.match(html, /direction-normal_request/);
+  assert.match(html, /&lt;img/); assert.doesNotMatch(html, /<img|evidence-relations-v1|representative_evidence_id/);
+  assert.equal((html.match(/원문과 개별 해석 보기/g) || []).length, 2);
+});
+test("shared canonical relation renders one explanation and preserves both analyst-facing role labels", () => {
+  const { result, mapping } = sharedRelationFixture();
+  const html = render(EvidenceCards, { detail: { status: "completed", result }, relations: mapping, onViewInput() {} });
+  assert.equal((html.match(/decision-evidence-row has-linked-sources/g) || []).length, 1);
+  assert.equal(html.split(result.evidence[1].interpretation_ko).length - 1, 1);
+  assert.match(html, /1차 분석 \/ 추가 검증/);
+  assert.equal((html.match(/원문과 개별 해석 보기/g) || []).length, 1);
+  assert.match(html, /근거 2 원문 보기/);
+});
+test("unavailable or invalid relation records leave individual evidence visible with retry", () => {
+  const result = relationFixture();
+  for (const props of [{ relationsError: true }, { relations: { version: "invalid", groups: [] } }]) {
+    const html = render(EvidenceCards, { detail: { status: "completed", result }, ...props, onRetryRelations() {} });
+    assert.match(html, /개별 근거를 표시합니다/); assert.match(html, /다시 시도/);
+    assert.ok(html.includes(result.evidence[1].interpretation_ko));
+    assert.ok(html.includes(result.evidence[3].interpretation_ko));
+  }
 });
 test("identical issue/check text is shown once with source, purpose and evidence links retained", () => {
   const detail = fixture(), conditions = decisionConditions(detail);

@@ -4,7 +4,7 @@ import json
 import pytest
 
 from app import worker
-from app.agent import legacy_prompts_v218, prompts
+from app.agent import legacy_prompts_v218, legacy_prompts_v219 as prompts
 from app.agent.contracts import EvidenceSelectionCorrectionOutput, SecurityAnalysisOutputV216
 from app.agent.executor import AgentCallResult
 from app.agent.input_builder import build_agent_input

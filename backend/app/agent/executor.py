@@ -20,7 +20,8 @@ from ..services.provider_options import (
 )
 from .contracts import (CONTRACT_ERRORS, EvidenceCorrectionOutput, WAFAnalysisOutput,
                         EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput,
-                        SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216, legacy_output_schema)
+                        SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216,
+                        SecurityAnalysisOutputV220, legacy_output_schema)
 from .evidence_editor import EvidenceEditorOutput, MAX_SECONDS as EDITOR_SECONDS, MAX_OUTPUT_TOKENS as EDITOR_TOKENS
 from .result_editor import ResultEditorOutput
 
@@ -346,7 +347,8 @@ def _retry_instructions(attempts: list[dict[str, Any]], max_output_tokens: int,
                         output_model: type[BaseModel] = WAFAnalysisOutput) -> str:
     previous = attempts[-1]
     dependency = (_dependency_feedback_v216(previous["validation_issues"])
-                  if output_model is SecurityAnalysisOutputV216 and previous["retry_kind"] == "schema_correction" else None)
+                  if output_model in {SecurityAnalysisOutputV216, SecurityAnalysisOutputV220}
+                  and previous["retry_kind"] == "schema_correction" else None)
     if previous["retry_kind"] == "schema_correction":
         codes = {item.get("type") for item in previous["validation_issues"] if isinstance(item, dict)}
         if dependency and codes <= _DEPENDENCY_ERRORS_V216:
@@ -379,7 +381,7 @@ def _retry_instructions(attempts: list[dict[str, Any]], max_output_tokens: int,
         )
     if level == 3:
         feedback += "\n불필요한 수식어·일반론·이미 다른 필드에서 한 설명을 빼고 모든 객체와 배열을 끝까지 닫는다."
-    if output_model in {SecurityAnalysisOutput, SecurityAnalysisOutputV216}:
+    if output_model in {SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220}:
         # Keep pinned historical repair text intact while the smaller new
         # contract never asks the model to reconstruct retired output fields.
         feedback = feedback.replace("verdict, signature relation, severity와 tuning scope", "verdict, signature relation, severity와 supports")
@@ -440,7 +442,7 @@ async def _execute_structured_agent(
     output_model: type[WAFAnalysisOutput] | type[EvidenceCorrectionOutput] = WAFAnalysisOutput,
 ) -> AgentCallResult:
     _validate_attempt_limit(output_validation_max_attempts)
-    if output_model not in {WAFAnalysisOutput, EvidenceCorrectionOutput, EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput, SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216, EvidenceEditorOutput, ResultEditorOutput}:
+    if output_model not in {WAFAnalysisOutput, EvidenceCorrectionOutput, EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput, SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, EvidenceEditorOutput, ResultEditorOutput}:
         raise ValueError("unsupported_agent_output_contract")
     if issubclass(output_model, EvidenceCorrectionOutput) and output_validation_max_attempts != 1:
         raise ValueError("evidence_correction_requires_single_attempt")

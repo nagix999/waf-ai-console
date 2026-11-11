@@ -6,7 +6,7 @@ step history; rejected citations and disconnected issues do not enter this view.
 """
 
 VERSION = "analyst-assessment-v1"
-RULES_VERSIONS = frozenset({"waf-system-v2.10", "waf-system-v2.11", "waf-system-v2.12", "waf-system-v2.13", "waf-system-v2.14", "waf-system-v2.15", "waf-system-v2.16", "waf-system-v2.17", "waf-system-v2.18", "waf-system-v2.19"})
+RULES_VERSIONS = frozenset({"waf-system-v2.10", "waf-system-v2.11", "waf-system-v2.12", "waf-system-v2.13", "waf-system-v2.14", "waf-system-v2.15", "waf-system-v2.16", "waf-system-v2.17", "waf-system-v2.18", "waf-system-v2.19", "waf-system-v2.20"})
 
 
 def build_analyst_assessment(primary, verifier=None):
@@ -22,9 +22,14 @@ def build_analyst_assessment(primary, verifier=None):
         accepted = {(item.field, item.excerpt, item.interpretation_ko) for item in call.output.evidence}
         resolved = (history.get("resolved_output") or {}).get("evidence", [])
         selections = assessment["evidence"]
+        excluded_indexes = history.get("excluded_relation_indexes", [])
         references = {}
         for source, item in zip(history.get("source_resolutions", []), resolved, strict=True):
             index = source["index"]
+            # Equal text in an independent source cannot resurrect a rejected
+            # representative or its original support direction and provenance.
+            if index in excluded_indexes:
+                continue
             key = (item["field"], item["excerpt"], item["interpretation_ko"])
             if key not in accepted:
                 continue

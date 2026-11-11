@@ -3,7 +3,7 @@
 import hashlib
 import json
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -31,7 +31,7 @@ def _instructions_hash(primary: str, verifier: str) -> str:
 class PromptSnapshot(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    schema_version: int = Field(default=1, ge=1, le=1)
+    schema_version: int = Field(default=1, ge=1, le=2)
     policy_version_id: str = Field(min_length=1, max_length=36)
     policy_version_number: int = Field(ge=1)
     policy_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -43,9 +43,18 @@ class PromptSnapshot(BaseModel):
     verifier_instructions: str = Field(min_length=1, max_length=50000)
     reserved_tokens: int = Field(ge=PROMPT_SCHEMA_RESERVED_TOKENS, le=100000)
     selection_origin: str = Field(pattern=r"^(enqueue|legacy_execution)$")
+    evidence_pipeline: dict | None = None
+
+    @model_validator(mode="after")
+    def pipeline_binding(self):
+        from ..agent.evidence_pipeline import RULES_VERSION, validate_pipeline_snapshot
+        if (self.schema_version == 2) != (self.fixed_rules_version == RULES_VERSION):
+            raise ValueError("prompt_snapshot_invalid")
+        validate_pipeline_snapshot(self.evidence_pipeline, self.fixed_rules_version)
+        return self
 
     def metadata(self) -> dict:
-        return self.model_dump(exclude={"primary_instructions", "verifier_instructions", "schema_version"})
+        return self.model_dump(exclude={"primary_instructions", "verifier_instructions", "schema_version", "evidence_pipeline"})
 
 
 def load_analysis_prompt(analysis: Analysis, crypto: CryptoService) -> PromptSnapshot:
@@ -93,13 +102,17 @@ def pin_analysis_prompt(
 
 def _build_snapshot(version, crypto, *, origin="enqueue", rules=None):
     from ..agent import prompts
+    from ..agent.evidence_pipeline import pipeline_for_rules
     rules = rules or prompts
     try:
         policy_text = read_policy_text(version, crypto)
     except (AttributeError, TypeError):
         raise PromptSnapshotError() from None
     primary, verifier = rules.build_role_instructions(policy_text)
+    pipeline = pipeline_for_rules(rules.FIXED_RULES_VERSION)
     snapshot = PromptSnapshot(
+        schema_version=2 if pipeline is not None else 1,
+        evidence_pipeline=pipeline,
         policy_version_id=version.id,
         policy_version_number=version.version_number,
         policy_hash=version.content_hash,
@@ -134,15 +147,19 @@ def approved_production_prompt(db, crypto):
         if configuration_digest(record.snapshot_json) != record.configuration_hash:
             raise ValueError()
         expected = record.snapshot_json["prompt"]
+        from ..agent.evidence_pipeline import validate_pipeline_snapshot
+        approved_pipeline = record.snapshot_json.get("evidence_pipeline")
+        validate_pipeline_snapshot(approved_pipeline, expected["fixed_rules_version"])
         if record.kind == "promotion":
             run = db.get(TestRun, record.source_test_run_id)
             snapshot = load_analysis_prompt(run, crypto)
         else:
-            from ..agent import legacy_prompts_v212, legacy_prompts_v213, legacy_prompts_v214, legacy_prompts_v215, legacy_prompts_v216, legacy_prompts_v217, legacy_prompts_v218, prompts
-            rules = {module.FIXED_RULES_VERSION: module for module in (legacy_prompts_v212, legacy_prompts_v213, legacy_prompts_v214, legacy_prompts_v215, legacy_prompts_v216, legacy_prompts_v217, legacy_prompts_v218, prompts)}[expected["fixed_rules_version"]]
+            from ..agent import legacy_prompts_v212, legacy_prompts_v213, legacy_prompts_v214, legacy_prompts_v215, legacy_prompts_v216, legacy_prompts_v217, legacy_prompts_v218, legacy_prompts_v219, prompts
+            rules = {module.FIXED_RULES_VERSION: module for module in (legacy_prompts_v212, legacy_prompts_v213, legacy_prompts_v214, legacy_prompts_v215, legacy_prompts_v216, legacy_prompts_v217, legacy_prompts_v218, legacy_prompts_v219, prompts)}[expected["fixed_rules_version"]]
             snapshot = _build_snapshot(get_policy_version(db, expected["policy_version_id"]), crypto, rules=rules)
         actual = {key: getattr(snapshot, key) for key in expected}
-        if actual != expected or get_active_policy(db, crypto).id != snapshot.policy_version_id:
+        if (actual != expected or snapshot.evidence_pipeline != approved_pipeline
+                or get_active_policy(db, crypto).id != snapshot.policy_version_id):
             raise ValueError()
         return snapshot
     except (ValueError, TypeError, KeyError, AttributeError):

@@ -133,7 +133,7 @@ def test_candidate_is_connected_to_all_existing_processing_contracts():
     for versions in (ASSESSMENT_RULES, SELECTION_RULES_VERSIONS, INTEGRITY_RULES_VERSIONS,
                      INTEGRITY_V3_RULES_VERSIONS, PARSER_DIAGNOSTICS_ONLY_RULES_VERSIONS):
         assert {"waf-system-v2.17", CURRENT} <= versions
-        assert "waf-system-v2.20" not in versions
+        assert "waf-system-v2.21" not in versions
     assert integrity_version_for_rules(CURRENT) == INTEGRITY_V3_VERSION
     assert integrity_version_for_rules("waf-system-v2.17") == INTEGRITY_V3_VERSION
 

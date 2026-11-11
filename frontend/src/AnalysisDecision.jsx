@@ -6,6 +6,7 @@ import { assessmentView } from "./analystAssessment.js";
 import { decisionExplanation, provisionalAnalysisNotice } from "./decisionExplanation.js";
 import { isResultV3 } from "./assessmentData.js";
 import { decisionConditions, detailEvidence } from "./decisionDetail.js";
+import { evidenceRelationView } from "./evidenceRelations.js";
 import { disagreementNotice, evidenceSections, legacySignatureNotice, severityMeaning, signatureSummary, verifierDisagreed, wafObservation } from "./decisionSemantics.js";
 import { formatDate, formatDuration, executionDuration } from "./analysisView.js";
 import { isMockAnalysis } from "./labelEvaluation.js";
@@ -46,25 +47,29 @@ export function DecisionHero({ detail }) {
   </>;
 }
 
-export function EvidenceCards({ detail, onViewInput }) {
-  const w = useR5Words(), items = detailEvidence(detail.result);
+export function EvidenceCards({ detail, onViewInput, relations, relationsError = false, relationsLoading = false, onRetryRelations }) {
+  const w = useR5Words(), relationView = evidenceRelationView(detail.result, relations), items = relationView.rows || relationView.items;
   const classified = Boolean(assessmentView(detail.result));
   const groups = evidenceSections(finalValue(detail, "verdict")).map(group => ({ ...group, items: items.filter(item => item.supports === group.side) })).filter(group => group.items.length);
-  const rows = group => <div className="decision-evidence-rows">{group.items.map(item => <article className="decision-evidence-row" key={item.number}>
-    <div className="decision-evidence-label"><strong>{w("근거", "Evidence")} {item.number}</strong><span>{analystFieldLabel(item.field)}</span><small>{item.field}</small></div>
-    <div className="decision-evidence-content"><span className="sr-only">{w("원문 발췌", "Source excerpt")}</span><code dir="ltr">{item.excerpt}</code><p>{analystText(item.interpretation_ko)}</p>{!!item.related_numbers.length && <small className="muted">{w("같은 로그 발췌", "Same excerpt")}: {item.related_numbers.join(" · ")}</small>}</div>
-    {onViewInput && item.field && item.excerpt && <button type="button" className="text-button evidence-input-link" onClick={() => onViewInput(item)}>{w("원문에서 보기", "View source")} →</button>}
+  const rows = group => <div className="decision-evidence-rows">{group.items.map(item => <article className={`decision-evidence-row${item.relation ? " has-linked-sources" : ""}`} key={`${item.number}:${item.roles?.join(",") || "all"}`}>
+    <div className="decision-evidence-label"><strong>{w("근거", "Evidence")} {item.number}</strong>{!!item.roles?.length && <span className="decision-evidence-roles">{item.roles.map(role => role === "primary" ? w("1차 분석", "Primary analysis") : w("추가 검증", "Additional verification")).join(" / ")}</span>}<span>{analystFieldLabel(item.field)}</span><small>{item.field}</small></div>
+    <div className="decision-evidence-content">{item.relation && <p className="decision-linked-interpretation">{analystText(item.interpretation_ko)}</p>}<span className="sr-only">{w("원문 발췌", "Source excerpt")}</span><code dir="ltr">{item.excerpt}</code>{item.relation && onViewInput && <button type="button" className="text-button decision-representative-source" onClick={() => onViewInput(item)}>{w(`근거 ${item.number} 원문 보기`, `View evidence ${item.number} source`)} →</button>}{!item.relation && <p>{analystText(item.interpretation_ko)}</p>}{!!item.related_numbers.length && <small className="muted">{w("같은 로그 발췌", "Same excerpt")}: {item.related_numbers.join(", ")}</small>}
+      {!!item.related_sources?.length && <div className="decision-linked-sources"><h4>{w("함께 본 원문", "Related sources")}</h4>{item.related_sources.map(source => <section className="decision-linked-source" key={source.evidence_id} aria-label={`${w("관련 근거", "Related evidence")} ${source.number}`}><div className="decision-linked-source-heading"><strong>{w("근거", "Evidence")} {source.number}</strong><Direction value={source.supports} /><span>{analystFieldLabel(source.field)}</span></div><code dir="ltr">{source.excerpt}</code>{onViewInput && <button type="button" className="text-button evidence-input-link" onClick={() => onViewInput(source)}>{w("원문과 개별 해석 보기", "View source and interpretation")} →</button>}</section>)}</div>}
+    </div>
+    {!item.relation && onViewInput && item.field && item.excerpt && <button type="button" className="text-button evidence-input-link" onClick={() => onViewInput(item)}>{w("원문에서 보기", "View source")} →</button>}
   </article>)}</div>;
   return <section className="panel decision-evidence-panel"><div className="panel-head-inline"><h2>{isResultV3(detail.result) ? w("보안 분석 근거", "Security analysis evidence") : w("판정 근거", "Decision evidence")}</h2>{onViewInput && <NavigationAction onClick={() => onViewInput(null)}>{w("전체 근거·원문", "All evidence & input")}</NavigationAction>}</div>
     {!classified && !!items.length && <p className="muted">{w("기존 분석에는 공격·정상 요청 근거 구분이 기록되지 않았습니다.", "This older analysis has no recorded evidence directions.")}</p>}
     {classified && <p className="muted">{w("공격 요청 근거는 공격 성공을 뜻하지 않으며, 근거 개수로 최종 판정을 결정하지 않습니다.", "Attack request evidence does not establish attack success. Evidence counts do not determine the final decision.")}</p>}
+    {relationsLoading && <p className="muted" role="status">{w("관련 원문을 확인하는 중…", "Loading source links…")}</p>}
+    {(relationsError || relationView.invalid) && <div className="decision-relations-fallback" role="status"><p>{w("근거 연결 정보를 불러오지 못해 개별 근거를 표시합니다.", "Source links are unavailable. Individual evidence is shown.")}</p>{onRetryRelations && <button type="button" className="secondary" disabled={relationsLoading} onClick={onRetryRelations}>{w("다시 시도", "Retry")}</button>}</div>}
     {groups.map(group => group.side === "context" ? <details className="decision-context-evidence" key={group.side}><summary><Direction value={group.side} label={group.label} /> <span>{group.items.length}</span></summary>{rows(group)}</details> : <section className={`decision-evidence-group evidence-${group.side}`} key={group.side}><h3><Direction value={group.side} label={group.label} /></h3>{rows(group)}</section>)}
     {!items.length && <p className="muted">{w("저장된 판정 근거가 없습니다. 이것만으로 공격이 없다고 볼 수는 없습니다.", "No decision evidence is recorded. This does not establish that the request is benign.")}</p>}
   </section>;
 }
 
-export function DecisionConditions({ detail, onViewInput }) {
-  const w = useR5Words(), conditions = decisionConditions(detail), evidence = detailEvidence(detail.result);
+export function DecisionConditions({ detail, onViewInput, preserveEvidence = false }) {
+  const w = useR5Words(), conditions = decisionConditions(detail, { preserveEvidence }), evidence = detailEvidence(detail.result, { preserveEvidence });
   if (!conditions.visible) return null;
   return <section className="panel decision-conditions">
     {conditions.sections.map((section, index) => <div key={section.key} className="decision-check-group" data-purpose={section.key}><h2>{w(...section.title)}</h2>
@@ -75,14 +80,14 @@ export function DecisionConditions({ detail, onViewInput }) {
   </section>;
 }
 
-export function FinalDecisionReason({ detail }) {
+export function FinalDecisionReason({ detail, preserveEvidence = false }) {
   const w = useR5Words();
   if (!isResultV3(detail.result) || detail.status !== "completed" || isMockAnalysis(detail)) return null;
   const held = finalValue(detail, "verdict") === "inconclusive", explanation = held ? decisionExplanation(detail) : null;
   // Decisive results are explained by their linked evidence. Do not manufacture
   // a second generic rationale or generate another summary on the client.
   if (!explanation) return null;
-  const issues = held ? (assessmentView(detail.result)?.issues || []).filter(issue => !issue.missing_condition_ko) : [];
+  const issues = held ? (assessmentView(detail.result, { preserveEvidence })?.issues || []).filter(issue => !issue.missing_condition_ko) : [];
   return <section className="panel decision-final-reason"><h2>{w("최종 판정 이유", "Final decision reasons")}</h2>
     <p>{explanation.reason_ko}</p>
     {!!issues.length && <ul>{issues.map((issue, index) => <li key={index}>{issue.point_ko}<small className="muted"> · {w("관련 근거", "Related evidence")} {issue.evidence_numbers.join(" · ")}</small></li>)}</ul>}
@@ -101,11 +106,11 @@ function ThreatFields({ threat, verdict }) {
   ].map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl>;
 }
 
-export function TechnicalInterpretation({ detail, onExecution }) {
+export function TechnicalInterpretation({ detail, onExecution, preserveEvidence = false }) {
   const w = useR5Words(), result = detail.result, threat = result?.threat_analysis, signature = result?.signature_assessment;
   const guidance = analystGuidance(detail), circumstances = isResultV3(result) ? [] : analystItems(result?.conflicting_evidence);
   const disagreed = verifierDisagreed(detail), verdict = finalValue(detail, "verdict");
-  const issues = ["true_positive", "false_positive"].includes(verdict) ? assessmentView(result)?.issues || [] : [];
+  const issues = ["true_positive", "false_positive"].includes(verdict) ? assessmentView(result, { preserveEvidence })?.issues || [] : [];
   return <section className="panel decision-technical"><details><summary>{w("기술 해석 펼치기", "Technical interpretation")}</summary>
     {!disagreed && finalValue(detail, "verdict") === "inconclusive" && <p className="analyst-notice">{provisionalAnalysisNotice}</p>}
     {disagreed ? <div className="decision-technical-note"><p className="analyst-notice">{w(...disagreementNotice)}</p><p className="muted">{w("아래 역할별 기록은 최종 해석이 아닙니다. 양쪽 근거와 실행 상세를 함께 확인하세요.", "Role records below are not a final interpretation. Review both evidence sets and execution details.")}</p>
@@ -144,10 +149,11 @@ export function DecisionContext({ detail, history, historyError, onSaved, onExec
   </aside>;
 }
 
-export function EvidenceWorkspace({ detail, event, target, onSelect, error, onRetry, active }) {
-  const w = useR5Words(), sections = evidenceSections(finalValue(detail, "verdict")), sourceItems = detailEvidence(detail.result), pane = useRef(null);
+export function EvidenceWorkspace({ detail, event, target, onSelect, error, onRetry, active, relations }) {
+  const w = useR5Words(), sections = evidenceSections(finalValue(detail, "verdict")), sourceItems = evidenceRelationView(detail.result, relations).items, pane = useRef(null);
   const items = sections.flatMap(group => sourceItems.filter(item => item.supports === group.side));
-  const selected = items.find(item => item.field === target?.field && item.excerpt === target?.excerpt && (target?.number == null || item.number === target.number));
+  const selected = items.find(item => item.field === target?.field && item.excerpt === target?.excerpt
+    && (target?.evidence_id ? item.evidence_id === target.evidence_id : target?.interpretation_ko ? item.interpretation_ko === target.interpretation_ko : target?.number == null || item.number === target.number));
   function select(item) { onSelect(item); if (window.matchMedia("(max-width: 800px)").matches) pane.current?.scrollIntoView({ block: "start", behavior: "auto" }); }
   return <section className="decision-evidence-workspace"><div className="panel decision-evidence-nav">
     <h2>{w("근거 선택", "Choose evidence")}</h2><p className="muted">{w("근거를 선택하면 접수 원문에서 같은 문구를 찾습니다.", "Select evidence to find its exact text in the received input.")}</p>

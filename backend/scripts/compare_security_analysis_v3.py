@@ -29,7 +29,7 @@ from sqlalchemy.orm import Session
 
 from app import worker
 from app.agent import legacy_prompts_v214, prompts, result_editor
-from app.agent.contracts import (SecurityAnalysisOutput, SecurityAnalysisOutputV216,
+from app.agent.contracts import (SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220,
                                  SemanticAssessmentOutput, EvidenceSelectionCorrectionOutput)
 from app.agent.executor import SAFE_VALIDATION_TYPES, _output_schema_field_names
 from app.candidate_schemas import CandidateConfiguration
@@ -111,7 +111,8 @@ def wire_model_for_revision(revision):
               "waf-system-v2.16": SecurityAnalysisOutputV216,
               "waf-system-v2.17": SecurityAnalysisOutputV216,
               "waf-system-v2.18": SecurityAnalysisOutputV216,
-              "waf-system-v2.19": SecurityAnalysisOutputV216}
+              "waf-system-v2.19": SecurityAnalysisOutputV216,
+              "waf-system-v2.20": SecurityAnalysisOutputV220}
     try:
         return models[revision.FIXED_RULES_VERSION]
     except KeyError:
@@ -207,7 +208,8 @@ def write_json(path, value):
 @lru_cache(maxsize=1)
 def validation_fields():
     return frozenset().union(*(_output_schema_field_names(model) for model in (
-        SecurityAnalysisOutput, SecurityAnalysisOutputV216, SemanticAssessmentOutput, EvidenceSelectionCorrectionOutput)))
+        SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220,
+        SemanticAssessmentOutput, EvidenceSelectionCorrectionOutput)))
 
 
 def retry_accounting(metadata, depth=0):

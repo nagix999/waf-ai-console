@@ -177,5 +177,5 @@ def test_unknown_security_revision_fails_before_any_model_call(monkeypatch):
     monkeypatch.setattr(worker, "execute_structured_agent", unexpected)
     with pytest.raises(worker.WorkerExecutionError, match="unsupported_security_output_contract"):
         worker._execute_grounded_agent(analysis=Analysis(extra_fields={}), raw_payload=RAW, parsed=parse_http_payload(RAW),
-            input_truncated=False, security_analysis_enabled=True, fixed_rules_version="waf-system-v2.20",
+            input_truncated=False, security_analysis_enabled=True, fixed_rules_version="waf-system-v2.21",
             user_input=build().text)

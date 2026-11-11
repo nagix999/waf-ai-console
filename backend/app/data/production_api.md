@@ -342,6 +342,7 @@ X-API-Key: YOUR_SERVICE_API_KEY
 
 - `supports`는 `attack_request`(공격 요청 근거), `normal_request`(정상 요청 근거), `context`(참고 내용) 중 필수 값이다. 최종 정오탐·침해 성공과는 별개이며 근거 개수나 WAF 조치로 판정하지 않는다.
 - 역할별 선택은 최대 5개, 양 역할의 원문 대조된 근거는 최대 10개다. 최종 정책의 기존 최대 5개 근거는 `policy.decision_evidence_ids`로 연결한다. 역할 기록도 중복 목록 대신 `evidence_ids`를 사용한다.
+- v2.20 후보도 공개 v3 필드는 동일하다. 여러 원문을 연결한 설명은 대표 근거의 `interpretation_ko`에 기록하고 관련 원문도 기존 근거 목록에 보존한다. 관리자 화면용 연결 정보는 별도 암호화 이력으로 관리하며 이 응답에 새 필드를 추가하지 않는다. 관련 원문의 `supports`를 대표 분류로 일괄 변경하지 않으며, 출처 대조가 해석의 정확성을 보장하는 것은 아니다.
 - 실제 미확인 조건은 `decision_issues`의 `point_ko/evidence_ids/missing_condition_ko/origins`에 기록한다. 기술적 보류는 `diagnostics`로 설명하며 업무 자료 부족으로 추정하지 않는다.
 - v3에는 `analyst_assessment`, `tuning_recommendation`, `analyst_checks`, `recommended_checks`, `conflicting_evidence`가 없다. 분석 요약은 요청 내용만 담고 최종 보류 사유는 별도로 표시한다.
 - `interpretation_conflict`는 실제로 양립하기 어려운 해석이 남았다는 명시적 신호다. 양쪽 근거의 존재를 곧 충돌로 해석하지 않는다. 제외된 검증 조건은 `policy.retired_verifier_triggers`에 기록한다. v2.15/v2.16은 `tuning_recommended`, v2.17과 v2.18 후보는 여기에 `parser_incomplete`를 포함하고 `policy.verifier_policy_version=security-analysis-policy-v2`를 기록한다. 두 후보 모두 파싱 상태와 경고 및 진단, 다른 검증 조건과 실패 또는 판정 불일치에 따른 보류는 유지한다. v2.18은 공통 판정 지침만 보완하며 입력과 출력 계약 및 서버 정책을 바꾸지 않는다. 실제 LLM 품질 검증이나 운영 반영 및 재배포는 수행하지 않았고, 코드 배포만으로 기존 운영 또는 재실행 정책이 바뀌지는 않는다.

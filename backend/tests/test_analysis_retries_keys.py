@@ -302,6 +302,12 @@ def test_test_retry_updates_current_result_without_changing_membership_or_labels
 
 
 def test_historical_named_failure_can_recover_recorded_profile_and_threshold(client, registered_vllm_target, event_payload, monkeypatch):
+    from app.agent import legacy_prompts_v219
+    from app.services import prompt_snapshots
+    original_builder = prompt_snapshots._build_snapshot
+    def historical_builder(*args, **kwargs):
+        return original_builder(*args, **{**kwargs, "rules": legacy_prompts_v219})
+    monkeypatch.setattr(prompt_snapshots, "_build_snapshot", historical_builder)
     login(client)
     client.app.state.settings.agent_mode = "moduagent"
     profile_fixture(client, is_test=True)

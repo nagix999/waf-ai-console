@@ -6,8 +6,8 @@ import { decisionExplanation } from "./decisionExplanation.js";
 
 // Presentation only. Keep stored directions and numbering; never infer a side
 // from the final verdict, rank evidence by strength, or manufacture a condition.
-export function detailEvidence(result) {
-  const assessment = assessmentView(result);
+export function detailEvidence(result, options) {
+  const assessment = assessmentView(result, options);
   if (assessment) return assessment.evidence;
   return groupedEvidence(result?.evidence)
     .filter(item => typeof item.field === "string" && typeof item.excerpt === "string")
@@ -17,7 +17,7 @@ export function detailEvidence(result) {
   }));
 }
 
-export function decisionConditions(detail) {
+export function decisionConditions(detail, options) {
   const followUp = analystFollowUp(detail);
   if (detail?.status !== "completed" || isMockAnalysis(detail)) return { ...followUp, items: [], visible: false };
   const held = finalValue(detail, "verdict") === "inconclusive";
@@ -27,7 +27,7 @@ export function decisionConditions(detail) {
     const technical = explanation && ["execution_incomplete", "evidence_unverified", "evidence_review", "input_limited"].includes(explanation.code);
     // Only recorded conditions are actionable. No generic response-code check,
     // guessed environment prerequisite or historical check fallback in V3.
-    if (held && !technical) for (const issue of assessmentView(detail.result)?.issues || []) {
+    if (held && !technical) for (const issue of assessmentView(detail.result, options)?.issues || []) {
       if (!issue.missing_condition_ko) continue;
       let item = items.find(row => row.title === issue.missing_condition_ko);
       if (!item) { item = { title: issue.missing_condition_ko, notes: [], evidence_numbers: [], checks: [] }; items.push(item); }

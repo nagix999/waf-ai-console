@@ -30,6 +30,8 @@ CONTRACT_ERRORS = {
     "recommended_checks_legacy_only": ("recommended_checks", "새 계약에서는 recommended_checks를 빈 배열로 두고 analyst_checks만 작성하세요."),
     "decisive_verdict_disallows_missing_condition": ("decision_issue.missing_condition_ko", "확정 판정의 미확인 필수 조건은 null이어야 합니다."),
     "summary_must_describe_request": ("summary_ko", "요약에는 요청에서 확인한 동작과 보안상 의미만 쓰고 정탐·오탐·보류 선언은 빼세요."),
+    "evidence_relation_invalid": ("evidence_relations", "근거 연결은 존재하는 서로 다른 인덱스를 사용하고 대표와 관련 인덱스를 중복하지 마세요."),
+    "evidence_relation_conflicting_supports": ("evidence_relations", "공격 요청 근거와 정상 요청 근거를 하나의 연결로 묶지 마세요. 참고 내용은 함께 연결할 수 있습니다."),
 }
 
 
@@ -381,6 +383,56 @@ class SecurityAnalysisOutputV216(StrictContract):
 
     def legacy_bridge(self):
         return _security_analysis_bridge(self)
+
+
+class EvidenceRelation(StrictContract):
+    """Internal links only; the representative evidence owns the explanation."""
+
+    representative_index: int = Field(ge=0, le=4, strict=True)
+    related_indexes: list[Annotated[int, Field(ge=0, le=4, strict=True)]] = Field(min_length=1, max_length=4)
+
+    @model_validator(mode="after")
+    def distinct_indexes(self):
+        if (self.representative_index in self.related_indexes
+                or len(set(self.related_indexes)) != len(self.related_indexes)):
+            raise contract_error("evidence_relation_invalid")
+        return self
+
+
+class SecurityAnalysisOutputV220(StrictContract):
+    """Independent candidate contract; earlier wire schemas remain unchanged."""
+
+    signature_assessment: SignatureAssessmentV2
+    evidence: list[RequestEvidenceSelection] = Field(max_length=5)
+    evidence_relations: list[EvidenceRelation] = Field(max_length=5)
+    interpretation_conflict: bool = Field(strict=True)
+    input_truncated: bool = Field(strict=True)
+    summary_ko: str = Field(min_length=1, max_length=3000)
+    verdict: AgentVerdict
+    confidence_score: float = Field(ge=0, le=1)
+    threat_analysis: ThreatAnalysis
+    decision_issue: DecisionIssue | None
+
+    @model_validator(mode="after")
+    def validate_security_analysis(self):
+        _validate_security_analysis(self)
+        representatives = set()
+        for relation in self.evidence_relations:
+            indexes = [relation.representative_index, *relation.related_indexes]
+            if (relation.representative_index in representatives
+                    or any(index >= len(self.evidence) for index in indexes)):
+                raise contract_error("evidence_relation_invalid")
+            representatives.add(relation.representative_index)
+            directions = {self.evidence[index].supports for index in indexes}
+            if {RequestEvidenceSupport.attack_request, RequestEvidenceSupport.normal_request} <= directions:
+                raise contract_error("evidence_relation_conflicting_supports")
+        return self
+
+    def legacy_bridge(self):
+        # Do not modify the frozen adapter or leak relationship extensions into
+        # its strict assessment schema. No text, direction or verdict is added.
+        values = self.model_dump(mode="json", exclude={"evidence_relations"})
+        return SecurityAnalysisOutputV216.model_validate(values).legacy_bridge()
 
 
 def legacy_output_schema(schema: dict) -> dict:

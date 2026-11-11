@@ -8,8 +8,8 @@ import pytest
 from pydantic import ValidationError
 
 from app import worker
-from app.agent import legacy_prompts_v214, legacy_prompts_v215, legacy_prompts_v216, legacy_prompts_v217, prompts
-from app.agent.contracts import SecurityAnalysisOutput, SecurityAnalysisOutputV216
+from app.agent import legacy_prompts_v214, legacy_prompts_v215, legacy_prompts_v216, legacy_prompts_v217, legacy_prompts_v219, prompts
+from app.agent.contracts import SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220
 from app.agent.executor import AgentCallResult
 from app.agent.policy import VerifierPolicyContext, verifier_reasons, finalize_with_verifier
 from app.agent.security_analysis import canonical_evidence, role_result, observational_summary
@@ -147,7 +147,7 @@ def test_nonretired_verifier_conditions_are_unchanged(verdict, action, status, t
 
 
 def test_pinned_v214_module_and_candidate_versions_are_separate():
-    assert prompts.FIXED_RULES_VERSION == "waf-system-v2.19"
+    assert prompts.FIXED_RULES_VERSION == "waf-system-v2.20"
     assert legacy_prompts_v217.FIXED_RULES_VERSION == "waf-system-v2.17"
     assert legacy_prompts_v216.FIXED_RULES_VERSION == "waf-system-v2.16"
     assert legacy_prompts_v215.FIXED_RULES_VERSION == "waf-system-v2.15"
@@ -159,7 +159,9 @@ def test_pinned_v214_module_and_candidate_versions_are_separate():
     assert hashlib.sha256(Path(legacy_prompts_v217.__file__).read_bytes()).hexdigest() == "ea92530a480ad9a4bc5f4674467ee4b2f10d11d54bfbe273f00a3d935a5f0e3f"
     assert legacy_prompts_v217.build_role_instructions("synthetic policy") == legacy_prompts_v216.build_role_instructions("synthetic policy")
     assert prompts.build_role_instructions("synthetic policy") != legacy_prompts_v217.build_role_instructions("synthetic policy")
-    assert len(prompts.FIXED_INSTRUCTIONS) < len(legacy_prompts_v214.FIXED_INSTRUCTIONS)
+    # Historical compact-prompt guarantee stays with its frozen revision. The
+    # new internal relationship contract is covered by dedicated v2.20 tests.
+    assert len(legacy_prompts_v219.FIXED_INSTRUCTIONS) < len(legacy_prompts_v214.FIXED_INSTRUCTIONS)
 
 
 @pytest.mark.parametrize("provider", ["vllm", "openai"])
@@ -202,9 +204,9 @@ def test_worker_persists_only_canonical_v3_and_observational_summary(
         value = None if is_verifier and verifier_verdict == "failed" else output(
             "normal_request" if is_verifier else "attack_request",
             verdict=verifier_verdict if is_verifier else "true_positive", conflict=not is_verifier and verifier_verdict is not None)
-        assert kwargs["output_model"] is SecurityAnalysisOutputV216
+        assert kwargs["output_model"] is SecurityAnalysisOutputV220
         if value is not None:
-            value = kwargs["output_model"].model_validate(value.model_dump(mode="json"))
+            value = kwargs["output_model"].model_validate({**value.model_dump(mode="json"), "evidence_relations": []})
         return AgentCallResult(value, "synthetic-v3", None, "completed" if value else "error", None,
                                "synthetic_failure" if value is None else None, {})
     monkeypatch.setattr(worker, "execute_structured_agent", fake)
@@ -258,8 +260,8 @@ def test_canonical_editor_is_evidence_only_and_skips_unnecessary_calls(client, e
             value.confidence_score = .6
             if mode != "skip" and kwargs["agent_name"] == "waf-verifier":
                 value.evidence[0].interpretation_ko = "같은 원문 위치와 공격 의미에 대한 다른 설명입니다."
-            assert kwargs["output_model"] is SecurityAnalysisOutputV216
-            value = kwargs["output_model"].model_validate(value.model_dump(mode="json"))
+            assert kwargs["output_model"] is SecurityAnalysisOutputV220
+            value = kwargs["output_model"].model_validate({**value.model_dump(mode="json"), "evidence_relations": []})
         return AgentCallResult(value, "synthetic-v3-editor", None, "completed", None, None, {})
     monkeypatch.setattr(worker, "execute_structured_agent", fake)
     with client.app.state.session_factory() as db:

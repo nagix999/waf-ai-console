@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from app.agent import legacy_prompts_v218, prompts
+from app.agent import legacy_prompts_v218, legacy_prompts_v219 as prompts
 from app.agent.analyst_assessment import RULES_VERSIONS as ASSESSMENT_RULES
 from app.agent.contracts import SecurityAnalysisOutputV216
 from app.agent.evidence_candidates import SELECTION_RULES_VERSIONS
@@ -105,7 +105,7 @@ def test_version_registration_keeps_existing_processing_and_verifier_policy():
     for versions in (ASSESSMENT_RULES, SELECTION_RULES_VERSIONS, INTEGRITY_RULES_VERSIONS,
                      INTEGRITY_V3_RULES_VERSIONS, PARSER_DIAGNOSTICS_ONLY_RULES_VERSIONS):
         assert {"waf-system-v2.17", "waf-system-v2.18", CURRENT} <= versions
-        assert "waf-system-v2.20" not in versions
+        assert "waf-system-v2.21" not in versions
     assert integrity_version_for_rules(CURRENT) == INTEGRITY_V3_VERSION
     assert verifier_policy_metadata(CURRENT) == verifier_policy_metadata("waf-system-v2.18")
 
@@ -131,7 +131,7 @@ def test_old_v218_encrypted_snapshot_is_not_replaced_by_new_default_guidance(cli
     with client.app.state.session_factory() as db:
         policy = get_active_policy(db, crypto)
         old = _build_snapshot(policy, crypto, rules=legacy_prompts_v218)
-        current = _build_snapshot(policy, crypto)
+        current = _build_snapshot(policy, crypto, rules=prompts)
         assert old.policy_hash == current.policy_hash
         assert old.policy_version_id == current.policy_version_id
         assert old.reserved_tokens == current.reserved_tokens

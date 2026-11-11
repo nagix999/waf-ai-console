@@ -1,4 +1,5 @@
 import asyncio
+import json
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile, status
@@ -8,7 +9,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
-from ..models import AccessAudit, AgentRun, Analysis, Review
+from ..models import AccessAudit, AgentRun, AgentStep, Analysis, Review
+from ..agent.evidence_relations import EvidenceRelations, validate_evidence_relations
 from ..schemas import (
     AgentRunResponse,
     AgentStepResponse,
@@ -372,6 +374,51 @@ def validate_review_duplicate(existing: Review, analysis_id: str, payload: Revie
         getattr(existing, field) != value for field, value in payload.model_dump().items()
     ):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="external_review_id_conflict")
+
+
+@router.get("/analyses/{analysis_id}/evidence-relations", response_model=EvidenceRelations, include_in_schema=False)
+def get_evidence_relations(
+    analysis_id: str,
+    request: Request,
+    response: Response,
+    db: DbSession,
+    principal: Annotated[Principal, Depends(require_scope("admin"))],
+) -> dict:
+    """Admin presentation links only; never extend the public result contract."""
+    analysis = db.get(Analysis, analysis_id)
+    if analysis is None:
+        raise HTTPException(404, "analysis_not_found")
+    response.headers["Cache-Control"] = "no-store"
+    empty = {"version": "evidence-relations-v1", "groups": []}
+    result = analysis.result_json
+    if analysis.status != "completed" or not isinstance(result, dict) or result.get("schema_version") != "waf-analysis-v3":
+        record_access(db, principal, "view_evidence_relations", "analysis", analysis_id)
+        return empty
+    latest = db.execute(select(AgentRun.id, AgentRun.status).where(AgentRun.analysis_id == analysis_id)
+                        .order_by(desc(AgentRun.created_at), desc(AgentRun.id)).limit(1)).first()
+    ciphertext = None
+    if latest and latest.status == "completed":
+        ciphertext = db.scalar(select(AgentStep.output_ciphertext).where(
+            AgentStep.run_id == latest.id, AgentStep.step_type == "finalize", AgentStep.status == "completed",
+        ).order_by(desc(AgentStep.sequence)).limit(1))
+    # Audit before decrypting, including a failed read. No source text, relation
+    # document, or model output belongs in the audit/error response.
+    record_access(db, principal, "view_evidence_relations", "analysis", analysis_id)
+    if not ciphertext:
+        return empty
+    try:
+        saved = json.loads(request.app.state.crypto.decrypt_text(ciphertext))
+        if not isinstance(saved, dict):
+            raise ValueError("evidence_relations_invalid")
+        if "evidence_relations" not in saved:
+            return empty
+        from ..result_contracts import validate_new_result
+        canonical = validate_new_result(result)
+        if saved.get("schema_version") != "waf-analysis-v3" or saved.get("evidence") != canonical["evidence"]:
+            raise ValueError("evidence_relations_invalid")
+        return validate_evidence_relations(saved["evidence_relations"], canonical["evidence"])
+    except (ValueError, TypeError, KeyError, UnicodeError):
+        raise HTTPException(500, "evidence_relations_unavailable", headers={"Cache-Control": "no-store"}) from None
 
 
 @router.get("/analyses/{analysis_id}/agent-runs", response_model=list[AgentRunResponse])

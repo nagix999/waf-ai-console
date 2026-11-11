@@ -350,6 +350,7 @@ def test_new_worker_metadata_records_only_fixed_parser_warnings(client, event_pa
 
 @pytest.mark.parametrize("partial", [False, True])
 def test_new_model_worker_records_parser_diagnostics_without_parser_only_verifier(client, event_payload, monkeypatch, registered_vllm_target, partial):
+    from app.agent.contracts import SecurityAnalysisOutputV220
     from test_test_retries import fixture_run as model_run
     from test_security_analysis_v3 import output
     if partial:
@@ -358,7 +359,8 @@ def test_new_model_worker_records_parser_diagnostics_without_parser_only_verifie
     calls = []
     async def fake(**kwargs):
         calls.append(kwargs)
-        value = kwargs["output_model"].model_validate(output().model_dump(mode="json"))
+        assert kwargs["output_model"] is SecurityAnalysisOutputV220
+        value = kwargs["output_model"].model_validate({**output().model_dump(mode="json"), "evidence_relations": []})
         return AgentCallResult(value, "synthetic", None, "completed", None, None, {})
     monkeypatch.setattr(worker, "execute_structured_agent", fake)
     with client.app.state.session_factory() as db:

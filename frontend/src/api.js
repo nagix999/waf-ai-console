@@ -90,6 +90,7 @@ export const api = {
   retryAnalysis: (id, payload) => request(`/api/v1/analyses/${encodeURIComponent(id)}/retry`, { method: "POST", body: JSON.stringify(payload), cache: "no-store" }),
   rawEvent: (id, options = {}) => request(`/api/v1/analyses/${id}/event`, options),
   agentRuns: (id, options = {}) => request(`/api/v1/analyses/${id}/agent-runs`, options),
+  evidenceRelations: (id, options = {}) => request(`/api/v1/analyses/${encodeURIComponent(id)}/evidence-relations`, { ...options, cache: "no-store" }),
   evaluationLabels: (id, options = {}) => request(`/api/v1/analyses/${id}/evaluation-labels`, options),
   previewEvaluationLabels: (body) => request("/api/v1/evaluation-labels/preview", { method: "POST", body }),
   confirmEvaluationLabels: (preview_token) => request("/api/v1/evaluation-labels/confirm", {
