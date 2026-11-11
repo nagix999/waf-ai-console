@@ -21,7 +21,8 @@ def resolve_profiles(db, crypto, candidate):
     # The editor uses its own small, separately captured instructions.
     if any(not has_input_budget(profile, policy) for profile in (primary, verifier)):
         raise AnalysisIngestError("agent_context_budget_too_small", 422)
-    return primary, verifier, capture_editor_profile(editor) if editor else None
+    from .evidence_display_jobs import capture_display_profile
+    return primary, verifier, capture_display_profile(editor) if editor else None
 
 
 def configuration_digest(snapshot):
@@ -34,6 +35,11 @@ def snapshot_from_run(run, crypto, *, include_parser=None):
     prompt = load_analysis_prompt(run, crypto)
     schema = read_schema_snapshot(crypto, run)
     editor = EditorSnapshot.model_validate_json(crypto.decrypt_text(run.evidence_editor_snapshot_ciphertext)) if run.evidence_editor_snapshot_ciphertext else None
+    from .evidence_display_jobs import load_snapshot, editor_metadata
+    display_ciphertext = getattr(run, "display_editor_snapshot_ciphertext", None)
+    display = load_snapshot(crypto, display_ciphertext) if display_ciphertext else None
+    if editor and display:
+        raise ValueError("candidate_editor_snapshot_ambiguous")
     verifier = run.profile_metadata["verifier_profile"]
     if include_parser is None:
         stored = run.configuration_snapshot_json
@@ -59,6 +65,8 @@ def snapshot_from_run(run, crypto, *, include_parser=None):
     if prompt.evidence_pipeline is not None:
         snapshot["schema_version"] = 3
         snapshot["evidence_pipeline"] = prompt.evidence_pipeline
+    if display:
+        snapshot["evidence_editor"] = editor_metadata(display)
     return snapshot
 
 
@@ -94,6 +102,17 @@ def verify_configuration(run, crypto, analysis=None):
             run_parser = parser_metadata(read_parser_snapshot(crypto, run))
             if queued_parser != run_parser:
                 raise ValueError()
+            if run.display_editor_snapshot_ciphertext:
+                from .evidence_display_jobs import load_snapshot
+                from ..models import EvidenceDisplayJob
+                display_job = analysis.__dict__.get("_display_admission_job")
+                if display_job is None:
+                    from sqlalchemy import select
+                    from sqlalchemy.orm import object_session
+                    display_job = object_session(analysis).scalar(select(EvidenceDisplayJob).where(
+                        EvidenceDisplayJob.analysis_id == analysis.id))
+                if display_job is None or load_snapshot(crypto, display_job.snapshot_ciphertext) != load_snapshot(crypto, run.display_editor_snapshot_ciphertext):
+                    raise ValueError()
         return actual
     except (KeyError, TypeError, ValueError, UnicodeError):
         raise AnalysisIngestError("candidate_configuration_invalid", 409) from None

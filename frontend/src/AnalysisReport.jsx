@@ -9,16 +9,27 @@ import "./analysisReport.css";
 // escaped by the generator, decoded once, and rendered as React text. Never
 // interpret embedded HTML, links, images, or model-generated Markdown.
 function ReportBlocks({ blocks, section }) {
-  // Only fixed-template level-three headings form evidence groups. Untrusted
-  // model values remain escaped text, never Markdown structure or CSS names.
-  const firstGroup = blocks.findIndex(block => block.type === "heading" && block.level === 3 && ["공격 요청 근거", "정상 요청 근거", "정탐 근거", "오탐 근거", "반대 근거", "공격 해석", "정상 해석", "참고 내용", "참고내용"].includes(block.text));
-  if (firstGroup >= 0) {
+  const tiers = blocks.findIndex(block => block.type === "heading" && block.level === 3 && ["핵심 근거", "나머지 근거"].includes(block.text));
+  if (tiers >= 0) {
     const groups = [];
-    for (const block of blocks.slice(firstGroup)) {
+    for (const block of blocks.slice(tiers)) {
       if (block.type === "heading" && block.level === 3) groups.push({ heading: block.text, blocks: [] });
       else groups.at(-1).blocks.push(block);
     }
-    return <><ReportBlocks blocks={blocks.slice(0, firstGroup)} section={section} />{groups.map((group, index) => <section key={index} className={`report-evidence-group ${["공격 요청 근거", "정탐 근거", "공격 해석"].includes(group.heading) ? "attack" : ["정상 요청 근거", "오탐 근거", "정상 해석"].includes(group.heading) ? "normal" : "context"}`}><h4>{decodeReportText(group.heading)}</h4><ReportBlocks blocks={group.blocks} section={group.heading} /></section>)}</>;
+    return <><ReportBlocks blocks={blocks.slice(0, tiers)} section={section} />{groups.map((group, index) => <div className="report-evidence-tier" key={index}><h4>{decodeReportText(group.heading)}</h4><ReportBlocks blocks={group.blocks} section={group.heading} /></div>)}</>;
+  }
+  // Only fixed-template level-three headings form evidence groups. Untrusted
+  // model values remain escaped text, never Markdown structure or CSS names.
+  const isGroup = block => block.type === "heading" && (block.level === 3 && ["공격 요청 근거", "정상 요청 근거", "정탐 근거", "오탐 근거", "반대 근거", "공격 해석", "정상 해석", "참고 내용", "참고내용"].includes(block.text)
+    || block.level === 4 && /^근거 [1-9][0-9]? — (공격 요청 근거|정상 요청 근거|참고 내용|구분 미기록)$/.test(block.text));
+  const firstGroup = blocks.findIndex(isGroup);
+  if (firstGroup >= 0) {
+    const groups = [];
+    for (const block of blocks.slice(firstGroup)) {
+      if (isGroup(block)) groups.push({ heading: block.text, blocks: [] });
+      else groups.at(-1).blocks.push(block);
+    }
+    return <><ReportBlocks blocks={blocks.slice(0, firstGroup)} section={section} />{groups.map((group, index) => <section key={index} className={`report-evidence-group ${["공격 요청 근거", "정탐 근거", "공격 해석"].includes(group.heading) || group.heading.endsWith("— 공격 요청 근거") ? "attack" : ["정상 요청 근거", "오탐 근거", "정상 해석"].includes(group.heading) || group.heading.endsWith("— 정상 요청 근거") ? "normal" : "context"}`}><h4>{decodeReportText(group.heading)}</h4><ReportBlocks blocks={group.blocks} section={group.heading} /></section>)}</>;
   }
   return blocks.map((block, index) => {
     // The generator appends exactly one LF to separate the excerpt from its

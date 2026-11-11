@@ -1,3 +1,5 @@
+import { analysisEvidenceMeta, rememberEvidenceMeta } from "./analysisEvidenceMeta.js";
+
 const POLL_MS = 3000;
 const MAX_ATTEMPTS = 3;
 const REQUEST_TIMEOUT_MS = 30000;
@@ -8,13 +10,13 @@ const canRetry = (error) => !error?.status || [408, 429].includes(error.status) 
 
 export function emptyDetailState(id) {
   return {
-    id, detail: null, error: "", loading: false,
+    id, detail: null, evidenceMeta: null, error: "", loading: false,
     labelHistory: null, labelHistoryError: "", labelsLoading: false,
     runs: null, runsError: "", runsLoading: false,
     evidenceRelations: null, relationsError: "", relationsLoading: false,
+    evidenceDisplay: null, displayError: "", displayLoading: false, displayPollingStopped: false,
   };
 }
-
 // One in-flight request per resource. Refresh/cancel also invalidates responses
 // from transports that cannot abort, so an old view can never publish late data.
 function resource({ fetchData, onData, onError, onLoading, shouldPoll, setTimer, clearTimer }) {
@@ -78,12 +80,10 @@ function resource({ fetchData, onData, onError, onLoading, shouldPoll, setTimer,
   };
 }
 
-export function createDetailLoader({ id, api, onChange, setTimer = setTimeout, clearTimer = clearTimeout }) {
+export function createDetailLoader({ id, api, onChange, includeLabels = true, setTimer = setTimeout, clearTimer = clearTimeout }) {
   let state = emptyDetailState(id);
   let disposed = false;
   let agentVisible = false;
-  let evidenceVisible = false;
-  const canReadRelations = () => state.detail?.status === "completed" && state.detail?.result?.schema_version === "waf-analysis-v3";
 
   function update(values) {
     if (disposed) return;
@@ -115,20 +115,22 @@ export function createDetailLoader({ id, api, onChange, setTimer = setTimeout, c
     (options) => api.agentRuns(id, options),
     "runs", "runsError", "runsLoading", () => agentVisible && isRunning(state.detail) && !state.error,
   );
-  const relations = makeResource(
-    options => api.evidenceRelations(id, options),
-    "evidenceRelations", "relationsError", "relationsLoading", () => false,
-  );
   const detail = makeResource(
     (options) => api.analysis(id, options),
     "detail", "error", "loading", () => isRunning(state.detail),
     (next, previous, hadError) => {
+      const transport = api.analysisEvidenceMeta?.(next) || analysisEvidenceMeta(next);
+      // Even a pre-header server must not cause a browser to invent a different
+      // evidence list from the JSON it just received.
+      const evidenceMeta = transport || (next.result?.schema_version === "waf-analysis-v3"
+        ? { view: "core-v1", status: "skipped" } : null);
+      if (evidenceMeta) rememberEvidenceMeta(next, evidenceMeta);
+      update({ evidenceMeta });
       if (next.status !== previous?.status || hadError) {
         // Read history once more after observing completion; an earlier history
         // response may still contain running steps from before the final commit.
         if (agentVisible) agent.refresh();
-        if (evidenceVisible && canReadRelations()) relations.refresh();
-        if (previous && next.status !== previous.status && isTerminal(next)) labels.refresh();
+        if (includeLabels && previous && next.status !== previous.status && isTerminal(next)) labels.refresh();
       }
     },
   );
@@ -138,7 +140,7 @@ export function createDetailLoader({ id, api, onChange, setTimer = setTimeout, c
       if (disposed) return;
       update(emptyDetailState(id));
       detail.refresh();
-      labels.refresh();
+      if (includeLabels) labels.refresh();
     },
     setAgentVisible(visible) {
       if (disposed || visible === agentVisible) return;
@@ -146,31 +148,26 @@ export function createDetailLoader({ id, api, onChange, setTimer = setTimeout, c
       if (visible) agent.refresh();
       else agent.cancel();
     },
-    setEvidenceVisible(visible) {
-      if (disposed || visible === evidenceVisible) return;
-      evidenceVisible = visible;
-      if (visible && canReadRelations() && state.evidenceRelations === null && !state.relationsError) relations.refresh();
-      else if (!visible) relations.cancel();
-    },
+    // Compatibility hook only. Core evidence now arrives with the analysis;
+    // changing tabs must not fetch or apply an original-evidence display plan.
+    setEvidenceVisible() {},
     refresh() {
       if (disposed) return;
       detail.refresh();
-      labels.refresh();
+      if (includeLabels) labels.refresh();
       if (agentVisible) agent.refresh();
-      if (evidenceVisible && canReadRelations()) relations.refresh();
     },
     refreshAgent() {
       if (!disposed && agentVisible) agent.refresh();
     },
     refreshRelations() {
-      if (!disposed && evidenceVisible && canReadRelations()) relations.refresh();
+      if (!disposed) detail.refresh();
     },
     dispose() {
       disposed = true;
       detail.cancel();
       labels.cancel();
       agent.cancel();
-      relations.cancel();
     },
   };
 }

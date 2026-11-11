@@ -9,6 +9,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { fetchReportFile, reportDownloadError, reportPath, reportTypes, saveReportFile } from "./analysisDownloads.js";
 
 const id = "11111111-2222-4333-8444-555555555555";
+
+test("unverified core evidence blocks PDF/Excel with an actionable localized message", async () => {
+  for (const format of ["pdf", "xlsx"]) {
+    await assert.rejects(fetchReportFile(id, format, { fetchImpl: async () => Response.json({ detail: "core_result_unavailable" }, { status: 503 }) }), error => error.message === "core_result_unavailable" && error.status === 503);
+  }
+  assert.match(reportDownloadError({ message: "core_result_unavailable" }), /핵심 근거/);
+  assert.match(reportDownloadError({ message: "core_result_unavailable" }, (ko, en) => en), /core evidence/);
+});
 const code = buildSync({ entryPoints: [fileURLToPath(new URL("./AnalysisDownloads.jsx", import.meta.url))], bundle: true, write: false, platform: "node", format: "cjs", packages: "external", jsx: "automatic", loader: { ".css": "empty" }, logLevel: "silent" }).outputFiles[0].text;
 const module = { exports: {} };
 runInNewContext(code, { module, exports: module.exports, require: createRequire(import.meta.url), AbortController });

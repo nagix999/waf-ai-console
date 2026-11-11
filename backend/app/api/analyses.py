@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
-from ..models import AccessAudit, AgentRun, AgentStep, Analysis, Review
+from ..models import AccessAudit, AgentRun, AgentStep, Analysis, EvidenceDisplayJob, Review
 from ..agent.evidence_relations import EvidenceRelations, validate_evidence_relations
 from ..schemas import (
     AgentRunResponse,
@@ -64,7 +64,13 @@ async def wait_for_analysis(db: Session, identifier: str, source, wait_seconds: 
 
     def read_status():
         try:
-            return fetch_analysis_status(db, identifier, source)
+            current = fetch_analysis_status(db, identifier, source)
+            if current == "completed":
+                display = db.scalar(select(EvidenceDisplayJob.status).where(
+                    EvidenceDisplayJob.analysis_id == identifier))
+                if display in {"pending", "running"}:
+                    return "processing"
+            return current
         finally:
             # A SELECT opens a Session transaction and checks out a connection.
             # Close each short read even when the HTTP wait is cancelled. The
@@ -123,6 +129,28 @@ def record_access(db: Session, principal: Principal, action: str, resource_type:
     db.commit()
 
 
+def core_detail_response(db, crypto, row, response, principal, *, result_version="v3"):
+    """One authorized, audited, source-consistent public presentation read."""
+    from ..result_contracts import StoredResultInvalid
+    from ..services.core_result_response import to_core_detail, set_core_headers
+    if isinstance(row.result_json, dict) and row.result_json.get("schema_version") == "waf-analysis-v3":
+        # Audit before reading any encrypted presentation/source relationship.
+        # This operation never appends or changes an analysis/display job.
+        identifier = row.id
+        db.rollback()
+        record_access(db, principal, "view_core_result", "analysis", identifier)
+        begin_analysis_read_snapshot(db)
+        db.refresh(row)
+    try:
+        detail, metadata = to_core_detail(db, crypto, row, result_version=result_version)
+    except StoredResultInvalid:
+        raise
+    except (ValueError, TypeError, KeyError, UnicodeError):
+        raise HTTPException(503, "core_result_unavailable", headers={"Cache-Control": "no-store"}) from None
+    set_core_headers(response, metadata)
+    return detail
+
+
 @router.post(
     "/analyses",
     response_model=AnalysisDetail,
@@ -134,9 +162,9 @@ async def create_analysis(
     response: Response,
     db: DbSession,
     principal: Annotated[Principal, Depends(require_scope("ingest"))],
-    wait_seconds: int = Query(default=300, ge=0, le=600, description="응답에서 분석 완료를 기다릴 시간(초). 기본 300초, 최대 600초이며 0이면 즉시 반환합니다. 테스트명이나 실행 시간 제한이 아닙니다. 기한이 지나거나 연결이 끊겨도 접수된 분석은 계속 처리합니다."),
+    wait_seconds: int = Query(default=300, ge=0, le=600, description="응답에서 분석과 근거 정리 완료를 함께 기다릴 총 시간(초). 기본 300초, 최대 600초이며 0이면 즉시 반환합니다. 테스트명이나 모델 실행 시간 제한이 아닙니다. 미완료는 202이며 기한이 지나거나 연결이 끊겨도 접수된 작업은 계속 처리합니다."),
     test_run_id: str | None = Query(default=None, max_length=36, description="Test 키 전용. POST /api/v1/test-sessions 응답의 id를 전달합니다. 테스트명·임의 ID는 사용할 수 없으며 생략하면 테스트를 자동 생성합니다."),
-    result_version: Literal["v2", "v3"] | None = Query(default=None, description="서비스 키는 기본 v2 호환 응답입니다. v3를 선택하면 엄격한 새 결과 계약을 반환합니다. 과거 결과는 원래 버전을 유지합니다."),
+    result_version: Literal["v2", "v3"] | None = Query(default=None, description="서비스 키는 기본 v2 호환 응답입니다. v3는 기존 필드 구조의 핵심 근거 응답이며 v2도 같은 핵심 근거만 변환합니다. 전체 원본은 내부에 보존하며 과거 결과는 원래 버전을 유지합니다."),
 ) -> AnalysisDetail:
     from ..services.initial_assessment import FIELDS
     if set(FIELDS).intersection(payload.model_fields_set) and not (
@@ -156,9 +184,11 @@ async def create_analysis(
             raise HTTPException(413 if item.error_code == "payload_too_large" else 422, item.error_code or "invalid_test_event")
         row = await wait_for_analysis(db, item.analysis_id, visible_source(principal), wait_seconds)
         row._test_run_id = run.id
-        if row.status in {"pending", "processing"}:
+        detail = core_detail_response(db, request.app.state.crypto, row, response, principal,
+            result_version=response_result_version(principal, result_version))
+        if detail.status in {"pending", "processing"}:
             response.status_code = 202
-        return to_detail(row, request.app.state.crypto, result_version=response_result_version(principal, result_version))
+        return detail
     return await submit_analysis(payload, request, response, db, principal, wait_seconds, "production", "service_api", result_version=result_version)
 
 
@@ -189,9 +219,11 @@ async def create_test_analysis(
                             item.error_code or "invalid_test_event")
     row = await wait_for_analysis(db, item.analysis_id, None, wait_seconds)
     row._test_run_id = run.id
-    if row.status in {"pending", "processing"}:
+    detail = core_detail_response(db, request.app.state.crypto, row, response, principal,
+        result_version=response_result_version(principal, result_version))
+    if detail.status in {"pending", "processing"}:
         response.status_code = 202
-    return to_detail(row, request.app.state.crypto, result_version=response_result_version(principal, result_version))
+    return detail
 
 
 async def submit_analysis(
@@ -215,9 +247,11 @@ async def submit_analysis(
     except AnalysisIngestError as exc:
         raise HTTPException(status_code=exc.status_code, detail=exc.issues or exc.code) from None
     row = await wait_for_analysis(db, row.id, visible_source(principal), wait_seconds)
-    if row.status in {"pending", "processing"}:
+    detail = core_detail_response(db, request.app.state.crypto, row, response, principal,
+        result_version=response_result_version(principal, result_version))
+    if detail.status in {"pending", "processing"}:
         response.status_code = status.HTTP_202_ACCEPTED
-    return to_detail(row, request.app.state.crypto, result_version=response_result_version(principal, result_version))
+    return detail
 
 
 @router.get("/analyses", response_model=AnalysisListResponse)
@@ -253,7 +287,7 @@ def get_analysis_by_event(
     except EventLookupError as exc:
         raise HTTPException(exc.status_code, exc.code) from None
     response.headers["Cache-Control"] = "no-store"
-    return to_detail(row, request.app.state.crypto, result_version=result_version)
+    return core_detail_response(db, request.app.state.crypto, row, response, principal, result_version=result_version)
 
 
 @router.get("/analyses/{analysis_id}", response_model=AnalysisDetail)
@@ -261,14 +295,18 @@ def get_analysis(
     analysis_id: str, db: DbSession,
     principal: Annotated[Principal, Depends(require_scope("ingest"))],
     request: Request = None,
-    result_version: Literal["v2", "v3"] = Query(default="v3", description="분석 조회는 기본 v3 응답입니다. v2를 지정하면 기존 호환 형식으로 반환합니다. 과거 저장 결과는 원래 버전을 유지합니다."),
+    response: Response = None,
+    result_version: Literal["v2", "v3"] = Query(default="v3", description="분석 조회는 기본 v3 핵심 근거 응답입니다. v2는 같은 핵심 근거의 기존 호환 형식입니다. 근거 정리 대기 중에는 status=processing, result=null이며 전체 원본과 과거 저장 결과는 보존합니다."),
 ) -> AnalysisDetail:
     begin_analysis_read_snapshot(db)
     row = fetch_analysis(db, analysis_id, visible_source(principal))
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="analysis_not_found")
-    return to_detail(row, request.app.state.crypto if request is not None else None,
-                     result_version=response_result_version(principal, result_version))
+    if request is None:
+        # Preserve direct internal callers without an HTTP request context.
+        return to_detail(row, result_version=response_result_version(principal, result_version))
+    return core_detail_response(db, request.app.state.crypto, row, response, principal,
+        result_version=response_result_version(principal, result_version))
 
 
 @router.get("/analyses/{analysis_id}/event", response_model=RawEventResponse)
@@ -419,6 +457,27 @@ def get_evidence_relations(
         return validate_evidence_relations(saved["evidence_relations"], canonical["evidence"])
     except (ValueError, TypeError, KeyError, UnicodeError):
         raise HTTPException(500, "evidence_relations_unavailable", headers={"Cache-Control": "no-store"}) from None
+
+
+@router.get("/analyses/{analysis_id}/evidence-display", include_in_schema=False)
+def get_evidence_display(
+    analysis_id: str,
+    request: Request,
+    response: Response,
+    db: DbSession,
+    principal: Annotated[Principal, Depends(require_scope("admin"))],
+) -> dict:
+    """Source-bound display IDs only; no public-result or canonical rewrites."""
+    response.headers["Cache-Control"] = "no-store"
+    analysis = db.get(Analysis, analysis_id)
+    if analysis is None:
+        raise HTTPException(404, "analysis_not_found", headers={"Cache-Control": "no-store"})
+    record_access(db, principal, "view_evidence_display", "analysis", analysis_id)
+    try:
+        from ..services.evidence_display_access import read_display_view
+        return read_display_view(db, request.app.state.crypto, analysis)
+    except (ValueError, TypeError, KeyError, UnicodeError):
+        raise HTTPException(503, "evidence_display_unavailable", headers={"Cache-Control": "no-store"}) from None
 
 
 @router.get("/analyses/{analysis_id}/agent-runs", response_model=list[AgentRunResponse])

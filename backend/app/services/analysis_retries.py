@@ -291,6 +291,13 @@ def enqueue_retry(db, crypto, settings, analysis_id, request, actor, *, commit=T
                    model_profile=_profile.name, status="pending")
     copy_parser_snapshot(original, row)
     db.add(row)
+    from .evidence_display_jobs import copy_job
+    try:
+        copy_job(db, crypto, original, row)
+    except ValueError:
+        if commit:
+            db.rollback()
+        raise RetryError("retry_display_snapshot_unavailable") from None
     from .test_runs import analysis_test_run
     run = analysis_test_run(db, original) if original.analysis_purpose == "test" else None
     if run and run.evaluation_mode == "ground_truth":

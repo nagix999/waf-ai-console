@@ -3,6 +3,7 @@ import { analystFollowUp, finalValue, groupedEvidence } from "./analystView.js";
 import { isMockAnalysis } from "./labelEvaluation.js";
 import { isResultV3 } from "./assessmentData.js";
 import { decisionExplanation } from "./decisionExplanation.js";
+import { isCoreEvidence } from "./analysisEvidenceMeta.js";
 
 // Presentation only. Keep stored directions and numbering; never infer a side
 // from the final verdict, rank evidence by strength, or manufacture a condition.
@@ -21,13 +22,24 @@ export function decisionConditions(detail, options) {
   const followUp = analystFollowUp(detail);
   if (detail?.status !== "completed" || isMockAnalysis(detail)) return { ...followUp, items: [], visible: false };
   const held = finalValue(detail, "verdict") === "inconclusive";
+  if (isCoreEvidence(detail.result, options?.evidenceView)) {
+    const items = (assessmentView(detail.result, options)?.issues || []).map(issue => ({
+      title: issue.missing_condition_ko || issue.point_ko,
+      notes: issue.missing_condition_ko && issue.point_ko !== issue.missing_condition_ko ? [issue.point_ko] : [],
+      evidence_numbers: issue.evidence_numbers, checks: [],
+    }));
+    return { ...followUp, items, held, visible: items.length > 0, sections: items.length ? [{
+      key: "conditions", title: held ? ["판정에 필요한 확인", "Checks needed for a decision"] : ["판정 시 고려한 조건", "Conditions considered"], items,
+      introduction: "API에 기록된 조건을 같은 순서로 표시합니다.", introductionEn: "Conditions are shown in the order returned by the API.",
+    }] : [] };
+  }
   if (isResultV3(detail.result)) {
     const items = [];
     const explanation = held ? decisionExplanation(detail) : null;
     const technical = explanation && ["execution_incomplete", "evidence_unverified", "evidence_review", "input_limited"].includes(explanation.code);
     // Only recorded conditions are actionable. No generic response-code check,
     // guessed environment prerequisite or historical check fallback in V3.
-    if (held && !technical) for (const issue of assessmentView(detail.result, options)?.issues || []) {
+    if (held && !technical) for (const issue of assessmentView(detail.result, { display: detail.evidence_display, ...options })?.issues || []) {
       if (!issue.missing_condition_ko) continue;
       let item = items.find(row => row.title === issue.missing_condition_ko);
       if (!item) { item = { title: issue.missing_condition_ko, notes: [], evidence_numbers: [], checks: [] }; items.push(item); }

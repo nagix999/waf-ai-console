@@ -8,6 +8,7 @@ import { assessmentView, evidenceNotice, legacyEvidenceNotice } from "./analystA
 import { decisionConditions } from "./decisionDetail.js";
 import { disagreementNotice, evidenceSections, legacySignatureNotice, severityMeaning, signatureSummary, verifierDisagreed, wafObservation } from "./decisionSemantics.js";
 import { isResultV3 } from "./assessmentData.js";
+import { isCoreEvidence } from "./analysisEvidenceMeta.js";
 const punctuation = /[\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e]/;
 const escapedPunctuation = /\\([\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e])/g;
 const entities = {
@@ -91,10 +92,11 @@ function duration(value) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? `${value} ms` : "미측정";
 }
 
-export function buildAnalysisReport(input, { decoding = null, includeAppendix = false } = {}) {
+export function buildAnalysisReport(input, { decoding = null, includeAppendix = false, evidenceView = null } = {}) {
   const detail = isRecord(input) ? input : {};
   const result = isRecord(detail.result) ? detail.result : null;
   const modern = isResultV3(result);
+  const core = isCoreEvidence(result, evidenceView);
   const finalValue = (key) => owns(result, key) ? result[key] : detail[key];
   const threat = isRecord(result?.threat_analysis) ? result.threat_analysis : {};
   const signature = isRecord(result?.signature_assessment) ? result.signature_assessment : {};
@@ -106,7 +108,7 @@ export function buildAnalysisReport(input, { decoding = null, includeAppendix = 
   const inconclusive = finalValue("verdict") === "inconclusive";
   const guidance = analystGuidance(detail);
   const decision = stub ? null : decisionExplanation(detail);
-  const followUp = decisionConditions(detail);
+  const followUp = decisionConditions(detail, { evidenceView });
   const disagreed = verifierDisagreed(detail);
   const explanation = (value) => analystText(value, value === null ? "미기록 (null)" : "분석가가 원문과 확인 항목을 함께 검토해 주세요.");
   const analystList = (value) => textList(Array.isArray(value) ? value.filter((item) => typeof item === "string" && !isTechnicalText(item)) : []);
@@ -156,7 +158,8 @@ export function buildAnalysisReport(input, { decoding = null, includeAppendix = 
     ["입력 잘림", named(finalValue("input_truncated"), { true: "있음", false: "없음" })],
   ]), escapeText(guidance.summary_ko));
   if (inconclusive) report.push(provisionalAnalysisNotice);
-  const issues = !stub && !inconclusive ? assessmentView(result)?.issues || [] : [];
+  const assessment = assessmentView(result, { display: detail.evidence_display, evidenceView });
+  const issues = !core && !stub && !inconclusive ? assessment?.issues || [] : [];
   if (issues.length) {
     report.push("### 판정 시 고려한 쟁점");
     issues.forEach(issue => report.push(table([
@@ -188,9 +191,35 @@ export function buildAnalysisReport(input, { decoding = null, includeAppendix = 
   if (!modern) report.push(...technicalAnalysis);
 
   report.push(modern ? "## 보안 분석 근거" : "## 판정 근거");
-  const assessment = assessmentView(result);
   if (assessment) {
     report.push(evidenceNotice);
+    if (core) {
+      report.push("API가 전달한 핵심 근거를 같은 순서로 표시합니다. 전체 원본 근거는 접근 기록이 남는 실행 이력에서 확인합니다.");
+      for (const item of assessment.evidence) report.push(`#### 근거 ${item.number} — ${{ attack_request: "공격 요청 근거", normal_request: "정상 요청 근거", context: "참고 내용" }[item.supports] || "구분 미기록"}`,
+        escapeText(item.interpretation_ko), table([["출처", analystFieldLabel(item.field)]]), fencedExcerpt(item.excerpt));
+    } else if (modern && assessment.display) {
+      const view = assessment.display;
+      if (view.plan.status === "fallback") report.push("정리 실패 — 원본 근거를 유지합니다.");
+      else if (["pending", "running"].includes(detail.evidence_display?.status)) report.push("근거 정리 중입니다. 아래 내용은 현재 저장된 근거이며 판정은 변경되지 않습니다.");
+      else if (view.plan.metrics.merged_count) report.push(`정리됨 — 근거 ${view.plan.metrics.original_evidence_count}개를 ${view.plan.metrics.group_count}묶음으로 표시합니다.`);
+      else if (detail.evidence_display?.status === "completed") report.push("검토 완료 — 합친 근거가 없습니다.");
+      else report.push("묶을 중복 근거가 없습니다.");
+      for (const [title, groups] of [["핵심 근거", view.core], ["나머지 근거", view.additional]]) {
+        if (!groups.length) continue;
+        report.push(`### ${title}`);
+        for (const item of groups) {
+          const label = evidenceSections(finalValue("verdict")).find(section => section.side === item.supports)?.label[0] || "참고 내용";
+          report.push(`#### 근거 ${item.number} — ${label}`, "분석 내용:", escapeText(item.interpretation_ko),
+            `위치: ${escapeText(analystFieldLabel(item.field))}`, "로그 발췌:", fencedExcerpt(item.excerpt));
+          const sources = [...item.member_sources.filter(source => source.evidence_id !== item.representative_id), ...item.related_sources];
+          if (sources.length) report.push("함께 본 원문:");
+          for (const source of sources) {
+            const direction = evidenceSections(finalValue("verdict")).find(section => section.side === source.supports)?.label[0] || "참고 내용";
+            report.push(`근거 ${source.number} — ${direction} / ${escapeText(analystFieldLabel(source.field))}`, fencedExcerpt(source.excerpt));
+          }
+        }
+      }
+    } else {
     for (const { side: supports, label: [label] } of evidenceSections(finalValue("verdict"))) {
       const items = assessment.evidence.filter(item => item.supports === supports);
       if (!items.length && ["context", "unclassified"].includes(supports)) continue;
@@ -201,6 +230,7 @@ export function buildAnalysisReport(input, { decoding = null, includeAppendix = 
           fencedExcerpt(item.excerpt), "판단 이유:", escapeText(item.interpretation_ko));
         if (item.related_numbers.length) report.push(`같은 로그 발췌: 근거 ${item.related_numbers.join(" · ")}`);
       }
+    }
     }
   } else {
   const evidence = groupedEvidence(result?.evidence);
@@ -222,7 +252,7 @@ export function buildAnalysisReport(input, { decoding = null, includeAppendix = 
   ]));
   if (modern && decision) {
     report.push("## 최종 판정 이유", escapeText(decision.reason_ko));
-    for (const issue of assessmentView(result)?.issues || []) if (!issue.missing_condition_ko) report.push(escapeText(issue.point_ko), `관련 근거: ${issue.evidence_numbers.join(" · ")}`);
+    for (const issue of assessment?.issues || []) if (!issue.missing_condition_ko) report.push(escapeText(issue.point_ko), `관련 근거: ${issue.evidence_numbers.join(" · ")}`);
   }
 
   report.push("## 인코딩·난독화 문자열");

@@ -39,7 +39,6 @@ import { createDetailLoader, emptyDetailState } from "./detailLoader.js";
 import { analystSummary, analystText, finalValue, isTechnicalText } from "./analystView.js";
 import DetailTabs from "./DetailTabs.jsx";
 import { DecisionHero, DecisionContext, EvidenceCards, DecisionConditions, FinalDecisionReason, TechnicalInterpretation, PolicySuggestion, EvidenceWorkspace, ExecutionView } from "./AnalysisDecision.jsx";
-import { evidenceRelationView } from "./evidenceRelations.js";
 import { isResultV3 } from "./assessmentData.js";
 import { decisionTab } from "./decisionDetail.js";
 import "./inferenceDetail.css";
@@ -453,7 +452,8 @@ export function Detail({ id, onBack, onOpen, backLabel = "분석 결과", tab: c
   const w = useR5Words();
   const [view, setView] = useState(() => emptyDetailState(id));
   const loader = useRef(null);
-  const { detail, error, loading, runs, runsError, runsLoading, labelHistory, labelHistoryError, labelsLoading, evidenceRelations, relationsError, relationsLoading } = view;
+  const { detail: savedDetail, error, loading, runs, runsError, runsLoading, labelHistory, labelHistoryError, labelsLoading, evidenceRelations, relationsError, relationsLoading, evidenceDisplay, displayError, displayLoading, displayPollingStopped } = view;
+  const detail = savedDetail;
   useEffect(() => { if (detail?.id === id) onResolved?.(detail); }, [detail?.id, detail?.analysis_purpose, detail?.test_run_id, id, onResolved]);
   const [rawRecord, setRawRecord] = useState(null);
   const raw = rawRecord?.id === id ? rawRecord.event : null;
@@ -478,7 +478,7 @@ export function Detail({ id, onBack, onOpen, backLabel = "분석 결과", tab: c
     return () => { current.dispose(); loader.current = null; };
   }, [id]);
   useEffect(() => { loader.current?.setAgentVisible(tab === "agent"); }, [id, tab]);
-  useEffect(() => { loader.current?.setEvidenceVisible(tab === "result" || tab === "raw"); }, [id, tab]);
+  useEffect(() => { loader.current?.setEvidenceVisible(["result", "raw", "report", "agent"].includes(tab)); }, [id, tab]);
   useEffect(() => {
     if (tab !== "raw" || raw) return;
     let active = true;
@@ -503,10 +503,10 @@ export function Detail({ id, onBack, onOpen, backLabel = "분석 결과", tab: c
     <DecisionHero detail={detail} />
     <DetailTabs label={t("detail")} items={tabItems} value={tab} onChange={setTab} focusRequest={tabFocusRequest}>{key => {
       if (key === "result") return tab === "result" && <div className="decision-layout">
-        {detail.status === "completed" && detail.result ? <ResultView detail={detail} relations={evidenceRelations} relationsError={relationsError} relationsLoading={relationsLoading} onRetryRelations={() => loader.current?.refreshRelations()} onViewInput={openInput} includePolicy={false} onExecution={() => jumpTab("agent")} /> : <section className="panel decision-awaiting"><h2>{detail.status === "canceled" ? w("테스트 중지", "Test stopped") : detail.status === "completed" ? w("결과 본문 미기록", "Result body not recorded") : detail.status === "failed" ? w("실행 확인", "Check execution") : w("분석 진행", "Analysis progress")}</h2><p>{detail.status === "canceled" ? w("중지된 문항에는 최종 판정이 없습니다. 입력과 중지 전 실행 기록은 확인할 수 있습니다.", "Stopped cases have no final verdict. Input and execution records remain available.") : detail.status === "completed" ? w("처리는 완료되었지만 저장된 결과 본문이 없어 근거를 표시할 수 없습니다. 실행 기록을 확인해 주세요.", "Processing completed, but the result body is unavailable. Check the execution record.") : detail.status === "failed" ? w("실패한 단계는 실행 탭에서 확인할 수 있습니다. 재실행해도 기존 실패 이력은 보존됩니다.", "Check the Execution tab for the failed step. Retrying preserves the original failure history.") : w("분석이 완료되면 판정 근거를 표시합니다.", "Evidence will appear when the analysis finishes.")}</p><NavigationAction onClick={() => jumpTab("agent")}>{w("실행 상세", "Execution details")}</NavigationAction></section>}
+        {detail.status === "completed" && detail.result ? <ResultView detail={detail} relations={evidenceRelations} relationsError={displayError || relationsError} relationsLoading={displayLoading || relationsLoading} displayPollingStopped={displayPollingStopped} onRetryRelations={() => loader.current?.refreshRelations()} onViewInput={openInput} includePolicy={false} onExecution={() => jumpTab("agent")} /> : <section className="panel decision-awaiting"><h2>{detail.status === "canceled" ? w("테스트 중지", "Test stopped") : detail.status === "completed" ? w("결과 본문 미기록", "Result body not recorded") : detail.status === "failed" ? w("실행 확인", "Check execution") : w("분석 진행", "Analysis progress")}</h2><p>{detail.status === "canceled" ? w("중지된 문항에는 최종 판정이 없습니다. 입력과 중지 전 실행 기록은 확인할 수 있습니다.", "Stopped cases have no final verdict. Input and execution records remain available.") : detail.status === "completed" ? w("처리는 완료되었지만 저장된 결과 본문이 없어 근거를 표시할 수 없습니다. 실행 기록을 확인해 주세요.", "Processing completed, but the result body is unavailable. Check the execution record.") : detail.status === "failed" ? w("실패한 단계는 실행 탭에서 확인할 수 있습니다. 재실행해도 기존 실패 이력은 보존됩니다.", "Check the Execution tab for the failed step. Retrying preserves the original failure history.") : w("분석이 완료되면 판정 근거를 표시합니다.", "Evidence will appear when the analysis finishes.")}</p><NavigationAction onClick={() => jumpTab("agent")}>{w("실행 상세", "Execution details")}</NavigationAction></section>}
         <DecisionContext detail={detail} history={labelHistory} historyError={labelHistoryError} onSaved={() => loader.current?.refresh()} onExecution={() => jumpTab("agent")} />
       </div>;
-      if (key === "agent") return <ExecutionView key={id} detail={detail} runs={runs} runsError={runsError} runsLoading={runsLoading} onRetry={() => loader.current?.refreshAgent()} onMetadata={() => setTechnicalOpen(true)} initialJson={requestedTab === "json"} active={tab === "agent"} />;
+      if (key === "agent") return <ExecutionView key={id} detail={detail} runs={runs} runsError={runsError} runsLoading={runsLoading} onRetry={() => loader.current?.refreshAgent()} onMetadata={() => setTechnicalOpen(true)} initialJson={requestedTab === "json"} active={tab === "agent"} displayLoading={displayLoading} displayError={displayError} displayPollingStopped={displayPollingStopped} onRetryDisplay={() => loader.current?.refreshRelations()} />;
       if (key === "raw") return (tab === "raw" || raw) && <EvidenceWorkspace key={id} event={raw} detail={detail} relations={evidenceRelations} target={inputTarget} onSelect={setInputTarget} error={rawError} onRetry={() => setRawAttempt(value => value + 1)} active={tab === "raw"} />;
       return tab === "report" && <AnalysisReport detail={detail} decoding={raw?.decoding ?? null} mode={reportMode} onModeChange={setReportMode} includeAppendix={reportAppendix} onAppendixChange={setReportAppendix} />;
     }}</DetailTabs>
@@ -531,11 +531,11 @@ export function Detail({ id, onBack, onOpen, backLabel = "분석 결과", tab: c
   </div>;
 }
 
-export function ResultView({ detail, onViewInput, onExecution, includePolicy = true, relations, relationsError, relationsLoading, onRetryRelations }) {
+export function ResultView({ detail, onViewInput, onExecution, includePolicy = true, relations, relationsError, relationsLoading, displayPollingStopped, onRetryRelations }) {
   if (!detail.result || detail.status !== "completed") return null;
-  const preserveEvidence = evidenceRelationView(detail.result, relations).enabled;
+  const preserveEvidence = false;
   return <div className="decision-main-stack">
-    <EvidenceCards detail={detail} relations={relations} relationsError={relationsError} relationsLoading={relationsLoading} onRetryRelations={onRetryRelations} onViewInput={onViewInput} />
+    <EvidenceCards detail={detail} relations={relations} relationsError={relationsError} relationsLoading={relationsLoading} displayPollingStopped={displayPollingStopped} onRetryRelations={onRetryRelations} onViewInput={onViewInput} onExecution={onExecution} />
     {!isResultV3(detail.result) && <DecisionConditions detail={detail} onViewInput={onViewInput} />}
     <TechnicalInterpretation detail={detail} onExecution={onExecution} preserveEvidence={preserveEvidence} />
     <FinalDecisionReason detail={detail} preserveEvidence={preserveEvidence} />

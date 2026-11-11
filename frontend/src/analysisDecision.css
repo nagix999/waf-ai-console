@@ -54,6 +54,21 @@
 .decision-linked-source > button { margin-top: 7px; padding: 5px 0; font-size: 12px; }
 .decision-relations-fallback { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 12px 0; font-size: 12px; color: var(--muted); }
 .decision-relations-fallback p { margin: 0; }
+.decision-display-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 0 0 16px; padding: 9px 12px; border-radius: 8px; background: color-mix(in srgb, var(--info) 7%, var(--panel)); color: var(--muted); font-size: 12px; line-height: 1.6; }
+.decision-display-status > span { color: var(--text); font-weight: 650; }
+.decision-display-status > small { font-size: 11px; }
+.decision-display-status.is-fallback { background: var(--warn-soft, var(--raised)); }
+.decision-display-groups { display: grid; gap: 14px; }
+.decision-display-panel .decision-display-group, .decision-core-evidence-panel .decision-core-evidence { border: 1px solid var(--line); border-radius: 10px; padding: 16px; border-left: 3px solid var(--info); }
+.decision-display-group.evidence-attack_request, .decision-core-evidence.evidence-attack_request { border-left-color: var(--danger); }
+.decision-display-group.evidence-normal_request, .decision-core-evidence.evidence-normal_request { border-left-color: var(--ok); }
+.decision-display-group.evidence-context, .decision-core-evidence.evidence-context { border-left-color: var(--muted); }
+.decision-evidence-label .decision-protected-reason { color: var(--warn); font-size: 11px; line-height: 1.5; }
+.decision-source-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; margin-top: 10px; }
+.decision-source-actions .text-button { margin: 0; padding: 5px 0; font-size: 12px; }
+.decision-additional-evidence { margin-top: 16px; }
+.decision-additional-toggle { min-height: 36px; margin-bottom: 12px; }
+.decision-evidence-footnote { margin: 14px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
 .decision-evidence-row > button { grid-column: 2; justify-self: start; margin: 6px 0 0; font-size: 12px; padding: 5px 0; }
 .decision-context-evidence { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 12px; }
 .decision-context-evidence > summary { margin-bottom: 12px; }

@@ -37,6 +37,7 @@ from test_validation_data import login
 
 
 OLD = "waf-system-v2.20"
+pytestmark = pytest.mark.usefixtures("legacy_evidence_editor_admissions")
 NEW = "waf-system-v2.21"
 V220_PROMPT_SHA256 = "145e9e1c56ee0967689cc33bdd9acbaf718013bf304675e2aae8f7e3862940b6"
 HEAD_FILE_SHA256 = {

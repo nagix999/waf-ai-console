@@ -53,7 +53,7 @@ for (const verdict of ["true_positive", "false_positive", "inconclusive"]) test(
   const html = render(EvidenceCards, detail), groups = evidenceSections(verdict);
   assert.deepEqual(groups.slice(0, 2).map(item => item.side), ["attack_request", "normal_request"]);
   assert.match(html, /공격 요청 근거/); assert.match(html, /정상 요청 근거/);
-  assert.doesNotMatch(html, /반대 근거|정탐 근거|오탐 근거|공격 해석|정상 해석/);
+  assert.doesNotMatch(html, /정탐 근거|오탐 근거|공격 해석|정상 해석/);
   assert.ok(html.indexOf("evidence-attack_request") < html.indexOf("evidence-normal_request"));
 });
 
@@ -95,9 +95,13 @@ test("V3 preserves source-linked editor groups and prevents cross-direction grou
   detail.result.evidence_presentation = { version: "evidence-editor-v1", status: "completed", groups: [
     { member_ids: ["e1", "e4"], representative_id: "e4" }, { member_ids: ["e2"], representative_id: "e2" }, { member_ids: ["e3"], representative_id: "e3" },
   ] };
+  // Different decision-condition membership is protected even when source and
+  // direction match. Only a compatible mapping may reduce the display.
+  assert.equal(detailEvidence(detail.result).length, 4);
+  detail.result.decision_issues[0].evidence_ids.push("e4");
   assert.equal(detailEvidence(detail.result).length, 3);
   assert.equal(detailEvidence(detail.result)[0].interpretation_ko, first.interpretation_ko);
-  assert.deepEqual(assessmentView(detail.result).issues[0].evidence_numbers, [1, 2]);
+  assert.deepEqual(assessmentView(detail.result).issues[0].evidence_numbers, [4, 2]);
   detail.result.evidence_presentation.groups = [{ member_ids: ["e1", "e2", "e4"], representative_id: "e1" }, { member_ids: ["e3"], representative_id: "e3" }];
   assert.equal(detailEvidence(detail.result).length, 4);
 });
@@ -115,7 +119,8 @@ test("V3 web/report share observations, fixed evidence labels and conditions wit
   // The report has a fixed allowlist and must not read deprecated output fields.
   const html = render(EvidenceCards, detail), report = decodeReportText(buildAnalysisReport(detail));
   assert.equal(render(PolicySuggestion, detail), "");
-  for (const title of ["공격 요청 근거", "정상 요청 근거", "참고 내용"]) { assert.ok(html.includes(title)); assert.ok(report.includes(title)); }
+  for (const title of ["공격 요청 근거", "정상 요청 근거"]) { assert.ok(html.includes(title)); assert.ok(report.includes(title)); }
+  assert.match(html, /나머지 근거 1묶음 보기/); assert.ok(report.includes("참고 내용"));
   assert.ok(report.includes(detail.result.summary_ko));
   assert.ok(report.indexOf("## 보안 분석 근거") < report.indexOf("## 세부 분석"));
   assert.ok(report.indexOf("## 보안 분석 근거") < report.indexOf("## 최종 판정 이유"));

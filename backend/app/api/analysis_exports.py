@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 
 from ..security import Principal, require_scope
 from ..database import get_db
-from ..services.analysis import fetch_analysis, to_detail
+from ..services.analysis import fetch_analysis
+from ..services.core_result_response import to_core_detail, set_core_headers
 from ..services.analysis_exports import ReportExportError, build_report, render_xlsx
 from ..services.report_pdf import pdf_document, render_report_pdf
 from ..services.payload_decoding import decode_payload
@@ -27,15 +28,27 @@ def _download(analysis_id, request, db, principal, format, *, include_appendix=F
     row = fetch_analysis(db, str(analysis_id))
     if row is None:
         raise HTTPException(404, "analysis_not_found", headers=headers)
+    if isinstance(row.result_json, dict) and row.result_json.get("schema_version") == "waf-analysis-v3":
+        # Source-link and display history are privileged, even for a download
+        # that later fails eligibility or renderer limits.
+        db.rollback()
+        record_access(db, principal, "view_evidence_display_for_export", "analysis", str(analysis_id))
+        begin_analysis_read_snapshot(db)
+        db.refresh(row)
     try:
-        # No crypto argument: field-definition history is not report content.
-        detail = to_detail(row).model_dump(mode="json")
+        projected, metadata = to_core_detail(db, request.app.state.crypto, row, include_field_metadata=False)
+        detail = projected.model_dump(mode="json")
+        evidence_view = "core-v1"
+        # Downloads follow the same readiness and evidence list as GET/POST.
+        # A model deadline is handled by the worker, never by a download read.
+        if metadata["status"] == "pending":
+            raise ReportExportError("report_not_final", 409)
         if format == "pdf":
-            build_report(detail)  # Eligibility before any optional raw read.
+            build_report(detail, evidence_view=evidence_view)  # Eligibility before any optional raw read.
             decoding = decode_payload(request.app.state.crypto.decrypt_text(row.payload_ciphertext)) if include_decoding else None
-            report = pdf_document(detail, decoding=decoding, include_appendix=include_appendix, theme=theme)
+            report = pdf_document(detail, decoding=decoding, include_appendix=include_appendix, theme=theme, evidence_view=evidence_view)
         else:
-            report = build_report(detail)
+            report = build_report(detail, evidence_view=evidence_view)
     except ReportExportError as exc:
         raise HTTPException(exc.status_code, exc.code, headers=headers) from None
     except Exception:
@@ -54,7 +67,9 @@ def _download(analysis_id, request, db, principal, format, *, include_appendix=F
         raise HTTPException(503, "report_export_unavailable", headers=headers) from None
     headers["Content-Disposition"] = f'attachment; filename="waf-analysis-{analysis_id}.{format}"'
     media_type = "application/pdf" if format == "pdf" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    return Response(body, media_type=media_type, headers=headers)
+    response = Response(body, media_type=media_type, headers=headers)
+    set_core_headers(response, metadata)
+    return response
 
 
 @router.get("/analyses/{analysis_id}/report.pdf", response_class=Response)

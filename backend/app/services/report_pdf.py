@@ -14,21 +14,30 @@ PDF_TIMEOUT_SECONDS = 45
 MAX_PDF_INPUT_BYTES = 2 * 1024 * 1024
 
 
-def pdf_document(detail, *, decoding=None, include_appendix=False, theme="light"):
+def pdf_document(detail, *, decoding=None, include_appendix=False, theme="light", evidence_view=None):
     # Keep existing final/non-stub eligibility and bounds. The child also
     # checks shared document/body limits including optional sections.
-    build_report(detail)
+    build_report(detail, evidence_view=evidence_view)
     # Raw, extension values and intermediate role output must never be handed
     # to the rendering process, including when an older DB contains extras.
     fields = "id event_id source_system status analysis_purpose ingest_channel company_name src_ip dest_ip src_port dest_port waf_vendor waf_action event_name signature created_at started_at completed_at total_elapsed_ms queue_wait_ms processing_duration_ms model_profile prompt_version verdict summary_ko severity input_truncated evaluation review_state error_code".split()
     clean = {key: detail[key] for key in fields if key in detail}
     result = detail.get("result") or {}
+    from .analyst_presentation import clean_display_view
+    # A full-result plan is source-hash bound to the canonical collection. It
+    # cannot be reapplied to a response that has already selected its evidence.
+    display = None if evidence_view == "core-v1" else clean_display_view(result, detail.get("evidence_display"))
+    if display is not None:
+        # Validated IDs, enums and counts only. No job snapshots or provider IO.
+        clean["evidence_display"] = display
     allowed = "schema_version verdict summary_ko confidence_score threat_analysis signature_assessment evidence analyst_guidance analyst_checks recommended_checks conflicting_evidence tuning_recommendation input_truncated analyst_assessment evidence_presentation follow_up_presentation decision_issues interpretation_conflict".split()
     clean["result"] = {key: result[key] for key in allowed if key in result}
     def pick(value, keys):
         return {key: value[key] for key in keys.split() if key in value} if isinstance(value, dict) else {}
     clean["result"]["agent"] = pick(result.get("agent"), "framework execution agent_mode llm_called llm_provider model_name")
-    clean["result"]["policy"] = pick(result.get("policy"), "prompt_version")
+    # Source-bound presentation validation needs only these existing IDs, not
+    # the private execution snapshot or the rest of the policy configuration.
+    clean["result"]["policy"] = pick(result.get("policy"), "prompt_version decision_evidence_ids")
     diagnostic = result.get("diagnostics") if isinstance(result.get("diagnostics"), dict) else {}
     clean["result"]["diagnostics"] = {
         **pick(diagnostic, "inconclusive_reasons"),
@@ -43,7 +52,10 @@ def pdf_document(detail, *, decoding=None, include_appendix=False, theme="light"
         clean["result"]["primary"] = pick(result.get("primary"), "verdict")
         if isinstance(result.get("verifier"), dict):
             clean["result"]["verifier"]["output"] = pick(result["verifier"].get("output"), "verdict")
-    return {"detail": clean, "decoding": decoding, "includeAppendix": include_appendix, "theme": theme}
+    document = {"detail": clean, "decoding": decoding, "includeAppendix": include_appendix, "theme": theme}
+    if evidence_view == "core-v1":
+        document["evidenceView"] = evidence_view
+    return document
 
 
 def render_report_pdf(document):

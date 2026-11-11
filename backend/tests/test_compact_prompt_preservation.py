@@ -32,7 +32,7 @@ from test_runtime_versions_v221 import HEAD_FILE_SHA256
 from test_validation_data import login
 
 
-pytestmark = pytest.mark.usefixtures("registered_vllm_target")
+pytestmark = pytest.mark.usefixtures("registered_vllm_target", "legacy_evidence_editor_admissions")
 FROZEN_V221_SHA256 = "2b9c4ab99ddced5d3d252972792c43e5c7bc1f1b9d61747954bd0b54062a66b9"
 ENGINE_SHA256 = {
     **HEAD_FILE_SHA256,

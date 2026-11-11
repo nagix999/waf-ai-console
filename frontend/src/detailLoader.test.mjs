@@ -252,7 +252,7 @@ test("a stale running detail does not keep Agent polling forever while detail lo
   h.loader.dispose(); assert.equal(h.clock.count, 0);
 });
 
-test("source links are lazy, terminal-v3 only, cached across evidence tabs and never fetch full Agent I/O", async () => {
+test("core-v3 evidence is received with analysis and changing tabs never fetches full-source links", async () => {
   const h = harness(); h.loader.start(); h.loader.setEvidenceVisible(true);
   await h.answer("analysis", analysis("processing", { result: { schema_version: "waf-analysis-v3" } }));
   await h.answer("evaluationLabels", history());
@@ -260,12 +260,11 @@ test("source links are lazy, terminal-v3 only, cached across evidence tabs and n
   await h.clock.advance(3000);
   await h.answer("analysis", analysis("completed", { result: { schema_version: "waf-analysis-v3" } }));
   await h.answer("evaluationLabels", history());
-  const mapping = { version: "evidence-relations-v1", groups: [] };
-  await h.answer("evidenceRelations", mapping);
   h.loader.setEvidenceVisible(false); h.loader.setEvidenceVisible(true);
   await h.clock.advance(60000);
-  assert.deepEqual(h.state.evidenceRelations, mapping);
-  assert.equal(h.calls("evidenceRelations").length, 1);
+  assert.equal(h.state.evidenceRelations, null);
+  assert.equal(h.state.evidenceMeta.view, "core-v1");
+  assert.equal(h.calls("evidenceRelations").length, 0);
   assert.equal(h.calls("agentRuns").length, 0);
   h.loader.dispose();
 });
@@ -279,20 +278,17 @@ test("legacy results never request source links", async () => {
   h.loader.dispose();
 });
 
-test("leaving source tabs aborts link reads and ignores late data; retry is independent of analysis", async () => {
+test("source compatibility refresh rereads the authoritative analysis without loading original sidecars", async () => {
   const h = harness(); h.loader.start(); h.loader.setEvidenceVisible(true);
   await h.answer("analysis", analysis("completed", { result: { schema_version: "waf-analysis-v3" } }));
   await h.answer("evaluationLabels", history());
-  const stale = h.next("evidenceRelations");
   h.loader.setEvidenceVisible(false);
-  assert.equal(stale.signal.aborted, true);
-  stale.resolve({ version: "stale", groups: [] }); await flush();
   assert.equal(h.state.evidenceRelations, null);
-  h.loader.setEvidenceVisible(true); await h.fail("evidenceRelations", 403);
-  assert.ok(h.state.relationsError);
+  h.loader.setEvidenceVisible(true);
   h.loader.refreshRelations();
-  await h.answer("evidenceRelations", { version: "evidence-relations-v1", groups: [] });
+  await h.answer("analysis", analysis("completed", { result: { schema_version: "waf-analysis-v3" } }));
   assert.equal(h.state.relationsError, "");
-  assert.equal(h.calls("analysis").length, 1);
+  assert.equal(h.calls("analysis").length, 2);
+  assert.equal(h.calls("evidenceRelations").length, 0);
   h.loader.dispose(); assert.equal(h.clock.count, 0);
 });

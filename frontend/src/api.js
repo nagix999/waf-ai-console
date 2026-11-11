@@ -1,6 +1,7 @@
 import { modelTestPayload } from "./modelValidation.js";
 import { modelAssignmentPayload } from "./modelAssignments.js";
 import { affectsHome, invalidateHome } from "./readInvalidation.js";
+import { analysisEvidenceMeta, responseEvidenceMeta } from "./analysisEvidenceMeta.js";
 
 async function request(path, options = {}) {
   const response = await fetch(path, {
@@ -23,10 +24,12 @@ async function request(path, options = {}) {
       code: message === "Value error, initial_assessment_pair_required" ? "initial_assessment_pair_required" : null })) : [];
     throw error;
   }
+  responseEvidenceMeta(body, response.headers);
   return body;
 }
 
 export const api = {
+  analysisEvidenceMeta,
   parsers: (options = {}) => request("/api/v1/admin/parsers", { ...options, cache: "no-store" }),
   parser: (id, options = {}) => request(`/api/v1/admin/parsers/${encodeURIComponent(id)}`, { ...options, cache: "no-store" }),
   createParser: payload => request("/api/v1/admin/parsers", { method: "POST", body: JSON.stringify(payload), cache: "no-store" }),
@@ -91,6 +94,7 @@ export const api = {
   rawEvent: (id, options = {}) => request(`/api/v1/analyses/${id}/event`, options),
   agentRuns: (id, options = {}) => request(`/api/v1/analyses/${id}/agent-runs`, options),
   evidenceRelations: (id, options = {}) => request(`/api/v1/analyses/${encodeURIComponent(id)}/evidence-relations`, { ...options, cache: "no-store" }),
+  evidenceDisplay: (id, options = {}) => request(`/api/v1/analyses/${encodeURIComponent(id)}/evidence-display`, { ...options, cache: "no-store" }),
   evaluationLabels: (id, options = {}) => request(`/api/v1/analyses/${id}/evaluation-labels`, options),
   previewEvaluationLabels: (body) => request("/api/v1/evaluation-labels/preview", { method: "POST", body }),
   confirmEvaluationLabels: (preview_token) => request("/api/v1/evaluation-labels/confirm", {

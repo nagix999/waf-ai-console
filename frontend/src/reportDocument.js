@@ -13,8 +13,8 @@ export function normalizeReportBlock(block) {
   return output;
 }
 
-export function buildReportDocument({ detail, decoding = null, includeAppendix = false }) {
-  const markdown = buildAnalysisReport(detail, { decoding, includeAppendix });
+export function buildReportDocument({ detail, decoding = null, includeAppendix = false, evidenceView = null }) {
+  const markdown = buildAnalysisReport(detail, { decoding, includeAppendix, evidenceView });
   if (new TextEncoder().encode(markdown).length > 512_000) throw new Error("report_too_large");
   const report = parseApiDocument(markdown);
   return {

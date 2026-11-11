@@ -27,8 +27,101 @@ def analyst_text(value, fallback="미기록"):
     return INPUT_LIMITATION if value == OLD_INPUT_LIMITATION else value
 
 
-def assessment_view(result):
+def clean_display_view(result, display_view):
+    """Allowlist an administrator sidecar before exports or renderer IPC."""
+    if not isinstance(display_view, dict) or result.get("schema_version") != "waf-analysis-v3":
+        return None
+    from ..agent.evidence_relations import validate_evidence_relations
+    from .evidence_display_plan import build_display_plan, validate_display_plan
+    try:
+        relations = validate_evidence_relations(display_view.get("relations") or {
+            "version": "evidence-relations-v1", "groups": []}, result["evidence"])
+        plan = validate_display_plan(result, relations, display_view["plan"])
+        status = display_view.get("status")
+        if status not in {"disabled", "pending", "running", "completed", "skipped", "fallback"}:
+            raise ValueError()
+    except (ValueError, TypeError, KeyError):
+        # Invalid presentation metadata must not conceal a single source.
+        relations = {"version": "evidence-relations-v1", "groups": []}
+        try:
+            plan = build_display_plan(result, relations, status="fallback", reason="display_record_invalid")
+        except (ValueError, TypeError, KeyError):
+            return None
+        status = "fallback"
+    return {"version": "evidence-display-view-v1", "status": status,
+            "relations": relations, "plan": plan, "metadata": {}}
+
+
+def _planned_assessment(result, display_view):
+    clean = clean_display_view(result, display_view)
+    if clean is None:
+        return None
+    plan = clean["plan"]
+    indexed = {item["evidence_id"]: item for item in result["evidence"]}
+    references = {identifier: group["number"] for group in plan["groups"] for identifier in group["member_ids"]}
+    evidence = []
+    for group in plan["groups"]:
+        original = indexed[group["representative_id"]]
+        additional, seen = [], set()
+        def source_key(item):
+            return item["field"], item["excerpt"], tuple((span["start"], span["end"]) for span in item.get("source_spans", []))
+        seen.add(source_key(original))
+        for identifier in [*group["member_ids"], *group["related_ids"]]:
+            item = indexed[identifier]
+            key = source_key(item)
+            if key in seen:
+                continue
+            seen.add(key)
+            additional.append({"evidence_id": identifier, "field": item["field"], "excerpt": item["excerpt"],
+                               "source_spans": item.get("source_spans", [])})
+        evidence.append({"number": group["number"], "field": original["field"], "excerpt": original["excerpt"],
+            "interpretation_ko": analyst_text(original["interpretation_ko"]), "supports": group["supports"],
+            "evidence_id": original["evidence_id"], "group_id": group["group_id"], "member_ids": group["member_ids"],
+            "related_sources": additional, "default_visible": group["default_visible"], "related_numbers": []})
+    for item in evidence:
+        item["related_numbers"] = [other["number"] for other in evidence if other["supports"] != item["supports"]
+            and (other["field"], other["excerpt"]) == (item["field"], item["excerpt"])]
+    issues = []
+    for issue in result.get("decision_issues", []):
+        ids = issue["evidence_ids"]
+        if not ids or any(identifier not in references for identifier in ids):
+            continue
+        row = {"point_ko": issue["point_ko"],
+               "evidence_numbers": list(dict.fromkeys(references[identifier] for identifier in ids)),
+               "missing_condition_ko": analyst_text(issue.get("missing_condition_ko"), "") or None}
+        if row not in issues:
+            issues.append(row)
+    return {"evidence": evidence, "issues": issues, "display_plan": plan}
+
+
+def _core_assessment(result):
+    """Format the already-projected API list without a second selection pass.
+
+    Stable evidence IDs, not the position in the shortened response, identify
+    references. Two different original objects must not be silently merged by
+    a report formatter, even if their excerpts happen to be identical.
+    """
+    evidence = [{"number": int(item["evidence_id"][1:]),
+                 "evidence_id": item["evidence_id"], "field": item["field"],
+                 "excerpt": item["excerpt"], "interpretation_ko": item["interpretation_ko"],
+                 "supports": item["supports"], "related_numbers": []}
+                for item in result["evidence"]]
+    numbers = {item["evidence_id"]: item["number"] for item in evidence}
+    issues = [{"point_ko": issue["point_ko"],
+               "evidence_numbers": [numbers[identifier] for identifier in issue["evidence_ids"]],
+               "missing_condition_ko": issue.get("missing_condition_ko")}
+              for issue in result.get("decision_issues", [])]
+    return {"evidence": evidence, "issues": issues}
+
+
+def assessment_view(result, *, display_view=None, evidence_view=None):
     """No raw input reads, role-result reads, inference or legacy rewrites."""
+    if evidence_view == "core-v1" and result.get("schema_version") == "waf-analysis-v3":
+        return _core_assessment(result)
+    if display_view is not None and result.get("schema_version") == "waf-analysis-v3":
+        planned = _planned_assessment(result, display_view)
+        if planned is not None:
+            return planned
     assessment = ({"version": "analyst-assessment-v1", "evidence": result.get("evidence"),
                    "decision_issues": result.get("decision_issues")}
                   if result.get("schema_version") == "waf-analysis-v3" else result.get("analyst_assessment"))

@@ -7,6 +7,12 @@ const id = "11111111-1111-4111-8111-111111111111";
 const preview = { count: 73, scope: "a".repeat(64), columns: [{ name: "event_id", label_ko: "이벤트 ID", description: "이벤트 식별자", example: "sample-001", group: "input" }] };
 const w = korean => korean;
 
+for (const [code, status] of [["test_export_evidence_pending", 409], ["core_result_unavailable", 503]]) test(`core export is blocked safely with an actionable KR/EN message: ${code}`, async () => {
+  await assert.rejects(fetchSelectedTestExport(id, { columns: ["event_id"] }, { fetchImpl: async () => Response.json({ detail: code }, { status }) }), error => error.message === code && error.status === status);
+  assert.match(testExportError({ message: code }, w), /핵심 근거/);
+  assert.match(testExportError({ message: code }, (ko, en) => en), /[Cc]ore evidence/);
+});
+
 test("export reuses case filters and order but excludes pagination, drafts and statistic setup", () => {
   const filter = { op: "and", rules: [{ field: "verdict", operator: "eq", value: "true_positive" }] };
   const selection = testExportFilters({ difficulty: "hard", cell: "fn", evaluation_id: id, limit: 1, offset: 500,

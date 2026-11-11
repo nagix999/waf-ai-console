@@ -30,9 +30,9 @@ class TestExportError(ValueError):
         super().__init__(code)
 
 
-def evidence_columns(result):
+def evidence_columns(result, *, display_view=None, evidence_view=None):
     """Display order/representatives, max five per direction; never reclassify."""
-    view = assessment_view(result)
+    view = assessment_view(result, display_view=display_view, evidence_view=evidence_view)
     items = view["evidence"] if view is not None else result.get("evidence", [])
     groups = {name: [] for name in EVIDENCE_COLUMNS}
     for item in items if isinstance(items, list) else []:
@@ -42,10 +42,33 @@ def evidence_columns(result):
                 "false_positive": EVIDENCE_COLUMNS[1], "normal_request": EVIDENCE_COLUMNS[1]}.get(item.get("supports"), EVIDENCE_COLUMNS[2])
         if len(groups[name]) == 5:
             continue
-        groups[name].append("\n".join(f"{label}: {item[key]}" for label, key in (
+        text = "\n".join(f"{label}: {item[key]}" for label, key in (
             ("위치", "field"), ("로그 발췌", "excerpt"), ("판단 이유", "interpretation_ko"))
-            if isinstance(item.get(key), str) and item[key]))
+            if isinstance(item.get(key), str) and item[key])
+        for source in item.get("related_sources", []):
+            text += f"\n관련 원문 위치: {source['field']}\n관련 원문 발췌: {source['excerpt']}"
+        groups[name].append(text)
     return {name: "\n---\n".join(values) for name, values in groups.items()}
+
+
+def _rows_with_display(db, crypto, query, include_evidence):
+    """Fetch encrypted display history only for selected evidence columns.
+
+    A bounded chunk uses one latest-finalize query and one display-job query,
+    instead of adding two SQL round trips per exported case.
+    """
+    for chunk in db.execute(query.execution_options(yield_per=100)).partitions(100):
+        views = {}
+        if include_evidence:
+            modern = [row[1] for row in chunk if row[1] is not None
+                and isinstance(row[1].result_json, dict) and row[1].result_json.get("schema_version") == "waf-analysis-v3"]
+            if modern:
+                from .evidence_display_access import read_many_evidence_relations
+                from .evidence_display_jobs import get_display_views
+                relations = read_many_evidence_relations(db, crypto, modern)
+                views = get_display_views(db, crypto, modern, relations)
+        for row in chunk:
+            yield (*row, views.get(row[1].id) if row[1] is not None else None)
 
 
 def prepare_export(db, crypto, run, filters=None):
@@ -119,13 +142,16 @@ def collect_rows(db, crypto, run, *, evaluation_id=None, reference_basis="latest
         attrs.add("extra_fields")
     if names & result_fields:
         attrs.add("result_json")
+    if names & set(EVIDENCE_COLUMNS):
+        attrs.add("status")
     admitted_label = aliased(AnalysisLabel)
     order = matches.c.sort_value.desc().nulls_last() if (filters or {}).get("sort_order") == "desc" else matches.c.sort_value.asc().nulls_last()
     query = select(TestRunItem, Analysis, matches.c.retry_count, matches.c.reference_verdict, matches.c.outcome, admitted_label.verdict).select_from(
         matches).join(TestRunItem, TestRunItem.id == matches.c.item_id).outerjoin(Analysis, Analysis.id == matches.c.analysis_id).outerjoin(
         admitted_label, admitted_label.id == TestRunItem.label_id).options(load_only(*(getattr(Analysis, name) for name in attrs), raiseload=True)).order_by(order, TestRunItem.row_number, TestRunItem.id)
     records, source_bytes = [], 0
-    for item, analysis, retries, reference, outcome, expected in db.execute(query.execution_options(yield_per=100)):
+    for item, analysis, retries, reference, outcome, expected, display_view in _rows_with_display(
+            db, crypto, query, bool(names & set(EVIDENCE_COLUMNS))):
         if len(records) >= MAX_TEST_ITEMS:
             raise TestExportError("test_export_too_large", 413)
         result = analysis.result_json if analysis and names & result_fields and isinstance(analysis.result_json, dict) else {}
@@ -144,7 +170,18 @@ def collect_rows(db, crypto, run, *, evaluation_id=None, reference_basis="latest
             reason = decision_explanation({"status": analysis.status, "result": result}) if analysis else None
             special["explanation_ko"] = reason["reason_ko"] if reason else None
         if names & set(EVIDENCE_COLUMNS):
-            special.update(evidence_columns(result))
+            evidence_view = None
+            if result.get("schema_version") == "waf-analysis-v3":
+                from .core_evidence_v3 import build_core_result
+                if not isinstance(display_view, dict) or display_view.get("status") in {"pending", "running"}:
+                    raise TestExportError("test_export_evidence_pending", 409)
+                try:
+                    result = build_core_result(result, relations=display_view.get("relations"),
+                                               display_view=display_view)["result"]
+                except (ValueError, TypeError, KeyError):
+                    raise TestExportError() from None
+                evidence_view = "core-v1"
+            special.update(evidence_columns(result, evidence_view=evidence_view))
         record = {}
         for column in columns:
             name = column["name"]

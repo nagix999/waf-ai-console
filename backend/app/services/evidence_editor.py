@@ -23,6 +23,14 @@ class EditorSnapshot(BaseModel):
 
 
 def capture_editor(db, purpose, primary):
+    from .evidence_display_jobs import VERSION as DISPLAY_VERSION, has_job_for_active_run
+    from .prompt_snapshots import approved_production_record
+    if has_job_for_active_run(db):
+        return None  # New independently pinned display never runs in the core.
+    if purpose == "production":
+        approved = approved_production_record(db)
+        if approved and approved.snapshot_json.get("evidence_editor", {}).get("version") == DISPLAY_VERSION:
+            return None
     config = db.get(AgentConfiguration, 1)
     if not config or not getattr(config, purpose + "_evidence_editor_enabled", False):
         return None
@@ -43,6 +51,12 @@ def capture_editor_profile(profile, *, db=None):
         if approved is not None:
             try:
                 expected = approved.snapshot_json["evidence_editor"]
+                from .evidence_display_jobs import VERSION as DISPLAY_VERSION, capture_display_profile, editor_metadata
+                if expected.get("version") == DISPLAY_VERSION:
+                    selected = capture_display_profile(profile)
+                    if editor_metadata(selected) != expected:
+                        raise ValueError()
+                    return selected
                 if not expected["enabled"]:
                     raise ValueError()
                 version = expected["version"]

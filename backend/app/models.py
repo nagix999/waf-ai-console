@@ -167,6 +167,32 @@ class AgentRun(Base):
     steps: Mapped[list["AgentStep"]] = relationship(back_populates="run", cascade="all, delete-orphan", order_by="AgentStep.sequence")
 
 
+class EvidenceDisplayJob(Base):
+    """Optional, independently leased presentation; never rewrites verdicts."""
+    __tablename__ = "evidence_display_jobs"
+    __table_args__ = (
+        Index("ix_evidence_display_jobs_status_created", "status", "created_at"),
+        CheckConstraint("status IN ('pending', 'running', 'completed', 'skipped', 'failed', 'canceled')",
+                        name="ck_evidence_display_job_status"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    analysis_id: Mapped[str] = mapped_column(ForeignKey("analyses.id", ondelete="CASCADE"), unique=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), default="pending", nullable=False)
+    snapshot_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    input_ciphertext: Mapped[str | None] = mapped_column(Text)
+    output_ciphertext: Mapped[str | None] = mapped_column(Text)
+    source_hash: Mapped[str | None] = mapped_column(String(64))
+    encryption_key_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(120))
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    lease_owner: Mapped[str | None] = mapped_column(String(255))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class AgentStep(Base):
     __tablename__ = "agent_steps"
     __table_args__ = (UniqueConstraint("run_id", "sequence", name="uq_agent_step_sequence"),)
@@ -513,6 +539,7 @@ class TestRun(Base):
     execution_mode: Mapped[str] = mapped_column(String(32), nullable=False)
     prompt_snapshot_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
     evidence_editor_snapshot_ciphertext: Mapped[str | None] = mapped_column(Text)
+    display_editor_snapshot_ciphertext: Mapped[str | None] = mapped_column(Text)
     prompt_policy_version_id: Mapped[str] = mapped_column(ForeignKey("prompt_policy_versions.id", ondelete="RESTRICT"), nullable=False)
     prompt_version: Mapped[str] = mapped_column(String(120), nullable=False)
     input_schema_version_id: Mapped[str | None] = mapped_column(ForeignKey("input_schema_versions.id", ondelete="RESTRICT"))

@@ -208,6 +208,16 @@ def enqueue_analysis(
         raise AnalysisIngestError(exc.code, 503) from None
     db.add(row)
     try:
+        if prompt_snapshot is None:
+            from .evidence_display_jobs import capture_for_purpose, pin_job
+            try:
+                selected_display = capture_for_purpose(db, crypto, analysis_purpose)
+                if selected_display is not None:
+                    pin_job(db, crypto, row, selected_display)
+            except ValueError:
+                if commit:
+                    db.rollback()
+                raise AnalysisIngestError("display_editor_configuration_unavailable", 503) from None
         if commit:
             db.commit()
         else:

@@ -80,6 +80,13 @@ def finalize_official_evaluation(db, run_id):
     if not approved or sorted(item.dataset_item_version_id or "" for item, _ in items) != sorted(approved):
         raise ValueError("official_evaluation_membership_invalid")
     ids = sorted(identifier for _, identifier in items if identifier)
+    display_summary = None
+    if run.display_editor_snapshot_ciphertext:
+        from .evidence_display_jobs import qualification
+        # No model calls here. A separate lease owns every display execution.
+        display_summary = qualification(db, run)
+        if display_summary["pending"]:
+            return None
     labels = sorted(item.label_id for item, _ in items if item.label_id)
     key = hashlib.sha256(json.dumps([run.id, ids, labels, run.configuration_hash, METRICS_VERSION]).encode()).hexdigest()
     record = db.scalar(select(TestEvaluation).where(TestEvaluation.idempotency_key == key))
@@ -89,7 +96,8 @@ def finalize_official_evaluation(db, run_id):
             revision=(db.scalar(select(func.max(TestEvaluation.revision)).where(TestEvaluation.test_run_id == run.id)) or 0) + 1,
             label_ids=labels, analysis_ids_json=ids, evaluation_kind="ground_truth",
             metrics_version=METRICS_VERSION, configuration_hash=run.configuration_hash,
-            summary_json={**summary.model_dump(mode="json"), "breakdowns": frozen_breakdowns(db, run)}, idempotency_key=key, created_by=run.created_by)
+            summary_json={**summary.model_dump(mode="json"), "breakdowns": frozen_breakdowns(db, run),
+                **({"display_editor": display_summary} if display_summary else {})}, idempotency_key=key, created_by=run.created_by)
         db.add(record)
         db.flush()
         db.add(AccessAudit(actor_kind="worker", actor_id="official-evaluation",

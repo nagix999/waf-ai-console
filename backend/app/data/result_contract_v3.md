@@ -3,6 +3,72 @@
 This is a result contract and candidate-instruction change, not an automatic
 Production configuration upgrade. The implementation starts from `eea2527`.
 
+## Source-bound evidence presentation (2026-11-11)
+
+The public v3 fields and types are unchanged. Stored evidence, verdict, severity
+and supports remain canonical and are never replaced by the optional display editor.
+`evidence-display-editor-v1` chooses existing representative IDs and group
+order only. Server validation preserves every ID, directional classification,
+decision-issue association and required related source. Meaning equivalence is
+still a model judgment; successful structural validation is not a quality score.
+
+An additive migration `0030_evidence_display_jobs` stores encrypted snapshots,
+input/output and source-bound display plans independently of completed results.
+Existing approved configurations and retries retain their original revision.
+New official evaluations must also finish the selected display jobs successfully
+before review and promotion. Failed/unknown-completion jobs are not silently
+resent or accepted for promotion. The existing worker process runs the bounded
+display lane through `app.worker_entrypoint`; no package or service is added.
+
+Administrators use audited, no-store
+`GET /api/v1/analyses/{analysis_id}/evidence-display` to read the saved plan and
+validated source relationships. Service API keys cannot use this endpoint.
+Reads never enqueue work or call a model. The canonical administrator sidecar
+remains distinct from the public projection described below. Batch Excel retains
+its five-items-per-direction limit. Live model quality and operational latency
+have not been measured.
+
+### Core evidence response, same v3 shape
+
+POST and both single-result GET routes, UI, Markdown report, PDF and Excel use
+the fixed read-only `core-evidence-v1` projection. This is a behavioral change:
+`result.evidence` is the selected core subset, not the full saved collection.
+Normally two or three existing items are selected. A real policy-used directional
+anchor, important opposing interpretation, root decision-issue references and
+required related-source closure override that soft target. No new descriptions,
+sources, supports or role provenance are generated. Selected objects and IDs are
+preserved exactly. Saved results and encrypted Agent Trace are not rewritten.
+
+Role and policy `evidence_ids` are their original IDs intersected with the
+selected set, never a different role's representative. An empty role list means
+that role has no evidence selected into this response, not that it originally
+produced none. Root `decision_issues` and their sources remain; a role issue is
+included only when all its original references remain. A full-result
+`evidence_presentation` mapping is not reapplied to the subset. Full-plan hashes
+must not be checked against the projected object. `policy_hash` continues to
+identify instructions, not the response bytes or full original reference list.
+
+`X-Evidence-View: core-v1`, `X-Evidence-Status: completed|fallback|skipped|pending`,
+`X-Evidence-Original-Count` and `X-Evidence-Returned-Count` describe this response
+in HTTP headers, not additional JSON properties. Disabled/legacy editors use
+the deterministic selection without a model call. Failed optional organization
+uses the same bounded selection and exact-duplicate rules, not a return-all
+fallback. Invalid canonical data fails with a content-free error rather than
+inventing a new verdict. The v1 selector is immutable; a future selector revision
+must be explicitly versioned instead of silently changing v1.
+
+Pending display work is not a final response: external detail status is
+`processing`, `result=null` even when the stored decision is completed. POST's
+existing 300-second default/600-second maximum is one deadline covering both
+analysis and selected organization. Expiry yields 202 and does not cancel,
+fail or force fallback of a server job. A later read does not dispatch a model.
+Report export while organization is pending returns 409. V2 compatibility is
+derived after core-v3 selection, including its `analyst_assessment`, so changing
+`result_version` cannot recover the full collection. Historical v2 data remains
+historical and does not receive the `X-Evidence-*` core headers. Existing POST
+version defaults are unchanged (service v2, admin v3;
+GET v3). No additional table or migration is required for this projection.
+
 ## New executions
 
 Candidates pinned to `waf-system-v2.15`, `waf-system-v2.16`, `waf-system-v2.17`,

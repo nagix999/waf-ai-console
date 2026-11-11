@@ -17,7 +17,7 @@ function exportPostPath(id, preview = false) {
 async function exportError(response) {
   const body = await response.json().catch(() => ({}));
   const code = ["test_export_too_large", "test_export_too_many_columns", "test_evaluation_not_found", "test_export_busy",
-    "test_export_selection_changed", "invalid_test_export_columns", "test_export_column_collision"].includes(body?.detail) ? body.detail : "test_export_unavailable";
+    "test_export_selection_changed", "invalid_test_export_columns", "test_export_column_collision", "test_export_evidence_pending", "core_result_unavailable"].includes(body?.detail) ? body.detail : "test_export_unavailable";
   const error = Error(code); error.status = response.status; throw error;
 }
 
@@ -62,6 +62,8 @@ async function workbookResponse(response, signal) {
 }
 
 export function testExportError(error, w) {
+  if (error?.message === "test_export_evidence_pending") return w("선택한 문항의 핵심 근거를 준비 중입니다. 완료 후 다시 다운로드하세요. 부분 파일은 생성하지 않았습니다.", "Core evidence for selected cases is still being prepared. Download again after completion. No partial file was created.");
+  if (error?.message === "core_result_unavailable") return w("핵심 근거를 확인하지 못해 다운로드를 중단했습니다. 잠시 후 다시 시도하세요. 전체 원본으로 대체하지 않습니다.", "The download stopped because core evidence could not be verified. Try again shortly. Full original evidence is not substituted.");
   if (error?.status === 401) return w("로그인이 만료되었습니다. 다시 로그인하세요.", "Your session expired. Sign in again.");
   if (error?.status === 403) return w("문항 다운로드는 관리자만 사용할 수 있습니다.", "Case exports require administrator access.");
   if (error?.message === "test_export_selection_changed") return w("대상 문항이나 필드 구성이 바뀌었습니다. 대상 다시 확인을 눌러 건수를 확인하세요.", "Cases or field definitions changed. Check the export scope again.");

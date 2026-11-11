@@ -7,7 +7,7 @@ from test_official_evaluations import approved_item, execute, finalize
 from test_test_retries import finish
 from test_validation_data import create_dataset
 
-pytestmark = pytest.mark.usefixtures("registered_vllm_target")
+pytestmark = pytest.mark.usefixtures("registered_vllm_target", "legacy_evidence_editor_admissions")
 BASE = "/api/v1/admin/production-configurations"
 
 

@@ -97,7 +97,11 @@ def create_run_record(db, crypto, settings, *, name, idempotency_key, request_ha
     temporary = Analysis()
     pin_analysis_prompt(db, crypto, temporary, version_id=candidate.prompt_policy_version_id if candidate else None)
     from .evidence_editor import capture_editor
-    editor = candidate_editor if candidate is not None else capture_editor(db, "test", profile) if mode == "moduagent" and not model_test else None
+    from .evidence_display_jobs import DisplayEditorSnapshot, capture_for_purpose
+    editor = candidate_editor if candidate is not None else capture_for_purpose(db, crypto, "test") if mode == "moduagent" and not model_test else None
+    display = editor if isinstance(editor, DisplayEditorSnapshot) else None
+    if display is not None:
+        editor = None
     identifier = str(uuid.uuid4())
     run = TestRun(
         id=identifier, name=values.name, idempotency_key=values.idempotency_key,
@@ -110,6 +114,7 @@ def create_run_record(db, crypto, settings, *, name, idempotency_key, request_ha
         profile_metadata=metadata, execution_mode=mode,
         prompt_snapshot_ciphertext=temporary.prompt_snapshot_ciphertext,
         evidence_editor_snapshot_ciphertext=crypto.encrypt_text(editor.model_dump_json()) if editor else None,
+        display_editor_snapshot_ciphertext=crypto.encrypt_text(display.model_dump_json()) if display else None,
         prompt_policy_version_id=temporary.prompt_policy_version_id,
         prompt_version=temporary.prompt_version, encryption_key_version=crypto.key_version,
         created_by=actor,
@@ -201,6 +206,9 @@ def add_run_items(db, crypto, settings, run, rows, *, ai_visible=None, source_re
                 if not duplicate:
                     pin_item_prompt(analysis, run)
                     analysis.internal_only = bool(trusted.get("internal_only", False))
+                    if run.display_editor_snapshot_ciphertext and not run.model_test_run_id:
+                        from .evidence_display_jobs import load_snapshot, pin_job
+                        pin_job(db, crypto, analysis, load_snapshot(crypto, run.display_editor_snapshot_ciphertext))
                 if run.model_test_run_id:
                     analysis.model_test_run_id = run.model_test_run_id
                 item.analysis_id = analysis.id

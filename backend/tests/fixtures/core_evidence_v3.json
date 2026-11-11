@@ -1,0 +1,2357 @@
+[
+  {
+    "name": "code_fallback_ten_to_three",
+    "result": {
+      "verdict": "false_positive",
+      "confidence_score": 0.9,
+      "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+      "threat_analysis": {
+        "severity": "NONE",
+        "category": "request_data",
+        "target": "payload.query",
+        "technique_ko": "검색어 입력을 전달하는 형태입니다.",
+        "obfuscations": [],
+        "potential_impact_ko": "실제 처리 결과는 기록되지 않았습니다."
+      },
+      "signature_assessment": {
+        "relation": "mismatch",
+        "explanation_ko": null,
+        "version": "signature-assessment-v2",
+        "matched_points": [],
+        "mismatched_points": [
+          "탐지 설명과 다른 데이터 입력입니다."
+        ],
+        "uncertainty_ko": null
+      },
+      "input_truncated": false,
+      "interpretation_conflict": false,
+      "schema_version": "waf-analysis-v3",
+      "evidence": [
+        {
+          "evidence_id": "e1",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-1",
+          "interpretation_ko": "입력 항목 1의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 0,
+              "source_id": "c1"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 5,
+              "end": 18
+            }
+          ]
+        },
+        {
+          "evidence_id": "e2",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-2",
+          "interpretation_ko": "입력 항목 2의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 1,
+              "source_id": "c2"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 105,
+              "end": 118
+            }
+          ]
+        },
+        {
+          "evidence_id": "e3",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-3",
+          "interpretation_ko": "입력 항목 3의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 2,
+              "source_id": "c3"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 205,
+              "end": 218
+            }
+          ]
+        },
+        {
+          "evidence_id": "e4",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-4",
+          "interpretation_ko": "입력 항목 4의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 3,
+              "source_id": "c4"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 305,
+              "end": 318
+            }
+          ]
+        },
+        {
+          "evidence_id": "e5",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-5",
+          "interpretation_ko": "입력 항목 5의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 4,
+              "source_id": "c5"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 405,
+              "end": 418
+            }
+          ]
+        },
+        {
+          "evidence_id": "e6",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-6",
+          "interpretation_ko": "입력 항목 6의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "verifier",
+              "index": 0,
+              "source_id": "c6"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 505,
+              "end": 518
+            }
+          ]
+        },
+        {
+          "evidence_id": "e7",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-7",
+          "interpretation_ko": "입력 항목 7의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "verifier",
+              "index": 1,
+              "source_id": "c7"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 605,
+              "end": 618
+            }
+          ]
+        },
+        {
+          "evidence_id": "e8",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-8",
+          "interpretation_ko": "입력 항목 8의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "verifier",
+              "index": 2,
+              "source_id": "c8"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 705,
+              "end": 718
+            }
+          ]
+        },
+        {
+          "evidence_id": "e9",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-9",
+          "interpretation_ko": "입력 항목 9의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "verifier",
+              "index": 3,
+              "source_id": "c9"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 805,
+              "end": 818
+            }
+          ]
+        },
+        {
+          "evidence_id": "e10",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-10",
+          "interpretation_ko": "입력 항목 10의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "verifier",
+              "index": 4,
+              "source_id": "c10"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 905,
+              "end": 919
+            }
+          ]
+        }
+      ],
+      "decision_issues": [],
+      "omitted_issue_count": 0,
+      "diagnostics": {
+        "version": "evidence-selection-v1",
+        "inconclusive_reasons": [],
+        "input_signals": [],
+        "roles": {
+          "primary": {
+            "initial_model_verdict": "false_positive",
+            "validated_verdict": "false_positive",
+            "grounding_rejected_count": 0,
+            "grounding_downgraded": false,
+            "repair_attempted": false,
+            "repair_recovered": false,
+            "correction_requires_review": false,
+            "resolved_source_count": 5,
+            "failure_category": null
+          },
+          "verifier": {
+            "initial_model_verdict": "false_positive",
+            "validated_verdict": "false_positive",
+            "grounding_rejected_count": 0,
+            "grounding_downgraded": false,
+            "repair_attempted": false,
+            "repair_recovered": false,
+            "correction_requires_review": false,
+            "resolved_source_count": 5,
+            "failure_category": null
+          }
+        }
+      },
+      "analyst_guidance": {
+        "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+        "limitations": []
+      },
+      "primary": {
+        "verdict": "false_positive",
+        "confidence_score": 0.9,
+        "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+        "threat_analysis": {
+          "severity": "NONE",
+          "category": "request_data",
+          "target": "payload.query",
+          "technique_ko": "검색어 입력을 전달하는 형태입니다.",
+          "obfuscations": [],
+          "potential_impact_ko": "실제 처리 결과는 기록되지 않았습니다."
+        },
+        "signature_assessment": {
+          "relation": "mismatch",
+          "explanation_ko": null,
+          "version": "signature-assessment-v2",
+          "matched_points": [],
+          "mismatched_points": [
+            "탐지 설명과 다른 데이터 입력입니다."
+          ],
+          "uncertainty_ko": null
+        },
+        "input_truncated": false,
+        "interpretation_conflict": false,
+        "evidence_ids": [
+          "e1",
+          "e2",
+          "e3",
+          "e4",
+          "e5"
+        ],
+        "decision_issues": []
+      },
+      "verifier": {
+        "executed": true,
+        "agreement": true,
+        "reasons": [
+          "synthetic_verification"
+        ],
+        "failure_id": null,
+        "error": null,
+        "output": {
+          "verdict": "false_positive",
+          "confidence_score": 0.9,
+          "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+          "threat_analysis": {
+            "severity": "NONE",
+            "category": "request_data",
+            "target": "payload.query",
+            "technique_ko": "검색어 입력을 전달하는 형태입니다.",
+            "obfuscations": [],
+            "potential_impact_ko": "실제 처리 결과는 기록되지 않았습니다."
+          },
+          "signature_assessment": {
+            "relation": "mismatch",
+            "explanation_ko": null,
+            "version": "signature-assessment-v2",
+            "matched_points": [],
+            "mismatched_points": [
+              "탐지 설명과 다른 데이터 입력입니다."
+            ],
+            "uncertainty_ko": null
+          },
+          "input_truncated": false,
+          "interpretation_conflict": false,
+          "evidence_ids": [
+            "e6",
+            "e7",
+            "e8",
+            "e9",
+            "e10"
+          ],
+          "decision_issues": []
+        },
+        "framework_run_id": null
+      },
+      "policy": {
+        "policy_version_id": "synthetic-policy",
+        "policy_version_number": 1,
+        "policy_hash": "fixture",
+        "prompt_version": "waf-judgment-v2.15/policy-1",
+        "fixed_rules_version": "waf-system-v2.15",
+        "fixed_rules_hash": "fixture",
+        "instructions_hash": "fixture",
+        "reserved_tokens": 4096,
+        "selection_origin": "enqueue",
+        "verifier_confidence_threshold": 0.75,
+        "disagreement_or_failure_becomes_inconclusive": true,
+        "decision_evidence_ids": [
+          "e1",
+          "e2",
+          "e3",
+          "e4",
+          "e5"
+        ],
+        "verifier_policy_version": "security-analysis-policy-v1",
+        "retired_verifier_triggers": [
+          "tuning_recommended"
+        ]
+      },
+      "agent": {
+        "role_profiles": {
+          "primary": {
+            "model_profile_id": "synthetic-profile",
+            "model_profile": "Synthetic",
+            "model_name": "synthetic",
+            "llm_provider": "vllm",
+            "profile_fingerprint": "fixture-fingerprint",
+            "external_data_approved": false
+          },
+          "verifier": {
+            "model_profile_id": "synthetic-profile",
+            "model_profile": "Synthetic",
+            "model_name": "synthetic",
+            "llm_provider": "vllm",
+            "profile_fingerprint": "fixture-fingerprint",
+            "external_data_approved": false
+          }
+        },
+        "framework": "moduagent",
+        "input_schema": {
+          "version_id": "synthetic-schema",
+          "version_number": 1,
+          "content_hash": "fixture",
+          "selection_origin": "enqueue",
+          "field_metadata_usage": "history_only",
+          "field_count": 11,
+          "field_metadata_sent_to_model": false
+        },
+        "framework_version": "0.6.2",
+        "execution": "standard",
+        "tools": [],
+        "preprocessors": [],
+        "llm_provider": "vllm",
+        "model_name": "synthetic",
+        "model_profile_id": "synthetic-profile",
+        "profile_fingerprint": "fixture-fingerprint",
+        "external_data_approved": false,
+        "thinking_enabled": false
+      }
+    },
+    "display_view": {
+      "status": "fallback",
+      "plan": null
+    },
+    "expected": {
+      "result": {
+        "verdict": "false_positive",
+        "confidence_score": 0.9,
+        "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+        "threat_analysis": {
+          "severity": "NONE",
+          "category": "request_data",
+          "target": "payload.query",
+          "technique_ko": "검색어 입력을 전달하는 형태입니다.",
+          "obfuscations": [],
+          "potential_impact_ko": "실제 처리 결과는 기록되지 않았습니다."
+        },
+        "signature_assessment": {
+          "relation": "mismatch",
+          "explanation_ko": null,
+          "version": "signature-assessment-v2",
+          "matched_points": [],
+          "mismatched_points": [
+            "탐지 설명과 다른 데이터 입력입니다."
+          ],
+          "uncertainty_ko": null
+        },
+        "input_truncated": false,
+        "interpretation_conflict": false,
+        "schema_version": "waf-analysis-v3",
+        "evidence": [
+          {
+            "evidence_id": "e1",
+            "field": "payload.query",
+            "excerpt": "q=synthetic-1",
+            "interpretation_ko": "입력 항목 1의 동작을 확인했습니다.",
+            "supports": "normal_request",
+            "origins": [
+              {
+                "role": "primary",
+                "index": 0,
+                "source_id": "c1"
+              }
+            ],
+            "source_spans": [
+              {
+                "start": 5,
+                "end": 18
+              }
+            ]
+          },
+          {
+            "evidence_id": "e2",
+            "field": "payload.query",
+            "excerpt": "q=synthetic-2",
+            "interpretation_ko": "입력 항목 2의 동작을 확인했습니다.",
+            "supports": "normal_request",
+            "origins": [
+              {
+                "role": "primary",
+                "index": 1,
+                "source_id": "c2"
+              }
+            ],
+            "source_spans": [
+              {
+                "start": 105,
+                "end": 118
+              }
+            ]
+          },
+          {
+            "evidence_id": "e3",
+            "field": "payload.query",
+            "excerpt": "q=synthetic-3",
+            "interpretation_ko": "입력 항목 3의 동작을 확인했습니다.",
+            "supports": "normal_request",
+            "origins": [
+              {
+                "role": "primary",
+                "index": 2,
+                "source_id": "c3"
+              }
+            ],
+            "source_spans": [
+              {
+                "start": 205,
+                "end": 218
+              }
+            ]
+          }
+        ],
+        "decision_issues": [],
+        "omitted_issue_count": 0,
+        "diagnostics": {
+          "version": "evidence-selection-v1",
+          "inconclusive_reasons": [],
+          "input_signals": [],
+          "roles": {
+            "primary": {
+              "initial_model_verdict": "false_positive",
+              "validated_verdict": "false_positive",
+              "grounding_rejected_count": 0,
+              "grounding_downgraded": false,
+              "repair_attempted": false,
+              "repair_recovered": false,
+              "correction_requires_review": false,
+              "resolved_source_count": 5,
+              "failure_category": null
+            },
+            "verifier": {
+              "initial_model_verdict": "false_positive",
+              "validated_verdict": "false_positive",
+              "grounding_rejected_count": 0,
+              "grounding_downgraded": false,
+              "repair_attempted": false,
+              "repair_recovered": false,
+              "correction_requires_review": false,
+              "resolved_source_count": 5,
+              "failure_category": null
+            }
+          }
+        },
+        "analyst_guidance": {
+          "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+          "limitations": []
+        },
+        "primary": {
+          "verdict": "false_positive",
+          "confidence_score": 0.9,
+          "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+          "threat_analysis": {
+            "severity": "NONE",
+            "category": "request_data",
+            "target": "payload.query",
+            "technique_ko": "검색어 입력을 전달하는 형태입니다.",
+            "obfuscations": [],
+            "potential_impact_ko": "실제 처리 결과는 기록되지 않았습니다."
+          },
+          "signature_assessment": {
+            "relation": "mismatch",
+            "explanation_ko": null,
+            "version": "signature-assessment-v2",
+            "matched_points": [],
+            "mismatched_points": [
+              "탐지 설명과 다른 데이터 입력입니다."
+            ],
+            "uncertainty_ko": null
+          },
+          "input_truncated": false,
+          "interpretation_conflict": false,
+          "evidence_ids": [
+            "e1",
+            "e2",
+            "e3"
+          ],
+          "decision_issues": []
+        },
+        "verifier": {
+          "executed": true,
+          "agreement": true,
+          "reasons": [
+            "synthetic_verification"
+          ],
+          "failure_id": null,
+          "error": null,
+          "output": {
+            "verdict": "false_positive",
+            "confidence_score": 0.9,
+            "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+            "threat_analysis": {
+              "severity": "NONE",
+              "category": "request_data",
+              "target": "payload.query",
+              "technique_ko": "검색어 입력을 전달하는 형태입니다.",
+              "obfuscations": [],
+              "potential_impact_ko": "실제 처리 결과는 기록되지 않았습니다."
+            },
+            "signature_assessment": {
+              "relation": "mismatch",
+              "explanation_ko": null,
+              "version": "signature-assessment-v2",
+              "matched_points": [],
+              "mismatched_points": [
+                "탐지 설명과 다른 데이터 입력입니다."
+              ],
+              "uncertainty_ko": null
+            },
+            "input_truncated": false,
+            "interpretation_conflict": false,
+            "evidence_ids": [],
+            "decision_issues": []
+          },
+          "framework_run_id": null
+        },
+        "policy": {
+          "policy_version_id": "synthetic-policy",
+          "policy_version_number": 1,
+          "policy_hash": "fixture",
+          "prompt_version": "waf-judgment-v2.15/policy-1",
+          "fixed_rules_version": "waf-system-v2.15",
+          "fixed_rules_hash": "fixture",
+          "instructions_hash": "fixture",
+          "reserved_tokens": 4096,
+          "selection_origin": "enqueue",
+          "verifier_confidence_threshold": 0.75,
+          "disagreement_or_failure_becomes_inconclusive": true,
+          "decision_evidence_ids": [
+            "e1",
+            "e2",
+            "e3"
+          ],
+          "verifier_policy_version": "security-analysis-policy-v1",
+          "retired_verifier_triggers": [
+            "tuning_recommended"
+          ]
+        },
+        "agent": {
+          "role_profiles": {
+            "primary": {
+              "model_profile_id": "synthetic-profile",
+              "model_profile": "Synthetic",
+              "model_name": "synthetic",
+              "llm_provider": "vllm",
+              "profile_fingerprint": "fixture-fingerprint",
+              "external_data_approved": false
+            },
+            "verifier": {
+              "model_profile_id": "synthetic-profile",
+              "model_profile": "Synthetic",
+              "model_name": "synthetic",
+              "llm_provider": "vllm",
+              "profile_fingerprint": "fixture-fingerprint",
+              "external_data_approved": false
+            }
+          },
+          "framework": "moduagent",
+          "input_schema": {
+            "version_id": "synthetic-schema",
+            "version_number": 1,
+            "content_hash": "fixture",
+            "selection_origin": "enqueue",
+            "field_metadata_usage": "history_only",
+            "field_count": 11,
+            "field_metadata_sent_to_model": false
+          },
+          "framework_version": "0.6.2",
+          "execution": "standard",
+          "tools": [],
+          "preprocessors": [],
+          "llm_provider": "vllm",
+          "model_name": "synthetic",
+          "model_profile_id": "synthetic-profile",
+          "profile_fingerprint": "fixture-fingerprint",
+          "external_data_approved": false,
+          "thinking_enabled": false
+        }
+      },
+      "metadata": {
+        "version": "core-evidence-v1",
+        "status": "fallback",
+        "original_count": 10,
+        "returned_count": 3
+      }
+    }
+  },
+  {
+    "name": "semantic_five_to_one",
+    "result": {
+      "verdict": "false_positive",
+      "confidence_score": 0.9,
+      "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+      "threat_analysis": {
+        "severity": "NONE",
+        "category": "request_data",
+        "target": "payload.query",
+        "technique_ko": "검색어 입력을 전달하는 형태입니다.",
+        "obfuscations": [],
+        "potential_impact_ko": "실제 처리 결과는 기록되지 않았습니다."
+      },
+      "signature_assessment": {
+        "relation": "mismatch",
+        "explanation_ko": null,
+        "version": "signature-assessment-v2",
+        "matched_points": [],
+        "mismatched_points": [
+          "탐지 설명과 다른 데이터 입력입니다."
+        ],
+        "uncertainty_ko": null
+      },
+      "input_truncated": false,
+      "interpretation_conflict": false,
+      "schema_version": "waf-analysis-v3",
+      "evidence": [
+        {
+          "evidence_id": "e1",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-1",
+          "interpretation_ko": "입력 항목 1의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 0,
+              "source_id": "c1"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 5,
+              "end": 18
+            }
+          ]
+        },
+        {
+          "evidence_id": "e2",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-2",
+          "interpretation_ko": "입력 항목 2의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 1,
+              "source_id": "c2"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 105,
+              "end": 118
+            }
+          ]
+        },
+        {
+          "evidence_id": "e3",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-3",
+          "interpretation_ko": "입력 항목 3의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 2,
+              "source_id": "c3"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 205,
+              "end": 218
+            }
+          ]
+        },
+        {
+          "evidence_id": "e4",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-4",
+          "interpretation_ko": "입력 항목 4의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 3,
+              "source_id": "c4"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 305,
+              "end": 318
+            }
+          ]
+        },
+        {
+          "evidence_id": "e5",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-5",
+          "interpretation_ko": "입력 항목 5의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 4,
+              "source_id": "c5"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 405,
+              "end": 418
+            }
+          ]
+        }
+      ],
+      "decision_issues": [],
+      "omitted_issue_count": 0,
+      "diagnostics": {
+        "version": "evidence-selection-v1",
+        "inconclusive_reasons": [],
+        "input_signals": [],
+        "roles": {
+          "primary": {
+            "initial_model_verdict": "false_positive",
+            "validated_verdict": "false_positive",
+            "grounding_rejected_count": 0,
+            "grounding_downgraded": false,
+            "repair_attempted": false,
+            "repair_recovered": false,
+            "correction_requires_review": false,
+            "resolved_source_count": 5,
+            "failure_category": null
+          }
+        }
+      },
+      "analyst_guidance": {
+        "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+        "limitations": []
+      },
+      "primary": {
+        "verdict": "false_positive",
+        "confidence_score": 0.9,
+        "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+        "threat_analysis": {
+          "severity": "NONE",
+          "category": "request_data",
+          "target": "payload.query",
+          "technique_ko": "검색어 입력을 전달하는 형태입니다.",
+          "obfuscations": [],
+          "potential_impact_ko": "실제 처리 결과는 기록되지 않았습니다."
+        },
+        "signature_assessment": {
+          "relation": "mismatch",
+          "explanation_ko": null,
+          "version": "signature-assessment-v2",
+          "matched_points": [],
+          "mismatched_points": [
+            "탐지 설명과 다른 데이터 입력입니다."
+          ],
+          "uncertainty_ko": null
+        },
+        "input_truncated": false,
+        "interpretation_conflict": false,
+        "evidence_ids": [
+          "e1",
+          "e2",
+          "e3",
+          "e4",
+          "e5"
+        ],
+        "decision_issues": []
+      },
+      "verifier": {
+        "executed": false,
+        "agreement": null,
+        "reasons": [],
+        "failure_id": null,
+        "error": null,
+        "output": null,
+        "framework_run_id": null
+      },
+      "policy": {
+        "policy_version_id": "synthetic-policy",
+        "policy_version_number": 1,
+        "policy_hash": "fixture",
+        "prompt_version": "waf-judgment-v2.15/policy-1",
+        "fixed_rules_version": "waf-system-v2.15",
+        "fixed_rules_hash": "fixture",
+        "instructions_hash": "fixture",
+        "reserved_tokens": 4096,
+        "selection_origin": "enqueue",
+        "verifier_confidence_threshold": 0.75,
+        "disagreement_or_failure_becomes_inconclusive": true,
+        "decision_evidence_ids": [
+          "e1",
+          "e2",
+          "e3",
+          "e4",
+          "e5"
+        ],
+        "verifier_policy_version": "security-analysis-policy-v1",
+        "retired_verifier_triggers": [
+          "tuning_recommended"
+        ]
+      },
+      "agent": {
+        "role_profiles": {
+          "primary": {
+            "model_profile_id": "synthetic-profile",
+            "model_profile": "Synthetic",
+            "model_name": "synthetic",
+            "llm_provider": "vllm",
+            "profile_fingerprint": "fixture-fingerprint",
+            "external_data_approved": false
+          },
+          "verifier": {
+            "model_profile_id": "synthetic-profile",
+            "model_profile": "Synthetic",
+            "model_name": "synthetic",
+            "llm_provider": "vllm",
+            "profile_fingerprint": "fixture-fingerprint",
+            "external_data_approved": false
+          }
+        },
+        "framework": "moduagent",
+        "input_schema": {
+          "version_id": "synthetic-schema",
+          "version_number": 1,
+          "content_hash": "fixture",
+          "selection_origin": "enqueue",
+          "field_metadata_usage": "history_only",
+          "field_count": 11,
+          "field_metadata_sent_to_model": false
+        },
+        "framework_version": "0.6.2",
+        "execution": "standard",
+        "tools": [],
+        "preprocessors": [],
+        "llm_provider": "vllm",
+        "model_name": "synthetic",
+        "model_profile_id": "synthetic-profile",
+        "profile_fingerprint": "fixture-fingerprint",
+        "external_data_approved": false,
+        "thinking_enabled": false
+      }
+    },
+    "display_view": {
+      "version": "evidence-display-view-v1",
+      "status": "completed",
+      "plan": {
+        "version": "evidence-display-v1",
+        "source_hash": "936e9357237b71bcd751dac1b4df0f9d92d489fbbfe1f4a7cf5e80c65e191487",
+        "status": "completed",
+        "reason": null,
+        "groups": [
+          {
+            "group_id": "g3",
+            "representative_id": "e3",
+            "member_ids": [
+              "e1",
+              "e2",
+              "e3",
+              "e4",
+              "e5"
+            ],
+            "related_ids": [],
+            "supports": "normal_request",
+            "number": 3,
+            "default_visible": true,
+            "visibility_reasons": [
+              "rank_top"
+            ]
+          }
+        ],
+        "metrics": {
+          "original_evidence_count": 5,
+          "group_count": 1,
+          "core_group_count": 1,
+          "merged_count": 4
+        }
+      },
+      "relations": {
+        "version": "evidence-relations-v1",
+        "groups": []
+      },
+      "metadata": {}
+    },
+    "expected": {
+      "result": {
+        "verdict": "false_positive",
+        "confidence_score": 0.9,
+        "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+        "threat_analysis": {
+          "severity": "NONE",
+          "category": "request_data",
+          "target": "payload.query",
+          "technique_ko": "검색어 입력을 전달하는 형태입니다.",
+          "obfuscations": [],
+          "potential_impact_ko": "실제 처리 결과는 기록되지 않았습니다."
+        },
+        "signature_assessment": {
+          "relation": "mismatch",
+          "explanation_ko": null,
+          "version": "signature-assessment-v2",
+          "matched_points": [],
+          "mismatched_points": [
+            "탐지 설명과 다른 데이터 입력입니다."
+          ],
+          "uncertainty_ko": null
+        },
+        "input_truncated": false,
+        "interpretation_conflict": false,
+        "schema_version": "waf-analysis-v3",
+        "evidence": [
+          {
+            "evidence_id": "e3",
+            "field": "payload.query",
+            "excerpt": "q=synthetic-3",
+            "interpretation_ko": "입력 항목 3의 동작을 확인했습니다.",
+            "supports": "normal_request",
+            "origins": [
+              {
+                "role": "primary",
+                "index": 2,
+                "source_id": "c3"
+              }
+            ],
+            "source_spans": [
+              {
+                "start": 205,
+                "end": 218
+              }
+            ]
+          }
+        ],
+        "decision_issues": [],
+        "omitted_issue_count": 0,
+        "diagnostics": {
+          "version": "evidence-selection-v1",
+          "inconclusive_reasons": [],
+          "input_signals": [],
+          "roles": {
+            "primary": {
+              "initial_model_verdict": "false_positive",
+              "validated_verdict": "false_positive",
+              "grounding_rejected_count": 0,
+              "grounding_downgraded": false,
+              "repair_attempted": false,
+              "repair_recovered": false,
+              "correction_requires_review": false,
+              "resolved_source_count": 5,
+              "failure_category": null
+            }
+          }
+        },
+        "analyst_guidance": {
+          "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+          "limitations": []
+        },
+        "primary": {
+          "verdict": "false_positive",
+          "confidence_score": 0.9,
+          "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+          "threat_analysis": {
+            "severity": "NONE",
+            "category": "request_data",
+            "target": "payload.query",
+            "technique_ko": "검색어 입력을 전달하는 형태입니다.",
+            "obfuscations": [],
+            "potential_impact_ko": "실제 처리 결과는 기록되지 않았습니다."
+          },
+          "signature_assessment": {
+            "relation": "mismatch",
+            "explanation_ko": null,
+            "version": "signature-assessment-v2",
+            "matched_points": [],
+            "mismatched_points": [
+              "탐지 설명과 다른 데이터 입력입니다."
+            ],
+            "uncertainty_ko": null
+          },
+          "input_truncated": false,
+          "interpretation_conflict": false,
+          "evidence_ids": [
+            "e3"
+          ],
+          "decision_issues": []
+        },
+        "verifier": {
+          "executed": false,
+          "agreement": null,
+          "reasons": [],
+          "failure_id": null,
+          "error": null,
+          "output": null,
+          "framework_run_id": null
+        },
+        "policy": {
+          "policy_version_id": "synthetic-policy",
+          "policy_version_number": 1,
+          "policy_hash": "fixture",
+          "prompt_version": "waf-judgment-v2.15/policy-1",
+          "fixed_rules_version": "waf-system-v2.15",
+          "fixed_rules_hash": "fixture",
+          "instructions_hash": "fixture",
+          "reserved_tokens": 4096,
+          "selection_origin": "enqueue",
+          "verifier_confidence_threshold": 0.75,
+          "disagreement_or_failure_becomes_inconclusive": true,
+          "decision_evidence_ids": [
+            "e3"
+          ],
+          "verifier_policy_version": "security-analysis-policy-v1",
+          "retired_verifier_triggers": [
+            "tuning_recommended"
+          ]
+        },
+        "agent": {
+          "role_profiles": {
+            "primary": {
+              "model_profile_id": "synthetic-profile",
+              "model_profile": "Synthetic",
+              "model_name": "synthetic",
+              "llm_provider": "vllm",
+              "profile_fingerprint": "fixture-fingerprint",
+              "external_data_approved": false
+            },
+            "verifier": {
+              "model_profile_id": "synthetic-profile",
+              "model_profile": "Synthetic",
+              "model_name": "synthetic",
+              "llm_provider": "vllm",
+              "profile_fingerprint": "fixture-fingerprint",
+              "external_data_approved": false
+            }
+          },
+          "framework": "moduagent",
+          "input_schema": {
+            "version_id": "synthetic-schema",
+            "version_number": 1,
+            "content_hash": "fixture",
+            "selection_origin": "enqueue",
+            "field_metadata_usage": "history_only",
+            "field_count": 11,
+            "field_metadata_sent_to_model": false
+          },
+          "framework_version": "0.6.2",
+          "execution": "standard",
+          "tools": [],
+          "preprocessors": [],
+          "llm_provider": "vllm",
+          "model_name": "synthetic",
+          "model_profile_id": "synthetic-profile",
+          "profile_fingerprint": "fixture-fingerprint",
+          "external_data_approved": false,
+          "thinking_enabled": false
+        }
+      },
+      "metadata": {
+        "version": "core-evidence-v1",
+        "status": "completed",
+        "original_count": 5,
+        "returned_count": 1
+      }
+    }
+  },
+  {
+    "name": "root_issue_and_required_dependency_soft_limit",
+    "result": {
+      "verdict": "false_positive",
+      "confidence_score": 0.9,
+      "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+      "threat_analysis": {
+        "severity": "NONE",
+        "category": "request_data",
+        "target": "payload.query",
+        "technique_ko": "검색어 입력을 전달하는 형태입니다.",
+        "obfuscations": [],
+        "potential_impact_ko": "실제 처리 결과는 기록되지 않았습니다."
+      },
+      "signature_assessment": {
+        "relation": "mismatch",
+        "explanation_ko": null,
+        "version": "signature-assessment-v2",
+        "matched_points": [],
+        "mismatched_points": [
+          "탐지 설명과 다른 데이터 입력입니다."
+        ],
+        "uncertainty_ko": null
+      },
+      "input_truncated": false,
+      "interpretation_conflict": false,
+      "schema_version": "waf-analysis-v3",
+      "evidence": [
+        {
+          "evidence_id": "e1",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-1",
+          "interpretation_ko": "입력 항목 1의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 0,
+              "source_id": "c1"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 5,
+              "end": 18
+            }
+          ]
+        },
+        {
+          "evidence_id": "e2",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-2",
+          "interpretation_ko": "입력 항목 2의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 1,
+              "source_id": "c2"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 105,
+              "end": 118
+            }
+          ]
+        },
+        {
+          "evidence_id": "e3",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-3",
+          "interpretation_ko": "입력 항목 3의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 2,
+              "source_id": "c3"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 205,
+              "end": 218
+            }
+          ]
+        },
+        {
+          "evidence_id": "e4",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-4",
+          "interpretation_ko": "입력 항목 4의 동작을 확인했습니다.",
+          "supports": "context",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 3,
+              "source_id": "c4"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 305,
+              "end": 318
+            }
+          ]
+        },
+        {
+          "evidence_id": "e5",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-5",
+          "interpretation_ko": "입력 항목 5의 동작을 확인했습니다.",
+          "supports": "context",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 4,
+              "source_id": "c5"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 405,
+              "end": 418
+            }
+          ]
+        }
+      ],
+      "decision_issues": [
+        {
+          "point_ko": "입력 처리 조건이 판정에 영향을 줍니다.",
+          "evidence_ids": [
+            "e3"
+          ],
+          "missing_condition_ko": null,
+          "origins": [
+            "primary"
+          ]
+        }
+      ],
+      "omitted_issue_count": 0,
+      "diagnostics": {
+        "version": "evidence-selection-v1",
+        "inconclusive_reasons": [],
+        "input_signals": [],
+        "roles": {
+          "primary": {
+            "initial_model_verdict": "false_positive",
+            "validated_verdict": "false_positive",
+            "grounding_rejected_count": 0,
+            "grounding_downgraded": false,
+            "repair_attempted": false,
+            "repair_recovered": false,
+            "correction_requires_review": false,
+            "resolved_source_count": 5,
+            "failure_category": null
+          }
+        }
+      },
+      "analyst_guidance": {
+        "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+        "limitations": []
+      },
+      "primary": {
+        "verdict": "false_positive",
+        "confidence_score": 0.9,
+        "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+        "threat_analysis": {
+          "severity": "NONE",
+          "category": "request_data",
+          "target": "payload.query",
+          "technique_ko": "검색어 입력을 전달하는 형태입니다.",
+          "obfuscations": [],
+          "potential_impact_ko": "실제 처리 결과는 기록되지 않았습니다."
+        },
+        "signature_assessment": {
+          "relation": "mismatch",
+          "explanation_ko": null,
+          "version": "signature-assessment-v2",
+          "matched_points": [],
+          "mismatched_points": [
+            "탐지 설명과 다른 데이터 입력입니다."
+          ],
+          "uncertainty_ko": null
+        },
+        "input_truncated": false,
+        "interpretation_conflict": false,
+        "evidence_ids": [
+          "e1",
+          "e2",
+          "e3",
+          "e4",
+          "e5"
+        ],
+        "decision_issues": []
+      },
+      "verifier": {
+        "executed": false,
+        "agreement": null,
+        "reasons": [],
+        "failure_id": null,
+        "error": null,
+        "output": null,
+        "framework_run_id": null
+      },
+      "policy": {
+        "policy_version_id": "synthetic-policy",
+        "policy_version_number": 1,
+        "policy_hash": "fixture",
+        "prompt_version": "waf-judgment-v2.15/policy-1",
+        "fixed_rules_version": "waf-system-v2.15",
+        "fixed_rules_hash": "fixture",
+        "instructions_hash": "fixture",
+        "reserved_tokens": 4096,
+        "selection_origin": "enqueue",
+        "verifier_confidence_threshold": 0.75,
+        "disagreement_or_failure_becomes_inconclusive": true,
+        "decision_evidence_ids": [
+          "e2"
+        ],
+        "verifier_policy_version": "security-analysis-policy-v1",
+        "retired_verifier_triggers": [
+          "tuning_recommended"
+        ]
+      },
+      "agent": {
+        "role_profiles": {
+          "primary": {
+            "model_profile_id": "synthetic-profile",
+            "model_profile": "Synthetic",
+            "model_name": "synthetic",
+            "llm_provider": "vllm",
+            "profile_fingerprint": "fixture-fingerprint",
+            "external_data_approved": false
+          },
+          "verifier": {
+            "model_profile_id": "synthetic-profile",
+            "model_profile": "Synthetic",
+            "model_name": "synthetic",
+            "llm_provider": "vllm",
+            "profile_fingerprint": "fixture-fingerprint",
+            "external_data_approved": false
+          }
+        },
+        "framework": "moduagent",
+        "input_schema": {
+          "version_id": "synthetic-schema",
+          "version_number": 1,
+          "content_hash": "fixture",
+          "selection_origin": "enqueue",
+          "field_metadata_usage": "history_only",
+          "field_count": 11,
+          "field_metadata_sent_to_model": false
+        },
+        "framework_version": "0.6.2",
+        "execution": "standard",
+        "tools": [],
+        "preprocessors": [],
+        "llm_provider": "vllm",
+        "model_name": "synthetic",
+        "model_profile_id": "synthetic-profile",
+        "profile_fingerprint": "fixture-fingerprint",
+        "external_data_approved": false,
+        "thinking_enabled": false
+      }
+    },
+    "relations": {
+      "version": "evidence-relations-v1",
+      "groups": [
+        {
+          "role": "primary",
+          "representative_evidence_id": "e2",
+          "related_evidence_ids": [
+            "e4"
+          ]
+        },
+        {
+          "role": "primary",
+          "representative_evidence_id": "e4",
+          "related_evidence_ids": [
+            "e5"
+          ]
+        }
+      ]
+    },
+    "expected": {
+      "result": {
+        "verdict": "false_positive",
+        "confidence_score": 0.9,
+        "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+        "threat_analysis": {
+          "severity": "NONE",
+          "category": "request_data",
+          "target": "payload.query",
+          "technique_ko": "검색어 입력을 전달하는 형태입니다.",
+          "obfuscations": [],
+          "potential_impact_ko": "실제 처리 결과는 기록되지 않았습니다."
+        },
+        "signature_assessment": {
+          "relation": "mismatch",
+          "explanation_ko": null,
+          "version": "signature-assessment-v2",
+          "matched_points": [],
+          "mismatched_points": [
+            "탐지 설명과 다른 데이터 입력입니다."
+          ],
+          "uncertainty_ko": null
+        },
+        "input_truncated": false,
+        "interpretation_conflict": false,
+        "schema_version": "waf-analysis-v3",
+        "evidence": [
+          {
+            "evidence_id": "e2",
+            "field": "payload.query",
+            "excerpt": "q=synthetic-2",
+            "interpretation_ko": "입력 항목 2의 동작을 확인했습니다.",
+            "supports": "normal_request",
+            "origins": [
+              {
+                "role": "primary",
+                "index": 1,
+                "source_id": "c2"
+              }
+            ],
+            "source_spans": [
+              {
+                "start": 105,
+                "end": 118
+              }
+            ]
+          },
+          {
+            "evidence_id": "e3",
+            "field": "payload.query",
+            "excerpt": "q=synthetic-3",
+            "interpretation_ko": "입력 항목 3의 동작을 확인했습니다.",
+            "supports": "normal_request",
+            "origins": [
+              {
+                "role": "primary",
+                "index": 2,
+                "source_id": "c3"
+              }
+            ],
+            "source_spans": [
+              {
+                "start": 205,
+                "end": 218
+              }
+            ]
+          },
+          {
+            "evidence_id": "e4",
+            "field": "payload.query",
+            "excerpt": "q=synthetic-4",
+            "interpretation_ko": "입력 항목 4의 동작을 확인했습니다.",
+            "supports": "context",
+            "origins": [
+              {
+                "role": "primary",
+                "index": 3,
+                "source_id": "c4"
+              }
+            ],
+            "source_spans": [
+              {
+                "start": 305,
+                "end": 318
+              }
+            ]
+          },
+          {
+            "evidence_id": "e5",
+            "field": "payload.query",
+            "excerpt": "q=synthetic-5",
+            "interpretation_ko": "입력 항목 5의 동작을 확인했습니다.",
+            "supports": "context",
+            "origins": [
+              {
+                "role": "primary",
+                "index": 4,
+                "source_id": "c5"
+              }
+            ],
+            "source_spans": [
+              {
+                "start": 405,
+                "end": 418
+              }
+            ]
+          }
+        ],
+        "decision_issues": [
+          {
+            "point_ko": "입력 처리 조건이 판정에 영향을 줍니다.",
+            "evidence_ids": [
+              "e3"
+            ],
+            "missing_condition_ko": null,
+            "origins": [
+              "primary"
+            ]
+          }
+        ],
+        "omitted_issue_count": 0,
+        "diagnostics": {
+          "version": "evidence-selection-v1",
+          "inconclusive_reasons": [],
+          "input_signals": [],
+          "roles": {
+            "primary": {
+              "initial_model_verdict": "false_positive",
+              "validated_verdict": "false_positive",
+              "grounding_rejected_count": 0,
+              "grounding_downgraded": false,
+              "repair_attempted": false,
+              "repair_recovered": false,
+              "correction_requires_review": false,
+              "resolved_source_count": 5,
+              "failure_category": null
+            }
+          }
+        },
+        "analyst_guidance": {
+          "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+          "limitations": []
+        },
+        "primary": {
+          "verdict": "false_positive",
+          "confidence_score": 0.9,
+          "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+          "threat_analysis": {
+            "severity": "NONE",
+            "category": "request_data",
+            "target": "payload.query",
+            "technique_ko": "검색어 입력을 전달하는 형태입니다.",
+            "obfuscations": [],
+            "potential_impact_ko": "실제 처리 결과는 기록되지 않았습니다."
+          },
+          "signature_assessment": {
+            "relation": "mismatch",
+            "explanation_ko": null,
+            "version": "signature-assessment-v2",
+            "matched_points": [],
+            "mismatched_points": [
+              "탐지 설명과 다른 데이터 입력입니다."
+            ],
+            "uncertainty_ko": null
+          },
+          "input_truncated": false,
+          "interpretation_conflict": false,
+          "evidence_ids": [
+            "e2",
+            "e3",
+            "e4",
+            "e5"
+          ],
+          "decision_issues": []
+        },
+        "verifier": {
+          "executed": false,
+          "agreement": null,
+          "reasons": [],
+          "failure_id": null,
+          "error": null,
+          "output": null,
+          "framework_run_id": null
+        },
+        "policy": {
+          "policy_version_id": "synthetic-policy",
+          "policy_version_number": 1,
+          "policy_hash": "fixture",
+          "prompt_version": "waf-judgment-v2.15/policy-1",
+          "fixed_rules_version": "waf-system-v2.15",
+          "fixed_rules_hash": "fixture",
+          "instructions_hash": "fixture",
+          "reserved_tokens": 4096,
+          "selection_origin": "enqueue",
+          "verifier_confidence_threshold": 0.75,
+          "disagreement_or_failure_becomes_inconclusive": true,
+          "decision_evidence_ids": [
+            "e2"
+          ],
+          "verifier_policy_version": "security-analysis-policy-v1",
+          "retired_verifier_triggers": [
+            "tuning_recommended"
+          ]
+        },
+        "agent": {
+          "role_profiles": {
+            "primary": {
+              "model_profile_id": "synthetic-profile",
+              "model_profile": "Synthetic",
+              "model_name": "synthetic",
+              "llm_provider": "vllm",
+              "profile_fingerprint": "fixture-fingerprint",
+              "external_data_approved": false
+            },
+            "verifier": {
+              "model_profile_id": "synthetic-profile",
+              "model_profile": "Synthetic",
+              "model_name": "synthetic",
+              "llm_provider": "vllm",
+              "profile_fingerprint": "fixture-fingerprint",
+              "external_data_approved": false
+            }
+          },
+          "framework": "moduagent",
+          "input_schema": {
+            "version_id": "synthetic-schema",
+            "version_number": 1,
+            "content_hash": "fixture",
+            "selection_origin": "enqueue",
+            "field_metadata_usage": "history_only",
+            "field_count": 11,
+            "field_metadata_sent_to_model": false
+          },
+          "framework_version": "0.6.2",
+          "execution": "standard",
+          "tools": [],
+          "preprocessors": [],
+          "llm_provider": "vllm",
+          "model_name": "synthetic",
+          "model_profile_id": "synthetic-profile",
+          "profile_fingerprint": "fixture-fingerprint",
+          "external_data_approved": false,
+          "thinking_enabled": false
+        }
+      },
+      "metadata": {
+        "version": "core-evidence-v1",
+        "status": "skipped",
+        "original_count": 5,
+        "returned_count": 4
+      }
+    }
+  },
+  {
+    "name": "other_role_representative_primary_zero",
+    "result": {
+      "verdict": "false_positive",
+      "confidence_score": 0.9,
+      "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+      "threat_analysis": {
+        "severity": "NONE",
+        "category": "request_data",
+        "target": "payload.query",
+        "technique_ko": "검색어 입력을 전달하는 형태입니다.",
+        "obfuscations": [],
+        "potential_impact_ko": "실제 처리 결과는 기록되지 않았습니다."
+      },
+      "signature_assessment": {
+        "relation": "mismatch",
+        "explanation_ko": null,
+        "version": "signature-assessment-v2",
+        "matched_points": [],
+        "mismatched_points": [
+          "탐지 설명과 다른 데이터 입력입니다."
+        ],
+        "uncertainty_ko": null
+      },
+      "input_truncated": false,
+      "interpretation_conflict": false,
+      "schema_version": "waf-analysis-v3",
+      "evidence": [
+        {
+          "evidence_id": "e1",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-1",
+          "interpretation_ko": "입력 항목 1의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 0,
+              "source_id": "c1"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 5,
+              "end": 18
+            }
+          ]
+        },
+        {
+          "evidence_id": "e2",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-2",
+          "interpretation_ko": "입력 항목 2의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 1,
+              "source_id": "c2"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 105,
+              "end": 118
+            }
+          ]
+        },
+        {
+          "evidence_id": "e3",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-3",
+          "interpretation_ko": "입력 항목 3의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 2,
+              "source_id": "c3"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 205,
+              "end": 218
+            }
+          ]
+        },
+        {
+          "evidence_id": "e4",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-4",
+          "interpretation_ko": "입력 항목 4의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 3,
+              "source_id": "c4"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 305,
+              "end": 318
+            }
+          ]
+        },
+        {
+          "evidence_id": "e5",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-5",
+          "interpretation_ko": "입력 항목 5의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 4,
+              "source_id": "c5"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 405,
+              "end": 418
+            }
+          ]
+        },
+        {
+          "evidence_id": "e6",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-6",
+          "interpretation_ko": "입력 항목 6의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "verifier",
+              "index": 0,
+              "source_id": "c6"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 505,
+              "end": 518
+            }
+          ]
+        },
+        {
+          "evidence_id": "e7",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-7",
+          "interpretation_ko": "입력 항목 7의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "verifier",
+              "index": 1,
+              "source_id": "c7"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 605,
+              "end": 618
+            }
+          ]
+        },
+        {
+          "evidence_id": "e8",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-8",
+          "interpretation_ko": "입력 항목 8의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "verifier",
+              "index": 2,
+              "source_id": "c8"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 705,
+              "end": 718
+            }
+          ]
+        },
+        {
+          "evidence_id": "e9",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-9",
+          "interpretation_ko": "입력 항목 9의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "verifier",
+              "index": 3,
+              "source_id": "c9"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 805,
+              "end": 818
+            }
+          ]
+        },
+        {
+          "evidence_id": "e10",
+          "field": "payload.query",
+          "excerpt": "q=synthetic-10",
+          "interpretation_ko": "입력 항목 10의 동작을 확인했습니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "verifier",
+              "index": 4,
+              "source_id": "c10"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 905,
+              "end": 919
+            }
+          ]
+        }
+      ],
+      "decision_issues": [],
+      "omitted_issue_count": 0,
+      "diagnostics": {
+        "version": "evidence-selection-v1",
+        "inconclusive_reasons": [],
+        "input_signals": [],
+        "roles": {
+          "primary": {
+            "initial_model_verdict": "false_positive",
+            "validated_verdict": "false_positive",
+            "grounding_rejected_count": 0,
+            "grounding_downgraded": false,
+            "repair_attempted": false,
+            "repair_recovered": false,
+            "correction_requires_review": false,
+            "resolved_source_count": 5,
+            "failure_category": null
+          },
+          "verifier": {
+            "initial_model_verdict": "false_positive",
+            "validated_verdict": "false_positive",
+            "grounding_rejected_count": 0,
+            "grounding_downgraded": false,
+            "repair_attempted": false,
+            "repair_recovered": false,
+            "correction_requires_review": false,
+            "resolved_source_count": 5,
+            "failure_category": null
+          }
+        }
+      },
+      "analyst_guidance": {
+        "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+        "limitations": []
+      },
+      "primary": {
+        "verdict": "false_positive",
+        "confidence_score": 0.9,
+        "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+        "threat_analysis": {
+          "severity": "NONE",
+          "category": "request_data",
+          "target": "payload.query",
+          "technique_ko": "검색어 입력을 전달하는 형태입니다.",
+          "obfuscations": [],
+          "potential_impact_ko": "실제 처리 결과는 기록되지 않았습니다."
+        },
+        "signature_assessment": {
+          "relation": "mismatch",
+          "explanation_ko": null,
+          "version": "signature-assessment-v2",
+          "matched_points": [],
+          "mismatched_points": [
+            "탐지 설명과 다른 데이터 입력입니다."
+          ],
+          "uncertainty_ko": null
+        },
+        "input_truncated": false,
+        "interpretation_conflict": false,
+        "evidence_ids": [
+          "e1",
+          "e2",
+          "e3",
+          "e4",
+          "e5"
+        ],
+        "decision_issues": []
+      },
+      "verifier": {
+        "executed": true,
+        "agreement": true,
+        "reasons": [
+          "synthetic_verification"
+        ],
+        "failure_id": null,
+        "error": null,
+        "output": {
+          "verdict": "false_positive",
+          "confidence_score": 0.9,
+          "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+          "threat_analysis": {
+            "severity": "NONE",
+            "category": "request_data",
+            "target": "payload.query",
+            "technique_ko": "검색어 입력을 전달하는 형태입니다.",
+            "obfuscations": [],
+            "potential_impact_ko": "실제 처리 결과는 기록되지 않았습니다."
+          },
+          "signature_assessment": {
+            "relation": "mismatch",
+            "explanation_ko": null,
+            "version": "signature-assessment-v2",
+            "matched_points": [],
+            "mismatched_points": [
+              "탐지 설명과 다른 데이터 입력입니다."
+            ],
+            "uncertainty_ko": null
+          },
+          "input_truncated": false,
+          "interpretation_conflict": false,
+          "evidence_ids": [
+            "e6",
+            "e7",
+            "e8",
+            "e9",
+            "e10"
+          ],
+          "decision_issues": []
+        },
+        "framework_run_id": null
+      },
+      "policy": {
+        "policy_version_id": "synthetic-policy",
+        "policy_version_number": 1,
+        "policy_hash": "fixture",
+        "prompt_version": "waf-judgment-v2.15/policy-1",
+        "fixed_rules_version": "waf-system-v2.15",
+        "fixed_rules_hash": "fixture",
+        "instructions_hash": "fixture",
+        "reserved_tokens": 4096,
+        "selection_origin": "enqueue",
+        "verifier_confidence_threshold": 0.75,
+        "disagreement_or_failure_becomes_inconclusive": true,
+        "decision_evidence_ids": [
+          "e6"
+        ],
+        "verifier_policy_version": "security-analysis-policy-v1",
+        "retired_verifier_triggers": [
+          "tuning_recommended"
+        ]
+      },
+      "agent": {
+        "role_profiles": {
+          "primary": {
+            "model_profile_id": "synthetic-profile",
+            "model_profile": "Synthetic",
+            "model_name": "synthetic",
+            "llm_provider": "vllm",
+            "profile_fingerprint": "fixture-fingerprint",
+            "external_data_approved": false
+          },
+          "verifier": {
+            "model_profile_id": "synthetic-profile",
+            "model_profile": "Synthetic",
+            "model_name": "synthetic",
+            "llm_provider": "vllm",
+            "profile_fingerprint": "fixture-fingerprint",
+            "external_data_approved": false
+          }
+        },
+        "framework": "moduagent",
+        "input_schema": {
+          "version_id": "synthetic-schema",
+          "version_number": 1,
+          "content_hash": "fixture",
+          "selection_origin": "enqueue",
+          "field_metadata_usage": "history_only",
+          "field_count": 11,
+          "field_metadata_sent_to_model": false
+        },
+        "framework_version": "0.6.2",
+        "execution": "standard",
+        "tools": [],
+        "preprocessors": [],
+        "llm_provider": "vllm",
+        "model_name": "synthetic",
+        "model_profile_id": "synthetic-profile",
+        "profile_fingerprint": "fixture-fingerprint",
+        "external_data_approved": false,
+        "thinking_enabled": false
+      }
+    },
+    "display_view": {
+      "version": "evidence-display-view-v1",
+      "status": "completed",
+      "plan": {
+        "version": "evidence-display-v1",
+        "source_hash": "f5e449668a208866b078bc25f1b28229f7dfa89236dc693b5cbcaf7852b53fbe",
+        "status": "completed",
+        "reason": null,
+        "groups": [
+          {
+            "group_id": "g6",
+            "representative_id": "e6",
+            "member_ids": [
+              "e1",
+              "e2",
+              "e3",
+              "e4",
+              "e5",
+              "e6",
+              "e7",
+              "e8",
+              "e9",
+              "e10"
+            ],
+            "related_ids": [],
+            "supports": "normal_request",
+            "number": 6,
+            "default_visible": true,
+            "visibility_reasons": [
+              "rank_top"
+            ]
+          }
+        ],
+        "metrics": {
+          "original_evidence_count": 10,
+          "group_count": 1,
+          "core_group_count": 1,
+          "merged_count": 9
+        }
+      },
+      "relations": {
+        "version": "evidence-relations-v1",
+        "groups": []
+      },
+      "metadata": {}
+    },
+    "expected": {
+      "result": {
+        "verdict": "false_positive",
+        "confidence_score": 0.9,
+        "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+        "threat_analysis": {
+          "severity": "NONE",
+          "category": "request_data",
+          "target": "payload.query",
+          "technique_ko": "검색어 입력을 전달하는 형태입니다.",
+          "obfuscations": [],
+          "potential_impact_ko": "실제 처리 결과는 기록되지 않았습니다."
+        },
+        "signature_assessment": {
+          "relation": "mismatch",
+          "explanation_ko": null,
+          "version": "signature-assessment-v2",
+          "matched_points": [],
+          "mismatched_points": [
+            "탐지 설명과 다른 데이터 입력입니다."
+          ],
+          "uncertainty_ko": null
+        },
+        "input_truncated": false,
+        "interpretation_conflict": false,
+        "schema_version": "waf-analysis-v3",
+        "evidence": [
+          {
+            "evidence_id": "e6",
+            "field": "payload.query",
+            "excerpt": "q=synthetic-6",
+            "interpretation_ko": "입력 항목 6의 동작을 확인했습니다.",
+            "supports": "normal_request",
+            "origins": [
+              {
+                "role": "verifier",
+                "index": 0,
+                "source_id": "c6"
+              }
+            ],
+            "source_spans": [
+              {
+                "start": 505,
+                "end": 518
+              }
+            ]
+          }
+        ],
+        "decision_issues": [],
+        "omitted_issue_count": 0,
+        "diagnostics": {
+          "version": "evidence-selection-v1",
+          "inconclusive_reasons": [],
+          "input_signals": [],
+          "roles": {
+            "primary": {
+              "initial_model_verdict": "false_positive",
+              "validated_verdict": "false_positive",
+              "grounding_rejected_count": 0,
+              "grounding_downgraded": false,
+              "repair_attempted": false,
+              "repair_recovered": false,
+              "correction_requires_review": false,
+              "resolved_source_count": 5,
+              "failure_category": null
+            },
+            "verifier": {
+              "initial_model_verdict": "false_positive",
+              "validated_verdict": "false_positive",
+              "grounding_rejected_count": 0,
+              "grounding_downgraded": false,
+              "repair_attempted": false,
+              "repair_recovered": false,
+              "correction_requires_review": false,
+              "resolved_source_count": 5,
+              "failure_category": null
+            }
+          }
+        },
+        "analyst_guidance": {
+          "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+          "limitations": []
+        },
+        "primary": {
+          "verdict": "false_positive",
+          "confidence_score": 0.9,
+          "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+          "threat_analysis": {
+            "severity": "NONE",
+            "category": "request_data",
+            "target": "payload.query",
+            "technique_ko": "검색어 입력을 전달하는 형태입니다.",
+            "obfuscations": [],
+            "potential_impact_ko": "실제 처리 결과는 기록되지 않았습니다."
+          },
+          "signature_assessment": {
+            "relation": "mismatch",
+            "explanation_ko": null,
+            "version": "signature-assessment-v2",
+            "matched_points": [],
+            "mismatched_points": [
+              "탐지 설명과 다른 데이터 입력입니다."
+            ],
+            "uncertainty_ko": null
+          },
+          "input_truncated": false,
+          "interpretation_conflict": false,
+          "evidence_ids": [],
+          "decision_issues": []
+        },
+        "verifier": {
+          "executed": true,
+          "agreement": true,
+          "reasons": [
+            "synthetic_verification"
+          ],
+          "failure_id": null,
+          "error": null,
+          "output": {
+            "verdict": "false_positive",
+            "confidence_score": 0.9,
+            "summary_ko": "쿼리 항목에 검색어가 전달되어 있습니다.",
+            "threat_analysis": {
+              "severity": "NONE",
+              "category": "request_data",
+              "target": "payload.query",
+              "technique_ko": "검색어 입력을 전달하는 형태입니다.",
+              "obfuscations": [],
+              "potential_impact_ko": "실제 처리 결과는 기록되지 않았습니다."
+            },
+            "signature_assessment": {
+              "relation": "mismatch",
+              "explanation_ko": null,
+              "version": "signature-assessment-v2",
+              "matched_points": [],
+              "mismatched_points": [
+                "탐지 설명과 다른 데이터 입력입니다."
+              ],
+              "uncertainty_ko": null
+            },
+            "input_truncated": false,
+            "interpretation_conflict": false,
+            "evidence_ids": [
+              "e6"
+            ],
+            "decision_issues": []
+          },
+          "framework_run_id": null
+        },
+        "policy": {
+          "policy_version_id": "synthetic-policy",
+          "policy_version_number": 1,
+          "policy_hash": "fixture",
+          "prompt_version": "waf-judgment-v2.15/policy-1",
+          "fixed_rules_version": "waf-system-v2.15",
+          "fixed_rules_hash": "fixture",
+          "instructions_hash": "fixture",
+          "reserved_tokens": 4096,
+          "selection_origin": "enqueue",
+          "verifier_confidence_threshold": 0.75,
+          "disagreement_or_failure_becomes_inconclusive": true,
+          "decision_evidence_ids": [
+            "e6"
+          ],
+          "verifier_policy_version": "security-analysis-policy-v1",
+          "retired_verifier_triggers": [
+            "tuning_recommended"
+          ]
+        },
+        "agent": {
+          "role_profiles": {
+            "primary": {
+              "model_profile_id": "synthetic-profile",
+              "model_profile": "Synthetic",
+              "model_name": "synthetic",
+              "llm_provider": "vllm",
+              "profile_fingerprint": "fixture-fingerprint",
+              "external_data_approved": false
+            },
+            "verifier": {
+              "model_profile_id": "synthetic-profile",
+              "model_profile": "Synthetic",
+              "model_name": "synthetic",
+              "llm_provider": "vllm",
+              "profile_fingerprint": "fixture-fingerprint",
+              "external_data_approved": false
+            }
+          },
+          "framework": "moduagent",
+          "input_schema": {
+            "version_id": "synthetic-schema",
+            "version_number": 1,
+            "content_hash": "fixture",
+            "selection_origin": "enqueue",
+            "field_metadata_usage": "history_only",
+            "field_count": 11,
+            "field_metadata_sent_to_model": false
+          },
+          "framework_version": "0.6.2",
+          "execution": "standard",
+          "tools": [],
+          "preprocessors": [],
+          "llm_provider": "vllm",
+          "model_name": "synthetic",
+          "model_profile_id": "synthetic-profile",
+          "profile_fingerprint": "fixture-fingerprint",
+          "external_data_approved": false,
+          "thinking_enabled": false
+        }
+      },
+      "metadata": {
+        "version": "core-evidence-v1",
+        "status": "completed",
+        "original_count": 10,
+        "returned_count": 1
+      }
+    }
+  }
+]

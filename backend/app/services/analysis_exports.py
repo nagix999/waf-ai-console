@@ -22,7 +22,7 @@ from .decision_explanation import (
     decision_explanation, is_generic_check, threat_category_label,
 )
 from .analyst_presentation import (
-    EVIDENCE_NOTICE, LEGACY_EVIDENCE_NOTICE, analyst_text, assessment_view,
+    EVIDENCE_LABELS, EVIDENCE_NOTICE, LEGACY_EVIDENCE_NOTICE, analyst_text, assessment_view,
 )
 from .decision_semantics import (
     SEVERITY_MEANING, DISAGREEMENT_NOTICE, LEGACY_SIGNATURE_NOTICE, SIGNATURE_SUMMARIES,
@@ -114,7 +114,7 @@ def _is_stub(detail, result):
         or agent.get("llm_called") is False)
 
 
-def build_report(detail: dict, *, generated_at: datetime | None = None) -> AnalysisReport:
+def build_report(detail: dict, *, generated_at: datetime | None = None, evidence_view=None) -> AnalysisReport:
     """Saved final fields plus role verdicts on disagreement; no raw role IO."""
     result = _record(detail.get("result"))
     verdict = result.get("verdict")
@@ -154,14 +154,15 @@ def build_report(detail: dict, *, generated_at: datetime | None = None) -> Analy
     assessment = _record(result.get("analyst_assessment"))
     _list(assessment.get("evidence"))
     _list(assessment.get("decision_issues"))
-    view = assessment_view(result)
+    view = assessment_view(result, display_view=detail.get("evidence_display"), evidence_view=evidence_view)
     section("판정 요약", [
         ("최종 판정", VERDICTS[verdict]), ("심각도", severity), ("심각도 기준", SEVERITY_MEANING), ("요약", summary),
         *([("보류 구분", decision["title_ko"]), ("검토 안내", decision["action_ko"])] if decision and not current_contract else []),
         ("안내", "자동 분석 결과입니다. 공격 시도와 실제 피해 발생을 구분하고 최종 판단은 분석가가 검토합니다."),
     ])
     review = {"issues": [], "checks": []} if current_contract else hold_review(detail, decision)
-    considered = view["issues"] if view and verdict != "inconclusive" else []
+    core_evidence = evidence_view == "core-v1" and current_contract
+    considered = view["issues"] if view and verdict != "inconclusive" and not core_evidence else []
     if considered:
         issue_rows = []
         for issue in considered:
@@ -205,14 +206,23 @@ def build_report(detail: dict, *, generated_at: datetime | None = None) -> Analy
         rows += [(f"근거 {len(seen)} · 위치", field), ("원문 발췌", excerpt), ("판정 근거", interpretation)]
     if view is not None:
         section("보안 분석" if current_contract else "판정 근거", [("안내", EVIDENCE_NOTICE)])
-        for supports, label in evidence_sections(verdict):
-            items = [item for item in view["evidence"] if item["supports"] == supports]
+        # Core responses are already ranked and selected by the server. Keep
+        # that exact order, including context needed by an integrated claim.
+        sections_to_render = ([(item["supports"], EVIDENCE_LABELS[item["supports"]], [item])
+                               for item in view["evidence"]] if core_evidence else
+                              [(supports, label, [item for item in view["evidence"] if item["supports"] == supports])
+                               for supports, label in evidence_sections(verdict)])
+        for supports, label, items in sections_to_render:
             if not items and supports in {"context", "unclassified"}:
                 continue
             evidence_rows = []
             for item in items:
+                if "default_visible" in item:
+                    evidence_rows.append(("표시 구분", "핵심 근거" if item["default_visible"] else "다른 근거"))
                 evidence_rows += [(f"근거 {item['number']} · 위치", item["field"]),
                     ("로그 발췌", item["excerpt"]), ("판단 이유", item["interpretation_ko"])]
+                for source in item.get("related_sources", []):
+                    evidence_rows += [("관련 원문 위치", source["field"]), ("관련 원문 발췌", source["excerpt"])]
                 if item["related_numbers"]:
                     evidence_rows.append(("같은 로그 발췌", "근거 " + " · ".join(map(str, item["related_numbers"]))))
             section(label, evidence_rows or [("안내", "기록된 근거가 없습니다.")])
@@ -298,6 +308,16 @@ def build_report(detail: dict, *, generated_at: datetime | None = None) -> Analy
     if current_contract:
         if decision:
             section("최종 판정 이유", [("구분", decision["title_ko"]), ("이유", decision["reason_ko"])])
+        if core_evidence and view and view["issues"]:
+            # Do not hide a supplied condition because a separate technical
+            # diagnostic also explains the hold. These are the API's issues.
+            rows = []
+            for issue in view["issues"]:
+                rows += [("판단할 내용", issue["point_ko"]),
+                         *([("확인할 조건", issue["missing_condition_ko"])] if issue["missing_condition_ko"] else []),
+                         ("관련 근거", " · ".join(map(str, issue["evidence_numbers"])))]
+            section("판정에 필요한 확인" if verdict == "inconclusive" else "판정 시 고려한 조건", rows)
+        elif decision:
             conditions = [issue for issue in (view["issues"] if view else []) if issue["missing_condition_ko"]]
             rows = []
             if decision["code"] in {"model_abstained", "assessment_pending", "reason_unrecorded"}:

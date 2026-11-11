@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useR5Words, verdictText } from "./R5Evaluation.jsx";
 import { useConsolePreferences } from "./consolePreferences.jsx";
 import { analysisNotices, analystFieldLabel, analystGuidance, analystItems, analystSummary, analystText, finalValue, hasTuningContent } from "./analystView.js";
@@ -7,6 +7,8 @@ import { decisionExplanation, provisionalAnalysisNotice } from "./decisionExplan
 import { isResultV3 } from "./assessmentData.js";
 import { decisionConditions, detailEvidence } from "./decisionDetail.js";
 import { evidenceRelationView } from "./evidenceRelations.js";
+import { evidenceDisplayView } from "./evidenceDisplayPlan.js";
+import { analysisEvidenceMeta, isCoreEvidence, receivedEvidence } from "./analysisEvidenceMeta.js";
 import { disagreementNotice, evidenceSections, legacySignatureNotice, severityMeaning, signatureSummary, verifierDisagreed, wafObservation } from "./decisionSemantics.js";
 import { formatDate, formatDuration, executionDuration } from "./analysisView.js";
 import { isMockAnalysis } from "./labelEvaluation.js";
@@ -47,8 +49,101 @@ export function DecisionHero({ detail }) {
   </>;
 }
 
-export function EvidenceCards({ detail, onViewInput, relations, relationsError = false, relationsLoading = false, onRetryRelations }) {
-  const w = useR5Words(), relationView = evidenceRelationView(detail.result, relations), items = relationView.rows || relationView.items;
+function DisplayStatus({ display, view, loading, stopped, error, onRetry }) {
+  const w = useR5Words(), state = display?.status, metrics = view.plan.metrics;
+  const failed = view.invalid || state === "fallback" || view.plan.status === "fallback";
+  let label = failed ? w("정리 실패 — 원본 유지", "Organization unavailable — originals retained")
+    : error ? w("정리 상태를 확인하지 못했습니다", "Could not check organization status")
+    : ["pending", "running"].includes(state) ? w("근거 정리 중", "Organizing evidence")
+      : metrics.merged_count ? w(`정리됨 — 근거 ${metrics.original_evidence_count}개를 ${metrics.group_count}묶음`, `Organized — ${metrics.original_evidence_count} evidence items in ${metrics.group_count} groups`)
+        : state === "completed" ? w("검토 완료 — 합친 근거 없음", "Review complete — no evidence combined")
+          : state === "skipped" ? w("중복 없음", "No duplicates") : state === "disabled" ? w("원본 근거", "Original evidence") : w("근거 확인", "Evidence overview");
+  return <div className={`decision-display-status${failed || error ? " is-fallback" : ""}`} role="status"><span>{label}</span>
+    {["pending", "running"].includes(state) && <small>{w("분석은 완료되었습니다. 정리 중에도 원문과 판정은 확인할 수 있습니다.", "Analysis is complete. Evidence organization does not change the decision.")}</small>}
+    {stopped && <small>{w("자동 확인을 멈췄습니다. 상태 확인은 분석을 다시 실행하지 않습니다.", "Automatic refresh paused. Checking status does not rerun analysis.")}</small>}
+    {(failed || error || stopped) && onRetry && <button type="button" className="text-button" disabled={loading} onClick={onRetry}>{w("상태 다시 확인", "Check status")}</button>}
+  </div>;
+}
+
+function CoreEvidenceStatus({ detail }) {
+  const w = useR5Words(), meta = analysisEvidenceMeta(detail) || analysisEvidenceMeta(detail.result);
+  const count = Array.isArray(detail.result?.evidence) ? detail.result.evidence.length : 0;
+  return <div className={`decision-display-status${meta?.status === "fallback" ? " is-fallback" : ""}`} role="status"><span>{meta?.status === "pending"
+    ? w("핵심 근거 준비 중", "Preparing core evidence") : meta?.status === "fallback"
+      ? w(`정리 미적용 — 전달된 근거 ${count}개`, `Organization unavailable — ${count} received evidence items`)
+      : w(`핵심 근거 ${count}개`, `${count} core evidence items`)}</span></div>;
+}
+
+function CoreEvidenceCards({ detail, onViewInput, onExecution }) {
+  const w = useR5Words(), items = receivedEvidence(detail.result);
+  return <section className="panel decision-evidence-panel decision-core-evidence-panel"><div className="panel-head-inline"><h2>{w("보안 분석 근거", "Security analysis evidence")}</h2>{onViewInput && <NavigationAction onClick={() => onViewInput(null)}>{w("근거와 원문", "Evidence & input")}</NavigationAction>}</div>
+    <CoreEvidenceStatus detail={detail} />
+    <div className="decision-display-groups">{items.map((item, index) => <article className={`decision-evidence-row decision-core-evidence evidence-${item.supports}`} key={`${item.evidence_id}:${index}`}>
+      <div className="decision-evidence-label"><strong>{w("근거", "Evidence")} {item.number}</strong><Direction value={item.supports} />
+        {!!item.roles.length && <span className="decision-evidence-roles">{item.roles.map(role => role === "primary" ? w("1차 분석", "Primary analysis") : w("추가 검증", "Additional verification")).join(" / ")}</span>}<span>{analystFieldLabel(item.field)}</span>
+      </div><div className="decision-evidence-content"><p className="decision-linked-interpretation">{item.interpretation_ko}</p><code dir="ltr">{item.excerpt}</code>
+        {onViewInput && <div className="decision-source-actions"><button type="button" className="text-button evidence-input-link" aria-label={w(`근거 ${item.number} 원문 보기`, `View evidence ${item.number} source`)} onClick={() => onViewInput(item)}>{w("원문에서 보기", "View source")} →</button></div>}
+      </div>
+    </article>)}</div>
+    {!items.length && <p className="muted">{w("전달된 근거가 없습니다. 이것만으로 정상 요청이라고 볼 수는 없습니다.", "No evidence was returned. This alone does not establish that the request is benign.")}</p>}
+    <p className="decision-evidence-footnote">{w("API가 전달한 근거를 같은 순서로 표시합니다. 공격 요청 근거는 공격 성공을 뜻하지 않습니다.", "Evidence is shown in the order returned by the API. Attack request evidence does not establish attack success.")}</p>
+    {onExecution && <button type="button" className="text-button" onClick={onExecution}>{w("전체 원본 근거는 실행 이력에서 확인", "View all original evidence in the execution trace")} →</button>}
+  </section>;
+}
+
+export function EvidenceDisplaySummary({ detail, loading = false, stopped = false, error = false, onRetry }) {
+  const w = useR5Words(), display = detail.evidence_display;
+  const meta = analysisEvidenceMeta(detail) || analysisEvidenceMeta(detail.result);
+  if (meta?.view === "core-v1") return <section className="panel decision-display-execution"><h2>{w("핵심 근거 전달", "Core evidence delivery")}</h2><CoreEvidenceStatus detail={detail} /><p className="muted">{w("화면과 API는 같은 근거를 사용합니다. 아래 실행 이력에는 분석 당시의 전체 기록이 보존됩니다.", "The screen and API use the same evidence. The execution trace below preserves the complete original analysis record.")}</p></section>;
+  const view = detail.status === "completed" && display?.version === "evidence-display-view-v1"
+    ? evidenceDisplayView(detail.result, display) : null;
+  if (!view) return null;
+  return <section className="panel decision-display-execution"><h2>{w("현재 근거 정리", "Current evidence organization")}</h2>
+    <DisplayStatus {...{ display, view, loading, stopped, error, onRetry }} />
+    {display.status !== "disabled" && <p className="muted">{w("근거 정리는 분석 종료 후 별도로 처리합니다. 아래 단계는 분석 당시 기록이므로 근거 정리 단계가 건너뜀으로 남아 있어도 현재 상태와 다를 수 있습니다.", "Evidence organization runs separately after analysis. The trace below records the original analysis; a skipped editor step does not describe the current organization status.")}</p>}
+  </section>;
+}
+
+function CompactEvidenceCards({ detail, onViewInput, relations, relationsError, relationsLoading, displayPollingStopped, onRetryRelations }) {
+  const w = useR5Words(), id = useId(), [additionalOpen, setAdditionalOpen] = useState(false), [sourcesOpen, setSourcesOpen] = useState(new Set());
+  const display = detail.evidence_display, view = evidenceDisplayView(detail.result, display, relations ?? display?.relations ?? null);
+  useEffect(() => { setAdditionalOpen(false); setSourcesOpen(new Set()); }, [detail.id, view?.plan.source_hash]);
+  if (!view) return null;
+  const toggleSources = key => setSourcesOpen(previous => { const next = new Set(previous); if (next.has(key)) next.delete(key); else next.add(key); return next; });
+  const rows = groups => <div className="decision-display-groups">{groups.map(item => {
+    const extraSources = [...item.member_sources.filter(source => source.evidence_id !== item.representative_id), ...item.related_sources];
+    const opened = sourcesOpen.has(item.group_id), sourceId = `${id}-${item.group_id}-sources`;
+    return <article className={`decision-evidence-row decision-display-group evidence-${item.supports}${item.relation ? " has-linked-sources" : ""}`} key={item.group_id}>
+      <div className="decision-evidence-label"><strong>{w("근거", "Evidence")} {item.number}</strong><Direction value={item.supports} />
+        {!!item.roles.length && <span className="decision-evidence-roles">{item.roles.map(role => role === "primary" ? w("1차 분석", "Primary analysis") : w("추가 검증", "Additional verification")).join(" / ")}</span>}
+        <span>{analystFieldLabel(item.field)}</span>{item.visibility_reasons.includes("counter_evidence") && <small className="decision-protected-reason">{w("반대 근거", "Counter-evidence")}</small>}
+        {item.visibility_reasons.includes("decision_issue") && <small className="decision-protected-reason">{w("확인 조건에 연결됨", "Linked to a decision condition")}</small>}
+      </div>
+      <div className="decision-evidence-content"><p className="decision-linked-interpretation">{analystText(item.interpretation_ko)}</p><code dir="ltr">{item.excerpt}</code>
+        <div className="decision-source-actions">{onViewInput && <button type="button" className="text-button evidence-input-link" aria-label={w(`근거 ${item.number} 원문 보기`, `View evidence ${item.number} source`)} onClick={() => onViewInput(item)}>{w("원문에서 보기", "View source")} →</button>}
+          {!!extraSources.length && <button type="button" className="text-button" aria-expanded={opened} aria-controls={sourceId} onClick={() => toggleSources(item.group_id)}>{opened ? w("함께 본 원문 접기", "Hide related sources") : w(`함께 본 원문 ${extraSources.length}개 보기`, `View ${extraSources.length} related sources`)}</button>}
+        </div>
+        {opened && <div id={sourceId} className="decision-linked-sources">{extraSources.map(source => <section className="decision-linked-source" key={source.evidence_id} aria-label={`${w("관련 근거", "Related evidence")} ${source.number}`}>
+          <div className="decision-linked-source-heading"><strong>{w("근거", "Evidence")} {source.number}</strong><Direction value={source.supports} /><span>{analystFieldLabel(source.field)}</span></div><code dir="ltr">{source.excerpt}</code>
+          {onViewInput && <button type="button" className="text-button evidence-input-link" onClick={() => onViewInput(source)}>{w("원문과 개별 해석 보기", "View source and interpretation")} →</button>}
+        </section>)}</div>}
+      </div>
+    </article>;
+  })}</div>;
+  return <section className="panel decision-evidence-panel decision-display-panel"><div className="panel-head-inline"><h2>{w("보안 분석 근거", "Security analysis evidence")}</h2>{onViewInput && <NavigationAction onClick={() => onViewInput(null)}>{w("전체 근거·원문", "All evidence & input")}</NavigationAction>}</div>
+    <DisplayStatus display={display} view={view} loading={relationsLoading} stopped={displayPollingStopped} error={relationsError} onRetry={onRetryRelations} />
+    {!!view.core.length && rows(view.core)}
+    {!!view.additional.length && <div className="decision-additional-evidence"><button type="button" className="secondary decision-additional-toggle" aria-expanded={additionalOpen} aria-controls={`${id}-additional`} onClick={() => setAdditionalOpen(value => !value)}>{additionalOpen ? w("나머지 근거 접기", "Hide additional evidence") : w(`나머지 근거 ${view.additional.length}묶음 보기`, `View ${view.additional.length} additional evidence groups`)}</button>{additionalOpen && <div id={`${id}-additional`}>{rows(view.additional)}</div>}</div>}
+    {!view.groups.length && <p className="muted">{w("저장된 판정 근거가 없습니다. 이것만으로 공격이 없다고 볼 수는 없습니다.", "No decision evidence is recorded. This does not establish that the request is benign.")}</p>}
+    {!!view.groups.length && <p className="decision-evidence-footnote">{w("공격 요청 근거는 공격 성공을 뜻하지 않습니다. 나머지 근거와 원문은 그대로 보존됩니다.", "Attack request evidence does not establish attack success. All evidence and original sources remain available.")}</p>}
+  </section>;
+}
+
+export function EvidenceCards({ detail, onViewInput, onExecution, relations, relationsError = false, relationsLoading = false, displayPollingStopped = false, onRetryRelations }) {
+  const w = useR5Words();
+  if (isCoreEvidence(detail.result)) return <CoreEvidenceCards {...{ detail, onViewInput, onExecution }} />;
+  if (isResultV3(detail.result)) return <CompactEvidenceCards {...{ detail, onViewInput, relations, relationsError, relationsLoading, displayPollingStopped, onRetryRelations }} />;
+  const relationView = evidenceRelationView(detail.result, relations), items = relationView.rows || relationView.items;
   const classified = Boolean(assessmentView(detail.result));
   const groups = evidenceSections(finalValue(detail, "verdict")).map(group => ({ ...group, items: items.filter(item => item.supports === group.side) })).filter(group => group.items.length);
   const rows = group => <div className="decision-evidence-rows">{group.items.map(item => <article className={`decision-evidence-row${item.relation ? " has-linked-sources" : ""}`} key={`${item.number}:${item.roles?.join(",") || "all"}`}>
@@ -69,7 +164,7 @@ export function EvidenceCards({ detail, onViewInput, relations, relationsError =
 }
 
 export function DecisionConditions({ detail, onViewInput, preserveEvidence = false }) {
-  const w = useR5Words(), conditions = decisionConditions(detail, { preserveEvidence }), evidence = detailEvidence(detail.result, { preserveEvidence });
+  const w = useR5Words(), conditions = decisionConditions(detail, { preserveEvidence, display: detail.evidence_display }), evidence = detailEvidence(detail.result, { preserveEvidence, display: detail.evidence_display });
   if (!conditions.visible) return null;
   return <section className="panel decision-conditions">
     {conditions.sections.map((section, index) => <div key={section.key} className="decision-check-group" data-purpose={section.key}><h2>{w(...section.title)}</h2>
@@ -87,7 +182,7 @@ export function FinalDecisionReason({ detail, preserveEvidence = false }) {
   // Decisive results are explained by their linked evidence. Do not manufacture
   // a second generic rationale or generate another summary on the client.
   if (!explanation) return null;
-  const issues = held ? (assessmentView(detail.result, { preserveEvidence })?.issues || []).filter(issue => !issue.missing_condition_ko) : [];
+  const issues = held && !isCoreEvidence(detail.result) ? (assessmentView(detail.result, { preserveEvidence, display: detail.evidence_display })?.issues || []).filter(issue => !issue.missing_condition_ko) : [];
   return <section className="panel decision-final-reason"><h2>{w("최종 판정 이유", "Final decision reasons")}</h2>
     <p>{explanation.reason_ko}</p>
     {!!issues.length && <ul>{issues.map((issue, index) => <li key={index}>{issue.point_ko}<small className="muted"> · {w("관련 근거", "Related evidence")} {issue.evidence_numbers.join(" · ")}</small></li>)}</ul>}
@@ -110,7 +205,7 @@ export function TechnicalInterpretation({ detail, onExecution, preserveEvidence 
   const w = useR5Words(), result = detail.result, threat = result?.threat_analysis, signature = result?.signature_assessment;
   const guidance = analystGuidance(detail), circumstances = isResultV3(result) ? [] : analystItems(result?.conflicting_evidence);
   const disagreed = verifierDisagreed(detail), verdict = finalValue(detail, "verdict");
-  const issues = ["true_positive", "false_positive"].includes(verdict) ? assessmentView(result, { preserveEvidence })?.issues || [] : [];
+  const issues = !isCoreEvidence(result) && ["true_positive", "false_positive"].includes(verdict) ? assessmentView(result, { preserveEvidence, display: detail.evidence_display })?.issues || [] : [];
   return <section className="panel decision-technical"><details><summary>{w("기술 해석 펼치기", "Technical interpretation")}</summary>
     {!disagreed && finalValue(detail, "verdict") === "inconclusive" && <p className="analyst-notice">{provisionalAnalysisNotice}</p>}
     {disagreed ? <div className="decision-technical-note"><p className="analyst-notice">{w(...disagreementNotice)}</p><p className="muted">{w("아래 역할별 기록은 최종 해석이 아닙니다. 양쪽 근거와 실행 상세를 함께 확인하세요.", "Role records below are not a final interpretation. Review both evidence sets and execution details.")}</p>
@@ -150,8 +245,10 @@ export function DecisionContext({ detail, history, historyError, onSaved, onExec
 }
 
 export function EvidenceWorkspace({ detail, event, target, onSelect, error, onRetry, active, relations }) {
-  const w = useR5Words(), sections = evidenceSections(finalValue(detail, "verdict")), sourceItems = evidenceRelationView(detail.result, relations).items, pane = useRef(null);
-  const items = sections.flatMap(group => sourceItems.filter(item => item.supports === group.side));
+  const w = useR5Words(), sections = evidenceSections(finalValue(detail, "verdict")), core = isCoreEvidence(detail.result);
+  const display = core ? null : evidenceDisplayView(detail.result, detail.evidence_display, relations ?? detail.evidence_display?.relations ?? null);
+  const sourceItems = core ? receivedEvidence(detail.result) : display?.items || evidenceRelationView(detail.result, relations).items, pane = useRef(null);
+  const items = core ? sourceItems : sections.flatMap(group => sourceItems.filter(item => item.supports === group.side));
   const selected = items.find(item => item.field === target?.field && item.excerpt === target?.excerpt
     && (target?.evidence_id ? item.evidence_id === target.evidence_id : target?.interpretation_ko ? item.interpretation_ko === target.interpretation_ko : target?.number == null || item.number === target.number));
   function select(item) { onSelect(item); if (window.matchMedia("(max-width: 800px)").matches) pane.current?.scrollIntoView({ block: "start", behavior: "auto" }); }
@@ -165,13 +262,14 @@ export function EvidenceWorkspace({ detail, event, target, onSelect, error, onRe
   </section>;
 }
 
-export function ExecutionView({ detail, runs, runsError, runsLoading, onRetry, onMetadata, initialJson = false, active }) {
+export function ExecutionView({ detail, runs, runsError, runsLoading, onRetry, onMetadata, initialJson = false, active, displayLoading, displayError, displayPollingStopped, onRetryDisplay }) {
   const { t } = useConsolePreferences(), w = useR5Words();
   const [expanded, setExpanded] = useState(false), [jsonOpen, setJsonOpen] = useState(initialJson);
   useEffect(() => { if (initialJson) setJsonOpen(true); }, [initialJson]);
   const steps = runs?.[0]?.steps || [];
   return <div className="decision-execution">
     <InferenceSummary detail={detail} runs={runs} onMetadata={onMetadata} title={w("실행 설정·시간", "Configuration & timing")} />
+    <EvidenceDisplaySummary detail={detail} loading={displayLoading} error={displayError} stopped={displayPollingStopped} onRetry={onRetryDisplay} />
     <section className="panel"><div className="panel-head-inline"><h2>{w("실행 요약", "Execution summary")}</h2>{runs !== null && <button type="button" className="secondary" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? w("전체 단계 접기", "Hide full trace") : w("전체 단계 보기", "View full trace")}</button>}</div><p className="muted">{t("detail.audit")}</p>
       {runsError && <div className="error" role="alert"><p>{t("detail.agentError")}</p><button type="button" className="secondary" disabled={runsLoading} onClick={onRetry}>{t("retry")}</button></div>}
       {runs === null ? !runsError && <p role="status">{t("loading")}</p> : !runs.length ? <p className="muted">{w("기록된 실행 이력이 없습니다.", "No execution history recorded.")}</p> : <><p className="muted">{w("최근 실행", "Latest execution")} · {executionDuration(runs[0])}{runs.length > 1 && ` · ${w("전체 실행", "Recorded runs")} ${runs.length}`}</p><ol className="decision-stage-summary">{steps.map((step, index) => <li key={step.id || index}><span>{stepLabel(step.step_type || step.name, step.metadata)}</span><strong>{step.metadata?.error_code === "test_run_stopped" ? w("테스트 중지", "Test stopped") : ({ completed: w("완료", "Completed"), passed: w("통과", "Passed"), failed: w("실패", "Failed"), skipped: w("건너뜀", "Skipped"), running: w("실행 중", "Running"), pending: w("대기", "Pending") })[step.status] || w("미기록", "Not recorded")}</strong><span>{executionDuration(step)}</span></li>)}</ol></>}

@@ -51,7 +51,13 @@ def live_snapshot(db, crypto, settings, *, roles=None, prompt_id=None, schema_id
         include_parser = not (latest and latest.snapshot_json.get("schema_version") == 1
                               and state.active_version_id == BASELINE_ID)
     editor = capture_editor_profile(editor_profile, db=db if production else None) if editor_profile else None
-    temporary.evidence_editor_snapshot_ciphertext = crypto.encrypt_text(editor.model_dump_json()) if editor else None
+    from .evidence_display_jobs import DisplayEditorSnapshot, capture_display_profile
+    if editor_profile and not production:
+        editor = capture_display_profile(editor_profile)
+    if isinstance(editor, DisplayEditorSnapshot):
+        temporary.display_editor_snapshot_ciphertext = crypto.encrypt_text(editor.model_dump_json())
+    else:
+        temporary.evidence_editor_snapshot_ciphertext = crypto.encrypt_text(editor.model_dump_json()) if editor else None
     return snapshot_from_run(temporary, crypto, include_parser=include_parser)
 
 
@@ -178,6 +184,13 @@ def preflight(db, crypto, settings, identifier):
         valid_profiles = False
     check("tested_profiles_still_valid", valid_profiles)
     check("tested_instructions_still_current", same_instructions)
+    if run.display_editor_snapshot_ciphertext:
+        from .evidence_display_jobs import qualification
+        try:
+            ready_display = qualification(db, run, crypto)["ready"]
+        except (ValueError, TypeError):
+            ready_display = False
+        check("display_editor_completed", ready_display)
     baseline_parser = parser_metadata(legacy_parser_snapshot())
     current_parser = current["snapshot"].get("parser", baseline_parser)
     candidate_parser = snapshot.get("parser", baseline_parser) if snapshot else None

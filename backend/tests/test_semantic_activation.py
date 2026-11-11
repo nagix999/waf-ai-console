@@ -13,7 +13,7 @@ from app.services.evidence_editor import capture_editor_profile
 from test_candidate_configurations import candidate
 from test_production_promotion import qualified, BASE
 
-pytestmark = pytest.mark.usefixtures("registered_vllm_target")
+pytestmark = pytest.mark.usefixtures("registered_vllm_target", "legacy_evidence_editor_admissions")
 
 
 def legacy_baseline(client, rules=legacy_prompts_v212):

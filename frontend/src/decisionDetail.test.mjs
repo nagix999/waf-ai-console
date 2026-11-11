@@ -78,24 +78,26 @@ test("linked evidence shows the representative interpretation once, inert relate
   assert.equal(html.split(result.evidence[1].interpretation_ko).length - 1, 1);
   assert.equal(html.split(result.evidence[3].interpretation_ko).length - 1, 1);
   assert.match(html, /함께 본 원문/); assert.match(html, /1차 분석/); assert.match(html, /추가 검증/);
-  assert.match(html, /direction-context/); assert.match(html, /direction-attack_request/); assert.match(html, /direction-normal_request/);
+  assert.match(html, /direction-attack_request/); assert.match(html, /direction-normal_request/);
   assert.match(html, /&lt;img/); assert.doesNotMatch(html, /<img|evidence-relations-v1|representative_evidence_id/);
-  assert.equal((html.match(/원문과 개별 해석 보기/g) || []).length, 2);
+  assert.equal((html.match(/함께 본 원문 1개 보기/g) || []).length, 2);
+  assert.equal((html.match(/원문과 개별 해석 보기/g) || []).length, 0);
+  assert.match(html, /나머지 근거 1묶음 보기/);
 });
 test("shared canonical relation renders one explanation and preserves both analyst-facing role labels", () => {
   const { result, mapping } = sharedRelationFixture();
   const html = render(EvidenceCards, { detail: { status: "completed", result }, relations: mapping, onViewInput() {} });
-  assert.equal((html.match(/decision-evidence-row has-linked-sources/g) || []).length, 1);
+  assert.equal((html.match(/has-linked-sources/g) || []).length, 1);
   assert.equal(html.split(result.evidence[1].interpretation_ko).length - 1, 1);
   assert.match(html, /1차 분석 \/ 추가 검증/);
-  assert.equal((html.match(/원문과 개별 해석 보기/g) || []).length, 1);
+  assert.equal((html.match(/함께 본 원문 1개 보기/g) || []).length, 1);
   assert.match(html, /근거 2 원문 보기/);
 });
 test("unavailable or invalid relation records leave individual evidence visible with retry", () => {
   const result = relationFixture();
   for (const props of [{ relationsError: true }, { relations: { version: "invalid", groups: [] } }]) {
     const html = render(EvidenceCards, { detail: { status: "completed", result }, ...props, onRetryRelations() {} });
-    assert.match(html, /개별 근거를 표시합니다/); assert.match(html, /다시 시도/);
+    assert.match(html, /정리 실패 — 원본 유지|정리 상태를 확인하지 못했습니다/); assert.match(html, /상태 다시 확인/);
     assert.ok(html.includes(result.evidence[1].interpretation_ko));
     assert.ok(html.includes(result.evidence[3].interpretation_ko));
   }
@@ -143,6 +145,20 @@ test("execution starts with summary, not a full debugger; legacy JSON can start 
   assert.doesNotMatch(html, /private-output|inspection-agent-grid|hidden-run/);
   assert.match(html, /<details><summary>결과 JSON/);
   assert.match(render(ExecutionView, { detail, runs, initialJson: true }), /<details open=""><summary>결과 JSON/);
+});
+
+test("execution separates current asynchronous evidence status from the immutable original trace", () => {
+  const detail = { ...fixture(), result: relationFixture(), evidence_display: {
+    version: "evidence-display-view-v1", status: "completed", plan: null, relations: relationMapping(), metadata: {},
+  } };
+  const runs = [{ steps: [{ step_type: "llm_evidence_editor", status: "skipped" }] }];
+  const before = JSON.stringify(runs), html = render(ExecutionView, { detail, runs });
+  assert.match(html, /현재 근거 정리/);
+  assert.match(html, /정리됨 — 근거 4개를 3묶음/);
+  assert.match(html, /근거 정리는 분석 종료 후 별도로 처리합니다/);
+  assert.match(html, /건너뜀/);
+  assert.equal(JSON.stringify(runs), before);
+  assert.doesNotMatch(html, /inspection-agent-grid/);
 });
 
 for (const verdict of ["true_positive", "false_positive", "inconclusive"]) for (const action of ["D", "A"]) test(`WAF ${action} and ${verdict}: observation is not a verdict prerequisite`, () => {

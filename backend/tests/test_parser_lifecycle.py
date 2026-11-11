@@ -25,7 +25,7 @@ from test_validation_data import login
 from test_analysis_retries_keys import failed_fixture, profile_fixture, retry
 from test_result_contract_v3 import result_fixture
 
-pytestmark = pytest.mark.usefixtures("registered_vllm_target")
+pytestmark = pytest.mark.usefixtures("registered_vllm_target", "legacy_evidence_editor_admissions")
 
 
 def historical_prompt(db, crypto, holder):

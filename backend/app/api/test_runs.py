@@ -298,6 +298,18 @@ def export_excel(run_id, db, principal, request, *, filters, payload=None):
         if payload and (payload.expected_count != metadata["count"] or payload.preview_scope != metadata["scope"]):
             raise TestExportError("test_export_selection_changed", 409)
         columns = selected_columns(metadata["columns"], payload.columns) if payload else metadata["columns"]
+        from ..services.test_export_columns import EVIDENCE_COLUMNS
+        if any(column["name"] in EVIDENCE_COLUMNS for column in columns):
+            # Access to encrypted source/display history is audited before
+            # decryption, including exports that subsequently fail.
+            db.rollback()
+            record_access(db, principal, "view_test_evidence_for_export", "test_run", run_id)
+            read_snapshot(db)
+            db.refresh(run)
+            refreshed = prepare_export(db, request.app.state.crypto, run, filters)
+            if refreshed[0]["scope"] != metadata["scope"]:
+                raise TestExportError("test_export_selection_changed", 409)
+            prepared = refreshed
         records, basis = collect_rows(db, request.app.state.crypto, run, filters=filters, prepared=prepared, columns=columns)
         db.rollback()
         record_access(db, principal, "export_test_run_xlsx", "test_run", run_id)

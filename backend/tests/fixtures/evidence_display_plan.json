@@ -1,0 +1,1168 @@
+[
+  {
+    "name": "semantic_priority_and_required_sources",
+    "result": {
+      "schema_version": "waf-analysis-v3",
+      "verdict": "true_positive",
+      "evidence": [
+        {
+          "evidence_id": "e1",
+          "field": "payload",
+          "excerpt": "synthetic source 1",
+          "interpretation_ko": "기존 근거 1의 해석입니다.",
+          "supports": "context",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 0,
+              "source_id": "c1"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 100,
+              "end": 118
+            }
+          ]
+        },
+        {
+          "evidence_id": "e2",
+          "field": "payload",
+          "excerpt": "synthetic source 2",
+          "interpretation_ko": "기존 근거 2의 해석입니다.",
+          "supports": "attack_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 1,
+              "source_id": "c2"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 200,
+              "end": 218
+            }
+          ]
+        },
+        {
+          "evidence_id": "e3",
+          "field": "payload",
+          "excerpt": "synthetic source 3",
+          "interpretation_ko": "기존 근거 3의 해석입니다.",
+          "supports": "attack_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 2,
+              "source_id": "c3"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 300,
+              "end": 318
+            }
+          ]
+        },
+        {
+          "evidence_id": "e4",
+          "field": "payload",
+          "excerpt": "synthetic source 4",
+          "interpretation_ko": "기존 근거 4의 해석입니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 3,
+              "source_id": "c4"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 400,
+              "end": 418
+            }
+          ]
+        },
+        {
+          "evidence_id": "e5",
+          "field": "payload",
+          "excerpt": "synthetic source 5",
+          "interpretation_ko": "기존 근거 5의 해석입니다.",
+          "supports": "context",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 4,
+              "source_id": "c5"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 500,
+              "end": 518
+            }
+          ]
+        },
+        {
+          "evidence_id": "e6",
+          "field": "payload",
+          "excerpt": "synthetic source 6",
+          "interpretation_ko": "기존 근거 6의 해석입니다.",
+          "supports": "attack_request",
+          "origins": [
+            {
+              "role": "verifier",
+              "index": 0,
+              "source_id": "c6"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 600,
+              "end": 618
+            }
+          ]
+        }
+      ],
+      "decision_issues": [
+        {
+          "point_ko": "입력의 처리 조건을 구분해야 합니다.",
+          "evidence_ids": [
+            "e4"
+          ],
+          "missing_condition_ko": null,
+          "origins": [
+            "primary"
+          ]
+        },
+        {
+          "point_ko": "입력의 처리 조건을 구분해야 합니다.",
+          "evidence_ids": [
+            "e6"
+          ],
+          "missing_condition_ko": "처리 조건이 확인되지 않았습니다.",
+          "origins": [
+            "primary"
+          ]
+        }
+      ],
+      "policy": {
+        "decision_evidence_ids": [
+          "e2"
+        ]
+      }
+    },
+    "relations": {
+      "version": "evidence-relations-v1",
+      "groups": [
+        {
+          "role": "primary",
+          "representative_evidence_id": "e2",
+          "related_evidence_ids": [
+            "e1"
+          ]
+        },
+        {
+          "role": "primary",
+          "representative_evidence_id": "e3",
+          "related_evidence_ids": [
+            "e1"
+          ]
+        }
+      ]
+    },
+    "model_groups": [
+      {
+        "member_ids": [
+          "e2",
+          "e3"
+        ],
+        "representative_id": "e3"
+      },
+      {
+        "member_ids": [
+          "e6"
+        ],
+        "representative_id": "e6"
+      },
+      {
+        "member_ids": [
+          "e4"
+        ],
+        "representative_id": "e4"
+      },
+      {
+        "member_ids": [
+          "e1"
+        ],
+        "representative_id": "e1"
+      },
+      {
+        "member_ids": [
+          "e5"
+        ],
+        "representative_id": "e5"
+      }
+    ],
+    "status": "completed",
+    "expected": {
+      "version": "evidence-display-v1",
+      "source_hash": "e9a9ec6850bdd9604ac146fba6b8a14816b437b3fb91b9f53d0f2db2ba484184",
+      "status": "completed",
+      "reason": null,
+      "groups": [
+        {
+          "group_id": "g3",
+          "representative_id": "e3",
+          "member_ids": [
+            "e2",
+            "e3"
+          ],
+          "related_ids": [
+            "e1"
+          ],
+          "supports": "attack_request",
+          "number": 3,
+          "default_visible": true,
+          "visibility_reasons": [
+            "rank_top"
+          ]
+        },
+        {
+          "group_id": "g6",
+          "representative_id": "e6",
+          "member_ids": [
+            "e6"
+          ],
+          "related_ids": [],
+          "supports": "attack_request",
+          "number": 6,
+          "default_visible": true,
+          "visibility_reasons": [
+            "rank_top",
+            "decision_issue"
+          ]
+        },
+        {
+          "group_id": "g4",
+          "representative_id": "e4",
+          "member_ids": [
+            "e4"
+          ],
+          "related_ids": [],
+          "supports": "normal_request",
+          "number": 4,
+          "default_visible": true,
+          "visibility_reasons": [
+            "rank_top",
+            "decision_issue",
+            "counter_evidence"
+          ]
+        },
+        {
+          "group_id": "g1",
+          "representative_id": "e1",
+          "member_ids": [
+            "e1"
+          ],
+          "related_ids": [],
+          "supports": "context",
+          "number": 1,
+          "default_visible": false,
+          "visibility_reasons": [
+            "context_auxiliary"
+          ]
+        },
+        {
+          "group_id": "g5",
+          "representative_id": "e5",
+          "member_ids": [
+            "e5"
+          ],
+          "related_ids": [],
+          "supports": "context",
+          "number": 5,
+          "default_visible": false,
+          "visibility_reasons": [
+            "context_auxiliary"
+          ]
+        }
+      ],
+      "metrics": {
+        "original_evidence_count": 6,
+        "group_count": 5,
+        "core_group_count": 3,
+        "merged_count": 1
+      }
+    },
+    "source_document": {
+      "evidence": [
+        {
+          "evidence_id": "e1",
+          "field": "payload",
+          "excerpt": "synthetic source 1",
+          "interpretation_ko": "기존 근거 1의 해석입니다.",
+          "supports": "context",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 0,
+              "source_id": "c1"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 100,
+              "end": 118
+            }
+          ]
+        },
+        {
+          "evidence_id": "e2",
+          "field": "payload",
+          "excerpt": "synthetic source 2",
+          "interpretation_ko": "기존 근거 2의 해석입니다.",
+          "supports": "attack_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 1,
+              "source_id": "c2"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 200,
+              "end": 218
+            }
+          ]
+        },
+        {
+          "evidence_id": "e3",
+          "field": "payload",
+          "excerpt": "synthetic source 3",
+          "interpretation_ko": "기존 근거 3의 해석입니다.",
+          "supports": "attack_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 2,
+              "source_id": "c3"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 300,
+              "end": 318
+            }
+          ]
+        },
+        {
+          "evidence_id": "e4",
+          "field": "payload",
+          "excerpt": "synthetic source 4",
+          "interpretation_ko": "기존 근거 4의 해석입니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 3,
+              "source_id": "c4"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 400,
+              "end": 418
+            }
+          ]
+        },
+        {
+          "evidence_id": "e5",
+          "field": "payload",
+          "excerpt": "synthetic source 5",
+          "interpretation_ko": "기존 근거 5의 해석입니다.",
+          "supports": "context",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 4,
+              "source_id": "c5"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 500,
+              "end": 518
+            }
+          ]
+        },
+        {
+          "evidence_id": "e6",
+          "field": "payload",
+          "excerpt": "synthetic source 6",
+          "interpretation_ko": "기존 근거 6의 해석입니다.",
+          "supports": "attack_request",
+          "origins": [
+            {
+              "role": "verifier",
+              "index": 0,
+              "source_id": "c6"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 600,
+              "end": 618
+            }
+          ]
+        }
+      ],
+      "decision_issues": [
+        {
+          "point_ko": "입력의 처리 조건을 구분해야 합니다.",
+          "evidence_ids": [
+            "e4"
+          ],
+          "missing_condition_ko": null,
+          "origins": [
+            "primary"
+          ]
+        },
+        {
+          "point_ko": "입력의 처리 조건을 구분해야 합니다.",
+          "evidence_ids": [
+            "e6"
+          ],
+          "missing_condition_ko": "처리 조건이 확인되지 않았습니다.",
+          "origins": [
+            "primary"
+          ]
+        }
+      ],
+      "policy": {
+        "decision_evidence_ids": [
+          "e2"
+        ]
+      },
+      "verdict": "true_positive",
+      "relations": {
+        "version": "evidence-relations-v1",
+        "groups": [
+          {
+            "role": "primary",
+            "representative_evidence_id": "e2",
+            "related_evidence_ids": [
+              "e1"
+            ]
+          },
+          {
+            "role": "primary",
+            "representative_evidence_id": "e3",
+            "related_evidence_ids": [
+              "e1"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "model_failure_restores_all_originals",
+    "result": {
+      "schema_version": "waf-analysis-v3",
+      "verdict": "true_positive",
+      "evidence": [
+        {
+          "evidence_id": "e1",
+          "field": "payload",
+          "excerpt": "synthetic source 1",
+          "interpretation_ko": "기존 근거 1의 해석입니다.",
+          "supports": "context",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 0,
+              "source_id": "c1"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 100,
+              "end": 118
+            }
+          ]
+        },
+        {
+          "evidence_id": "e2",
+          "field": "payload",
+          "excerpt": "synthetic source 2",
+          "interpretation_ko": "기존 근거 2의 해석입니다.",
+          "supports": "attack_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 1,
+              "source_id": "c2"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 200,
+              "end": 218
+            }
+          ]
+        },
+        {
+          "evidence_id": "e3",
+          "field": "payload",
+          "excerpt": "synthetic source 3",
+          "interpretation_ko": "기존 근거 3의 해석입니다.",
+          "supports": "attack_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 2,
+              "source_id": "c3"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 300,
+              "end": 318
+            }
+          ]
+        },
+        {
+          "evidence_id": "e4",
+          "field": "payload",
+          "excerpt": "synthetic source 4",
+          "interpretation_ko": "기존 근거 4의 해석입니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 3,
+              "source_id": "c4"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 400,
+              "end": 418
+            }
+          ]
+        },
+        {
+          "evidence_id": "e5",
+          "field": "payload",
+          "excerpt": "synthetic source 5",
+          "interpretation_ko": "기존 근거 5의 해석입니다.",
+          "supports": "context",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 4,
+              "source_id": "c5"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 500,
+              "end": 518
+            }
+          ]
+        },
+        {
+          "evidence_id": "e6",
+          "field": "payload",
+          "excerpt": "synthetic source 6",
+          "interpretation_ko": "기존 근거 6의 해석입니다.",
+          "supports": "attack_request",
+          "origins": [
+            {
+              "role": "verifier",
+              "index": 0,
+              "source_id": "c6"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 600,
+              "end": 618
+            }
+          ]
+        }
+      ],
+      "decision_issues": [
+        {
+          "point_ko": "입력의 처리 조건을 구분해야 합니다.",
+          "evidence_ids": [
+            "e4"
+          ],
+          "missing_condition_ko": null,
+          "origins": [
+            "primary"
+          ]
+        },
+        {
+          "point_ko": "입력의 처리 조건을 구분해야 합니다.",
+          "evidence_ids": [
+            "e6"
+          ],
+          "missing_condition_ko": "처리 조건이 확인되지 않았습니다.",
+          "origins": [
+            "primary"
+          ]
+        }
+      ],
+      "policy": {
+        "decision_evidence_ids": [
+          "e2"
+        ]
+      }
+    },
+    "relations": {
+      "version": "evidence-relations-v1",
+      "groups": [
+        {
+          "role": "primary",
+          "representative_evidence_id": "e2",
+          "related_evidence_ids": [
+            "e1"
+          ]
+        },
+        {
+          "role": "primary",
+          "representative_evidence_id": "e3",
+          "related_evidence_ids": [
+            "e1"
+          ]
+        }
+      ]
+    },
+    "status": "fallback",
+    "reason": "editor_call_failed",
+    "expected": {
+      "version": "evidence-display-v1",
+      "source_hash": "e9a9ec6850bdd9604ac146fba6b8a14816b437b3fb91b9f53d0f2db2ba484184",
+      "status": "fallback",
+      "reason": "editor_call_failed",
+      "groups": [
+        {
+          "group_id": "g1",
+          "representative_id": "e1",
+          "member_ids": [
+            "e1"
+          ],
+          "related_ids": [],
+          "supports": "context",
+          "number": 1,
+          "default_visible": true,
+          "visibility_reasons": [
+            "fallback_original"
+          ]
+        },
+        {
+          "group_id": "g2",
+          "representative_id": "e2",
+          "member_ids": [
+            "e2"
+          ],
+          "related_ids": [
+            "e1"
+          ],
+          "supports": "attack_request",
+          "number": 2,
+          "default_visible": true,
+          "visibility_reasons": [
+            "fallback_original"
+          ]
+        },
+        {
+          "group_id": "g3",
+          "representative_id": "e3",
+          "member_ids": [
+            "e3"
+          ],
+          "related_ids": [
+            "e1"
+          ],
+          "supports": "attack_request",
+          "number": 3,
+          "default_visible": true,
+          "visibility_reasons": [
+            "fallback_original"
+          ]
+        },
+        {
+          "group_id": "g4",
+          "representative_id": "e4",
+          "member_ids": [
+            "e4"
+          ],
+          "related_ids": [],
+          "supports": "normal_request",
+          "number": 4,
+          "default_visible": true,
+          "visibility_reasons": [
+            "fallback_original"
+          ]
+        },
+        {
+          "group_id": "g5",
+          "representative_id": "e5",
+          "member_ids": [
+            "e5"
+          ],
+          "related_ids": [],
+          "supports": "context",
+          "number": 5,
+          "default_visible": true,
+          "visibility_reasons": [
+            "fallback_original"
+          ]
+        },
+        {
+          "group_id": "g6",
+          "representative_id": "e6",
+          "member_ids": [
+            "e6"
+          ],
+          "related_ids": [],
+          "supports": "attack_request",
+          "number": 6,
+          "default_visible": true,
+          "visibility_reasons": [
+            "fallback_original"
+          ]
+        }
+      ],
+      "metrics": {
+        "original_evidence_count": 6,
+        "group_count": 6,
+        "core_group_count": 6,
+        "merged_count": 0
+      }
+    },
+    "source_document": {
+      "evidence": [
+        {
+          "evidence_id": "e1",
+          "field": "payload",
+          "excerpt": "synthetic source 1",
+          "interpretation_ko": "기존 근거 1의 해석입니다.",
+          "supports": "context",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 0,
+              "source_id": "c1"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 100,
+              "end": 118
+            }
+          ]
+        },
+        {
+          "evidence_id": "e2",
+          "field": "payload",
+          "excerpt": "synthetic source 2",
+          "interpretation_ko": "기존 근거 2의 해석입니다.",
+          "supports": "attack_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 1,
+              "source_id": "c2"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 200,
+              "end": 218
+            }
+          ]
+        },
+        {
+          "evidence_id": "e3",
+          "field": "payload",
+          "excerpt": "synthetic source 3",
+          "interpretation_ko": "기존 근거 3의 해석입니다.",
+          "supports": "attack_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 2,
+              "source_id": "c3"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 300,
+              "end": 318
+            }
+          ]
+        },
+        {
+          "evidence_id": "e4",
+          "field": "payload",
+          "excerpt": "synthetic source 4",
+          "interpretation_ko": "기존 근거 4의 해석입니다.",
+          "supports": "normal_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 3,
+              "source_id": "c4"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 400,
+              "end": 418
+            }
+          ]
+        },
+        {
+          "evidence_id": "e5",
+          "field": "payload",
+          "excerpt": "synthetic source 5",
+          "interpretation_ko": "기존 근거 5의 해석입니다.",
+          "supports": "context",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 4,
+              "source_id": "c5"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 500,
+              "end": 518
+            }
+          ]
+        },
+        {
+          "evidence_id": "e6",
+          "field": "payload",
+          "excerpt": "synthetic source 6",
+          "interpretation_ko": "기존 근거 6의 해석입니다.",
+          "supports": "attack_request",
+          "origins": [
+            {
+              "role": "verifier",
+              "index": 0,
+              "source_id": "c6"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 600,
+              "end": 618
+            }
+          ]
+        }
+      ],
+      "decision_issues": [
+        {
+          "point_ko": "입력의 처리 조건을 구분해야 합니다.",
+          "evidence_ids": [
+            "e4"
+          ],
+          "missing_condition_ko": null,
+          "origins": [
+            "primary"
+          ]
+        },
+        {
+          "point_ko": "입력의 처리 조건을 구분해야 합니다.",
+          "evidence_ids": [
+            "e6"
+          ],
+          "missing_condition_ko": "처리 조건이 확인되지 않았습니다.",
+          "origins": [
+            "primary"
+          ]
+        }
+      ],
+      "policy": {
+        "decision_evidence_ids": [
+          "e2"
+        ]
+      },
+      "verdict": "true_positive",
+      "relations": {
+        "version": "evidence-relations-v1",
+        "groups": [
+          {
+            "role": "primary",
+            "representative_evidence_id": "e2",
+            "related_evidence_ids": [
+              "e1"
+            ]
+          },
+          {
+            "role": "primary",
+            "representative_evidence_id": "e3",
+            "related_evidence_ids": [
+              "e1"
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "name": "legacy_editor_and_relations_together",
+    "result": {
+      "schema_version": "waf-analysis-v3",
+      "verdict": "true_positive",
+      "evidence": [
+        {
+          "evidence_id": "e1",
+          "field": "payload",
+          "excerpt": "synthetic source 1",
+          "interpretation_ko": "기존 근거 1의 해석입니다.",
+          "supports": "attack_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 0,
+              "source_id": "c1"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 100,
+              "end": 118
+            }
+          ]
+        },
+        {
+          "evidence_id": "e2",
+          "field": "payload",
+          "excerpt": "synthetic source 1",
+          "interpretation_ko": "기존 근거 2의 해석입니다.",
+          "supports": "attack_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 1,
+              "source_id": "c2"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 100,
+              "end": 118
+            }
+          ]
+        },
+        {
+          "evidence_id": "e3",
+          "field": "payload",
+          "excerpt": "synthetic source 3",
+          "interpretation_ko": "기존 근거 3의 해석입니다.",
+          "supports": "context",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 2,
+              "source_id": "c3"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 300,
+              "end": 318
+            }
+          ]
+        }
+      ],
+      "decision_issues": [],
+      "policy": {
+        "decision_evidence_ids": []
+      },
+      "evidence_presentation": {
+        "version": "evidence-editor-v1",
+        "status": "completed",
+        "groups": [
+          {
+            "member_ids": [
+              "e1",
+              "e2"
+            ],
+            "representative_id": "e2"
+          },
+          {
+            "member_ids": [
+              "e3"
+            ],
+            "representative_id": "e3"
+          }
+        ]
+      }
+    },
+    "relations": {
+      "version": "evidence-relations-v1",
+      "groups": [
+        {
+          "role": "primary",
+          "representative_evidence_id": "e1",
+          "related_evidence_ids": [
+            "e3"
+          ]
+        },
+        {
+          "role": "primary",
+          "representative_evidence_id": "e2",
+          "related_evidence_ids": [
+            "e3"
+          ]
+        }
+      ]
+    },
+    "status": "skipped",
+    "reason": "editor_disabled",
+    "expected": {
+      "version": "evidence-display-v1",
+      "source_hash": "9addc6ca99f11b684403d09a1dec9dc3f2a4f4e09a592b995b68e104343e925b",
+      "status": "skipped",
+      "reason": "editor_disabled",
+      "groups": [
+        {
+          "group_id": "g2",
+          "representative_id": "e2",
+          "member_ids": [
+            "e1",
+            "e2"
+          ],
+          "related_ids": [
+            "e3"
+          ],
+          "supports": "attack_request",
+          "number": 2,
+          "default_visible": true,
+          "visibility_reasons": [
+            "rank_top"
+          ]
+        },
+        {
+          "group_id": "g3",
+          "representative_id": "e3",
+          "member_ids": [
+            "e3"
+          ],
+          "related_ids": [],
+          "supports": "context",
+          "number": 3,
+          "default_visible": false,
+          "visibility_reasons": [
+            "context_auxiliary"
+          ]
+        }
+      ],
+      "metrics": {
+        "original_evidence_count": 3,
+        "group_count": 2,
+        "core_group_count": 1,
+        "merged_count": 1
+      }
+    },
+    "source_document": {
+      "evidence": [
+        {
+          "evidence_id": "e1",
+          "field": "payload",
+          "excerpt": "synthetic source 1",
+          "interpretation_ko": "기존 근거 1의 해석입니다.",
+          "supports": "attack_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 0,
+              "source_id": "c1"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 100,
+              "end": 118
+            }
+          ]
+        },
+        {
+          "evidence_id": "e2",
+          "field": "payload",
+          "excerpt": "synthetic source 1",
+          "interpretation_ko": "기존 근거 2의 해석입니다.",
+          "supports": "attack_request",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 1,
+              "source_id": "c2"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 100,
+              "end": 118
+            }
+          ]
+        },
+        {
+          "evidence_id": "e3",
+          "field": "payload",
+          "excerpt": "synthetic source 3",
+          "interpretation_ko": "기존 근거 3의 해석입니다.",
+          "supports": "context",
+          "origins": [
+            {
+              "role": "primary",
+              "index": 2,
+              "source_id": "c3"
+            }
+          ],
+          "source_spans": [
+            {
+              "start": 300,
+              "end": 318
+            }
+          ]
+        }
+      ],
+      "decision_issues": [],
+      "policy": {
+        "decision_evidence_ids": []
+      },
+      "verdict": "true_positive",
+      "relations": {
+        "version": "evidence-relations-v1",
+        "groups": [
+          {
+            "role": "primary",
+            "representative_evidence_id": "e1",
+            "related_evidence_ids": [
+              "e3"
+            ]
+          },
+          {
+            "role": "primary",
+            "representative_evidence_id": "e2",
+            "related_evidence_ids": [
+              "e3"
+            ]
+          }
+        ]
+      }
+    }
+  }
+]

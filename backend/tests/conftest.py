@@ -6,6 +6,22 @@ from app.main import create_app
 
 
 @pytest.fixture(autouse=True)
+def legacy_evidence_editor_admissions(monkeypatch, request):
+    """Opt-in replay of archived Editor/qualification contracts only.
+
+    New display-job tests deliberately omit this marker and exercise the real
+    asynchronous qualification gate. Old worker fixtures must keep their old
+    ID-only, same-source editor instead of silently adopting a new contract.
+    """
+    historical = {"legacy_v220_admissions", "legacy_evidence_editor_admissions"}
+    if not any(historical.intersection(marker.args) for marker in request.node.iter_markers("usefixtures")):
+        return
+    from app.services import evidence_display_jobs
+    from app.services.evidence_editor import capture_editor_profile
+    monkeypatch.setattr(evidence_display_jobs, "capture_display_profile", capture_editor_profile)
+
+
+@pytest.fixture(autouse=True)
 def legacy_v220_admissions(monkeypatch, request):
     """Replay archived worker contracts without replacing their runtime code.
 

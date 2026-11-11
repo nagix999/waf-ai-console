@@ -11,7 +11,9 @@ export function reportPath(id, format) {
   return `/api/v1/analyses/${id}/report.${format}`;
 }
 
-export function reportDownloadError(error) {
+export function reportDownloadError(error, w = ko => ko) {
+  if (error?.message === "core_result_unavailable") return w("핵심 근거를 확인하지 못해 보고서를 만들지 않았습니다. 잠시 후 다시 시도하세요.", "The report was not created because core evidence could not be verified. Try again shortly.");
+  if (error?.message === "test_export_evidence_pending") return w("핵심 근거를 준비 중입니다. 완료 후 다시 다운로드하세요.", "Core evidence is still being prepared. Download again after completion.");
   if (error?.status === 401) return "로그인이 만료되었습니다. 다시 로그인해 주세요.";
   if (error?.status === 403) return "보고서는 관리자만 내려받을 수 있습니다.";
   if (error?.status === 404) return "해당 분석을 찾을 수 없습니다.";
@@ -35,7 +37,7 @@ export async function fetchReportFile(id, format, { signal, pdfOptions, fetchImp
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     // Never surface arbitrary server text or response bodies in the UI.
-    const code = ["report_not_final", "report_too_large", "report_export_busy", "report_export_timeout"].includes(body?.detail) ? body.detail : "report_export_unavailable";
+    const code = ["report_not_final", "report_too_large", "report_export_busy", "report_export_timeout", "core_result_unavailable", "test_export_evidence_pending"].includes(body?.detail) ? body.detail : "report_export_unavailable";
     const error = new Error(code); error.status = response.status; throw error;
   }
   if (response.headers.get("content-type")?.split(";")[0] !== reportTypes[format]) throw new Error("invalid_report_response");

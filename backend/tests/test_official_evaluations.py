@@ -14,7 +14,7 @@ from test_ground_truth_review import review
 from test_test_retries import detail, finish, submit
 from test_validation_data import add_item, create_dataset, dataset_run, forbid_model_calls, login, save_reference
 
-pytestmark = pytest.mark.usefixtures("registered_vllm_target")
+pytestmark = pytest.mark.usefixtures("registered_vllm_target", "legacy_evidence_editor_admissions")
 
 
 @pytest.fixture

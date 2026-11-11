@@ -15,7 +15,7 @@ from test_validation_data import login, create_dataset, add_item
 from test_ground_truth_working import save, publish, draft
 from test_candidate_configurations import candidate
 
-pytestmark = pytest.mark.usefixtures("registered_vllm_target")
+pytestmark = pytest.mark.usefixtures("registered_vllm_target", "legacy_evidence_editor_admissions")
 
 
 @contextmanager
