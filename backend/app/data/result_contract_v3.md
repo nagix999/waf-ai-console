@@ -3,6 +3,41 @@
 This is a result contract and candidate-instruction change, not an automatic
 Production configuration upgrade. The implementation starts from `eea2527`.
 
+## Candidate v2.22: bounded relation deduplication (2026-11-12)
+
+This candidate changes an internal recovery path, not public v3 JSON. After
+complete, unambiguous JSON normalization, `executor_v222.py` invokes relation
+recovery only when the original `SecurityAnalysisOutputV220` validation reports
+`evidence_relation_invalid` and no other error. Only repeated identical integer
+indexes and groups with exactly identical original representative/related-index
+sequences may be deduplicated, preserving first occurrence and evidence order.
+The original full strict codec and subsequent grounding still validate the
+result. Evidence, interpretation, supports, verdict and required sources remain
+unchanged. Self references, out-of-range indexes, invalid types, conflicting
+supports and different groups are never guessed away or merged. Truncated JSON,
+refusals and incomplete provider responses are not salvaged.
+
+Safe local recovery makes no additional model call. Remaining errors use the
+existing maximum of four complete-JSON generation attempts, including the first,
+with fixed relation-specific feedback. A pure relation error does not force
+shorter analysis merely because it recurs. Existing nonrelation, output-limit
+and timeout recovery behavior remains unchanged. Retry metadata uses the
+existing structure with version `structured-output-repair-v4`; successful
+deduplication codes use the existing `json_normalizations` list only. No new
+diagnostic screen, statistics field or public output field is introduced.
+
+Frozen v2.20/v2.21 implementations and the four pinned display files are
+preserved. The new `evidence-pipeline-v3` path is dispatched by
+`python -m app.worker_entrypoint_v222` after encrypted-snapshot validation,
+without global function replacement. Old failed-job retries retain their old
+engine and instructions. New candidate promotion still requires approved
+Ground Truth evaluation and administrator approval. No DB migration, dependency,
+judgment-prompt text, profile, output-token limit, timeout or active Production
+configuration changes are made. Actual LLM behavior and a 99% success target
+remain unverified. No automatic activation, deployment or Git upload was done.
+The compression and contextual-interpretation notes below are historical work
+records, not a further prompt change in this recovery candidate.
+
 ## Source-bound evidence presentation (2026-11-11)
 
 The public v3 fields and types are unchanged. Stored evidence, verdict, severity
@@ -18,7 +53,7 @@ Existing approved configurations and retries retain their original revision.
 New official evaluations must also finish the selected display jobs successfully
 before review and promotion. Failed/unknown-completion jobs are not silently
 resent or accepted for promotion. The existing worker process runs the bounded
-display lane through `app.worker_entrypoint`; no package or service is added.
+display lane through `app.worker_entrypoint_v222`; no package or service is added.
 
 Administrators use audited, no-store
 `GET /api/v1/analyses/{analysis_id}/evidence-display` to read the saved plan and
@@ -72,7 +107,8 @@ GET v3). No additional table or migration is required for this projection.
 ## New executions
 
 Candidates pinned to `waf-system-v2.15`, `waf-system-v2.16`, `waf-system-v2.17`,
-`waf-system-v2.18`, `waf-system-v2.19` or `waf-system-v2.20` generate
+`waf-system-v2.18`, `waf-system-v2.19`, `waf-system-v2.20`,
+`waf-system-v2.21` or `waf-system-v2.22` generate
 `waf-analysis-v3`. Approved
 Production instructions, already queued jobs and failed-job retries retain
 their encrypted pinned instructions. In particular, v2.14 remains available
@@ -156,7 +192,7 @@ pipeline manifest; existing approvals, queued work, retries and old v1 manifests
 are not rewritten. Production still requires official evaluation and explicit
 administrator promotion. Runtime quality and speed require actual model tests.
 
-The unpromoted v2.21 candidate's instructions have also been compacted without
+The historical unpromoted v2.21 candidate's instructions were compacted without
 changing this execution contract or any pipeline artifact. Shared fixed text is
 5,019 → 4,236 characters; full default Primary/Verifier instructions are
 4,546/4,570 characters (including whitespace, excluding event JSON and output

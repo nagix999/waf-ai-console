@@ -1,4 +1,4 @@
-"""Shared reasoning text and immutable revisions, not model quality claims.
+"""Archived v2.21 reasoning text and immutable revisions, not quality claims.
 
 These tests do not call a model, change an active policy, or infer semantics
 from a sentence counter. Runtime and public contracts retain their own suites.
@@ -9,11 +9,15 @@ from pathlib import Path
 
 import pytest
 
-from app.agent import legacy_prompts_v221, legacy_prompts_v221_compact as previous, prompts
+from app.agent import (
+    legacy_prompts_v221, legacy_prompts_v221_compact as previous,
+    legacy_prompts_v221_reasoning as prompts,
+)
 from app.services.prompt_snapshots import _baseline_rules
 
 
 COMPACT_FILE_SHA256 = "3ca72dfac82d3f4751fe8b023e917623820bccd45a4602faf89b86ba7f83686c"
+pytestmark = pytest.mark.usefixtures("legacy_v221_admissions")
 
 
 def text_hash(value):

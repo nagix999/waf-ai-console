@@ -17,7 +17,10 @@ import pytest
 from pydantic import ValidationError
 
 from app import worker, worker_v221
-from app.agent import evidence_pipeline, evidence_pipeline_v221, legacy_prompts_v220, prompts
+from app.agent import (
+    evidence_pipeline, evidence_pipeline_v221, legacy_prompts_v220,
+    legacy_prompts_v221_reasoning as prompts,
+)
 from app.models import Analysis, ProductionPromotion, TestRun as NamedRun, VLLMProfile, utcnow
 from app.services import worker_runtime
 from app.services.analysis_retries import (
@@ -37,7 +40,7 @@ from test_validation_data import login
 
 
 OLD = "waf-system-v2.20"
-pytestmark = pytest.mark.usefixtures("legacy_evidence_editor_admissions")
+pytestmark = pytest.mark.usefixtures("legacy_evidence_editor_admissions", "legacy_v221_admissions")
 NEW = "waf-system-v2.21"
 V220_PROMPT_SHA256 = "145e9e1c56ee0967689cc33bdd9acbaf718013bf304675e2aae8f7e3862940b6"
 HEAD_FILE_SHA256 = {
@@ -186,7 +189,7 @@ def test_new_implementation_drift_invalidates_v221_but_not_saved_v220_manifest(m
     assert evidence_pipeline_v221.validate_pipeline_snapshot(old, OLD) == old
 
 
-def test_default_prompt_is_v221_and_explicit_historical_prompt_stays_v220(client):
+def test_archived_default_prompt_is_v221_and_explicit_historical_prompt_stays_v220(client):
     old, new = build_prompt(client, legacy=True), build_prompt(client)
     assert (old.fixed_rules_version, new.fixed_rules_version) == (OLD, NEW)
     assert old.schema_version == new.schema_version == 2

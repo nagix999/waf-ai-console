@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from scripts import compare_security_analysis_v3 as comparison
 from app.agent.contracts import SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SemanticAssessmentOutput
 from app.agent.executor import AgentCallResult
-from app import worker_v221
+from app import worker_v221, worker_v222
 from app.config import Settings
 from app.database import Base, build_engine
 from app.models import VLLMProfile, VLLMTestRun, utcnow
@@ -175,6 +175,7 @@ def test_mocked_comparison_preserves_source_and_aborts_quota(tmp_path, monkeypat
                                {"usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}})
     monkeypatch.setattr(comparison.worker, "execute_structured_agent", execute)
     monkeypatch.setattr(worker_v221, "execute_structured_agent", execute)
+    monkeypatch.setattr(worker_v222, "execute_structured_agent", execute)
     directory = tmp_path / "safe-results"
     result = comparison.main(["--execute-model-calls", "--profile-name", "Synthetic isolated profile",
                               "--output-dir", str(directory)])

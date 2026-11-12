@@ -3,8 +3,8 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from agent_selection_helpers import model_output
 
-from app import worker, worker_v221
-from app.agent import legacy_prompts_v220
+from app import worker, worker_v221, worker_v222
+from app.agent import legacy_prompts_v220, legacy_prompts_v221_reasoning
 from app.agent.contracts import WAFAnalysisOutput
 from app.agent.executor import AgentCallResult
 from app.agent.input_builder import build_agent_input
@@ -12,7 +12,7 @@ from app.agent.prompts import DEFAULT_POLICY_TEXT, FIXED_INSTRUCTIONS, build_rol
 from app.models import Analysis, PromptPolicyVersion, VLLMProfile
 from app.services.http_parser import parse_http_payload
 from app.services.prompt_snapshots import PromptSnapshotError, load_analysis_prompt
-from app.services.worker_runtime import process_moduagent
+from app.services.worker_runtime_v222 import process_moduagent
 
 pytestmark = pytest.mark.usefixtures("registered_vllm_target")
 
@@ -75,7 +75,8 @@ def fake_output():
     })
 
 
-@pytest.mark.parametrize("rules", [legacy_prompts_v220, None], ids=["pinned-v220", "current-v221"])
+@pytest.mark.parametrize("rules", [legacy_prompts_v220, legacy_prompts_v221_reasoning, None],
+    ids=["pinned-v220", "pinned-v221", "current-v222"])
 def test_worker_and_verifier_use_queued_snapshot_after_activation_and_code_change(client, event_payload, monkeypatch, rules):
     if rules is not None:
         # Recreate admission under the frozen revision, not a current snapshot
@@ -85,7 +86,7 @@ def test_worker_and_verifier_use_queued_snapshot_after_activation_and_code_chang
     created = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload).json()
     with client.app.state.session_factory() as db:
         original = load_analysis_prompt(db.get(Analysis, created["id"]), client.app.state.crypto)
-        assert original.fixed_rules_version == (rules.FIXED_RULES_VERSION if rules else "waf-system-v2.21")
+        assert original.fixed_rules_version == (rules.FIXED_RULES_VERSION if rules else "waf-system-v2.22")
         db.add(VLLMProfile(name="synthetic-profile", base_url="http://10.0.0.10:8000/v1", model_name="synthetic-model", status="production"))
         db.commit()
     newer = create_and_activate(client, "새 버전에서만 사용하는 별도 작성 지침.")
@@ -103,6 +104,7 @@ def test_worker_and_verifier_use_queued_snapshot_after_activation_and_code_chang
 
     monkeypatch.setattr(worker, "execute_structured_agent", execute)
     monkeypatch.setattr(worker_v221, "execute_structured_agent", execute)
+    monkeypatch.setattr(worker_v222, "execute_structured_agent", execute)
     with client.app.state.session_factory() as db:
         row = worker.claim_next(db, "worker-one", 60)
         cipher_before = row.prompt_snapshot_ciphertext
@@ -113,7 +115,7 @@ def test_worker_and_verifier_use_queued_snapshot_after_activation_and_code_chang
         assert reclaimed.prompt_snapshot_ciphertext == cipher_before
         process_moduagent(db, client.app.state.crypto, reclaimed, "10.0.0.10:8000", 0.75)
     assert len(calls) == 2
-    assert all(bool(call.get("structured_output_recovery")) == (rules is None) for call in calls)
+    assert all(bool(call.get("structured_output_recovery")) == (rules is not legacy_prompts_v220) for call in calls)
     assert calls[0]["instructions"] == original.primary_instructions
     assert calls[1]["instructions"] == original.verifier_instructions
     assert calls[0]["user_input"] == calls[1]["user_input"]
@@ -139,6 +141,7 @@ def test_snapshot_corruption_fails_before_model_call(client, event_payload, monk
 
     monkeypatch.setattr(worker, "execute_structured_agent", execute)
     monkeypatch.setattr(worker_v221, "execute_structured_agent", execute)
+    monkeypatch.setattr(worker_v222, "execute_structured_agent", execute)
     with client.app.state.session_factory() as db:
         row = db.get(Analysis, created["id"])
         if corruption == "changed_role":
@@ -191,6 +194,7 @@ def test_small_context_fails_before_llm_and_preserves_pinned_policy(client, even
 
     monkeypatch.setattr(worker, "execute_structured_agent", execute)
     monkeypatch.setattr(worker_v221, "execute_structured_agent", execute)
+    monkeypatch.setattr(worker_v222, "execute_structured_agent", execute)
     with client.app.state.session_factory() as db:
         db.add(VLLMProfile(name="small-synthetic", base_url="http://10.0.0.10:8000/v1", model_name="synthetic-model", context_window=8192, max_output_tokens=3072, status="production"))
         db.commit()

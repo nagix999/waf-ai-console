@@ -114,7 +114,8 @@ def wire_model_for_revision(revision):
               "waf-system-v2.18": SecurityAnalysisOutputV216,
               "waf-system-v2.19": SecurityAnalysisOutputV216,
               "waf-system-v2.20": SecurityAnalysisOutputV220,
-              "waf-system-v2.21": SecurityAnalysisOutputV220}
+              "waf-system-v2.21": SecurityAnalysisOutputV220,
+              "waf-system-v2.22": SecurityAnalysisOutputV220}
     try:
         return models[revision.FIXED_RULES_VERSION]
     except KeyError:
@@ -279,13 +280,15 @@ def retry_accounting(metadata, depth=0):
 
 def pipeline_hashes():
     root = Path(__file__).resolve().parents[2]
-    paths = [Path(__file__).resolve(), root / "backend/app/worker.py", root / "backend/app/worker_v221.py"]
+    paths = [Path(__file__).resolve(), root / "backend/app/worker.py", root / "backend/app/worker_v221.py",
+             root / "backend/app/worker_v222.py", root / "backend/app/worker_entrypoint_v222.py"]
     paths.extend((root / "backend/app/agent").glob("*.py"))
     paths.extend(root / "backend/app/services" / (name + ".py") for name in (
         "http_parser", "payload_decoding", "request_integrity", "json_duplicate_values", "provider_options", "prompt_snapshots",
         "input_schemas", "evidence_editor", "candidate_configurations", "test_runs", "test_comparisons",
         "analysis_retries", "analysis", "uploads", "upload_expected_labels", "crypto", "concurrency",
-        "worker_runtime", "worker_concurrency", "model_validation_worker"))
+        "worker_runtime", "worker_concurrency", "model_validation_worker",
+        "worker_runtime_v222", "worker_concurrency_v222", "model_validation_worker_v222"))
     hashes = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(set(paths))}
     digest = hashlib.sha256(json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     return digest, hashes
@@ -501,7 +504,7 @@ def run(args):
                     started, previous_wait = time.monotonic(), authority.wait_ms
                     try:
                         authority()
-                        from app.services.worker_runtime import process_moduagent
+                        from app.services.worker_runtime_v222 import process_moduagent
                         process_moduagent(db, crypto, row, "", settings.verifier_confidence_threshold, request_check=authority)
                     except Exception as exc:
                         db.rollback()

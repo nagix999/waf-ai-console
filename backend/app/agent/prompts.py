@@ -1,7 +1,8 @@
-"""Shared reasoning guidance for the unpromoted v2.21 execution contract.
+"""Shared reasoning guidance for the unpromoted v2.22 execution contract.
 
 Approved and queued revisions keep their original instructions and contracts.
-Content hashes distinguish this candidate from preserved earlier instructions.
+Execution version and artifact hash distinguish the recovery-only candidate;
+the instruction text itself matches the preserved v2.21 reasoning revision.
 The parser, independent Verifier policy and public v3 contract stay intact.
 """
 from .legacy_prompts_v216 import (
@@ -12,11 +13,11 @@ from .legacy_prompts_v216 import (
     policy_reserved_tokens,
 )
 
-PROMPT_VERSION = "waf-judgment-v2.21"
-FIXED_RULES_VERSION = "waf-system-v2.21"
-V3_RULES_VERSIONS = frozenset({"waf-system-v2.15", "waf-system-v2.16", "waf-system-v2.17", "waf-system-v2.18", "waf-system-v2.19", "waf-system-v2.20", FIXED_RULES_VERSION})
+PROMPT_VERSION = "waf-judgment-v2.22"
+FIXED_RULES_VERSION = "waf-system-v2.22"
+V3_RULES_VERSIONS = frozenset({"waf-system-v2.15", "waf-system-v2.16", "waf-system-v2.17", "waf-system-v2.18", "waf-system-v2.19", "waf-system-v2.20", "waf-system-v2.21", FIXED_RULES_VERSION})
 SEMANTIC_RULES_VERSIONS = frozenset({
-    "waf-system-v2.13", "waf-system-v2.14", "waf-system-v2.15", "waf-system-v2.16", "waf-system-v2.17", "waf-system-v2.18", "waf-system-v2.19", "waf-system-v2.20", FIXED_RULES_VERSION,
+    "waf-system-v2.13", "waf-system-v2.14", "waf-system-v2.15", "waf-system-v2.16", "waf-system-v2.17", "waf-system-v2.18", "waf-system-v2.19", "waf-system-v2.20", "waf-system-v2.21", FIXED_RULES_VERSION,
 })
 
 FIXED_INSTRUCTIONS = """

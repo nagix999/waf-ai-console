@@ -16,13 +16,13 @@ from app.services.http_parser import parse_http_payload
 from app.services.analysis_retries import load_execution_snapshot
 from app.services.analyst_presentation import assessment_view
 from app.services.prompt_policies import get_active_policy
-from app.services.prompt_snapshots import _build_snapshot
+from app.services.prompt_snapshots import _build_snapshot, load_analysis_prompt
 from app.services.worker_runtime import process_moduagent
 from app.services.vllm_profiles import profile_fingerprint
 from test_evidence_relations import wire
 
 
-pytestmark = pytest.mark.usefixtures("registered_vllm_target")
+pytestmark = pytest.mark.usefixtures("registered_vllm_target", "legacy_v221_admissions")
 SIGNATURE = "Synthetic Signature"
 OBSERVATION = "요청에 실제로 들어 있는 입력값과 위치를 확인했습니다."
 INTEGRATED = "요청 위치와 관련 자료를 연결한 통합 설명입니다."
@@ -54,6 +54,11 @@ def enqueue(client, event_payload, service_headers, *, raw=None, action="D"):
         prompt = _build_snapshot(get_active_policy(db, crypto), crypto)
         assert prompt.fixed_rules_version == "waf-system-v2.21"
         assert prompt.evidence_pipeline["source_catalog_version"] == "evidence-selection-v4"
+        # The archived marker must pin the API admission itself, not merely
+        # replace a v2.22 snapshot just before invoking the frozen worker.
+        queued = load_analysis_prompt(row, crypto)
+        assert queued.fixed_rules_version == prompt.fixed_rules_version
+        assert queued.evidence_pipeline == prompt.evidence_pipeline
         row.prompt_version, row.prompt_policy_version_id = prompt.prompt_version, prompt.policy_version_id
         row.prompt_snapshot_ciphertext = crypto.encrypt_text(prompt.model_dump_json())
         db.commit()

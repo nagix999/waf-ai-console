@@ -13,7 +13,7 @@ def legacy_evidence_editor_admissions(monkeypatch, request):
     asynchronous qualification gate. Old worker fixtures must keep their old
     ID-only, same-source editor instead of silently adopting a new contract.
     """
-    historical = {"legacy_v220_admissions", "legacy_evidence_editor_admissions"}
+    historical = {"legacy_v220_admissions", "legacy_v221_admissions", "legacy_evidence_editor_admissions"}
     if not any(historical.intersection(marker.args) for marker in request.node.iter_markers("usefixtures")):
         return
     from app.services import evidence_display_jobs
@@ -38,6 +38,22 @@ def legacy_v220_admissions(monkeypatch, request):
     import app.agent
     from app.agent import legacy_prompts_v220
     monkeypatch.setattr(app.agent, "prompts", legacy_prompts_v220)
+
+
+@pytest.fixture(autouse=True)
+def legacy_v221_admissions(monkeypatch, request):
+    """Replay archived v2.21 admissions without changing its frozen engine.
+
+    Only explicitly marked historical suites bind the final saved v2.21
+    reasoning revision. Unmarked suites keep the real current candidate, and
+    local monkeypatch contexts may still exercise older v2.21 text revisions.
+    """
+    if not any("legacy_v221_admissions" in marker.args
+               for marker in request.node.iter_markers("usefixtures")):
+        return
+    import app.agent
+    from app.agent import legacy_prompts_v221_reasoning
+    monkeypatch.setattr(app.agent, "prompts", legacy_prompts_v221_reasoning)
 
 
 @pytest.fixture

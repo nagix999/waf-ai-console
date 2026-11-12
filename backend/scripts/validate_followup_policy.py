@@ -96,7 +96,7 @@ def main():
                 "policy": "default editable instructions", "schema": "default input schema", "editor": False}), flush=True)
             for analysis, case in zip(analyses, rows, strict=True):
                 try:
-                    from app.services.worker_runtime import process_moduagent
+                    from app.services.worker_runtime_v222 import process_moduagent
                     process_moduagent(db, crypto, analysis, "", settings.verifier_confidence_threshold, request_check=live_check)
                 except Exception as exc:
                     db.rollback()

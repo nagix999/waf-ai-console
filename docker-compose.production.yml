@@ -50,7 +50,7 @@ services:
   worker:
     image: ${WAF_BACKEND_IMAGE:?Set WAF_BACKEND_IMAGE to an explicit deployment tag}
     build: *backend-build
-    command: ["python", "-m", "app.worker_entrypoint"]
+    command: ["python", "-m", "app.worker_entrypoint_v222"]
     environment:
       <<: *backend-env
       WAF_WORKER_ROLE: analysis
@@ -69,7 +69,7 @@ services:
   model-tester:
     image: ${WAF_BACKEND_IMAGE:?Set WAF_BACKEND_IMAGE to an explicit deployment tag}
     build: *backend-build
-    command: ["python", "-m", "app.worker_entrypoint"]
+    command: ["python", "-m", "app.worker_entrypoint_v222"]
     environment:
       <<: *backend-env
       WAF_WORKER_ROLE: model_test
