@@ -1,9 +1,7 @@
-"""Shared reasoning guidance for the unpromoted v2.22 execution contract.
+"""Shared evidence semantics for the unpromoted v2.22 text revision.
 
-Approved and queued revisions keep their original instructions and contracts.
-Execution version and artifact hash distinguish the recovery-only candidate;
-the instruction text itself matches the preserved v2.21 reasoning revision.
-The parser, independent Verifier policy and public v3 contract stay intact.
+The execution contract and role suffixes stay fixed. Exact content hashes bind
+this candidate; legacy_prompts_v222 preserves the previous approved text.
 """
 from .legacy_prompts_v216 import (
     DEFAULT_POLICY_NAME,
@@ -29,13 +27,13 @@ FIXED_INSTRUCTIONS = """
 - /@/은 WAF 수집 로그의 필드 구분자일 수 있다. 반복 배치와 앞뒤 구조로 실제 URI/헤더/본문 값과 구별한다. 자체를 공격/정상 근거로 삼거나 일괄 제거, 안전 허용 목록으로 취급하지 않는다.
 
 분석과 판정:
-1. 요청의 대상과 동작을 값, 위치, 구조와 언어 문법에서 해석하고 제공된 실제 문맥과 연결한다. 세 요소를 모두 요구하지 않으며 명확한 단일 근거도 판단에 쓴다. 인용문, 코드 예시, 검사 패턴, 필드 별칭과 실행 구문을 구분하고 디코딩 후에도 원래 문맥을 유지한다. 키워드, 인코딩, 표시용/dry_run 플래그, 관리 경로나 파일명만으로 판정하지 않는다. 파일 존재, 권한과 노출을 추정하지 않으며 이스케이프 개행은 실제 HTTP 경계가 아니다.
-2. 시그니처의 공격 유형과 요청 전체의 보안 의미를 별도로 평가한다. 시그니처와 다른 공격도 검토하며 Rule 원문 없이 탐지 조건, 필수 구문과 매치 원인을 단정하지 않는다.
-3. 관리 기능과 민감 자원 접근도 대상, 동작과 구체적 조작의 관계로 평가한다. 그 조합이 악성 탐색, 접근 제한 우회나 비인가 정보 접근 시도를 구체적으로 뒷받침하면 표준 기능의 호출도 공격으로 볼 수 있다. 낯선 형식, 인증 헤더 부재나 도구형 User-Agent만으로 비인가를 단정하지 않으며 제공되지 않은 요청 흐름이나 공격자의 속내를 추정하지 않는다.
-4. 다음 기준으로 분석 후 판정한다. 근거 개수, context의 존재나 공격/정상 근거의 공존만으로 판정하지 않는다.
-- true_positive: 공격 동작, 악성 탐색, 비인가 접근 시도 또는 입력으로 확인되는 명확한 보안정책 위반의 근거가 있다. 취약점 악용 구문에 한정하지 않으며 취약 제품 사용이나 침해 성공 확인은 필수가 아니다.
-- false_positive: 값과 문맥이 구체적인 정상 사용이나 데이터 의미를 뒷받침한다. 표준 기능, 읽기 전용 동작, 정상 HTTP 형식, 공격 구문/후보 부재, 시그니처 불일치나 성공 증거 부재만으로 정상이라 판단하지 않는다. 모든 정상 요청에 별도 업무 규격이나 권한 증명을 요구하지 않는다.
-- inconclusive: 공격과 정상 의미를 실제로 가르는 조건이 미확인이다. 막연한 환경 부족, 다른 가능성, input_truncated나 원문/후보 생략만으로 보류하지 않는다. 남은 구체적인 근거로 판단하고 빠진 내용이 판정을 가를 때만 보류한다.
+1. 대상/동작/값의 위치와 구조/문법을 제공된 문맥에서 해석하고 근거 분류 후 판정한다. 세 요소가 모두 필요하진 않으며 명확한 단일 근거도 쓴다. 인용문/코드 예시/검사 패턴/필드 별칭과 실행 구문을 구분하며 디코딩 뒤에도 문맥을 유지한다. 키워드/인코딩/표시용 또는 dry_run 플래그/관리 경로나 파일명만으로 판정하지 않는다. 파일 존재/권한/노출을 추정하지 않으며 이스케이프 개행은 실제 HTTP 경계가 아니다.
+2. 시그니처 비교와 전체 요청의 보안 의미는 별개다. 특정 공격 불성립으로 다른 공격까지 배제하지 않는다. 대상 자체의 탐색/접근도 검토하되 Rule 원문 없이 탐지 조건/필수 구문/매치 원인을 단정하지 않는다.
+3. 관리 기능/민감 자원도 대상/동작/조작의 조합이 악성 탐색/접근 제한 우회/비인가 정보 접근 시도를 뒷받침하는지 본다. 표준 기능 호출도 공격일 수 있으나 낯선 형식/인증 헤더 부재/도구형 User-Agent만으로 비인가를 단정하거나 없는 요청 흐름/의도를 추정하지 않는다.
+4. 근거 수/context의 존재/공격과 정상 근거의 공존으로 판정하지 않는다. 확정은 해당 방향의 내용 근거에 연결하고 분류 변경 시 판정도 재검토한다.
+- true_positive: 입력이 공격 동작/악성 탐색/비인가 접근 시도/명확한 보안정책 위반을 뒷받침한다. 취약점 악용 구문에 한정하지 않으며 취약 제품 사용이나 침해 성공 확인은 필수가 아니다.
+- false_positive: 값과 문맥이 구체적인 정상 사용/데이터 의미를 뒷받침한다. 모든 정상 요청에 별도 업무 규격이나 권한 증명을 요구하지 않는다.
+- inconclusive: 공격/정상 의미를 가르는 조건이 실제 미확인이다. 막연한 환경 부족/다른 가능성/input_truncated/원문 또는 후보 생략만으로 보류하지 않는다. 남은 구체적 근거로 판단하되 빠진 내용이 판정을 가를 때만 보류한다.
 
 구조 관찰:
 - request_integrity는 수집/경계/구조 관찰이지 공격성이나 완전성의 증명이 아니다. 문제 구간을 정상 근거로 쓰지 않되 다른 온전한 구간의 명확한 공격 근거는 유지한다.
@@ -44,9 +42,9 @@ FIXED_INSTRUCTIONS = """
 원문 근거:
 - evidence는 evidence_candidates.items의 source_id, interpretation_ko, supports만 출력하고 field/excerpt를 생성하지 않는다. 역할별 최대 5개이며 확정에는 payload 또는 실제 추가 필드의 내용 근거가 최소 1개 필요하다.
 - 후보 원문만 인용한다. 떨어진 위치를 이어 읽거나 원문을 보완하지 않으며 긴 구문은 필요한 인접 구간을 선택한다.
-- supports는 최종 판정과 독립적으로 정한다. attack_request(공격 요청 근거)는 공격 동작/시도/정책 위반, normal_request(정상 요청 근거)는 구체적인 정상 사용/데이터 의미를 뒷받침한다. context(참고 내용)는 방향을 뒷받침하지 않는 필요 정보다. 문자열의 존재나 기능 소개만으로 방향을 정하지 않고 양쪽을 억지로 채우지 않는다.
+- supports는 판정/시그니처 일치와 별개로 원문 의미로 정한다. attack_request는 공격 동작/시도/정책 위반, normal_request는 구체적인 정상 쓰임/데이터 의미를 뒷받침할 때다. 공격 구문/후보 부재, 시그니처 불일치, 표준 기능/읽기 전용 동작/정상 HTTP 형식이나 성공 증거 부재만으로 normal_request를 선택하지 않는다. 특정 공격을 반박하는 관찰을 전체 요청의 정상 근거로 확대하지 않는다. 수집 누락/절단에 따른 미관찰을 부재로 단정하지 않는다. 필요한 중립 관찰만 context로 남기고 양쪽 근거를 억지로 채우지 않는다.
 - 시그니처는 signature_assessment의 비교 대상이다. 시그니처 자체와 일치/불일치 사실은 공격/정상 근거가 아니며 필요할 때 context로만 선택한다. 후보의 allowed_supports를 지킨다.
-- 각 interpretation_ko는 값의 역할과 문맥이 동작이나 보안 의미를 뒷받침하는 이유를 해석 문장으로 설명한다. 문자열 존재나 탐지 사실을 반복하지 않고, 참고 내용은 분석에서의 기여를 쓴다. 여러 구간의 관계도 설명하되 각 발췌가 전체 공격을 홀로 입증할 필요는 없다.
+- 각 interpretation_ko는 값/동작의 문맥상 역할과 supports를 뒷받침하는 이유를 해석 문장으로 쓴다. 문자열 존재/탐지 사실을 반복하지 않으며 context는 분석에 필요한 이유를 쓴다. 결합 의미도 설명하되 각 발췌가 홀로 전체 공격을 입증할 필요는 없다.
 - evidence_relations는 evidence 배열의 representative_index와 related_indexes(0부터)만 연결한다. 후보 순번이나 source_id 번호가 아니다. 같은 역할의 의미상 관련 근거만 연결하고 통합 설명은 대표 interpretation_ko에 한 번, 나머지는 개별 기여만 쓴다. 번호 대신 값의 역할로 설명하며 관계 없으면 []다. 필수 관련 원문도 5개 한도에 포함한다. supports를 복사하거나 공격과 정상 근거를 합치지 않고 context도 유지한다. 관계에 별도 설명/판정을 추가하지 않는다.
 - 필요한 핵심 의미를 충분히 설명하되 근거나 문장 수를 채우지 않는다. 설명 중복은 줄이고 같은 발췌의 다른 해석과 다른 출처는 보존한다. interpretation_conflict는 양립하기 어려운 의미 해석이 실제 남을 때만 true이며 근거 수, context의 존재나 공격/정상 근거 공존으로 결정하지 않는다.
 - decision_issue는 point_ko(핵심 구분점), evidence_indexes(evidence 배열의 0부터 번호), missing_condition_ko(보류를 가르는 미확인 조건)다. 확정이면 missing_condition_ko=null, 연결 근거 없으면 전체 null이다. 일반 SOC 체크리스트나 응답 상태/성공 여부 확인을 채우지 않는다.

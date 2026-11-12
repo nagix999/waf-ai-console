@@ -155,13 +155,15 @@ def _baseline_rules(expected):
         legacy_prompts_v212, legacy_prompts_v213, legacy_prompts_v214,
         legacy_prompts_v215, legacy_prompts_v216, legacy_prompts_v217,
         legacy_prompts_v218, legacy_prompts_v219, legacy_prompts_v220,
-        legacy_prompts_v221, legacy_prompts_v221_compact, legacy_prompts_v221_reasoning, prompts,
+        legacy_prompts_v221, legacy_prompts_v221_compact, legacy_prompts_v221_reasoning,
+        legacy_prompts_v222, prompts,
     )
     modules = dict.fromkeys((
         legacy_prompts_v212, legacy_prompts_v213, legacy_prompts_v214,
         legacy_prompts_v215, legacy_prompts_v216, legacy_prompts_v217,
         legacy_prompts_v218, legacy_prompts_v219, legacy_prompts_v220,
-        legacy_prompts_v221, legacy_prompts_v221_compact, legacy_prompts_v221_reasoning, prompts,
+        legacy_prompts_v221, legacy_prompts_v221_compact, legacy_prompts_v221_reasoning,
+        legacy_prompts_v222, prompts,
     ))
     matches = [module for module in modules
         if module.FIXED_RULES_VERSION == expected["fixed_rules_version"]

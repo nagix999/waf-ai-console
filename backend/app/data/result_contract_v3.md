@@ -3,7 +3,34 @@
 This is a result contract and candidate-instruction change, not an automatic
 Production configuration upgrade. The implementation starts from `eea2527`.
 
-## Candidate v2.22: bounded relation deduplication (2026-11-12)
+## Current v2.22 instruction revision (2026-11-12)
+
+Only the [shared instructions](../agent/prompts.py) change. The absence of a
+particular attack or a signature mismatch must not be expanded into evidence of
+normal use; `normal_request` needs a concrete benign use or data meaning.
+Sensitive targets are evaluated with their actions and manipulations, not a
+filename alone. Missing observations caused by capture loss or truncation are
+not proof of absence. Linking a decisive verdict to content evidence of the
+same direction, and reconsidering the verdict when supports change, are model
+instructions only, not a new code consistency guard or keyword postprocessor.
+
+The v2.22 processing contract, forty pinned engine files and four display files
+remain unchanged. The complete prior prompt file is preserved byte-for-byte as
+`legacy_prompts_v222.py` and registered for exact baseline restoration. Content
+hashes identify revisions within the same version label. Approved Production,
+queued work and retries retain their exact saved instructions; the revised
+candidate needs a new official evaluation and administrator approval. No new
+LLM call, intermediate output, API field, DB migration, output-token limit or
+timeout is introduced. No operational sample or user path is added to a prompt
+or test fixture.
+
+Including whitespace, fixed instructions change from 4,624 to 4,617 characters
+and 9,224 to 9,181 UTF-8 bytes. Default Primary instructions change from 4,934 to
+4,927 characters and Verifier from 4,958 to 4,951, excluding event data and the
+output schema. These counts do not establish actual tokenizer savings, faster
+execution or better judgment quality; real-model behavior remains unverified.
+
+## Earlier v2.22 implementation: bounded relation deduplication (2026-11-12)
 
 This candidate changes an internal recovery path, not public v3 JSON. After
 complete, unambiguous JSON normalization, `executor_v222.py` invokes relation
@@ -31,10 +58,11 @@ preserved. The new `evidence-pipeline-v3` path is dispatched by
 `python -m app.worker_entrypoint_v222` after encrypted-snapshot validation,
 without global function replacement. Old failed-job retries retain their old
 engine and instructions. New candidate promotion still requires approved
-Ground Truth evaluation and administrator approval. No DB migration, dependency,
-judgment-prompt text, profile, output-token limit, timeout or active Production
-configuration changes are made. Actual LLM behavior and a 99% success target
-remain unverified. No automatic activation, deployment or Git upload was done.
+Ground Truth evaluation and administrator approval. That recovery implementation
+did not change DB migrations, dependencies, judgment-prompt text, profiles,
+output-token limits, timeouts or active Production configuration. Actual LLM
+behavior and a 99% success target remain unverified. No automatic activation,
+deployment or Git upload was done.
 The compression and contextual-interpretation notes below are historical work
 records, not a further prompt change in this recovery candidate.
 

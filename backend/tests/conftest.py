@@ -56,6 +56,21 @@ def legacy_v221_admissions(monkeypatch, request):
     monkeypatch.setattr(app.agent, "prompts", legacy_prompts_v221_reasoning)
 
 
+@pytest.fixture(autouse=True)
+def legacy_v222_admissions(monkeypatch, request):
+    """Replay pre-semantics v2.22 text with the unchanged v2.22 execution.
+
+    This opt-in only pins the saved instructions; current unmarked tests and
+    the independent display-job qualification gate are not replaced.
+    """
+    if not any("legacy_v222_admissions" in marker.args
+               for marker in request.node.iter_markers("usefixtures")):
+        return
+    import app.agent
+    from app.agent import legacy_prompts_v222
+    monkeypatch.setattr(app.agent, "prompts", legacy_prompts_v222)
+
+
 @pytest.fixture
 def settings() -> Settings:
     return Settings(

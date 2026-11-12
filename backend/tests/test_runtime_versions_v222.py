@@ -15,7 +15,7 @@ from app.agent import (
     evidence_pipeline_v221 as old_pipeline, evidence_pipeline_v222 as new_pipeline,
     execution_policy_v221 as old_policy, execution_policy_v222 as new_policy,
     input_builder_v221 as old_input, input_builder_v222 as new_input,
-    legacy_prompts_v221_reasoning as old_rules, prompts,
+    legacy_prompts_v221_reasoning as old_rules, legacy_prompts_v222 as prompts,
 )
 from app.agent.contracts import SecurityAnalysisOutputV220
 from app.agent.policy import VerifierPolicyContext
@@ -36,7 +36,7 @@ from test_validation_data import login
 
 
 OLD, NEW = old_rules.FIXED_RULES_VERSION, prompts.FIXED_RULES_VERSION
-pytestmark = pytest.mark.usefixtures("registered_vllm_target")
+pytestmark = pytest.mark.usefixtures("registered_vllm_target", "legacy_v222_admissions")
 DISPLAY_SHA256 = {
     "agent/evidence_display.py": "b7111efd4af18c313053c3e8642213416db28624bc7393f6bb1101f9685256e6",
     "services/evidence_display_plan.py": "707bb2db2bb365afeb83d46db5dfd19f0f244dd5c2c99bd21c80e8cf6bb275f4",
