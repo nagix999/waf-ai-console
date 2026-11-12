@@ -147,21 +147,21 @@ def approved_production_record(db):
 def _baseline_rules(expected):
     """Restore the exact approved text, not the latest text with its label.
 
-    The unpromoted v2.21 candidate was compacted without changing its execution
-    contract. Its original text remains available by the immutable content hash.
-    No approval or evaluation is migrated to the compacted instructions.
+    v2.21 text revisions share the unchanged execution contract, not approval.
+    Pre-compaction and compact text remain available by immutable content hash;
+    no approval or evaluation transfers to the latest candidate instructions.
     """
     from ..agent import (
         legacy_prompts_v212, legacy_prompts_v213, legacy_prompts_v214,
         legacy_prompts_v215, legacy_prompts_v216, legacy_prompts_v217,
         legacy_prompts_v218, legacy_prompts_v219, legacy_prompts_v220,
-        legacy_prompts_v221, prompts,
+        legacy_prompts_v221, legacy_prompts_v221_compact, prompts,
     )
     modules = dict.fromkeys((
         legacy_prompts_v212, legacy_prompts_v213, legacy_prompts_v214,
         legacy_prompts_v215, legacy_prompts_v216, legacy_prompts_v217,
         legacy_prompts_v218, legacy_prompts_v219, legacy_prompts_v220,
-        legacy_prompts_v221, prompts,
+        legacy_prompts_v221, legacy_prompts_v221_compact, prompts,
     ))
     matches = [module for module in modules
         if module.FIXED_RULES_VERSION == expected["fixed_rules_version"]

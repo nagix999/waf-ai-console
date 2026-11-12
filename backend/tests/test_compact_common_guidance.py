@@ -1,11 +1,11 @@
-"""Compact candidate boundaries, not an evaluation of actual model behavior."""
+"""Frozen compact revision boundaries, not actual model behavior evaluation."""
 import hashlib
 import inspect
 from pathlib import Path
 
 import pytest
 
-from app.agent import legacy_prompts_v221 as previous, prompts
+from app.agent import legacy_prompts_v221 as previous, legacy_prompts_v221_compact as prompts
 
 
 PREVIOUS_SHA256 = "2b9c4ab99ddced5d3d252972792c43e5c7bc1f1b9d61747954bd0b54062a66b9"

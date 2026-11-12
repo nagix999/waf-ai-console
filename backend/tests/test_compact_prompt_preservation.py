@@ -14,7 +14,10 @@ import pytest
 from sqlalchemy import func, select
 
 from app import worker, worker_v221
-from app.agent import evidence_pipeline, evidence_pipeline_v221, legacy_prompts_v220, legacy_prompts_v221, prompts
+from app.agent import (
+    evidence_pipeline, evidence_pipeline_v221, legacy_prompts_v220,
+    legacy_prompts_v221, legacy_prompts_v221_compact, prompts,
+)
 from app.models import Analysis, ProductionPromotion, TestEvaluation as EvaluationRecord, TestRun as NamedRun, VLLMProfile, utcnow
 from app.services import worker_runtime
 from app.services.analysis_retries import load_execution_snapshot, make_execution_snapshot
@@ -103,8 +106,8 @@ def test_old_and_compact_prompts_have_distinct_text_hashes_but_identical_runtime
     assert _baseline_rules(new.metadata()) is prompts
 
 
-@pytest.mark.parametrize("rules", [legacy_prompts_v220, legacy_prompts_v221, prompts],
-    ids=["approved-v220", "approved-original-v221", "approved-compact-v221"])
+@pytest.mark.parametrize("rules", [legacy_prompts_v220, legacy_prompts_v221, legacy_prompts_v221_compact, prompts],
+    ids=["approved-v220", "approved-original-v221", "approved-compact-v221", "approved-reasoning-v221"])
 def test_baseline_restores_exact_approved_text_instead_of_latest_same_version(client, rules):
     identifier, before, expected = seed_baseline(client, rules)
     crypto = client.app.state.crypto
@@ -120,7 +123,8 @@ def test_baseline_restores_exact_approved_text_instead_of_latest_same_version(cl
         assert record.snapshot_json == before and record.configuration_hash == configuration_digest(before)
 
 
-@pytest.mark.parametrize("rules", [legacy_prompts_v221, prompts], ids=["original-v221", "compact-v221"])
+@pytest.mark.parametrize("rules", [legacy_prompts_v221, legacy_prompts_v221_compact, prompts],
+    ids=["original-v221", "compact-v221", "reasoning-v221"])
 def test_queued_reclaimed_snapshot_dispatches_exact_instructions_without_ciphertext_rewrite(
     client, event_payload, monkeypatch, rules,
 ):
@@ -152,12 +156,14 @@ def test_queued_reclaimed_snapshot_dispatches_exact_instructions_without_ciphert
         assert calls == [expected]
 
 
+@pytest.mark.parametrize("rules", [legacy_prompts_v221, legacy_prompts_v221_compact],
+    ids=["original-v221", "compact-v221"])
 def test_original_v221_retry_preserves_prompt_ciphertext_and_execution_provenance(
-    client, event_payload, monkeypatch,
+    client, event_payload, monkeypatch, rules,
 ):
     client.app.state.settings.agent_mode = "moduagent"
     profile_id = profile_fixture(client)
-    _identifier, _before, old = seed_baseline(client, legacy_prompts_v221)
+    _identifier, _before, old = seed_baseline(client, rules)
     response = client.post("/api/v1/analyses?wait_seconds=0", json=event_payload)
     assert response.status_code == 202, response.text
     crypto = client.app.state.crypto
@@ -243,14 +249,16 @@ def test_rehashing_modified_approval_cannot_transfer_approval_to_a_different_pro
         assert record.snapshot_json == changed and before["prompt"][field] != value
 
 
+@pytest.mark.parametrize("rules", [legacy_prompts_v221, legacy_prompts_v221_compact],
+    ids=["original-v221", "compact-v221"])
 def test_old_official_evaluation_is_not_automatically_reused_for_compacted_candidate(
-    client, event_payload, candidate, monkeypatch,
+    client, event_payload, candidate, monkeypatch, rules,
 ):
     with monkeypatch.context() as scope:
-        scope.setattr("app.agent.prompts", legacy_prompts_v221)
+        scope.setattr("app.agent.prompts", rules)
         original = qualified(client, event_payload, candidate)
     original_configuration = original["configuration_snapshot"]
-    assert original_configuration["prompt"]["fixed_rules_hash"] == text_hash(legacy_prompts_v221.FIXED_INSTRUCTIONS)
+    assert original_configuration["prompt"]["fixed_rules_hash"] == text_hash(rules.FIXED_INSTRUCTIONS)
     response = direct(client, {**event_payload, "vendor_score": 2}, candidate)
     assert response.status_code == 202, response.text
     compact = response.json()
@@ -278,11 +286,13 @@ def test_old_official_evaluation_is_not_automatically_reused_for_compacted_candi
             ProductionPromotion.kind == "promotion")) == 0
 
 
+@pytest.mark.parametrize("rules", [legacy_prompts_v221, legacy_prompts_v221_compact],
+    ids=["original-v221", "compact-v221"])
 def test_already_promoted_original_v221_keeps_approved_text_after_compaction(
-    client, event_payload, candidate, monkeypatch,
+    client, event_payload, candidate, monkeypatch, rules,
 ):
     with monkeypatch.context() as scope:
-        scope.setattr("app.agent.prompts", legacy_prompts_v221)
+        scope.setattr("app.agent.prompts", rules)
         original = qualified(client, event_payload, candidate)
         baseline = client.get(BASE).json()
         response = client.post(BASE + "/promote", json={"candidate_test_run_id": original["id"],
@@ -296,7 +306,7 @@ def test_already_promoted_original_v221_keeps_approved_text_after_compaction(
         record = db.get(ProductionPromotion, response.json()["id"])
         before = deepcopy(record.snapshot_json), record.configuration_hash
         assert approved_production_prompt(db, crypto) == expected
-        assert expected.fixed_rules_hash == text_hash(legacy_prompts_v221.FIXED_INSTRUCTIONS)
+        assert expected.fixed_rules_hash == text_hash(rules.FIXED_INSTRUCTIONS)
         assert expected.fixed_rules_hash != text_hash(prompts.FIXED_INSTRUCTIONS)
         current = live_snapshot(db, crypto, client.app.state.settings)
         assert current == original["configuration_snapshot"]
