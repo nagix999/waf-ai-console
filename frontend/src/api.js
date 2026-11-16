@@ -3,7 +3,7 @@ import { modelAssignmentPayload } from "./modelAssignments.js";
 import { affectsHome, invalidateHome } from "./readInvalidation.js";
 import { analysisEvidenceMeta, responseEvidenceMeta } from "./analysisEvidenceMeta.js";
 
-async function request(path, options = {}) {
+export async function request(path, options = {}) {
   const response = await fetch(path, {
     credentials: "include",
     ...options,

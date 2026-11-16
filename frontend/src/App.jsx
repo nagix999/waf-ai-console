@@ -544,7 +544,7 @@ export function ResultView({ detail, onViewInput, onExecution, includePolicy = t
   </div>;
 }
 
-export function Settings({ onProductionChange, onViewDataset, tab: controlledTab, onTabChange, standalone = false }) {
+export function Settings({ onProductionChange, onViewDataset, tab: controlledTab, onTabChange, standalone = false, parserRoute, onParserRoute }) {
   const [localTab, setLocalTab] = useState("models");
   const tab = controlledTab ?? localTab;
   const setTab = onTabChange || setLocalTab;
@@ -554,7 +554,7 @@ export function Settings({ onProductionChange, onViewDataset, tab: controlledTab
     <button type="button" role="tab" aria-selected={tab === "schema"} onClick={() => setTab("schema")}>입력 스키마</button>
     <button type="button" role="tab" aria-selected={tab === "egress"} onClick={() => setTab("egress")}>내부 연결 허용</button>
     <button type="button" role="tab" aria-selected={tab === "keys"} onClick={() => setTab("keys")}>서비스 API Key</button>
-  </div>}{tab === "models" ? <ModelSettings onProductionChange={onProductionChange} onConfigureAgents={() => setTab("agents")} onInternalEgress={() => setTab("egress")} onViewDataset={onViewDataset} /> : ["agents", "prompts"].includes(tab) ? <ReadOnlyAgentRoles /> : tab === "instructions" ? <PromptSettings /> : tab === "concurrency" ? <ConcurrencySettings /> : tab === "schema" ? <InputSchemaSettings /> : tab === "parsers" ? <ParserManagement /> : tab === "egress" ? <InternalEgressSettings /> : <ServiceApiKeys />}</div>;
+  </div>}{tab === "models" ? <ModelSettings onProductionChange={onProductionChange} onConfigureAgents={() => setTab("agents")} onInternalEgress={() => setTab("egress")} onViewDataset={onViewDataset} /> : ["agents", "prompts"].includes(tab) ? <ReadOnlyAgentRoles /> : tab === "instructions" ? <PromptSettings /> : tab === "concurrency" ? <ConcurrencySettings /> : tab === "schema" ? <InputSchemaSettings /> : tab === "parsers" ? <ParserManagement route={parserRoute} onNavigate={onParserRoute} /> : tab === "egress" ? <InternalEgressSettings /> : <ServiceApiKeys />}</div>;
 }
 
 export function ModelSettings({ onProductionChange, onInternalEgress, onViewDataset, onConfigureAgents }) {
@@ -899,7 +899,7 @@ function ConsoleApp() {
     {page === "test" && <TestAnalysisPage key={screen.cloneRunId || "new"} cloneRunId={screen.cloneRunId} onViewTests={viewTests} onOpen={openTest} selectedRunId={null} onSelectRun={openTestRun} agentMode={mode} onConfigureModels={() => navigate("agents")} />}
     {page === "apiDocs" && <ProductionApi />}
     {page === "datasets" && <GroundTruthWorkspace initialCaseId={screen.groundTruthCaseId} id={screen.datasetId} initialState={screen.groundTruthState} listState={screen.datasetListState} onListStateChange={value => navigation.remember(current => ({ ...current, datasetListState: value }))} onSelect={id => id ? move(current => ({ ...current, page: "datasets", datasetId: id, groundTruthCaseId: undefined, groundTruthState: undefined })) : navigation.backTo(current => current.page === "datasets" && !current.datasetId, current => ({ ...current, page: "datasets", datasetId: null, groundTruthCaseId: undefined, groundTruthState: undefined }))} />}
-    {page === "settings" && <Settings standalone onProductionChange={setProductionName} onViewDataset={viewDataset} tab={settingsTab} onTabChange={tab => move(current => ({ ...current, settingsTab: tab }))} />}
+    {page === "settings" && <Settings standalone onProductionChange={setProductionName} onViewDataset={viewDataset} tab={settingsTab} onTabChange={tab => move(current => ({ ...current, settingsTab: tab }))} parserRoute={screen.parserRoute} onParserRoute={parserRoute => move(current => ({ ...current, parserRoute }))} />}
     {page === "detail" && <Detail onResolved={resolveDetail} key={selectedId} id={selectedId} onBack={backFromDetail} onOpen={id => move(current => ({ ...current, selectedId: id, detailTab: "result" }))} tab={detailTab} onTabChange={tab => navigation.navigate(current => ({ ...current, detailTab: tab }))} backLabel={t(detailReturnPage === "testRun" ? "runs" : detailReturnPage === "test" ? "run" : detailReturnPage === "dashboard" ? "status" : "history")} />}
   </ConsoleShell>;
 }

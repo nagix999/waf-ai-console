@@ -3,6 +3,7 @@ export const PARSER_ENGINES = ["generic-http-v3", "http-capture-v1"];
 export const defaultParserOptions = () => ({ line_endings: "actual", request_line_whitespace: "strict", skip_leading_blank_lines: false });
 
 export function parserDraft(version) {
+  if (version?.engine_version === "vendor-http-v2") throw new Error("parser_new_workbench_required");
   const options = { ...defaultParserOptions(), ...(version?.options || {}) };
   if (options.profiles) options.profiles = options.profiles.map(profile => ({ ...profile }));
   return { name: "", description: "", engine_version: "http-capture-v1", options, parent_id: version?.id || BASELINE_PARSER_ID };
@@ -44,6 +45,7 @@ export function parserSourcePayload({ source, testRunId, analysisIds, maxCases }
   return { analysis_ids, max_cases };
 }
 export function parserSuggestionDraft(result, baseline) {
+  if (baseline?.engine_version === "vendor-http-v2") return null;
   const suggestion = result?.suggestion;
   if (suggestion?.engine_version !== "http-capture-v1" || !safeParserOptions(suggestion.options) || suggestion.options.profiles?.length) return null;
   const draft = parserDraft(baseline);

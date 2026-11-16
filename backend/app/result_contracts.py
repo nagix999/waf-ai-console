@@ -11,6 +11,7 @@ from pydantic import Field, model_serializer, model_validator
 from .agent.contracts import (AgentVerdict, SignatureAssessmentV2, StrictContract,
                               ThreatAnalysis, ThreatSeverity)
 from .parser_schemas import ParserOptions
+from .services.parser_rule_versions import RuleSnapshotOptions
 
 
 class StoredResultInvalid(ValueError):
@@ -182,15 +183,19 @@ class EditorMetadata(StrictContract):
 
 class ParserMetadata(StrictContract):
     version_id: str = Field(min_length=1, max_length=36)
-    engine_version: Literal["generic-http-v3", "http-capture-v1"]
+    engine_version: Literal["generic-http-v3", "http-capture-v1", "vendor-http-v2"]
     content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
-    options: ParserOptions | None = None
+    options: ParserOptions | RuleSnapshotOptions | None = None
 
     @model_validator(mode="after")
     def bundled_options_only(self):
         from .services.parser_engine import validate_options
         if self.options is not None:
-            validate_options(self.engine_version, self.options.model_dump())
+            if self.engine_version == "vendor-http-v2":
+                from .services.parser_rule_versions import validate_rule_options
+                validate_rule_options(self.options.model_dump())
+            else:
+                validate_options(self.engine_version, self.options.model_dump())
         return self
 
     @model_serializer(mode="wrap")

@@ -796,3 +796,52 @@ class WorkerHeartbeat(Base):
     worker_id: Mapped[str] = mapped_column(String(255), primary_key=True)
     worker_kind: Mapped[str] = mapped_column(String(24), nullable=False)
     observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class ParserWorkbench(Base):
+    """Frozen parser samples and human review; source and rules stay encrypted."""
+    __tablename__ = "parser_workbenches"
+    __table_args__ = (Index("ix_parser_workbenches_updated_id", "updated_at", "id"),
+                     CheckConstraint("status IN ('draft', 'discovered', 'groups_confirmed', 'generated', 'validated', 'saved')",
+                                    name="ck_parser_workbench_status"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), default="draft", nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    source_kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    dataset_version_id: Mapped[str | None] = mapped_column(ForeignKey("validation_dataset_versions.id", ondelete="RESTRICT"))
+    baseline_version_id: Mapped[str] = mapped_column(ForeignKey("parser_versions.id", ondelete="RESTRICT"), nullable=False)
+    candidate_version_id: Mapped[str | None] = mapped_column(ForeignKey("parser_versions.id", ondelete="RESTRICT"))
+    input_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    state_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    encryption_key_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class ParserWorkbenchJob(Base):
+    __tablename__ = "parser_workbench_jobs"
+    __table_args__ = (Index("ix_parser_workbench_jobs_status_created", "status", "created_at"),
+        Index("ix_parser_workbench_jobs_workbench_created", "workbench_id", "created_at"),
+        CheckConstraint("kind IN ('format_discovery', 'rule_generation')", name="ck_parser_workbench_job_kind"),
+        CheckConstraint("status IN ('pending', 'running', 'completed', 'failed', 'cancelled')", name="ck_parser_workbench_job_status"))
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    workbench_id: Mapped[str] = mapped_column(ForeignKey("parser_workbenches.id", ondelete="RESTRICT"), nullable=False)
+    kind: Mapped[str] = mapped_column(String(24), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), default="pending", nullable=False)
+    session_revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    profile_id: Mapped[str] = mapped_column(ForeignKey("vllm_profiles.id", ondelete="RESTRICT"), nullable=False)
+    profile_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    result_ciphertext: Mapped[str | None] = mapped_column(Text)
+    encryption_key_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(120))
+    lease_owner: Mapped[str | None] = mapped_column(String(255))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

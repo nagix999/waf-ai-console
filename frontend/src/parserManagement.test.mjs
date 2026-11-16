@@ -33,6 +33,8 @@ test("immutable parser drafts copy options but not names, hashes or source logs"
   assert.throws(() => parserDraftPayload({ ...draft, name: " " }));
   assert.throws(() => parserDraftPayload({ ...draft, engine_version: "python" }));
   assert.equal(parserDraftPayload({ ...draft, engine_version: BASELINE_PARSER_ID }).options.line_endings, "actual");
+  assert.throws(() => parserDraft({ engine_version: "vendor-http-v2", options: { rule_count: 3 } }), /parser_new_workbench_required/);
+  assert.equal(parserSuggestionDraft({}, { engine_version: "vendor-http-v2" }), null);
 });
 test("parser input selection deduplicates IDs and sends raw-sensitive selection in JSON, never URLs", () => {
   assert.deepEqual(parserSourcePayload({ source: "analyses", analysisIds: `${id},\n${id}`, maxCases: 100 }), { analysis_ids: [id], max_cases: 100 });
@@ -102,7 +104,7 @@ test("parser API requests are admin-only paths, noncached and do not offer activ
   } finally { globalThis.fetch = previous; }
 });
 test("parser management initial view does not invent a current version or expose mutating activation", () => {
-  const Page = load("./ParserManagement.jsx"); const html = renderToStaticMarkup(createElement(Page));
+  const Page = load("./LegacyParserManagement.jsx"); const html = renderToStaticMarkup(createElement(Page));
   assert.match(html, /현재 운영 파서/); assert.match(html, /공식 테스트/); assert.match(html, /불러오는 중/);
   assert.match(html, /원문 사본이 암호화되어 남으며, 원본 분석을 삭제해도 별도로 보존됩니다/);
   assert.doesNotMatch(html, /onclick|<textarea[^>]*>PRIVATE|운영에 즉시 적용|파서 적용 버튼/);
@@ -122,4 +124,11 @@ test("manual parsing review reads mutable audit metadata, not the original encry
     const blocked = renderToStaticMarkup(createElement(Result, { job: { status: "completed", summary, result: { summary: { ...summary, ...change }, items: [] } }, onReview: () => {} }));
     assert.match(blocked, /disabled="">파싱 결과 확인 완료로 기록</);
   }
+});
+test("new vendor-rule bundles show real rule counts, never guessed legacy capture options", () => {
+  const Facts = load("./ParserManagement.jsx", "ParserVersionFacts");
+  const html = renderToStaticMarkup(createElement(Facts, { version: { engine_version: "vendor-http-v2", options: { rule_count: 3 } } }));
+  assert.match(html, /벤더별 규칙 묶음/); assert.match(html, />3</);
+  assert.doesNotMatch(html, /기존 형식|보존<|줄바꿈 형식/);
+  assert.match(html, /#configure\/parsers\/new\/data/);
 });

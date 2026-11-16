@@ -25,7 +25,7 @@ Object.assign(methods,{
 });
 export const api=`);
 const bundle = await build({ stdin: { contents: `import {createRoot} from 'react-dom/client';import App from './App.jsx';import './styles.css';import './console.css';import './lifecycle.css';import './r3.css';createRoot(document.getElementById('root')).render(<App/>);`, loader: "jsx", resolveDir: fileURLToPath(new URL("../src", import.meta.url)) },
-  plugins: [{ name: "offline-api", setup(builder) { builder.onLoad({ filter: /\/api\.js$/ }, () => ({ contents: mock, loader: "js" })); } }],
+  plugins: [{ name: "offline-api", setup(builder) { builder.onLoad({ filter: /\/api\.js$/ }, () => ({ contents: mock + "\nexport async function request(){throw Error(\"Workbench API must not be called on legacy view\");}", loader: "js" })); } }],
   bundle: true, write: false, outfile: join(output, "bundle.js"), platform: "browser", format: "iife", jsx: "automatic", define: { "process.env.NODE_ENV": '"production"' }, loader: { ".md": "text", ".woff2": "dataurl" }, logLevel: "silent" });
 const archive = join(homedir(), ".cache/uv/archive-v0");
 const driver = process.env.PLAYWRIGHT_MODULE || readdirSync(archive).map(name => join(archive, name, "playwright/driver/package/index.mjs")).find(existsSync);
@@ -46,7 +46,7 @@ try {
     assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll('body *')].filter(node => { const rect = node.getBoundingClientRect(); return rect.width && rect.right > innerWidth + 2 && !node.closest('.data-table-wrap,.table-wrap'); }).map(node => ({ tag: node.tagName, className: String(node.className), width: node.getBoundingClientRect().width, right: node.getBoundingClientRect().right, text: node.innerText?.slice(0, 70) })).slice(0, 12)), [], name);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, name);
   };
-  await go("#configure/parsers"); await page.locator(".parser-current strong").filter({ hasText: "기존 기본 파서" }).waitFor();
+  await go("#configure/parsers/legacy"); await page.locator(".parser-current strong").filter({ hasText: "기존 기본 파서" }).waitFor();
   assert.equal(await page.locator("aside [aria-current=page]").innerText(), "파서 관리");
   assert.equal(await page.evaluate(() => fixture.parserRawReads || 0), 0);
   for (const theme of ["SK", "Light", "Dark"]) {
@@ -119,7 +119,7 @@ try {
   assert.equal(await parser.inputValue(), "generic-http-v3");
   await parser.selectOption("00000201-1111-4111-8111-111111111111"); await snap("candidate-parser");
   await page.goBack(); await page.locator(".parser-management").waitFor(); await page.goForward(); await parser.waitFor();
-  await go("#configure/parsers"); await page.locator(".parser-management").waitFor();
+  await go("#configure/parsers/legacy"); await page.locator(".parser-management").waitFor();
   await page.setViewportSize({ width: 390, height: 844 });
   await snap("management-mobile-KR");
   await page.getByRole("button", { name: "EN", exact: true }).click(); await snap("management-mobile-EN");

@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 
 from ..models import AccessAudit, Analysis, ParserJob, TestRun, TestRunItem, utcnow
 from .parser_engine import parse_capture_payload, valid_source_spans
-from .parser_versions import ParserVersionError, get_version
+from .parser_versions import ParserVersionError, apply_parser_snapshot, get_version, read_parser_snapshot
 
 MAX_SOURCE_BYTES = 64 * 1024
 MAX_TOTAL_BYTES = 512 * 1024
@@ -83,8 +83,8 @@ def compare(db, crypto, payload, actor):
     items, all_valid, changed = [], True, 0
     for source in sources:
         raw = source["raw_payload"]
-        before = parse_capture_payload(raw, baseline.engine_version, baseline.options_json, waf_vendor=source.get("waf_vendor"))
-        after = parse_capture_payload(raw, candidate.engine_version, candidate.options_json, waf_vendor=source.get("waf_vendor"))
+        before = parse_version_payload(raw, baseline, crypto, waf_vendor=source.get("waf_vendor"))
+        after = parse_version_payload(raw, candidate, crypto, waf_vendor=source.get("waf_vendor"))
         changed_fields = [key for key in COMPARISON_FIELDS if before.get(key) != after.get(key)]
         valid = valid_source_spans(raw, before) and valid_source_spans(raw, after)
         all_valid = all_valid and valid
@@ -105,6 +105,18 @@ def compare(db, crypto, payload, actor):
     row.status, row.completed_at = "completed", utcnow()
     audit(db, actor, "compare_parsers", row.id)
     return row
+
+
+def parse_version_payload(raw, version, crypto, *, waf_vendor=None):
+    """Resolve encrypted rule snapshots without changing old comparison paths."""
+    if version.engine_version != "vendor-http-v2":
+        return parse_capture_payload(raw, version.engine_version, version.options_json, waf_vendor=waf_vendor)
+    from types import SimpleNamespace
+    target = SimpleNamespace(parser_version_id=version.id, parser_snapshot_json={
+        "schema_version": 1, "version_id": version.id, "engine_version": version.engine_version,
+        "options": version.options_json, "content_hash": version.content_hash, "selection_origin": "candidate"})
+    snapshot = read_parser_snapshot(crypto, target, allow_legacy=False)
+    return apply_parser_snapshot(raw, snapshot, waf_vendor=waf_vendor)
 
 
 def job_summary(row):

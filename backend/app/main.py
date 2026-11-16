@@ -30,6 +30,7 @@ from .api.production_configurations import router as production_configurations_r
 from .api.runtime import router as runtime_router
 from .api.test_defaults import router as test_defaults_router
 from .api.parsers import router as parsers_router
+from .api.parser_workbench import router as parser_workbench_router
 from .config import Settings, get_settings
 from .browser_security import BrowserSecurityMiddleware
 from .database import Base, build_engine, build_session_factory
@@ -127,6 +128,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
     app.include_router(runtime_router, prefix="/api/v1")
     app.include_router(test_defaults_router, prefix="/api/v1")
     app.include_router(parsers_router, prefix="/api/v1")
+    app.include_router(parser_workbench_router, prefix="/api/v1")
 
     def live_openapi():
         # Cache only the static route contracts, never the active definition.
@@ -158,7 +160,8 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
         if (request.url.path == app.openapi_url or request.url.path.startswith("/api/v1/validation-datasets")
                 or request.url.path.startswith("/api/v1/test-runs")
                 or request.url.path.startswith("/api/v1/test-sessions") or request.url.path.endswith("/evaluation-labels")
-                or request.url.path.startswith("/api/v1/admin/parsers")):
+                or request.url.path.startswith("/api/v1/admin/parsers")
+                or request.url.path.startswith("/api/v1/admin/parser-workbench")):
             response.headers["Cache-Control"] = "no-store"
         return response
 

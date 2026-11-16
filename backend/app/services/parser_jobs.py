@@ -66,6 +66,8 @@ def check_budget(profile, text):
 
 def enqueue_suggestion(db, crypto, payload, actor):
     baseline = get_version(db, payload.baseline_version_id)
+    if baseline.engine_version == "vendor-http-v2":
+        raise ParserVersionError("parser_rule_workbench_required", 409)
     profile = approved_profile(db, payload.profile_id)
     sources, selection = selected_sources(db, crypto, payload, actor)
     check_budget(profile, suggestion_input(sources, baseline))

@@ -29,7 +29,7 @@ def test_fresh_alembic_upgrade_handles_initial_current_metadata(tmp_path, monkey
     command.upgrade(config, "head")
     engine = create_engine(url)
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0030_evidence_display_jobs"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0031_parser_rule_workbench"
         assert "analysis_purpose" in {column["name"] for column in inspect(connection).get_columns("analyses")}
     engine.dispose()
 

@@ -1,0 +1,27 @@
+import { useState } from "react";
+import { useConsolePreferences } from "./consolePreferences.jsx";
+
+// A declarative draft only. The server validates syntax, budgets and safe execution.
+export default function ParserRuleEditor({ rule, busy, onApply, onCancel }) {
+  const { locale } = useConsolePreferences(), w = (ko, en) => locale === "en" ? en : ko;
+  const [name, setName] = useState(rule.name), [match, setMatch] = useState(JSON.stringify(rule.match, null, 2)), [extract, setExtract] = useState({ ...rule.extract }), [capture, setCapture] = useState({ ...rule.capture }), [error, setError] = useState("");
+  const change = (key, value) => setExtract(current => ({ ...current, [key]: value }));
+  function method(kind) {
+    setExtract(({ raw_payload: { kind }, json_string: { kind, json_pointer: "" }, between_markers: { kind, start_marker: "", end_marker: "", start_anchor: "line_start" }, regex_capture: { kind, pattern: "" } })[kind]);
+  }
+  function submit(event) {
+    event.preventDefault(); setError(""); let parsed;
+    try { parsed = JSON.parse(match); if (!parsed || Array.isArray(parsed) || typeof parsed !== "object" || Object.keys(parsed).length !== 1 || !["all", "any"].includes(Object.keys(parsed)[0]) || !Array.isArray(Object.values(parsed)[0]) || !Object.values(parsed)[0].length) throw new Error(); }
+    catch { setError(w("적용 조건을 all 또는 any 조건 배열로 작성하세요.", "Use an all or any predicate array for matching conditions.")); return; }
+    onApply({ ...rule, name: name.trim(), match: parsed, extract, capture });
+  }
+  return <form className="parser-form" onSubmit={submit}><p>{w("제안된 규칙을 필요한 경우에만 수정하세요. 표현식은 이 화면에서 실행하지 않으며 저장 확인 후 서버에서 검증합니다. 변경하면 이전 파싱 검증은 무효가 됩니다.", "Edit only when needed. Expressions are not executed here; the server validates them after confirmation. Changes invalidate prior parsing validation.")}</p><fieldset disabled={busy}>
+    <label>{w("규칙 이름", "Rule name")}<input required maxLength={120} value={name} onChange={event => setName(event.target.value)} /></label>
+    <label>{w("적용 조건 JSON", "Matching conditions JSON")}<textarea rows={6} spellCheck={false} maxLength={16000} value={match} onChange={event => setMatch(event.target.value)} /><small>{w("포장 구조만 지정하세요. 공격 내용이나 정오탐 판정을 선택 조건으로 사용하지 마세요.", "Describe wrapper structure, not attack content or a desired verdict.")}</small></label>
+    <label>{w("추출 방식", "Extraction method")}<select value={extract.kind} onChange={event => method(event.target.value)}><option value="raw_payload">{w("HTTP 요청 전체", "Whole HTTP request")}</option><option value="json_string">{w("JSON 문자열 키", "JSON string key")}</option><option value="between_markers">{w("시작 / 종료 표식", "Start / end markers")}</option><option value="regex_capture">{w("제한된 정규식", "Bounded regex")}</option></select></label>
+    {extract.kind === "json_string" && <label>{w("JSON Pointer", "JSON Pointer")}<input maxLength={512} value={extract.json_pointer} onChange={event => change("json_pointer", event.target.value)} placeholder="/request_text" /></label>}
+    {extract.kind === "between_markers" && <><label>{w("시작 표식", "Start marker")}<input required maxLength={256} value={extract.start_marker} onChange={event => change("start_marker", event.target.value)} /></label><label>{w("종료 표식", "End marker")}<input required maxLength={256} value={extract.end_marker} onChange={event => change("end_marker", event.target.value)} /></label><label>{w("시작 위치", "Start anchor")}<select value={extract.start_anchor} onChange={event => change("start_anchor", event.target.value)}><option value="line_start">{w("줄 시작", "Line start")}</option><option value="payload_start">{w("원문 시작", "Payload start")}</option></select></label></>}
+    {extract.kind === "regex_capture" && <label>{w("정규식", "Regex")}<textarea required rows={4} maxLength={1024} value={extract.pattern} spellCheck={false} onChange={event => change("pattern", event.target.value)} /><small>{w("서버가 허용한 문법과 시간 / 입력 제한을 적용합니다. 브라우저 미리 실행은 하지 않습니다.", "Server syntax, time and input limits apply. No browser execution is performed.")}</small></label>}
+    <div className="pw-field-pair"><label>{w("줄바꿈 형식", "Line ending format")}<select value={capture.line_endings} onChange={event => setCapture(value => ({ ...value, line_endings: event.target.value }))}><option value="actual">{w("실제 줄바꿈", "Actual line breaks")}</option><option value="escaped_crlf">{w("문자로 저장된 \\r\\n", "Literal \\r\\n")}</option><option value="escaped_lf">{w("문자로 저장된 \\n", "Literal \\n")}</option></select></label><label>{w("요청 줄 공백", "Request line spaces")}<select value={capture.request_line_whitespace} onChange={event => setCapture(value => ({ ...value, request_line_whitespace: event.target.value }))}><option value="strict">{w("기존 형식", "Strict")}</option><option value="flexible">{w("탭 / 연속 공백 허용", "Allow tabs / repeated spaces")}</option></select></label></div><label className="checkbox-row"><input type="checkbox" checked={capture.skip_leading_blank_lines} onChange={event => setCapture(value => ({ ...value, skip_leading_blank_lines: event.target.checked }))} />{w("앞쪽 빈 줄 건너뛰기", "Skip leading blank lines")}</label>
+  </fieldset>{error && <p className="error" role="alert">{error}</p>}<div className="parser-actions"><button type="submit" className="primary" disabled={busy || !name.trim()}>{w("수정 초안 반영", "Use edited draft")}</button><button type="button" className="secondary" disabled={busy} onClick={onCancel}>{w("취소", "Cancel")}</button></div></form>;
+}

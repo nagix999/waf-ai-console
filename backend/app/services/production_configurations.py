@@ -209,6 +209,11 @@ def preflight(db, crypto, settings, identifier):
                     and type(count) is int and count > 0):
                 parser_reviewed = True
                 break
+        if candidate_parser.get("engine_version") == "vendor-http-v2":
+            # A legacy global confirmation cannot qualify generated rules.
+            from .parser_workbench import workbench_parser_review_ready
+            parser_reviewed = workbench_parser_review_ready(
+                db, candidate_parser["version_id"], current_parser["version_id"])
     check("parser_structure_reviewed", parser_reviewed)
     schema = schema_diff(db, crypto, current["snapshot"]["input_schema"]["version_id"],
         snapshot["input_schema"]["version_id"]) if snapshot and same_instructions else {

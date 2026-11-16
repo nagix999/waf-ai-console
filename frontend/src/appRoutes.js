@@ -17,6 +17,10 @@ const canonical = {
 };
 
 export function readAppHash(hash) {
+  if (hash === "#configure/parsers/new/data") return { page: "settings", tab: "parsers", parserRoute: { view: "new", step: "data" } };
+  if (hash === "#configure/parsers/legacy") return { page: "settings", tab: "parsers", parserRoute: { view: "legacy" } };
+  const parserSession = typeof hash === "string" && hash.match(/^#configure\/parsers\/sessions\/([^/]+)\/(data|formats|verify)$/);
+  if (parserSession && uuid.test(parserSession[1])) return { page: "settings", tab: "parsers", parserRoute: { view: "session", sessionId: parserSession[1].toLowerCase(), step: parserSession[2] } };
   const testView = typeof hash === "string" && hash.match(/^#evaluate\/tests\/([^/]+)\/(metrics|statistics)$/);
   if (testView && uuid.test(testView[1])) return { page: "analyses", purpose: "test", view: "runs", runId: testView[1].toLowerCase(), runView: testView[2] };
   const ungrouped = typeof hash === "string" && hash.match(/^#evaluate\/tests\/items\/([^/]+)\/(result|agent-trace|input|result-json|report)$/);
@@ -66,6 +70,13 @@ export function readAppHash(hash) {
 
 export function writeAppHash(state) {
   const legacy = writeLegacyHash(state);
+  if (state.page === "settings" && state.settingsTab === "parsers") {
+    const route = state.parserRoute;
+    if (route?.view === "legacy") return "#configure/parsers/legacy";
+    if (route?.view === "new") return "#configure/parsers/new/data";
+    if (route?.view === "session" && uuid.test(route.sessionId || "") && ["data", "formats", "verify"].includes(route.step)) return `#configure/parsers/sessions/${route.sessionId.toLowerCase()}/${route.step}`;
+    return "#configure/parsers";
+  }
   if (state.page === "promote") return uuid.test(state.promoteRunId || "") ? `#promotion/${state.promoteRunId}` : "#evaluate/tests";
   if (state.page === "datasets") return uuid.test(state.datasetId || "") ? `#evaluate/ground-truth/${state.datasetId.toLowerCase()}` : "#evaluate/ground-truth";
   if (state.page === "analyses" && state.resultsPurpose === "test" && state.testResults?.view === "runs" && uuid.test(state.testResults?.runId || "") && uuid.test(state.testResults?.caseId || "")) return `#evaluate/tests/${state.testResults.runId}/case/${state.testResults.caseId}`;
@@ -108,7 +119,10 @@ export function applyAppRoute(state, route) {
   const next = { ...state, page: route.page };
   if (route.page === "promote") next.promoteRunId = route.promoteRunId;
   if (route.page === "datasets") next.datasetId = route.datasetId;
-  if (route.page === "settings") next.settingsTab = route.tab;
+  if (route.page === "settings") {
+    next.settingsTab = route.tab;
+    if (route.tab === "parsers") next.parserRoute = route.parserRoute || { view: "list" };
+  }
   if (route.page === "detail") {
     next.selectedId = route.id;
     next.detailTab = route.tab;

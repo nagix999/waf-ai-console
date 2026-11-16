@@ -16,6 +16,13 @@ from .prompt_policies import _sqlite_write_transaction
 BASELINE_ID = LEGACY_ENGINE
 
 
+def _options(engine, options):
+    if engine == "vendor-http-v2":
+        from .parser_rule_versions import validate_rule_options
+        return validate_rule_options(options)
+    return validate_options(engine, options)
+
+
 class ParserVersionError(ValueError):
     def __init__(self, code, status_code=409):
         self.code, self.status_code = code, status_code
@@ -24,6 +31,9 @@ class ParserVersionError(ValueError):
 
 @cache
 def engine_artifact_hash(engine):
+    if engine == "vendor-http-v2":
+        from .parser_rule_versions import rule_engine_artifact_hash
+        return rule_engine_artifact_hash()
     # Only fixed bundled files; never a path supplied by a user or model.
     files = [Path(__file__).with_name("http_parser.py")]
     if engine == CAPTURE_ENGINE:
@@ -32,7 +42,7 @@ def engine_artifact_hash(engine):
 
 
 def definition_hash(engine, options):
-    document = {"engine_version": engine, "options": validate_options(engine, options),
+    document = {"engine_version": engine, "options": _options(engine, options),
                 "engine_artifact_hash": engine_artifact_hash(engine)}
     return hashlib.sha256(json.dumps(document, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()).hexdigest()
 
@@ -79,11 +89,14 @@ def create_version(db, crypto, *, name, engine_version=CAPTURE_ENGINE, options=N
     if parent_id is not None:
         get_version(db, parent_id)
     try:
-        clean = validate_options(engine_version, DEFAULT_OPTIONS if options is None else options)
+        clean = _options(engine_version, DEFAULT_OPTIONS if options is None else options)
     except (TypeError, ValueError):
         raise ParserVersionError("parser_definition_invalid", 422) from None
     if not isinstance(name, str) or not name.strip() or len(name) > 120:
         raise ParserVersionError("parser_name_invalid", 422)
+    if engine_version == "vendor-http-v2":
+        from .parser_rule_versions import decrypt_rule_document
+        decrypt_rule_document(clean, crypto)
     row = ParserVersion(id=str(uuid.uuid4()), name=name.strip(), engine_version=engine_version,
         options_json=clean, content_hash=definition_hash(engine_version, clean), parent_id=parent_id,
         description_ciphertext=crypto.encrypt_text(description) if description else None, created_by=actor)
@@ -93,8 +106,11 @@ def create_version(db, crypto, *, name, engine_version=CAPTURE_ENGINE, options=N
 
 
 def version_summary(row):
+    options = row.options_json
+    if row.engine_version == "vendor-http-v2":
+        options = {key: value for key, value in options.items() if key != "definition_ciphertext"}
     return {"id": row.id, "name": row.name, "engine_version": row.engine_version,
-            "options": row.options_json, "content_hash": row.content_hash, "parent_id": row.parent_id,
+            "options": options, "content_hash": row.content_hash, "parent_id": row.parent_id,
             "created_by": row.created_by, "created_at": row.created_at}
 
 
@@ -116,7 +132,7 @@ def _validated(snapshot):
             raise ValueError()
     except (KeyError, TypeError, ValueError):
         raise ParserVersionError("parser_snapshot_invalid") from None
-    return {**snapshot, "options": validate_options(snapshot["engine_version"], snapshot["options"])}
+    return {**snapshot, "options": _options(snapshot["engine_version"], snapshot["options"])}
 
 
 def read_parser_snapshot(crypto, target, allow_legacy=True):
@@ -129,6 +145,9 @@ def read_parser_snapshot(crypto, target, allow_legacy=True):
     snapshot = _validated(value)
     if snapshot["version_id"] != identifier:
         raise ParserVersionError("parser_snapshot_invalid")
+    if snapshot["engine_version"] == "vendor-http-v2" and crypto is not None:
+        from .parser_rule_versions import bind_runtime
+        return bind_runtime(snapshot, crypto)
     return snapshot
 
 
@@ -157,6 +176,9 @@ def parser_metadata(snapshot):
 
 def apply_parser_snapshot(raw_payload, snapshot, *, waf_vendor=None):
     value = _validated(snapshot)
+    if value["engine_version"] == "vendor-http-v2":
+        from .parser_rule_versions import apply_rule_snapshot
+        return apply_rule_snapshot(raw_payload, snapshot, waf_vendor=waf_vendor)
     return parse_capture_payload(raw_payload, value["engine_version"], value["options"], waf_vendor=waf_vendor)
 
 

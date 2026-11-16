@@ -437,7 +437,7 @@ def test_fresh_and_existing_upgrade_preserve_prior_analysis_and_add_nullable_sna
         before = connection.execute(text("SELECT id,payload_ciphertext,result_json FROM analyses")).all()
     command.upgrade(configuration, "head")
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0030_evidence_display_jobs"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0031_parser_rule_workbench"
         assert inspect(connection).has_table("evidence_display_jobs")
         column = next(c for c in inspect(connection).get_columns("test_runs") if c["name"] == "display_editor_snapshot_ciphertext")
         assert column["nullable"]
