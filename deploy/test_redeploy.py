@@ -69,13 +69,15 @@ class ConfigurationTests(unittest.TestCase):
                 with self.assertRaises(DeployError):
                     redeploy.validate(model, rows)
 
-    def test_only_image_runtime_identity_and_external_resource_flags_change(self):
+    def test_only_image_launcher_runtime_identity_and_external_resource_flags_change(self):
         model, rows = fixture()
         before = deepcopy(model)
         target = redeploy.target_model(model, "waf-test", "fixed")
         self.assertEqual(model, before)
         for role, service in target["services"].items():
             expected = deepcopy(model["services"][role])
+            if role in ("worker", "model-tester"):
+                expected["command"] = list(redeploy.WORKER_COMMAND)
             for key in ("image", "build", "pull_policy", "user", "sysctls"):
                 expected.pop(key, None)
             self.assertEqual({k: v for k, v in service.items() if k not in ("image", "build", "pull_policy", "user", "sysctls")}, expected)
@@ -86,6 +88,31 @@ class ConfigurationTests(unittest.TestCase):
         self.assertEqual(len({target["services"][role]["image"] for role in redeploy.BACKENDS}), 1)
         self.assertEqual(target["volumes"]["data"], {"external": True, "name": "existing-data"})
         self.assertEqual(compose_model(json.loads(compose_text(target))), target)
+
+    def test_legacy_workers_upgrade_launcher_without_changing_execution_settings(self):
+        for web in ("frontend", "waf-web"):
+            with self.subTest(web=web):
+                model, _ = fixture(web)
+                for role, worker_role in (("worker", "analysis"), ("model-tester", "model_test")):
+                    model["services"][role]["command"] = ["python", "-m", "app.worker"]
+                    model["services"][role]["environment"]["WAF_WORKER_ROLE"] = worker_role
+                original = deepcopy(model)
+                target = redeploy.target_model(model, "waf-test", "fixed")
+                self.assertEqual(model, original)
+                for role in ("worker", "model-tester"):
+                    self.assertEqual(target["services"][role]["command"],
+                                     ["python", "-m", "app.worker_entrypoint_v223"])
+                    self.assertEqual(target["services"][role]["environment"],
+                                     original["services"][role]["environment"])
+                    self.assertEqual(target["services"][role]["environment"]["WAF_AGENT_MODE"], "moduagent")
+                for role in ("api", web):
+                    self.assertEqual(target["services"][role]["command"],
+                                     original["services"][role]["command"])
+                # Each service owns its command list; modifying one cannot
+                # silently change the other worker's launch configuration.
+                target["services"]["worker"]["command"].append("--synthetic")
+                self.assertEqual(target["services"]["model-tester"]["command"],
+                                 ["python", "-m", "app.worker_entrypoint_v223"])
 
     def test_key_mismatch_between_workers_rejected(self):
         model, rows = fixture()

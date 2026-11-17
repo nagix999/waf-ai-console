@@ -15,14 +15,21 @@ DATABASE_FILES = frozenset({"waf.db", "waf.db-wal", "waf.db-shm", "waf.db-journa
 
 
 def prepare_directory(path, uid=RUNTIME_UID, gid=RUNTIME_GID):
-    """Validate every target before changing any ownership or permissions."""
+    """Prepare SQLite files only, leaving unrelated volume entries untouched.
+
+    Existing deployments can keep backups beside the database. Enumerating the
+    directory must not turn those entries into maintenance targets: only the
+    exact SQLite names are opened, and every opened target is validated before
+    any ownership or mode changes. A nonempty volume must contain the main
+    database so that an unrelated directory is not mistaken for the WAF volume.
+    """
     descriptor = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     files = []
     try:
         names = os.listdir(descriptor)
-        if not set(names) <= DATABASE_FILES:
-            raise ValueError("unexpected_data_volume_entries")
-        for name in names:
+        if names and "waf.db" not in names:
+            raise ValueError("data_volume_database_required")
+        for name in sorted(DATABASE_FILES.intersection(names)):
             item = os.open(name, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW, dir_fd=descriptor)
             files.append(item)
             info = os.fstat(item)

@@ -18,6 +18,7 @@ from deploy.automation.common import (DeployError, Runner, compose_model, compos
                                      secure_dir, private_write)
 
 BACKENDS = ("api", "worker", "model-tester")
+WORKER_COMMAND = ("python", "-m", "app.worker_entrypoint_v223")
 DB_URL = "sqlite+pysqlite:////data/waf.db"
 
 
@@ -134,6 +135,11 @@ def target_model(model, project, stamp, source_root=None):
         service["build"] = {"context": str(source_root or ROOT), "dockerfile": "backend/Dockerfile" if backend else "frontend/Dockerfile"}
         service["pull_policy"] = "never"
         service["user"] = "10001:10001" if backend else "101:101"
+        # Upgrade the application launcher with its image. Preserving an old
+        # frozen Compose command would bypass new parser/signature pipelines.
+        # Runtime roles, Agent mode and model settings remain unchanged.
+        if role in ("worker", "model-tester"):
+            service["command"] = list(WORKER_COMMAND)
         if not backend:
             service["sysctls"] = {**service.get("sysctls", {}), "net.ipv4.ip_unprivileged_port_start": "0"}
     # Reuse resources by exact name. Missing resources must not create a fresh DB/network.
