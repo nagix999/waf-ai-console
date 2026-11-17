@@ -11,6 +11,7 @@ WAF_ENV_FILE="${WAF_ENV_FILE:-.env}"
 WAF_COMPOSE_FILE="${WAF_COMPOSE_FILE:-docker-compose.yml}"
 WAF_RECOVERY_DIR=''
 WAF_PHASE='사전 확인'
+WAF_LOCAL_IMAGES_FILE=''
 
 fail() { printf '중단: %s\n' "$1" >&2; exit 1; }
 on_exit() {
@@ -39,8 +40,11 @@ exec 9>"$WAF_ROOT/.local-deploy/redeploy/operation.lock"
 flock -n 9 || fail '다른 배포 작업이 실행 중입니다.'
 
 waf() {
-  docker compose --env-file "$WAF_ENV_FILE" -p "$WAF_PROJECT" \
-    -f "$WAF_COMPOSE_FILE" "$@"
+  local options=(--env-file "$WAF_ENV_FILE" -p "$WAF_PROJECT" -f "$WAF_COMPOSE_FILE")
+  if [ -n "$WAF_LOCAL_IMAGES_FILE" ]; then
+    options+=(-f "$WAF_LOCAL_IMAGES_FILE")
+  fi
+  docker compose "${options[@]}" "$@"
 }
 waf config --quiet
 WAF_API_CONTAINER="$(waf ps -aq api)"
@@ -50,6 +54,7 @@ WAF_DATA_VOLUME="$(docker inspect --format '{{range .Mounts}}{{if eq .Destinatio
 [ -n "$WAF_DATA_VOLUME" ] || fail '기존 API의 쓰기 가능한 /data 데이터 볼륨을 찾지 못했습니다.'
 
 # Consume resolved configuration privately; never print its environment values.
+WAF_OVERRIDE_CANDIDATE="$(mktemp "$WAF_ROOT/.local-deploy/compose-local-images.XXXXXXXX.json")"
 waf config --format json | python3 -c '
 import json, sys
 try:
@@ -61,9 +66,26 @@ try:
     assert mount["type"] == "volume" and not mount.get("read_only", False)
     assert config["volumes"][mount["source"]]["name"] == sys.argv[1]
     assert api["environment"]["WAF_DATABASE_URL"] == "sqlite+pysqlite:////data/waf.db"
+    # Older Compose supports this policy but not the run --pull CLI option.
+    # Store only service names and policy, never resolved environment values.
+    override = {"services": {name: {"pull_policy": "never"} for name in config["services"]}}
+    with open(sys.argv[2], "w") as stream:
+        json.dump(override, stream)
 except Exception:
     sys.exit("중단: Compose의 DB 설정이 기존 데이터 볼륨과 다르거나 지원 범위 밖입니다.")
-' "$WAF_DATA_VOLUME"
+' "$WAF_DATA_VOLUME" "$WAF_OVERRIDE_CANDIDATE"
+WAF_LOCAL_IMAGES_FILE="$WAF_OVERRIDE_CANDIDATE"
+
+# Enforce offline operation without relying on version-specific --pull flags.
+# Validate support and local image availability before stopping any services.
+waf config --quiet
+WAF_LOCAL_IMAGES="$(waf config --images)"
+[ -n "$WAF_LOCAL_IMAGES" ] || fail '사용할 로컬 이미지를 확인하지 못했습니다.'
+while IFS= read -r image; do
+  [ -n "$image" ] || continue
+  docker image inspect "$image" >/dev/null 2>&1 || \
+    fail '필요한 로컬 이미지가 없습니다. 먼저 같은 설정으로 빌드하거나 이미지를 반입하세요.'
+done <<< "$WAF_LOCAL_IMAGES"
 
 WAF_PHASE='서비스 중지'
 printf '%s\n' "$WAF_PHASE"
@@ -72,7 +94,7 @@ waf stop
   fail 'DB 볼륨을 사용하는 컨테이너가 아직 실행 중입니다.'
 
 WAF_PHASE='DB 마운트 확인'
-waf run --rm --no-deps --pull never -T --user 0:0 --entrypoint python api -c '
+waf run --rm --no-deps -T --user 0:0 --entrypoint python api -c '
 import os, stat, sys
 try:
     assert os.path.ismount("/data")
@@ -89,7 +111,7 @@ except Exception:
 
 WAF_RECOVERY_DIR="$(mktemp -d "$WAF_ROOT/.local-deploy/db-recovery.XXXXXXXX")"
 dbtool() {
-  waf run --rm --no-deps --pull never -T --user 0:0 --entrypoint python \
+  waf run --rm --no-deps -T --user 0:0 --entrypoint python \
     -v "$WAF_ROOT/deploy/redeploy_db.py:/opt/waf-db-check.py:ro" \
     -v "$WAF_RECOVERY_DIR:/backup" \
     api /opt/waf-db-check.py "$@"
@@ -102,16 +124,16 @@ dbtool verify /data/waf.db /backup/baseline.json
 printf '검증된 DB 백업: %s/waf.db\n' "$WAF_RECOVERY_DIR"
 
 WAF_PHASE='현재 DB 파일 권한 준비'
-waf run --rm --no-deps --pull never -T --user 0:0 --entrypoint python \
+waf run --rm --no-deps -T --user 0:0 --entrypoint python \
   api /opt/waf-data-permissions.py --stopped-and-backed-up
 
 WAF_PHASE='DB 마이그레이션'
-waf run --rm --no-deps --pull never -T --user 10001:10001 api alembic upgrade head
+waf run --rm --no-deps -T --user 10001:10001 api alembic upgrade head
 WAF_PHASE='기존 데이터 보존 확인'
 dbtool verify /data/waf.db /backup/baseline.json
-waf run --rm --no-deps --pull never -T --user 10001:10001 api alembic current
+waf run --rm --no-deps -T --user 10001:10001 api alembic current
 
 WAF_PHASE='서비스 재기동과 상태 확인'
-waf up -d --no-build --pull never --wait
+waf up -d --no-build --wait
 waf ps
 printf '완료. DB 백업: %s/waf.db\n' "$WAF_RECOVERY_DIR"

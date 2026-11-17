@@ -31,14 +31,21 @@ class ComposeRecoveryScriptTests(unittest.TestCase):
             import json, os, sys
             args = sys.argv[1:]
             case = os.environ.get("FAKE_CASE", "")
+            override = None
             if args[0] == "inspect":
                 step = "inspect"
+            elif args[0] == "image":
+                step = "image-inspect"
             elif args[0] == "ps":
                 step = "consumers"
             else:
-                action = args[args.index("-f") + 2:]
+                files = [i for i, value in enumerate(args) if value == "-f"]
+                action = args[files[-1] + 2:]
+                if len(files) > 1:
+                    with open(args[files[-1] + 1]) as stream:
+                        override = json.load(stream)
                 if action[0] == "config":
-                    step = "config-json" if "json" in action else "config-quiet"
+                    step = "config-json" if "json" in action else "config-images" if "--images" in action else "config-quiet"
                 elif action[0] == "ps":
                     step = "existing-api" if "-aq" in action else "status"
                 elif action[0] != "run":
@@ -61,8 +68,15 @@ class ComposeRecoveryScriptTests(unittest.TestCase):
                 with open(log) as stream:
                     previous = [json.loads(line) for line in stream]
             with open(log, "a") as stream:
-                stream.write(json.dumps({"step": step, "args": args, "cwd": os.getcwd()}) + "\\n")
+                stream.write(json.dumps({"step": step, "args": args, "cwd": os.getcwd(), "override": override}) + "\\n")
+            # Reproduce a server whose Compose does not accept --pull.
+            if "--pull" in args:
+                sys.exit("unknown flag: --pull")
             if step == os.environ.get("FAKE_FAIL"):
+                sys.exit(2)
+            if case == "missing-local-image" and step == "image-inspect":
+                sys.exit(2)
+            if case == "unsupported-policy" and step == "config-quiet" and override:
                 sys.exit(2)
             if case == "preservation-failure" and step == "verify" and any(p["step"] == "verify" for p in previous):
                 sys.exit(2)
@@ -72,15 +86,18 @@ class ComposeRecoveryScriptTests(unittest.TestCase):
                 print("" if case == "readonly-mount" else "waf-standalone_waf-data")
             elif step == "consumers" and case == "active-consumer":
                 print("another-container")
+            elif step == "config-images" and case != "empty-images":
+                print("waf-standalone-api\\nwaf-standalone-worker\\nwaf-standalone-model-tester\\nwaf-standalone-frontend")
             elif step == "config-json":
                 url = "sqlite+pysqlite:////data/waf.db"
                 if case == "different-url":
                     url = "sqlite+pysqlite:////other/waf.db"
                 name = "other-volume" if case == "different-volume" else "waf-standalone_waf-data"
-                print(json.dumps({"services": {"api": {
+                services = {"api": {
                     "environment": {"WAF_DATABASE_URL": url, "PASSWORD": "never-print-this-value"},
                     "volumes": [{"type": "volume", "source": "waf-data", "target": "/data"}]
-                }}, "volumes": {"waf-data": {"name": name}}}))
+                }, "worker": {}, "model-tester": {}, "frontend": {}}
+                print(json.dumps({"services": services, "volumes": {"waf-data": {"name": name}}}))
         '''))
         docker.chmod(0o700)
 
@@ -102,7 +119,8 @@ class ComposeRecoveryScriptTests(unittest.TestCase):
         result, calls = self.run_script()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual([call["step"] for call in calls], [
-            "config-quiet", "existing-api", "inspect", "config-json", "stop",
+            "config-quiet", "existing-api", "inspect", "config-json",
+            "config-quiet", "config-images", *["image-inspect"] * 4, "stop",
             "consumers", "mount-check", "backup", "verify", "permissions",
             "migration", "verify", "revision", "up", "status"])
         for call in calls:
@@ -112,8 +130,11 @@ class ComposeRecoveryScriptTests(unittest.TestCase):
                                            "waf-standalone", "-f", "docker-compose.yml"])
             self.assertNotIn("build", args)
             self.assertNotIn("down", args)
+            self.assertNotIn("--pull", args)
             if call["step"] in ("mount-check", "backup", "verify", "permissions", "migration", "revision", "up"):
-                self.assertEqual(args[args.index("--pull") + 1], "never")
+                self.assertEqual(call["override"], {"services": {
+                    name: {"pull_policy": "never"}
+                    for name in ("api", "worker", "model-tester", "frontend")}})
             if call["step"] in ("migration", "revision"):
                 self.assertEqual(args[args.index("--user") + 1], "10001:10001")
         backups = list((self.root / ".local-deploy").glob("db-recovery.*"))
@@ -143,6 +164,25 @@ class ComposeRecoveryScriptTests(unittest.TestCase):
         result, calls = self.run_script(case="active-consumer")
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(calls[-1]["step"], "consumers")
+
+    def test_missing_images_or_unsupported_policy_stops_before_services(self):
+        for case in ("missing-local-image", "empty-images", "unsupported-policy"):
+            with self.subTest(case=case):
+                if self.log.exists():
+                    self.log.unlink()
+                result, calls = self.run_script(case=case)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertNotIn("stop", [call["step"] for call in calls])
+
+    def test_override_contains_no_resolved_environment_and_keeps_source_files(self):
+        before = (self.root / "docker-compose.yml").read_bytes()
+        result, _ = self.run_script()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        overrides = list((self.root / ".local-deploy").glob("compose-local-images.*.json"))
+        self.assertEqual(len(overrides), 1)
+        self.assertNotIn("never-print-this-value", overrides[0].read_text())
+        self.assertEqual(overrides[0].stat().st_mode & 0o777, 0o600)
+        self.assertEqual((self.root / "docker-compose.yml").read_bytes(), before)
 
     def test_failed_preservation_prevents_service_start(self):
         result, calls = self.run_script(case="preservation-failure")
