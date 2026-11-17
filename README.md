@@ -315,6 +315,12 @@ HTTP 연결이 끊겨도 DB에 접수된 분석은 worker가 계속 처리합니
 - 인자 없는 `scripts/deploy.sh`는 **GitHub main 게시와 기존 서비스 재배포를 함께 수행**합니다. 신규 설치 명령으로 사용하지 않습니다.
 - API 응답이나 컨테이너 기동 성공만으로 모델 품질·GPU 연결·운영 부하가 검증되지는 않습니다.
 
+## 기존 SQLite 권한 복구
+
+새 이미지를 빌드한 기존 설치에서 DB 쓰기 권한 오류가 발생하면 `bash scripts/docker-compose.sh`로 백업, 권한 준비, 마이그레이션과 재기동을 진행할 수 있습니다. 기본 설정은 프로젝트 `waf-standalone`, `.env`, `docker-compose.yml`이며 다른 배포는 `WAF_PROJECT`, `WAF_ENV_FILE`, `WAF_COMPOSE_FILE`을 같은 설치의 값으로 지정합니다. 신규 설치용 명령이 아니며 Git 작업이나 이미지 빌드와 다운로드는 하지 않습니다.
+
+이 스크립트는 **운영서버의 Python 설치가 필요하지 않습니다.** Bash와 Docker Compose 및 `flock`, `mktemp` 등 기본 Linux 명령을 사용하고, 설정 검사와 SQLite 백업은 기존 API 이미지에 포함된 Python으로 실행합니다. 설정 검사 컨테이너에는 DB를 연결하지 않고 네트워크와 이미지 다운로드를 차단합니다. 기존 데이터 볼륨과 로컬 이미지가 확인되고 백업 검증이 성공한 경우에만 권한을 변경하며 실패하면 이후 단계를 중단합니다. 스크립트뿐 아니라 저장소의 `deploy/compose_recovery_checks.py`와 `deploy/redeploy_db.py`도 함께 있어야 합니다.
+
 ## 로컬 개발·검증
 
 Backend는 Python 3.12+, Frontend는 Node.js 22+를 사용합니다.
