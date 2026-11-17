@@ -22,7 +22,7 @@ from app.services.vllm_profiles import profile_fingerprint
 from test_evidence_relations import wire
 
 
-pytestmark = pytest.mark.usefixtures("registered_vllm_target")
+pytestmark = pytest.mark.usefixtures("registered_vllm_target", "legacy_v222_capture_admissions")
 SIGNATURE = "Synthetic Signature"
 OBSERVATION = "요청에 실제로 들어 있는 입력값과 위치를 확인했습니다."
 INTEGRATED = "요청 위치와 관련 자료를 연결한 통합 설명입니다."

@@ -15,7 +15,7 @@ export default function CandidateConfiguration({ agentMode, busy, onChange = noo
   const savePending = useRef(false);
   useEffect(() => {
     const controller = new AbortController(); setLoading(true); setError("");
-    Promise.all([api.agentSettings({ signal: controller.signal }), api.promptPolicies({ signal: controller.signal }), api.inputSchemas({ signal: controller.signal }), api.testDefaults({ signal: controller.signal }), api.parsers({ signal: controller.signal })]).then(async ([agents, prompts, schemas, saved, parsers]) => {
+    Promise.all([api.agentSettings({ signal: controller.signal }), api.promptPolicies({ signal: controller.signal }), api.inputSchemas({ signal: controller.signal }), api.testDefaults({ signal: controller.signal }), api.parsers({ signal: controller.signal }), api.signatureExplanations({ limit: 100 }, { signal: controller.signal })]).then(async ([agents, prompts, schemas, saved, parsers, signatureExplanations]) => {
       if (controller.signal.aborted) return;
       // undefined means a new Test. null means the source Test has no snapshot:
       // never silently replace a missing source configuration with today's defaults.
@@ -23,9 +23,12 @@ export default function CandidateConfiguration({ agentMode, busy, onChange = noo
       const parserId = prefill.parser_version_id || BASELINE_PARSER_ID, items = parserCatalogVersions(parsers);
       // Recent-version limits must not make a pinned historical Test unusable.
       if (!items.some(version => version.id === parserId)) items.push(await api.parser(parserId, { signal: controller.signal }));
+      const explanationId = prefill.signature_explanation_version_id || null;
+      const explanationItems = [...signatureExplanations.items];
+      if (explanationId && !explanationItems.some(version => version.id === explanationId)) explanationItems.push(await api.signatureExplanation(explanationId, { signal: controller.signal }));
       if (controller.signal.aborted) return;
-      setCatalog({ agents, prompts, schemas, parsers: { ...parsers, items } }); setDefaults(saved);
-      setValue({ ...prefill, parser_version_id: parserId }); setLoading(false);
+      setCatalog({ agents, prompts, schemas, parsers: { ...parsers, items }, signatureExplanations: { ...signatureExplanations, items: explanationItems } }); setDefaults(saved);
+      setValue({ ...prefill, parser_version_id: parserId, signature_explanation_version_id: explanationId }); setLoading(false);
     }).catch(() => { if (!controller.signal.aborted) { setError("load"); setLoading(false); } });
     return () => controller.abort();
   }, [reload, initialConfiguration]);
@@ -43,17 +46,18 @@ export default function CandidateConfiguration({ agentMode, busy, onChange = noo
   const profiles = catalog?.agents.profiles || [];
   const model = (key, label, optional) => <label>{label}<select disabled={busy || saving} value={value?.[key] || ""} onChange={e => change(key, e.target.value || null)}><option value="">{optional ? w("주 분석 모델과 동일", "Same as Primary") : w("모델 선택", "Select model")}</option>{value?.[key] && !profiles.some(p => p.id === value[key]) && <option value={value[key]} disabled>{w("이전 모델을 사용할 수 없음", "Source model unavailable")}</option>}{profiles.map(p => <option key={p.id} value={p.id} disabled={!p.can_assign}>{p.name} · {p.provider}{p.can_assign ? "" : w(" · 검증 필요", " · Validation required")}</option>)}</select></label>;
   return <section className="panel candidate-configuration" aria-busy={loading}>
-    <div className="panel-head"><div>{!editDefaults && <h2>{w("2. 테스트 설정", "2. Test Configuration")}</h2>}<p className="ux-muted">{editDefaults ? w("새 테스트의 초기값만 바꿉니다. 운영과 기존 테스트는 바뀌지 않습니다.", "Changes New Test prefill only. Production and existing Tests are unchanged.") : initialConfiguration !== undefined ? w("이전 테스트 설정에서 불러옴", "Loaded from the source Test") : w("기본 테스트 설정에서 불러옴", "Loaded from Default Test Configuration")}</p></div></div>
+    <div className="panel-head"><div>{!editDefaults && <h2>{w("2. 테스트 설정", "2. Test Configuration")}</h2>}<p className="ux-muted">{editDefaults ? w("새 테스트의 기본 선택값입니다. 설명집은 새 Test API 세션에도 적용합니다. 운영과 기존 테스트는 바뀌지 않습니다.", "Default selections for new Tests. The explanation collection also applies to new Test API sessions. Production and existing Tests are unchanged.") : initialConfiguration !== undefined ? w("이전 테스트 설정에서 불러옴", "Loaded from the source Test") : w("기본 테스트 설정에서 불러옴", "Loaded from Default Test Configuration")}</p></div></div>
     {loading ? <p role="status">{t("loading")}</p> : catalog && value && <div className="data-form r5-configuration-form">
       {model("primary_profile_id", t("primary"))}{model("verifier_profile_id", t("verifier"), true)}
       <label className="checkbox-row"><input type="checkbox" checked={value.evidence_editor_enabled} disabled={busy || saving} onChange={e => change("evidence_editor_enabled", e.target.checked)} />{t("editor")}</label>
       {value.evidence_editor_enabled && model("evidence_editor_profile_id", t("editor"), true)}
       {[["prompt_policy_version_id", "instructions", catalog.prompts], ["input_schema_version_id", "schema", catalog.schemas]].map(([key, label, versions]) => <label key={key}>{t(label)}<select disabled={busy || saving} value={value[key] || ""} onChange={e => change(key, e.target.value)}><option value="">{w("버전 선택", "Select version")}</option>{value[key] && !versions.items.some(v => v.id === value[key]) && <option value={value[key]} disabled>{w("이전 버전을 사용할 수 없음", "Source version unavailable")}</option>}{versions.items.map(v => <option key={v.id} value={v.id}>v{v.version_number} · {v.name}</option>)}</select></label>)}
       <label>{w("파서 버전", "Parser version")}<select disabled={busy || saving} value={value.parser_version_id || BASELINE_PARSER_ID} onChange={e => change("parser_version_id", e.target.value)}>{value.parser_version_id && !catalog.parsers.items.some(v => v.id === value.parser_version_id) && <option value={value.parser_version_id} disabled>{w("이전 파서 버전을 사용할 수 없음", "Source parser unavailable")}</option>}{catalog.parsers.items.map(version => <option key={version.id} value={version.id}>{version.name}</option>)}</select></label>
+      <label>{t("signatureExplanations")}<select disabled={busy || saving} value={value.signature_explanation_version_id || ""} onChange={event => change("signature_explanation_version_id", event.target.value || null)}><option value="">{w("사용 안 함", "Disabled")}</option>{catalog.signatureExplanations.items.map(version => <option key={version.id} value={version.id}>v{version.version_no} · {version.name}</option>)}</select><small className="ux-muted">{w("일치하는 벤더와 시그니처의 설명만 참고 정보로 전달합니다.", "Only matching vendor and signature explanations are supplied as context.")}</small></label>
     </div>}
-    {issue && !loading && <p className="notice">{w("모델 검증 상태와 지침·입력 스키마·파서 선택을 확인하세요.", "Check model validation and select instructions, input schema and parser.")}</p>}
+    {issue && !loading && <p className="notice">{w("모델 검증 상태와 지침, 입력 스키마, 파서 및 설명집 선택을 확인하세요.", "Check model validation and select instructions, input schema, parser and explanations.")}</p>}
     {error && <p role="alert" className="error">{error === "stale" ? w("기본 설정이 변경됐습니다. 다시 불러와 확인하세요.", "Defaults changed. Reload and review.") : w("설정을 읽거나 저장하지 못했습니다.", "Could not read or save the configuration.")}</p>}
-    {candidateUsesExternal(catalog, value) && <p className="notice">{w("OpenAI 사용 시 HTTP 원문·Cookie가 외부로 전송되며 비용이 발생할 수 있습니다.", "OpenAI sends raw HTTP and cookies externally and may incur charges.")}</p>}
-    <div className="action-row"><button type="button" className="text-button" disabled={loading || busy || saving} onClick={() => setReload(n => n + 1)}>{t("retry")}</button><NavigationAction href="#configure/instructions">{t("instructions")}</NavigationAction><NavigationAction href="#configure/input-schema">{t("schema")}</NavigationAction><NavigationAction href="#configure/parsers">{t("parsers")}</NavigationAction>{editDefaults && <button type="button" className="primary" disabled={loading || saving || Boolean(issue)} onClick={save}>{saving ? w("저장 중…", "Saving…") : w("기본 설정 저장", "Save defaults")}</button>}</div>
+    {candidateUsesExternal(catalog, value) && <p className="notice">{w("OpenAI 사용 시 HTTP 원문, Cookie와 선택한 시그니처 설명이 외부로 전송되며 비용이 발생할 수 있습니다.", "OpenAI sends raw HTTP, cookies and selected signature explanations externally and may incur charges.")}</p>}
+    <div className="action-row"><button type="button" className="text-button" disabled={loading || busy || saving} onClick={() => setReload(n => n + 1)}>{t("retry")}</button><NavigationAction href="#configure/instructions">{t("instructions")}</NavigationAction><NavigationAction href="#configure/input-schema">{t("schema")}</NavigationAction><NavigationAction href="#configure/parsers">{t("parsers")}</NavigationAction><NavigationAction href="#configure/signature-explanations">{t("signatureExplanations")}</NavigationAction>{editDefaults && <button type="button" className="primary" disabled={loading || saving || Boolean(issue)} onClick={save}>{saving ? w("저장 중…", "Saving…") : w("기본 설정 저장", "Save defaults")}</button>}</div>
   </section>;
 }

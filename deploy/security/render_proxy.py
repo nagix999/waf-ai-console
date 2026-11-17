@@ -9,6 +9,7 @@ import hashlib
 import ipaddress
 import json
 import os
+import stat
 from pathlib import Path
 import re
 import tempfile
@@ -145,12 +146,25 @@ def expected_manifest(settings, contents):
             "files": {name: digest(value) for name, value in contents.items()}}
 
 
+def policy_directory_permissions(path):
+    info = path.stat()
+    mode = stat.S_IMODE(info.st_mode)
+    return stat.S_ISDIR(info.st_mode) and (mode == 0o700 or (mode == 0o750 and info.st_gid == 101))
+
+
+def policy_file_permissions(path, name):
+    info = path.stat()
+    mode = stat.S_IMODE(info.st_mode)
+    return (stat.S_ISREG(info.st_mode) and info.st_nlink == 1
+            and (mode == 0o600 or (name in {"http.conf", "server.conf", "proxy.conf"} and mode == 0o640 and info.st_gid == 101)))
+
+
 def ensure_directory(path):
     if path.is_symlink():
         raise PolicyError("output directory must not be a symlink")
     path.mkdir(mode=0o700, parents=True, exist_ok=True)
-    if path.stat().st_mode & 0o077:
-        raise PolicyError("output directory must have mode 0700")
+    if not policy_directory_permissions(path):
+        raise PolicyError("output directory must have mode 0700 or prepared mode 0750 with Nginx group 101")
 
 
 def write_policy(path, settings):
@@ -172,13 +186,13 @@ def write_policy(path, settings):
 
 
 def check_policy(path, settings):
-    if not path.is_dir() or path.is_symlink() or path.stat().st_mode & 0o077:
+    if not path.is_dir() or path.is_symlink() or not policy_directory_permissions(path):
         raise PolicyError("private rendered policy directory required")
     contents = render(settings)
     expected = expected_manifest(settings, contents)
     for name, value in {**contents, "manifest.json": json.dumps(expected, sort_keys=True, indent=2) + "\n"}.items():
         target = path / name
-        if not target.is_file() or target.is_symlink() or target.stat().st_mode & 0o077 or target.read_text(encoding="utf-8") != value:
+        if not target.is_file() or target.is_symlink() or not policy_file_permissions(target, name) or target.read_text(encoding="utf-8") != value:
             raise PolicyError("rendered policy missing, changed, or stale; run renderer again")
 
 
@@ -204,6 +218,8 @@ def main():
         message = str(error) if isinstance(error, PolicyError) else "cannot read/write private policy files"
         parser.exit(1, message + "\n")
     print("Proxy policy verified; secret values were not printed.")
+    if not args.check:
+        print("Rendered files use mode 0600. Run the deployment's Nginx config permission preparation before starting the non-root web container.")
 
 
 if __name__ == "__main__":

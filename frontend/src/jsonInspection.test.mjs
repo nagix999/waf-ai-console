@@ -22,6 +22,7 @@ const render = (value, props = {}) => renderToStaticMarkup(createElement(TextIns
 test("JSON values default to a typed tree; strings and absent records remain text", () => {
   const html = render({ text: "97", score: 0.97, checked: true, retry: false, missing: null, array: [], object: {} }, { label: "결과 JSON" });
   assert.match(html, /결과 JSON 트리/);
+  assert.match(html, /role="region" tabindex="0" aria-label="결과 JSON 트리"/);
   assert.match(html, /aria-pressed="true">트리/);
   assert.match(html, /json-string">&quot;97&quot;/);
   assert.match(html, /json-number">0.97/);
@@ -162,6 +163,22 @@ test("invalid, non-container, duplicate-key, rounded and oversized JSON keep the
   for (const source of ['{"a":{"x":1},"b":{"x":2}}', '[{"x":1},{"x":2}]', '{"x":0.8499999999999999}', '{"x":1.2500e2}']) {
     assert.ok(parseJsonRecord(source));
   }
+});
+
+test("long zero runs preserve decimal precision checks and the source text", { timeout: 5000 }, () => {
+  const zeros = "0".repeat(100000);
+  for (const [source, key, expected] of [
+    [`{"x":1.${zeros}}`, "x", 1], [`{"x":0.${zeros}}`, "x", 0], [`{"한글😀":1.25${zeros}e2}`, "한글😀", 125],
+  ]) {
+    const parsed = parseJsonRecord(source);
+    assert.ok(parsed);
+    assert.equal(parsed.value[key], expected);
+    assert.equal(recordText(source), source);
+  }
+  for (const source of [
+    `{"x":1.${zeros}1}`, `{"x":0.${zeros}1}`, `{"x":-0.${zeros}}`,
+    `{"x":1.${zeros},"\\u0078":1}`, `{"x":1.${zeros}e0000000}`,
+  ]) assert.equal(parseJsonRecord(source), null);
 });
 
 test("embedded model input can be explicitly inspected, without auto-parsing payloads or prompts", () => {

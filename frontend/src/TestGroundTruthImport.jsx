@@ -63,7 +63,7 @@ export default function TestGroundTruthImport({ runId, open, onClose, onOpenData
             <label>{w("평가 데이터셋", "Evaluation Dataset")}<select aria-label={w("평가 데이터셋", "Evaluation Dataset")} required value={datasetId} disabled={busy || !catalog} onChange={e => { setDatasetId(e.target.value); resetPreview(); }}><option value="">{w("선택하세요", "Choose dataset")}</option>{catalog?.items.map(row => <option key={row.id} value={row.id}>{row.name} · {row.total} {w("문항", "cases")}</option>)}</select></label>
             {catalog && <Pagination total={catalog.total} limit={20} offset={catalogOffset} onOffsetChange={changeCatalog} disabled={busy} label={w("평가 데이터셋 페이지", "Dataset pages")} />}
           </>}
-          <button className="secondary" disabled={busy || target === "append_to_existing_dataset" && !datasetId}>{phase === "preview" ? w("미리보기 준비 중…", "Preparing preview…") : w("미리보기", "Preview")}</button>
+          <button type="submit" className="secondary" disabled={busy || target === "append_to_existing_dataset" && !datasetId}>{phase === "preview" ? w("미리보기 준비 중…", "Preparing preview…") : w("미리보기", "Preview")}</button>
         </form>
         {preview && <section className="data-form" ref={error ? null : feedback} tabIndex={-1} aria-label={w("가져오기 미리보기", "Import preview result")}>
           <h3>{w(`미리보기 · 전체 ${preview.source_total}문항`, `Preview · ${preview.source_total} cases`)}</h3>

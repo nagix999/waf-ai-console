@@ -98,22 +98,26 @@ test("report evidence groups have distinct presentation and full paragraph width
   assert.doesNotMatch(html, /dangerouslySetInnerHTML|<script/);
 });
 
-test("Evaluation Dataset states are distinct from answers and direct approval is not offered", () => {
+test("legacy Evaluation Dataset review states stay distinct from verdicts", () => {
   assert.deepEqual(reviewActions("draft"), ["reviewed"]);
   assert.deepEqual(reviewActions("reviewed"), ["approved", "draft"]);
   assert.deepEqual(reviewActions("approved"), ["draft"]);
   for (const value of ["inconclusive", "true_positive", "unknown", "__proto__", "constructor"]) assert.deepEqual(reviewActions(value), []);
-  const Review = component("./GroundTruthReview.jsx");
-  const render = props => renderToStaticMarkup(createElement(Review, { item: { id: "item", review_status: "draft", reference_verdict: "inconclusive", revision: 1 }, ...props }));
-  const draft = render({});
-  assert.match(draft, /미검토/); assert.match(draft, /기대 판정: 보류/); assert.match(draft, />검토 완료<\/button>/);
-  assert.doesNotMatch(draft, />승인<\/button>/);
-  assert.match(render({ dirty: true }), /먼저 변경 내용을 저장/);
-  assert.match(render({ dirty: true }), /disabled/);
-  assert.doesNotMatch(render({ readonly: true }), /<button/);
-  const approved = render({ item: { id: "item", review_status: "approved", reference_verdict: "true_positive", created_by: "<script>test</script>" } });
-  assert.match(approved, /승인됨/); assert.match(approved, /미검토로 되돌리기/);
-  assert.doesNotMatch(approved, /<script>/);
+});
+
+test("current dataset workspace renders the catalog and preserves read-only revision selection", () => {
+  const Workspace = component("./GroundTruthWorkspace.jsx");
+  const catalog = renderToStaticMarkup(createElement(Workspace, { id: null, onSelect() {} }));
+  assert.match(catalog, /평가 데이터셋 만들기/);
+  assert.match(catalog, /평가 데이터셋 검색/);
+  const RevisionBrowser = component("./DatasetRevisionBrowser.jsx");
+  const history = renderToStaticMarkup(createElement(RevisionBrowser, { datasetId: "synthetic-dataset", versions: [
+    { id: "revision-2", revision: 2, total: 3 }, { id: "revision-1", revision: 1, total: 2 },
+  ] }));
+  assert.match(history, /내용 확인 · 읽기 전용/);
+  assert.match(history, /<option value="2" selected="">r2 · 3 문항<\/option>/);
+  assert.match(history, /<option value="1">r1 · 2 문항<\/option>/);
+  assert.doesNotMatch(history, /<textarea|<input|>저장<\/button>|>삭제<\/button>/);
 });
 
 test("review API sends optimistic revision and explicit status only in the body", async () => {

@@ -1,0 +1,109 @@
+services:
+  db:
+    image: ${SONAR_POSTGRES_IMAGE:?Pinned PostgreSQL image is required}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_DB: sonar
+      POSTGRES_PASSWORD: ${SONAR_DB_PASSWORD:?Generated local password is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U sonar -d sonar]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    mem_limit: 512m
+    cpus: 1
+    networks: [diagnostics]
+    security_opt: [no-new-privileges:true]
+
+  sonarqube:
+    image: ${SONAR_SERVER_IMAGE:?Pinned SonarQube image is required}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://db:5432/sonar
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: ${SONAR_DB_PASSWORD:?Generated local password is required}
+      SONAR_FORCEAUTHENTICATION: "true"
+      SONAR_TELEMETRY_ENABLE: "false"
+      SONAR_UPDATECENTER_ACTIVATE: "false"
+    volumes:
+      - sonar_data:/opt/sonarqube/data
+      - sonar_extensions:/opt/sonarqube/extensions
+      - sonar_logs:/opt/sonarqube/logs
+    ulimits:
+      nofile: {soft: 131072, hard: 131072}
+      nproc: {soft: 8192, hard: 8192}
+    mem_limit: 4g
+    cpus: 2
+    networks: [diagnostics]
+    security_opt: [no-new-privileges:true]
+
+  browser:
+    image: ${SONAR_BROWSER_IMAGE:?Pinned local browser proxy image is required}
+    restart: unless-stopped
+    depends_on: [sonarqube]
+    user: "101:101"
+    entrypoint: [nginx, -c, /etc/nginx/local-sonar.conf, -g, "daemon off;"]
+    ports:
+      - "127.0.0.1:${SONAR_LOCAL_PORT:-19000}:8080"
+    volumes:
+      - type: bind
+        source: ./nginx.conf
+        target: /etc/nginx/local-sonar.conf
+        read_only: true
+        bind: {create_host_path: false}
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=67108864,mode=1777
+      - /var/cache/nginx:rw,nosuid,nodev,size=67108864,uid=101,gid=101
+    cap_drop: [ALL]
+    mem_limit: 128m
+    cpus: 0.5
+    networks: [diagnostics, browser]
+    security_opt: [no-new-privileges:true]
+
+  scanner:
+    image: ${SONAR_SCANNER_IMAGE:?Pinned SonarScanner image is required}
+    profiles: [scan]
+    user: "${SONAR_LOCAL_UID:-1000}:${SONAR_LOCAL_GID:-1000}"
+    environment:
+      SONAR_HOST_URL: http://sonarqube:9000
+      SONAR_TOKEN: ${SONAR_SCAN_TOKEN:-}
+      SONAR_SCANNER_JAVA_OPTS: -Xmx512m
+    working_dir: /usr/src
+    volumes:
+      - type: bind
+        source: ${SONAR_SCAN_SOURCE:?Source-only snapshot is required}
+        target: /usr/src
+        read_only: true
+        bind: {create_host_path: false}
+      - type: bind
+        source: ${SONAR_SCAN_OUTPUT:?Scanner output directory is required}
+        target: /out
+        bind: {create_host_path: false}
+      - scanner_cache:/opt/sonar-scanner/.sonar
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=536870912,mode=1777
+    # JVM and the embedded JavaScript analyzer run together. At 2 GiB the
+    # current source tree repeatedly reclaimed pages during JS analysis.
+    mem_limit: 3g
+    cpus: 2
+    networks: [diagnostics]
+    security_opt: [no-new-privileges:true]
+
+networks:
+  diagnostics:
+    internal: true
+  browser:
+
+volumes:
+  postgres_data:
+  sonar_data:
+  sonar_extensions:
+  sonar_logs:
+  scanner_cache:

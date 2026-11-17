@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from scripts import compare_security_analysis_v3 as comparison
 from app.agent.contracts import SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SemanticAssessmentOutput
 from app.agent.executor import AgentCallResult
-from app import worker_v221, worker_v222
+from app import worker_v221, worker_v222, worker_v223
 from app.config import Settings
 from app.database import Base, build_engine
 from app.models import VLLMProfile, VLLMTestRun, utcnow
@@ -176,6 +176,7 @@ def test_mocked_comparison_preserves_source_and_aborts_quota(tmp_path, monkeypat
     monkeypatch.setattr(comparison.worker, "execute_structured_agent", execute)
     monkeypatch.setattr(worker_v221, "execute_structured_agent", execute)
     monkeypatch.setattr(worker_v222, "execute_structured_agent", execute)
+    monkeypatch.setattr(worker_v223, "execute_structured_agent", execute)
     directory = tmp_path / "safe-results"
     result = comparison.main(["--execute-model-calls", "--profile-name", "Synthetic isolated profile",
                               "--output-dir", str(directory)])
@@ -186,6 +187,8 @@ def test_mocked_comparison_preserves_source_and_aborts_quota(tmp_path, monkeypat
     assert manifest["verifier_confidence_threshold"] == settings.verifier_confidence_threshold
     assert len(manifest["pipeline_code_hash"]) == 64 and len(manifest["default_input_schema_hash"]) == 64
     assert "backend/app/agent/executor.py" in manifest["pipeline_source_hashes"]
+    assert "backend/app/worker_v223.py" in manifest["pipeline_source_hashes"]
+    assert "backend/app/services/signature_explanations.py" in manifest["pipeline_source_hashes"]
     checkpoints = list(directory.glob("waf-system-*.json"))
     assert len(checkpoints) == (1 if quota else 4)
     text_output = capsys.readouterr().out + "".join(path.read_text() for path in directory.glob("*.json"))

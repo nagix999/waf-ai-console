@@ -71,6 +71,21 @@ def legacy_v222_admissions(monkeypatch, request):
     monkeypatch.setattr(app.agent, "prompts", legacy_prompts_v222)
 
 
+@pytest.fixture(autouse=True)
+def legacy_v222_capture_admissions(monkeypatch, request):
+    """Replay the final v2.22 text, never the v2.23 reference-input engine.
+
+    Historical suites opt in explicitly. Current unmarked cases still exercise
+    the new candidate and its separate signature-description provenance.
+    """
+    if not any("legacy_v222_capture_admissions" in marker.args
+               for marker in request.node.iter_markers("usefixtures")):
+        return
+    import app.agent
+    from app.agent import legacy_prompts_v222_capture
+    monkeypatch.setattr(app.agent, "prompts", legacy_prompts_v222_capture)
+
+
 @pytest.fixture
 def settings() -> Settings:
     return Settings(

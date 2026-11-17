@@ -3,6 +3,8 @@
 !.env.example
 !.env.production.example
 .local-deploy/
+.local-sonarqube/
+.scannerwork/
 # Local design, deployment and validation records are not published.
 /docs/
 .agents/
@@ -21,6 +23,7 @@ __pycache__/
 *.pem
 *.key
 .pytest_cache/
+*.egg-info/
 node_modules/
 dist/
 backend/app/data/report-ui/

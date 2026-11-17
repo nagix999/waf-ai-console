@@ -284,7 +284,8 @@ def test_primary_and_verifier_receive_no_upload_answer_or_provenance(
     async def fake_execute(**kwargs):
         calls.append(kwargs)
         return AgentCallResult(
-            output=model_output(primary_output("test").model_copy(update={"confidence_score": 0.5}), kwargs),
+            output=model_output(primary_output("test").model_copy(update={"confidence_score": 0.5}), kwargs,
+                                evidence_supports="attack_request"),
             framework_run_id="synthetic-no-network", agent_fingerprint="synthetic-offline",
             finish_reason="completed", failure_id=None, error=None,
             telemetry={"framework": "moduagent", "framework_version": "0.6.2", "tool_trace": []},

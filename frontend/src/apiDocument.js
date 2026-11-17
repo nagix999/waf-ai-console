@@ -2,38 +2,86 @@
 // It never evaluates HTML, URLs, code, or inline Markdown. Render text as React
 // children; these blocks must not be passed to dangerouslySetInnerHTML.
 
+const horizontalSpace = character => character === " " || character === "\t";
+const hasLineEnding = text => /[\r\n\u2028\u2029]/.test(text);
+
+function lineStart(line) {
+  let index = 0;
+  while (line[index] === " ") index += 1;
+  return index <= 3 ? index : -1;
+}
+
 function heading(line) {
-  const match = /^ {0,3}(#{1,6})[ \t]+(.+?)[ \t]*$/.exec(line);
-  return match ? { level: match[1].length, text: match[2] } : null;
+  let index = lineStart(line);
+  if (index < 0) return null;
+  const start = index;
+  while (line[index] === "#") index += 1;
+  const level = index - start;
+  if (level < 1 || level > 6 || !horizontalSpace(line[index])) return null;
+  const spaceStart = index;
+  while (horizontalSpace(line[index])) index += 1;
+  let end = line.length;
+  // Preserve the old parser's single retained character for a blank heading.
+  if (index === end && index - spaceStart > 1) index -= 1;
+  if (index >= end) return null;
+  while (end > index + 1 && horizontalSpace(line[end - 1])) end -= 1;
+  const text = line.slice(index, end);
+  return hasLineEnding(text) ? null : { level, text };
 }
 
 function fence(line) {
-  const match = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
-  if (!match || (match[1][0] === "`" && match[2].includes("`"))) return null;
-  return { marker: match[1], language: match[2].trim().split(/\s+/)[0] || "" };
+  const start = lineStart(line);
+  if (start < 0 || !["`", "~"].includes(line[start])) return null;
+  let index = start;
+  while (line[index] === line[start]) index += 1;
+  if (index - start < 3) return null;
+  const suffix = line.slice(index);
+  if (hasLineEnding(suffix) || (line[start] === "`" && suffix.includes("`"))) return null;
+  return { marker: line.slice(start, index), language: suffix.trim().split(/\s+/)[0] || "" };
 }
 
 function closesFence(line, marker) {
-  const match = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(line);
-  return Boolean(match && match[1][0] === marker[0] && match[1].length >= marker.length);
+  const start = lineStart(line);
+  if (start < 0 || line[start] !== marker[0]) return false;
+  let index = start;
+  while (line[index] === marker[0]) index += 1;
+  if (index - start < marker.length) return false;
+  const end = line.length;
+  while (index < end && horizontalSpace(line[index])) index += 1;
+  return index === end;
 }
 
 function listItem(line) {
-  const match = /^ {0,3}([-+*]|\d+[.)])[ \t]+(.*)$/.exec(line);
-  if (!match) return null;
-  const ordered = /^\d/.test(match[1]);
-  return { ordered, start: ordered ? Number.parseInt(match[1], 10) : 1, text: match[2] };
+  let index = lineStart(line);
+  if (index < 0) return null;
+  const start = index;
+  const ordered = line[index] >= "0" && line[index] <= "9";
+  if (ordered) {
+    while (line[index] >= "0" && line[index] <= "9") index += 1;
+    if (![".", ")"].includes(line[index])) return null;
+  } else if (!["-", "+", "*"].includes(line[index])) return null;
+  index += 1;
+  if (!horizontalSpace(line[index])) return null;
+  const numberEnd = index - 1;
+  while (horizontalSpace(line[index])) index += 1;
+  const text = line.slice(index);
+  if (hasLineEnding(text)) return null;
+  return { ordered, start: ordered ? Number.parseInt(line.slice(start, numberEnd), 10) : 1, text };
 }
 
-function hasClosingTicks(line, from, width) {
-  for (let index = from; index < line.length; index += 1) {
-    if (line[index] !== "`") continue;
+function lastTickRuns(line) {
+  // A suffix lookup for every unmatched width can become quadratic. The last
+  // run of each width answers the same question after one linear pre-scan.
+  const last = new Map();
+  let index = 0;
+  while (index < line.length) {
+    if (line[index] !== "`") { index += 1; continue; }
     let end = index + 1;
     while (line[end] === "`") end += 1;
-    if (end - index === width) return true;
-    index = end - 1;
+    last.set(end - index, index);
+    index = end;
   }
-  return false;
+  return last;
 }
 
 function tableRow(line) {
@@ -42,25 +90,29 @@ function tableRow(line) {
   let cell = "";
   let ticks = 0;
   let separators = 0;
-  for (let index = 0; index < source.length; index += 1) {
+  const closingTicks = lastTickRuns(source);
+  let index = 0;
+  while (index < source.length) {
     const character = source[index];
     if (!ticks && character === "\\" && index + 1 < source.length) {
       cell += source.slice(index, index + 2);
-      index += 1;
+      index += 2;
     } else if (character === "`") {
       let end = index + 1;
       while (source[end] === "`") end += 1;
       const width = end - index;
       if (ticks === width) ticks = 0;
-      else if (!ticks && hasClosingTicks(source, end, width)) ticks = width;
+      else if (!ticks && closingTicks.get(width) >= end) ticks = width;
       cell += source.slice(index, end);
-      index = end - 1;
+      index = end;
     } else if (character === "|" && !ticks) {
       cells.push(cell.trim());
       cell = "";
       separators += 1;
+      index += 1;
     } else {
       cell += character;
+      index += 1;
     }
   }
   cells.push(cell.trim());

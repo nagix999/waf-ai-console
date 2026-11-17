@@ -33,7 +33,7 @@ services:
   worker:
     stop_grace_period: 120s
     build: *backend-build
-    command: ["python", "-m", "app.worker_entrypoint_parsers"]
+    command: ["python", "-m", "app.worker_entrypoint_v223"]
     environment:
       <<: *backend-env
       WAF_WORKER_ROLE: analysis
@@ -47,7 +47,7 @@ services:
   model-tester:
     stop_grace_period: 120s
     build: *backend-build
-    command: ["python", "-m", "app.worker_entrypoint_parsers"]
+    command: ["python", "-m", "app.worker_entrypoint_v223"]
     environment:
       <<: *backend-env
       WAF_WORKER_ROLE: model_test
@@ -64,6 +64,9 @@ services:
       dockerfile: frontend/Dockerfile
     ports:
       - "8080:80"
+    # Container namespace only; never changes the host's sysctl settings.
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: "0"
     depends_on:
       api:
         condition: service_healthy

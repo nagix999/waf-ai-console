@@ -19,6 +19,11 @@ def validate(db, crypto, value):
         pin_parser(db, crypto, TestRun(), version_id=value.parser_version_id or "generic-http-v3", selection_origin="test")
     except ParserVersionError as exc:
         raise AnalysisIngestError(exc.code, exc.status_code) from None
+    from .signature_explanations import SignatureExplanationError, snapshot_for_version
+    try:
+        snapshot_for_version(db, crypto, value.signature_explanation_version_id, "test")
+    except SignatureExplanationError as exc:
+        raise AnalysisIngestError(exc.code, exc.status_code) from None
 
 
 def document(db, crypto):
@@ -72,6 +77,7 @@ def clone_template(db, crypto, run_id):
             prompt_policy_version_id=snapshot["prompt"]["policy_version_id"],
             input_schema_version_id=snapshot["input_schema"]["version_id"])
         value["parser_version_id"] = snapshot.get("parser", {}).get("version_id", "generic-http-v3")
+        value["signature_explanation_version_id"] = snapshot.get("signature_explanations", {}).get("version_id")
         validate(db, crypto, CandidateConfiguration.model_validate(value))
         validity = {"valid": True}
     except (ValueError, KeyError, TypeError) as exc:

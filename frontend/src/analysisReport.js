@@ -28,7 +28,8 @@ function scalar(value) {
 
 function escapeText(value) {
   const text = scalar(value);
-  const trailingSpaces = / +$/.exec(text)?.[0].length || 0;
+  let contentEnd = text.length;
+  while (contentEnd > 0 && text[contentEnd - 1] === " ") contentEnd -= 1;
   let leading = true;
   let offset = 0;
   let escaped = "";
@@ -41,7 +42,7 @@ function escapeText(value) {
     else if (character === "\t") escaped += "&#9;";
     else if (character === "\u2028") escaped += "&#8232;";
     else if (character === "\u2029") escaped += "&#8233;";
-    else if (character === " " && (leading || offset >= text.length - trailingSpaces)) escaped += "&#32;";
+    else if (character === " " && (leading || offset >= contentEnd)) escaped += "&#32;";
     else escaped += punctuation.test(character) ? `\\${character}` : character;
     if (/[\r\n\u2028\u2029]/.test(character)) leading = true;
     else if (character !== " " && character !== "\t") leading = false;

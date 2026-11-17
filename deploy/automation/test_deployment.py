@@ -2,6 +2,7 @@
 from contextlib import nullcontext
 from copy import deepcopy
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
@@ -30,10 +31,17 @@ class FakeRunner:
         self.fail_workers = False
         self.identifier = CID
         self.recreated = 0
+        self.fail_web_config = False
+        self.fail_nonroot_read = False
 
     def run(self, args, **kwargs):
         args = list(map(str, args))
         self.commands.append(args)
+        if args[:2] == ["docker", "run"]:
+            if "/opt/waf-web-config-permissions.py" in args and self.fail_web_config:
+                raise DeployError("web_config_permission_preparation_failed")
+            if "101:101" in args and self.fail_nonroot_read:
+                raise DeployError("nonroot_web_config_read_check_failed")
         if args[:3] == ["docker", "container", "inspect"]:
             return json.dumps([{"Image": self.image, "State": {"Health": {"Status": "healthy"}},
                                 "NetworkSettings": {"Networks": self.networks}}])
@@ -136,6 +144,23 @@ class DeploymentTests(unittest.TestCase):
         self.assertFalse(self.operation.state_dir.exists())
         self.assertTrue(all(command[0] == "curl" for command in self.runner.commands))
 
+    def test_existing_volume_permission_probe_is_isolated_and_read_only(self):
+        resources = {"volume": {"Name": "waf-ai-console-production-data"}, "containers": [{
+            "Image": BACKEND, "Config": {"Labels": {"com.docker.compose.service": "api"}}}]}
+        self.operation.check_existing_data_identity(resources)
+        command = self.runner.commands[-1]
+        self.assertIn("--network", command)
+        self.assertEqual(command[command.index("--network") + 1], "none")
+        self.assertEqual(command[command.index("--user") + 1], "10001:10001")
+        self.assertIn("type=volume,source=waf-ai-console-production-data,target=/data,readonly", command)
+        self.assertNotIn("-e", command)
+        self.assertNotIn("chown", command[-1])
+
+    def test_existing_volume_without_known_api_refuses_before_mutation(self):
+        with self.assertRaisesRegex(DeployError, "backup_aware_redeploy"):
+            self.operation.check_existing_data_identity({"volume": {"Name": "waf-ai-console-production-data"}, "containers": []})
+        self.assertEqual(self.runner.commands, [])
+
     def test_first_deploy_gateway_only_team_mutation(self):
         record = self.deploy()
         self.assertEqual(self.operation.state("transaction")["phase"], "complete")
@@ -148,6 +173,76 @@ class DeploymentTests(unittest.TestCase):
                 self.assertNotIn("--remove-orphans", command)
         self.assertEqual(record["before_model"]["services"]["gateway"]["image"], OLD)
         self.assertEqual(record["gateway_model"]["services"]["gateway"]["image"], NEW)
+
+    def test_web_permission_preparation_mounts_only_generation_config_without_network(self):
+        record = self.deploy()
+        directory = self.operation.state_dir / "generations" / record["generation"]
+        commands = [command for command in self.runner.commands if command[:2] == ["docker", "run"]]
+        self.assertEqual(len(commands), 2)
+        for command, user in zip(commands, ("0:0", "101:101")):
+            self.assertEqual(command[command.index("--user") + 1], user)
+            self.assertEqual(command[command.index("--network") + 1], "none")
+            self.assertEqual(command[command.index("--entrypoint") + 1], "python")
+            self.assertIn(BACKEND, command)
+            mounts = [command[index + 1] for index, value in enumerate(command) if value == "--mount"]
+            suffix = ",readonly" if user == "101:101" else ""
+            self.assertEqual(mounts, [f"type=bind,source={directory / 'security'},target=/policy" + suffix,
+                                      f"type=bind,source={directory / 'nginx.production.conf'},target=/site.conf" + suffix])
+            self.assertFalse(any("runtime.env" in argument or "target=/data" in argument or "/team-read-only" in argument for argument in command))
+        self.assertIn("--prepare", commands[0])
+        self.assertIn("os.O_NOFOLLOW", commands[1][-1])
+        prepare_index = self.runner.commands.index(commands[0])
+        self.assertFalse(any("up" in command for command in self.runner.commands[:prepare_index]))
+
+    def test_web_permission_or_read_failures_leave_existing_services_untouched(self):
+        for failure, code in (("fail_web_config", "web_config_permission_preparation_failed"), ("fail_nonroot_read", "nonroot_web_config_read_check_failed")):
+            with self.subTest(failure=failure):
+                self.runner.commands.clear()
+                setattr(self.runner, failure, True)
+                try:
+                    with self.assertRaisesRegex(DeployError, code):
+                        self.operation.deploy()
+                    self.assertEqual(self.runner.image, OLD)
+                    self.assertFalse(any("up" in command or "stop" in command for command in self.runner.commands))
+                finally:
+                    setattr(self.runner, failure, False)
+
+    def test_record_accepts_only_named_web_artifacts_with_exact_nginx_group_mode(self):
+        record = self.deploy()
+        directory = self.operation.state_dir / "generations" / record["generation"]
+        names = {"nginx.production.conf", "security/http.conf", "security/server.conf", "security/proxy.conf"}
+        paths = {directory / name for name in names}
+        for path in paths:
+            path.chmod(0o640)
+        original = Path.stat
+        def nginx_group(path, *args, **kwargs):
+            result = original(path, *args, **kwargs)
+            if path in paths:
+                values = list(result)
+                values[5] = 101
+                return os.stat_result(values)
+            return result
+        with patch.object(Path, "stat", nginx_group):
+            self.assertEqual(self.operation.record(record["generation"])["generation"], record["generation"])
+            (directory / "runtime.env").chmod(0o640)
+            with self.assertRaisesRegex(DeployError, "unsafe_file_permissions"):
+                self.operation.record(record["generation"])
+
+    def test_record_rejects_web_config_readable_by_another_group(self):
+        record = self.deploy()
+        directory = self.operation.state_dir / "generations" / record["generation"]
+        target = directory / "security/http.conf"
+        target.chmod(0o640)
+        original = Path.stat
+        def another_group(path, *args, **kwargs):
+            result = original(path, *args, **kwargs)
+            if path == target:
+                values = list(result)
+                values[5] = 999
+                return os.stat_result(values)
+            return result
+        with patch.object(Path, "stat", another_group), self.assertRaisesRegex(DeployError, "unsafe_web_config_permissions"):
+            self.operation.record(record["generation"])
 
     def test_state_and_runtime_files_private(self):
         self.deploy()

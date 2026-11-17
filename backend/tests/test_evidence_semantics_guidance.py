@@ -10,7 +10,9 @@ import re
 
 import pytest
 
-from app.agent import legacy_prompts_v222 as previous, prompts
+# Replay the precise prompt-only revision this preservation suite describes.
+# New capture/context instructions have their own v2.23 runtime assertions.
+from app.agent import legacy_prompts_v222 as previous, legacy_prompts_v222_capture as prompts
 
 
 FROZEN_V222_SHA256 = "a9f0aa75f947cc9f6c779a60400e6eb7beb8686d62b9770746d79dd77b7ebd84"

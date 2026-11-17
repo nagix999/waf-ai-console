@@ -69,7 +69,7 @@ def test_stop_retry_preserves_old_official_record_blocks_new_record_and_promotio
     with client.app.state.session_factory() as db:
         row = db.get(Analysis, original)
         snapshot = make_execution_snapshot(row, db.get(VLLMProfile, candidate["primary_profile_id"]),
-            load_analysis_prompt(row, client.app.state.crypto), .75, verifier_profile=db.get(VLLMProfile, candidate["verifier_profile_id"]))
+            load_analysis_prompt(row, client.app.state.crypto), .75, verifier_profile=db.get(VLLMProfile, candidate["verifier_profile_id"]), crypto=client.app.state.crypto)
         row.execution_snapshot_ciphertext = client.app.state.crypto.encrypt_text(snapshot.model_dump_json())
         db.commit()
     previous_id = finalize(client, run)
@@ -168,7 +168,7 @@ def test_retry_updates_current_and_creates_new_snapshot_without_rewriting_old(cl
     with client.app.state.session_factory() as db:
         row = db.get(Analysis, original)
         snapshot = make_execution_snapshot(row, db.get(VLLMProfile, candidate["primary_profile_id"]),
-            load_analysis_prompt(row, client.app.state.crypto), .75, verifier_profile=db.get(VLLMProfile, candidate["verifier_profile_id"]))
+            load_analysis_prompt(row, client.app.state.crypto), .75, verifier_profile=db.get(VLLMProfile, candidate["verifier_profile_id"]), crypto=client.app.state.crypto)
         row.execution_snapshot_ciphertext = client.app.state.crypto.encrypt_text(snapshot.model_dump_json())
         db.commit()
     first = finalize(client, run)

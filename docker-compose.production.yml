@@ -50,7 +50,7 @@ services:
   worker:
     image: ${WAF_BACKEND_IMAGE:?Set WAF_BACKEND_IMAGE to an explicit deployment tag}
     build: *backend-build
-    command: ["python", "-m", "app.worker_entrypoint_parsers"]
+    command: ["python", "-m", "app.worker_entrypoint_v223"]
     environment:
       <<: *backend-env
       WAF_WORKER_ROLE: analysis
@@ -69,7 +69,7 @@ services:
   model-tester:
     image: ${WAF_BACKEND_IMAGE:?Set WAF_BACKEND_IMAGE to an explicit deployment tag}
     build: *backend-build
-    command: ["python", "-m", "app.worker_entrypoint_parsers"]
+    command: ["python", "-m", "app.worker_entrypoint_v223"]
     environment:
       <<: *backend-env
       WAF_WORKER_ROLE: model_test
@@ -92,6 +92,10 @@ services:
       dockerfile: frontend/Dockerfile
     ports:
       - "127.0.0.1:${WAF_WEB_PORT:-18080}:80"
+    # Preserve the existing internal/external ports without a root Nginx master.
+    # This is scoped to the container network namespace, not the host.
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: "0"
     volumes:
       - type: bind
         source: ./frontend/nginx.production.conf

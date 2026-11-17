@@ -126,6 +126,14 @@ test("default page is the real rule catalog, while legacy features remain linked
   assert.match(html, /벤더별 파서 규칙/); assert.match(html, /이전 파서 \/ 비교 이력/);
   assert.match(html, /불러오는 중/); assert.doesNotMatch(html, /운영 사용 중|실제 정규식 실행 완료/);
 });
+test("vendor options use Korean display ordering without changing or duplicating stored names", () => {
+  const Page = load("./ParserWorkbench.jsx", "ParserRuleCatalog");
+  const vendors = ["Zulu", "나무", "Alpha", "가나다", "Alpha"];
+  const rules = vendors.map((waf_vendor, index) => ({ waf_vendor, rule_id: `rule-${index}`, version_id: "fixture-version", name: `format-${index}`, method: "raw_payload" }));
+  const html = renderToStaticMarkup(createElement(Page, { catalog: { rules } }));
+  const values = [...html.matchAll(/<option value="([^"]+)">/g)].map(match => match[1]);
+  assert.deepEqual(values, [...new Set(vendors)].sort((left, right) => left.localeCompare(right, "ko")));
+});
 test("recent rule work shows ten rows with page controls instead of hiding older work", () => {
   const Page = load("./ParserWorkbench.jsx", "ParserRecentWork");
   const sessions = Array.from({ length: 24 }, (_, index) => ({ id: `${index}`, name: `work-${String(index + 1).padStart(2, "0")}` }));

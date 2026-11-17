@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import test from "node:test";
 import { OPENAI_BASE_URL, EXTERNAL_DATA_APPROVAL, changeProfileProvider, editProfileForm, modelProfileError, newProfileForm, profilePayload, profileRequiresKey, providerLabel, providerOf, validateProfileForm } from "./llmProfiles.js";
 
 const internal = { ...newProfileForm(), id: "synthetic-vllm", name: "synthetic-vllm", has_api_key: true };
+test("new profiles default to vLLM without external approval or a copied form object", () => {
 assert.equal(providerOf({}), "vllm");
 assert.equal(providerLabel({}), "vLLM");
 assert.equal(providerLabel({ provider: "openai" }), "OpenAI");
@@ -11,16 +13,20 @@ assert.equal(newProfileForm().base_url, "");
 assert.equal(newProfileForm().model_name, "google/gemma-4-26B-A4B-it");
 assert.notEqual(newProfileForm(), newProfileForm());
 assert.equal(newProfileForm().external_data_approved, false);
+});
 
 const edited = editProfileForm({ ...internal, api_key: "synthetic-response-secret", extra: "never-copy", provider: undefined });
+test("profile editing never copies credentials or unknown response properties", () => {
 assert.equal(edited.api_key, "");
 assert.equal(edited.extra, undefined);
 assert.equal(edited.provider, "vllm");
 assert.equal(profilePayload(edited, internal).api_key, undefined);
 assert.equal(Object.hasOwn(profilePayload(edited, internal), "api_key"), false);
 assert.equal(profilePayload({ ...edited, api_key: "synthetic-replacement" }, internal).api_key, "synthetic-replacement");
+});
 
 const switched = changeProfileProvider({ ...edited, api_key: "synthetic-vllm-secret", base_url: "http://synthetic.internal:8000/v1" }, "openai");
+test("switching to OpenAI resets credentials, approval and model while retaining context", () => {
 assert.equal(switched.base_url, OPENAI_BASE_URL);
 assert.equal(switched.model_name, "");
 assert.equal(switched.api_key, "");
@@ -30,12 +36,14 @@ assert.equal(switched.key_reset_required, true);
 assert.equal(switched.context_window, edited.context_window);
 assert.equal(profileRequiresKey(switched, internal), true);
 assert.match(validateProfileForm(switched, internal), /모델 이름/);
+});
 
 const openai = { ...switched, name: "synthetic-openai", model_name: "synthetic-model" };
+const valid = { ...openai, api_key: "synthetic-openai-secret", external_data_approved: true };
+test("OpenAI requires approval and a new key and forces its official HTTPS endpoint", () => {
 assert.match(validateProfileForm(openai, null), /승인/);
 assert.match(validateProfileForm({ ...openai, external_data_approved: true }, internal), /새 API Key/);
 assert.match(validateProfileForm({ ...openai, api_key: "   ", external_data_approved: true }, null), /새 API Key/);
-const valid = { ...openai, api_key: "synthetic-openai-secret", external_data_approved: true };
 assert.equal(validateProfileForm(valid, internal), "");
 const payload = profilePayload({ ...valid, base_url: "https://untrusted.invalid/v1", tls_verify: false }, internal);
 assert.equal(payload.base_url, OPENAI_BASE_URL);
@@ -45,9 +53,11 @@ assert.equal(payload.api_key, "synthetic-openai-secret");
 assert.equal(payload.key_reset_required, undefined);
 assert.equal(payload.id, undefined);
 assert.equal(EXTERNAL_DATA_APPROVAL.includes("payload·Cookie"), true);
+});
 
 const existingOpenai = { ...valid, id: "synthetic-openai", has_api_key: true, thinking_enabled: null };
 const openaiEdit = editProfileForm(existingOpenai);
+test("existing approved OpenAI keys stay server-side and provider round trips require a new key", () => {
 assert.equal(openaiEdit.api_key, "");
 assert.equal(openaiEdit.key_reset_required, false);
 assert.equal(openaiEdit.external_data_approved, true);
@@ -57,7 +67,9 @@ assert.equal(Object.hasOwn(profilePayload(openaiEdit, existingOpenai), "api_key"
 assert.equal(profileRequiresKey(openaiEdit, { ...existingOpenai, has_api_key: false }), true);
 assert.equal(profileRequiresKey(openaiEdit, null), true);
 assert.equal(profileRequiresKey(changeProfileProvider(changeProfileProvider(openaiEdit, "vllm"), "openai"), existingOpenai), true);
+});
 
+test("switching back to vLLM clears external approval and restores provider-specific defaults", () => {
 const backToInternal = changeProfileProvider(valid, "vllm");
 assert.equal(backToInternal.external_data_approved, false);
 assert.equal(backToInternal.api_key, "");
@@ -71,6 +83,9 @@ assert.equal(changeProfileProvider(valid, "unexpected"), valid);
 assert.match(validateProfileForm({ ...valid, name: "잘못된 이름" }, null), /프로필 이름/);
 assert.match(validateProfileForm({ ...valid, max_output_tokens: "32768" }, null), /Context window/);
 assert.equal(typeof profilePayload({ ...edited, timeout_seconds: "60" }, internal).timeout_seconds, "number");
+});
+
+test("vLLM profile validation requires loaded and explicitly allowed IP and port targets", () => {
 const internalTargets = { items: [{ id: "synthetic-target", ip_address: "10.0.0.10", port: 8000 }], loading: false, error: "" };
 const literalProfile = { ...internal, base_url: "http://10.0.0.10:8000/v1" };
 assert.match(validateProfileForm(literalProfile, internal), /불러오는 중/);
@@ -80,7 +95,10 @@ assert.match(validateProfileForm({ ...literalProfile, base_url: "http://vllm.int
 assert.match(validateProfileForm({ ...literalProfile, base_url: "http://10.0.0.10:8001/v1" }, internal, internalTargets), /등록되어 있지/);
 assert.equal(validateProfileForm(literalProfile, internal, internalTargets), "");
 assert.equal(validateProfileForm(valid, internal, { items: null, error: "조회 실패" }), "");
+});
+
+test("profile errors explain known egress failures and retain unknown safe codes", () => {
 assert.match(modelProfileError(new Error("vllm_target_not_allowed")), /Internal Egress/);
 assert.match(modelProfileError(new Error("vllm_base_url_must_use_ip_address")), /hostname 대신 IP 주소/);
 assert.equal(modelProfileError(new Error("existing_profile_error")), "existing_profile_error");
-console.log("LLM profile provider switching, credential isolation, approval, editing and payload tests passed.");
+});

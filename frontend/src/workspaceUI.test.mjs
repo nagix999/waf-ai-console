@@ -4,13 +4,13 @@ import { buildSync } from "esbuild";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
-import { createElement } from "react";
+import { Children, createElement, Fragment } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { comparisonDelta } from "./testComparison.js";
 
-function load(file) {
+function load(file, globals = {}) {
   const code = buildSync({ entryPoints: [fileURLToPath(new URL(file, import.meta.url))], bundle: true, write: false, platform: "node", format: "cjs", packages: "external", jsx: "automatic", loader: { ".css": "empty" }, logLevel: "silent" }).outputFiles[0].text;
-  const module = { exports: {} }; runInNewContext(code, { module, exports: module.exports, require: createRequire(import.meta.url), process, URL, Date }); return module.exports;
+  const module = { exports: {} }; runInNewContext(code, { module, exports: module.exports, require: createRequire(import.meta.url), process, URL, Date, ...globals }); return module.exports;
 }
 const render = (component, props) => renderToStaticMarkup(createElement(component, props));
 
@@ -53,4 +53,45 @@ test("overflow trigger has a visible affordance and no mounted destructive actio
   const More = load("./MoreActions.jsx").default;
   const html = render(More, { children: createElement("button", null, "삭제") });
   assert.match(html, /aria-label="더보기"/); assert.equal((html.match(/<circle/g) || []).length, 3); assert.match(html, /aria-expanded="false"/); assert.doesNotMatch(html, />삭제<\/button>/);
+});
+
+test("overflow actions close explicitly after their native button handler, including nested fragments", () => {
+  const More = load("./MoreActions.jsx").default;
+  const events = [];
+  let tree;
+  function Capture() {
+    tree = More({ children: [createElement("button", { key: "normal", onClick: () => events.push("action") }, "Open"),
+      createElement(Fragment, { key: "fragment" }, createElement("button", { disabled: true, onClick: () => events.push("disabled") }, "Disabled"))] });
+    return null;
+  }
+  render(Capture);
+  const content = tree.props.children(() => events.push("closed"));
+  assert.equal(content.props.onClick, undefined); // A non-interactive wrapper never handles clicks.
+  const [button, fragment] = Children.toArray(content.props.children);
+  button.props.onClick({});
+  assert.deepEqual(events, ["action", "closed"]);
+  const disabled = Children.toArray(fragment.props.children)[0];
+  disabled.props.onClick({});
+  assert.deepEqual(events, ["action", "closed"]);
+});
+
+test("dialogs focus only an enabled in-dialog target and restore the connected opener on close", () => {
+  for (const [inside, disabled, connected] of [[true, false, true], [true, true, true], [false, false, true], [true, false, false]]) {
+    const calls = [], effects = [], originalRequire = createRequire(import.meta.url);
+    const initial = { disabled, focus: () => calls.push("initial") };
+    const previous = { isConnected: connected, focus: () => calls.push("previous") };
+    const node = { open: false, contains: target => inside && target === initial,
+      showModal() { this.open = true; calls.push("show"); }, close() { this.open = false; calls.push("close"); } };
+    const componentRequire = id => id === "react" ? { ...originalRequire("react"), useEffect: effect => effects.push(effect) } : originalRequire(id);
+    const Dialog = load("./Dialog.jsx", { document: { body: { nodeType: 1 }, activeElement: previous }, require: componentRequire }).default;
+    let portal;
+    function Capture() { portal = Dialog({ open: true, title: "Confirm", initialFocusRef: { current: initial }, onClose() {} }); return null; }
+    render(Capture);
+    portal.children.props.ref.current = node;
+    const close = effects[0]();
+    assert.deepEqual(calls, inside && !disabled ? ["show", "initial"] : ["show"]);
+    close();
+    assert.equal(node.open, false);
+    assert.deepEqual(calls.slice(inside && !disabled ? 2 : 1), connected ? ["close", "previous"] : ["close"]);
+  }
 });

@@ -3,6 +3,7 @@
 승인 전 디자인 검토에 사용한 독립 프로토타입을 보존한다. 승인된 조판은 `backend/app/services/report_pdf_layout.py`에 적용했다. 이 도구는 고정된 가상 데이터 3종만 생성하며 API·DB·LLM·환경 파일을 읽지 않는다. 결과 폴더에 같은 이름의 파일이 있으면 덮어쓰지 않고 중단한다.
 
 - `prepare.mjs`: 웹 보고서의 내용 생성·파서를 재사용해 Markdown, 표시용 JSON, 비교용 입력 생성.
+- `output.mjs`: 심볼릭 링크를 거부하고 개인 작업 폴더와 새 파일의 권한을 확인.
 - `renderer.py`: JSON을 ReportLab PDF로 조판. 브라우저와 네트워크 사용 없음.
 - `test_renderer.py`: 단위 테스트. 네트워크 연결과 하위 프로세스 실행을 차단.
 - `verify.py`: 설치된 Poppler로 본문 보존과 페이지 경계 검사. 생성기의 운영 의존성이 아님.
@@ -17,6 +18,12 @@ node scripts/reportlab_preview/prepare.mjs "$REPORT_PREVIEW_DIR"
 python scripts/reportlab_preview/renderer.py "$REPORT_PREVIEW_DIR"
 python -m pytest scripts/reportlab_preview/test_renderer.py -q
 python scripts/reportlab_preview/verify.py "$REPORT_PREVIEW_DIR"
+```
+
+`mktemp -d`가 만든 현재 사용자 소유의 `0700` 폴더를 그대로 사용한다. 폴더를 생략하면 매 실행마다 고유한 `0700` 임시 폴더를 만들고 경로를 출력한다. 직접 지정할 때는 부모 폴더가 이미 있어야 하며, 기존 폴더는 소유자와 권한이 맞지 않으면 변경하지 않고 중단한다. 부모를 포함한 심볼릭 링크를 거부하고 새 파일은 `0600`과 덮어쓰기 금지를 적용한다.
+
+```bash
+node --test scripts/reportlab_preview/output.test.mjs
 ```
 
 준비된 기존 API 이미지로 생성하려면 다음을 사용할 수 있다. 이미지 이름은 로컬에 이미 있는 태그로 지정한다. 운영 컨테이너를 교체하거나 운영 볼륨을 연결하지 않는다.

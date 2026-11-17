@@ -45,7 +45,7 @@ def failed_fixture(client, event, profile_id):
     with client.app.state.session_factory() as db:
         row = db.get(Analysis, identifier)
         prompt = load_analysis_prompt(row, client.app.state.crypto)
-        snapshot = make_execution_snapshot(row, db.get(VLLMProfile, profile_id), prompt, 0.73)
+        snapshot = make_execution_snapshot(row, db.get(VLLMProfile, profile_id), prompt, 0.73, crypto=client.app.state.crypto)
         row.execution_snapshot_ciphertext = client.app.state.crypto.encrypt_text(snapshot.model_dump_json())
         row.status = "failed"
         row.error_code = "synthetic-original-failure"
@@ -286,7 +286,7 @@ def test_test_retry_updates_current_result_without_changing_membership_or_labels
         row = db.get(Analysis, identifier)
         row.status = "failed"
         row.completed_at = utcnow()
-        snapshot = make_execution_snapshot(row, db.get(VLLMProfile, profile_id), load_analysis_prompt(row, client.app.state.crypto), 0.75)
+        snapshot = make_execution_snapshot(row, db.get(VLLMProfile, profile_id), load_analysis_prompt(row, client.app.state.crypto), 0.75, crypto=client.app.state.crypto)
         row.execution_snapshot_ciphertext = client.app.state.crypto.encrypt_text(snapshot.model_dump_json())
         db.commit()
     before = client.get(f"/api/v1/test-runs/{run['id']}").json()

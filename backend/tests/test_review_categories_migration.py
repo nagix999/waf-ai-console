@@ -76,7 +76,7 @@ def test_fresh_and_existing_upgrade_preserves_reviews_and_ciphertext(tmp_path, m
     command.upgrade(config, "head")
     command.upgrade(config, "head")
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0031_parser_rule_workbench"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0032_signature_explanations"
         check_structure(connection)
         if existing:
             assert connection.execute(text(f"SELECT {HISTORICAL_COLUMNS} FROM reviews ORDER BY id")).all() == before_reviews

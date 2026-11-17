@@ -6,6 +6,7 @@ import { newTestRequestKey } from "./testRuns.js";
 import { answerNames, datasetImportMessage, selectedPageIds, validationDataError } from "./validationData.js";
 import "./validationData.css";
 import { ConsolePopover } from "./ConsoleShell.jsx";
+import { runUiTask } from "./uiTask.js";
 
 export function useAnalysisSelection(items, scope) {
   const [state, setState] = useState({ scope, ids: [] });
@@ -20,9 +21,13 @@ export function useAnalysisSelection(items, scope) {
 export default function AnalysisSelectionActions({ ids, onSaved, single = false, onClear, allowReferences = true, compact = false, allowDataset = true, onAddDataset }) {
   const [dialog, setDialog] = useState(null), [busy, setBusy] = useState(false), [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const openAction = (kind, close) => runUiTask(() => {
+    close?.();
+    return open(kind);
+  }, setError, "선택한 작업을 열지 못했습니다. 잠시 후 다시 시도하세요.");
   async function open(kind) {
     if (busy || !ids.length) return;
-    if (kind === "dataset" && onAddDataset) { onAddDataset(); return; }
+    if (kind === "dataset" && onAddDataset) { await onAddDataset(); return; }
     setBusy(true); setError(""); setNotice("");
     try {
       const selected = [...ids];
@@ -53,11 +58,11 @@ export default function AnalysisSelectionActions({ ids, onSaved, single = false,
         message = datasetImportMessage(result);
         if (result.conflicts.length || result.rejected.length) {
           setDialog({ ...dialog, result, message });
-          onSaved?.(); return;
+          await onSaved?.(); return;
         }
         setNotice(message);
       }
-      setDialog(null); onSaved?.({ kind: dialog.kind, message }); onClear?.();
+      setDialog(null); await onSaved?.({ kind: dialog.kind, message }); await onClear?.();
     } catch (err) { setError(validationDataError(err)); }
     finally { setBusy(false); }
   }
@@ -68,7 +73,7 @@ export default function AnalysisSelectionActions({ ids, onSaved, single = false,
     catch (err) { setError(validationDataError(err)); } finally { setBusy(false); }
   }
   return <div className="selection-actions">
-    {compact ? <ConsolePopover label="기대 판정·데이터 관리" trigger={busy ? "조회 중…" : "기대 판정·데이터 관리 ▾"} disabled={busy || !ids.length}>{close => <>{allowReferences && <button type="button" onClick={() => { close(); open("reference"); }}>참고 판정 입력</button>}{allowDataset && <button type="button" onClick={() => { close(); open("dataset"); }}>평가 데이터셋에 추가</button>}</>}</ConsolePopover> : (single || ids.length > 0) && <div className="ux-toolbar">{!single && <span>{ids.length}건 선택 · 현재 페이지</span>}{allowReferences && <button type="button" className="secondary" disabled={busy || !ids.length} onClick={() => open("reference")}>참고 판정 {single ? "입력" : "일괄 입력"}</button>}{allowDataset && <button type="button" className="secondary" disabled={busy || !ids.length} onClick={() => open("dataset")}>평가 데이터셋에 추가</button>}{ids.length > 0 && onClear && <button type="button" className="text-button" onClick={onClear}>선택 해제</button>}</div>}
+    {compact ? <ConsolePopover label="기대 판정·데이터 관리" trigger={busy ? "조회 중…" : "기대 판정·데이터 관리 ▾"} disabled={busy || !ids.length}>{close => <>{allowReferences && <button type="button" onClick={() => openAction("reference", close)}>참고 판정 입력</button>}{allowDataset && <button type="button" onClick={() => openAction("dataset", close)}>평가 데이터셋에 추가</button>}</>}</ConsolePopover> : (single || ids.length > 0) && <div className="ux-toolbar">{!single && <span>{ids.length}건 선택 · 현재 페이지</span>}{allowReferences && <button type="button" className="secondary" disabled={busy || !ids.length} onClick={() => openAction("reference")}>참고 판정 {single ? "입력" : "일괄 입력"}</button>}{allowDataset && <button type="button" className="secondary" disabled={busy || !ids.length} onClick={() => openAction("dataset")}>평가 데이터셋에 추가</button>}{ids.length > 0 && onClear && <button type="button" className="text-button" onClick={onClear}>선택 해제</button>}</div>}
     {notice && <p role="status" className="notice">{notice}</p>}{error && !dialog && <p role="alert" className="error">{error}</p>}
     <Dialog open={Boolean(dialog)} title={dialog?.kind === "reference" ? "참고 판정 입력" : "평가 데이터셋에 추가"} onClose={() => { if (!busy) { setDialog(null); setError(""); } }}>
       {dialog && <form onSubmit={save} className="data-form"><p>{dialog.selected.length}건 선택</p>

@@ -61,7 +61,8 @@ def test_candidate_parser_is_pinned_per_run_and_item_not_applied(client, event_p
     response = direct(client, {**event_payload, "vendor_score": 2}, {**candidate, "parser_version_id": identifier})
     assert response.status_code == 202, response.text
     run = response.json()
-    assert run["configuration_snapshot"]["schema_version"] == 3
+    assert run["configuration_snapshot"]["schema_version"] == 4
+    assert run["configuration_snapshot"]["signature_explanations"]["version_id"] is None
     assert run["configuration_snapshot"]["parser"]["version_id"] == identifier
     assert client.get(BASE).json()["configuration_hash"] == before["configuration_hash"]
     with client.app.state.session_factory() as db:
@@ -89,6 +90,7 @@ def test_parser_selection_is_part_of_hash_and_legacy_request_hash_is_unchanged(c
         assert saved.request_hash == digest
 
 
+@pytest.mark.usefixtures("legacy_v222_capture_admissions")
 def test_legacy_configuration_hash_survives_new_registry_and_rejects_hidden_parser(client, event_payload, candidate):
     run = direct(client, {**event_payload, "vendor_score": 2}, candidate).json()
     new_id = version(client)
@@ -135,6 +137,7 @@ def test_changed_parser_requires_explicit_structural_review_and_official_evaluat
         assert after["configuration_hash"] == run["configuration_hash"] and not after["drifted"]
 
 
+@pytest.mark.usefixtures("legacy_v222_capture_admissions")
 def test_existing_production_hash_remains_legacy_until_a_new_promotion(client, candidate):
     current = client.get(BASE).json()
     with client.app.state.session_factory() as db:
@@ -189,7 +192,8 @@ def test_retry_copies_original_parser_not_new_production_selection(client, event
         assert child.parser_snapshot_json == parent.parser_snapshot_json
         assert child.parser_version_id == parent.parser_version_id == BASELINE_ID
         snapshot = load_execution_snapshot(child, client.app.state.crypto)
-        assert snapshot.schema_version == 5 and snapshot.parser["version_id"] == BASELINE_ID
+        assert snapshot.schema_version == 6 and snapshot.parser["version_id"] == BASELINE_ID
+        assert snapshot.signature_explanations["version_id"] is None
         child.parser_version_id = child.parser_snapshot_json = None
         # Removing a genuinely non-default selected parser must fail closed.
         pin_parser(db, None, child, version_id=selected, selection_origin="candidate")
@@ -197,6 +201,7 @@ def test_retry_copies_original_parser_not_new_production_selection(client, event
             load_execution_snapshot(child, client.app.state.crypto)
 
 
+@pytest.mark.usefixtures("legacy_v222_capture_admissions")
 def test_legacy_execution_snapshot_never_claims_a_new_parser(client, event_payload):
     login(client)
     client.app.state.settings.agent_mode = "moduagent"

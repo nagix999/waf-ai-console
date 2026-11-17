@@ -81,7 +81,7 @@ def test_moduagent_worker_uses_production_profile_and_stores_agent_steps(
     async def fake_execute(**kwargs):
         calls.append(kwargs)
         return AgentCallResult(
-            output=model_output(primary_output(), kwargs),
+            output=model_output(primary_output(), kwargs, evidence_supports="attack_request"),
             framework_run_id="framework-run-1",
             agent_fingerprint="agent-fingerprint-1",
             finish_reason="completed",
@@ -109,7 +109,7 @@ def test_moduagent_worker_uses_production_profile_and_stores_agent_steps(
     assert result["model_profile"] == "gemma4-prod"
     assert result["result"]["schema_version"] == "waf-analysis-v3"
     assert "analyst_assessment" not in result["result"]
-    assert result["result"]["evidence"][0]["supports"] == "context"
+    assert result["result"]["evidence"][0]["supports"] == "attack_request"
     assert result["result"]["threat_analysis"]["severity"] == "HIGH"
     assert "uncertainties" not in result["result"]
     assert result["result"]["verifier"]["executed"] is False

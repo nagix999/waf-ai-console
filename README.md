@@ -4,11 +4,21 @@ WAF 로그의 **정탐·오탐·판정 보류**와 판단 근거를 분석하고
 
 내부 vLLM 또는 승인된 OpenAI 프로필로 요청을 분석합니다. 분석가는 판정과 심각도, 원문에 연결된 근거를 확인하고 참고 판정과 비교할 수 있습니다. AI가 WAF 정책을 자동 변경하거나 사람의 최종 판단을 대신하지 않습니다.
 
+## 시그니처 설명과 수집 누락 해석 후보 (2026-11-17)
+
+**설정 → 시그니처 설명**에서 벤더와 시그니처별 참고 설명을 불변 설명집 버전으로 관리합니다. 벤더의 앞뒤 공백과 대소문자를 정규화하고 시그니처는 앞뒤 공백을 제외한 정확 일치로 선택합니다. 테스트 구성에서 설명집을 선택하고, 공식 평가와 운영 반영 검토를 거친 버전만 Production에 적용합니다. 저장만으로 운영 설정은 바뀌지 않습니다.
+
+외부 요청은 `signature_explanation`을 보내지 않습니다. 서버는 접수 시 고정한 설명을 새 `waf-system-v2.23` 실행의 추론용 이벤트 최상위에 추가합니다. 원본 이벤트와 중복 판별값은 그대로이며, Primary와 독립 Verifier가 같은 설명을 받습니다. 설명은 `context`로만 인용할 수 있고 실제 요청을 관찰한 공격/정상 근거로 사용할 수 없습니다. 기존 실행과 실패 재실행은 당시 설명 및 지침을 유지하며 과거 데이터에 최신 설명을 채우지 않습니다.
+
+공통 지침은 탐지 맥락과 실제 요청 구조 및 입력 배치를 함께 해석하도록 보완합니다. 직접적인 전체 공격 코드나 침해 성공 확인이 필수는 아니지만 시그니처·반복 문자열·절단만으로 자동 정탐 처리하지 않습니다. 확인된 장비 저장 제한과 서버의 모델 입력 생략을 구분하고, 보이지 않는 공격 구문을 정상 근거로 쓰거나 누락된 코드를 관찰한 것처럼 설명하지 않습니다. 특정 CVE나 벤더별 저장 한도를 하드코딩하지 않습니다.
+
+Alembic `0032_signature_explanations`와 새 실행기 `python -m app.worker_entrypoint_v223`가 필요합니다. Compose 명령은 새 실행기로 연결하며 파서 관리 작업과 기존 실행 경로를 유지합니다. 공개 v3 필드 구조와 판정 결합 정책, 기존 고정 엔진 및 표시 코드는 보존합니다. 공통 지침은 4,617→5,086자이며 추가 LLM 호출은 없습니다. 실제 모델의 품질·처리 시간, 운영 반영과 재배포는 별도 검증 대상입니다. [관리·버전·입력 계약](backend/app/data/signature_explanations.md)
+
 ## 파서 관리 개편 (2026-11-13)
 
 평가 데이터셋 버전이나 기존 테스트 입력을 고정한 뒤 내부 vLLM으로 로그 형식을 나누고 추출 규칙을 제안받습니다. 형식 확인, 규칙 생성, 원문과 기대값 대조를 세 단계로 진행하며 벤더별로 여러 규칙을 관리합니다. 후보 저장은 운영 반영이 아니며 공식 테스트와 운영 검토를 거쳐야 합니다. 기존 파서 및 비교 화면과 과거 실행은 보존합니다.
 
-DB migration `0031_parser_rule_workbench`와 빌드 의존성 `google-re2`가 추가됩니다. Compose는 새 `python -m app.worker_entrypoint_parsers`를 사용합니다. 이 실행기는 기존 판정 처리기와 근거 정리 경로를 그대로 호출하며 새 규칙 작업만 같은 관리자 작업 대기열에 연결합니다. 기존 고정 실행 파일을 수정하지 않습니다. [규칙 계약과 제한](backend/app/data/parser_rules.md)
+DB migration `0031_parser_rule_workbench`와 빌드 의존성 `google-re2`가 추가됩니다. 이 개편 당시 실행기는 `python -m app.worker_entrypoint_parsers`였으며 현재 Compose는 같은 파서 작업을 보존하는 `app.worker_entrypoint_v223`을 사용합니다. 기존 고정 실행 파일을 수정하지 않습니다. [규칙 계약과 제한](backend/app/data/parser_rules.md)
 
 ## 이전 후보: 요청 의미와 근거 분류 지침 (2026-11-12)
 
@@ -222,9 +232,27 @@ waf_compose config --quiet
 waf_compose build api waf-web
 waf_compose run --rm --no-deps -T api alembic upgrade head
 waf_compose run --rm --no-deps -T api alembic current
+```
+
+API와 두 worker는 UID/GID `10001`, 웹은 Nginx의 비특권 사용자로 실행합니다. 새 데이터 볼륨은 이미지의 `/data` 소유권을 이어받습니다. 기존 볼륨은 아래 신규 설치 절차로 덮어쓰거나 실행 중에 소유권을 변경하지 마세요. 기존 설치는 백업과 중지 절차가 포함된 `scripts/redeploy.sh`를 사용합니다.
+
+운영 정책을 생성한 뒤에는 다음 명령으로 **비밀값이 아닌 Nginx 정책 세 파일과 사이트 설정**의 읽기 권한을 준비합니다. `.env.production`의 `WAF_BACKEND_IMAGE`에 지정한, 방금 빌드한 이미지 태그를 `WAF_RUNTIME_IMAGE`에 넣으세요. 소유자는 유지하고 정책 폴더는 `0750`, 설정은 `0640`으로 Nginx 그룹 `101`에만 읽기를 허용합니다. manifest는 `0600`을 유지합니다. 실제 키나 DB를 이 작업에 연결하지 않습니다.
+
+```bash
+WAF_RUNTIME_IMAGE=waf-ai-console-backend:your-deployment-tag
+docker run --rm --pull never --network none --user 0:0 \
+  --mount "type=bind,source=$PWD/.local-deploy/production-security,target=/policy" \
+  --mount "type=bind,source=$PWD/frontend/nginx.production.conf,target=/site.conf" \
+  --entrypoint python "$WAF_RUNTIME_IMAGE" /opt/waf-web-config-permissions.py --prepare
+python3 deploy/security/render_proxy.py --env-file .env.production --check
+
 waf_compose up -d --no-build --pull never api waf-web worker model-tester
 waf_compose ps
 ```
+
+정책을 다시 생성하면 새 파일은 `0600`이므로 권한 준비도 다시 실행해야 합니다. 웹의 기존 내부 포트 `80`과 외부 포트는 유지하며, 낮은 포트 바인딩 허용 설정은 **웹 컨테이너 네트워크 내부에만** 적용합니다. 호스트 sysctl이나 기존 Gateway 설정은 변경하지 않습니다. root 권한은 한 번 실행하고 끝나는 제한된 유지보수 도구에만 사용합니다.
+
+기존 Gateway 자동화가 `existing_data_permissions_use_backup_aware_redeploy_first`로 중단되면 root 소유 DB를 자동 변경하지 않은 상태입니다. 기존 WAF의 `scripts/redeploy.sh`로 중지, 백업, 이전 검사와 권한 준비를 먼저 완료한 뒤 Gateway 연동을 다시 진행하세요. 이 단계에서 `down -v`나 임의 `chown -R`을 사용하지 않습니다.
 
 브라우저에서는 `.env.production`에 지정한 **HTTPS 주소**로 접속합니다. 운영 모드에서 `http://서버:18080` 직접 접속은 로그인 경로가 아닙니다. 접속이 거부되면 origin·TLS·프록시 peer·전달 헤더를 확인하고 보안 검사를 끄지 않습니다.
 
@@ -305,7 +333,20 @@ node --test --test-isolation=none src/*.test.mjs
 npm run build
 ```
 
-백엔드·프런트엔드 개발 서버는 각각 `uvicorn app.main:app --reload`와 `npm run dev`로 실행합니다. worker는 별도 터미널에서 `python -m app.worker_entrypoint_parsers`로 기동합니다. 기존 분석 worker와 제한된 근거 정리 작업 및 파서 규칙 작업을 같은 프로세스에서 실행합니다. 모델 호출·외부 전송이 포함되는 실제 검증과 합성 데이터 기반 자동 테스트는 구분해서 수행합니다.
+백엔드·프런트엔드 개발 서버는 각각 `uvicorn app.main:app --reload`와 `npm run dev`로 실행합니다. worker는 별도 터미널에서 `python -m app.worker_entrypoint_v223`으로 기동합니다. 기존 분석 worker와 제한된 근거 정리 작업 및 파서 규칙 작업을 같은 프로세스에서 실행합니다. 모델 호출·외부 전송이 포함되는 실제 검증과 합성 데이터 기반 자동 테스트는 구분해서 수행합니다.
+
+### 로컬 소스 코드 진단
+
+SonarQube Community Build와 전용 DB를 기존 WAF 서비스와 분리해 실행합니다. 최초 설치에는 공식 Docker 이미지 다운로드가 필요하며, 이후에는 고정한 이미지 digest를 사용합니다.
+
+```bash
+bash scripts/sonarqube.sh --check
+bash scripts/sonarqube.sh
+```
+
+브라우저 주소는 `http://127.0.0.1:19000`입니다. 환경 파일, 키, DB와 운영 로그를 제외한 소스 사본만 진단 서버에 전달합니다. 첫 진단에는 테스트 커버리지를 측정하지 않으며 Git 게시나 WAF 배포를 자동 실행하지 않습니다. 로그인, 재진단과 중지 방법은 [소스 진단 안내](deploy/sonarqube/README.md)를 참고하세요.
+
+소스 진단 보완에서는 컨테이너 non-root 실행, 제한된 유지보수 도구, 긴 입력의 순회형 처리, 비동기 오류 경계, 접근성 이름과 포커스 및 테스트 구성을 개선합니다. 공개 API와 DB 스키마, 판정 지침은 변경하지 않습니다. 과거 Agent 엔진과 표시 처리의 고정 해시 파일, 보안 경계 CIDR, 키보드 스크롤과 결정적 정렬은 경고 제거 목적으로 수정하지 않습니다. Quality Gate의 조건이 비어 있으면 `OK`라도 보안 합격으로 사용하지 않습니다.
 
 ### 저장된 실행 시간 진단
 

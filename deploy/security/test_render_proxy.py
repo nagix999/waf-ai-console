@@ -1,9 +1,11 @@
 """Pure standard-library tests. All network values are private test fixtures."""
 import importlib.util
 import json
+import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 MODULE = Path(__file__).with_name("render_proxy.py")
 SPEC = importlib.util.spec_from_file_location("render_proxy", MODULE)
@@ -118,6 +120,48 @@ class PolicyTests(unittest.TestCase):
             (target / "server.conf").write_text("# removed controls")
             with self.assertRaises(policy.PolicyError):
                 policy.check_policy(target, settings)
+
+    def test_prepared_policy_allows_only_exact_nginx_group_read_permissions(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "policy"
+            settings = policy.validate(sample())
+            policy.write_policy(target, settings)
+            target.chmod(0o750)
+            confs = {target / name for name in ("http.conf", "server.conf", "proxy.conf")}
+            for path in confs:
+                path.chmod(0o640)
+            original = Path.stat
+            def nginx_group(path, *args, **kwargs):
+                result = original(path, *args, **kwargs)
+                if path == target or path in confs:
+                    values = list(result)
+                    values[5] = 101
+                    return os.stat_result(values)
+                return result
+            with patch.object(Path, "stat", nginx_group):
+                policy.check_policy(target, settings)
+                policy.write_policy(target, settings)
+                policy.check_policy(target, settings)
+                self.assertEqual((target / "manifest.json").stat().st_mode & 0o777, 0o600)
+                self.assertTrue(all(path.stat().st_mode & 0o777 == 0o600 for path in confs))
+
+    def test_prepared_modes_with_another_group_or_readable_manifest_are_rejected(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "policy"
+            settings = policy.validate(sample())
+            policy.write_policy(target, settings)
+            original = Path.stat
+            def another_group(path, *args, **kwargs):
+                result = original(path, *args, **kwargs)
+                values = list(result)
+                values[5] = 999
+                return os.stat_result(values)
+            for directory_mode, conf_mode, manifest_mode in [(0o750, 0o600, 0o600), (0o700, 0o640, 0o600), (0o700, 0o600, 0o640)]:
+                target.chmod(directory_mode)
+                (target / "http.conf").chmod(conf_mode)
+                (target / "manifest.json").chmod(manifest_mode)
+                with self.subTest(directory=directory_mode, conf=conf_mode, manifest=manifest_mode), patch.object(Path, "stat", another_group), self.assertRaises(policy.PolicyError):
+                    policy.check_policy(target, settings)
 
     def test_symlink_and_world_readable_policy_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:

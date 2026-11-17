@@ -25,7 +25,6 @@ import { EXTERNAL_DATA_APPROVAL, changeProfileProvider, editProfileForm, modelPr
 import { CompactReferenceComparison, EvaluationSummary, LabelAttachment } from "./ReferenceLabels.jsx";
 import AnalysisSelectionActions, { useAnalysisSelection } from "./AnalysisSelection.jsx";
 import DataTable, { Table, serverSorting, changedSort } from "./DataTable.jsx";
-import DataManagement from "./DataManagement.jsx";
 import GroundTruthWorkspace from "./GroundTruthWorkspace.jsx";
 import R3Overview from "./R3Overview.jsx";
 import RegistryFilters from "./RegistryFilters.jsx";
@@ -51,6 +50,7 @@ import ConcurrencySettings from "./ConcurrencySettings.jsx";
 import InputSchemaSettings, { InputSchemaMetadata } from "./InputSchemaSettings.jsx";
 import InternalEgressSettings from "./InternalEgressSettings.jsx";
 import ParserManagement from "./ParserManagement.jsx";
+import SignatureExplanations from "./SignatureExplanations.jsx";
 import ServiceApiKeys from "./ServiceApiKeys.jsx";
 import FullValidationDialog, { DatasetEvaluation } from "./FullValidationDialog.jsx";
 import ModelCheckDetail from "./ModelCheckDetail.jsx";
@@ -153,7 +153,7 @@ export function Login({ onLogin }) {
         <label>{w("아이디", "Username")}<input required value={username} placeholder={w("관리자 아이디", "Admin username")} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="none" spellCheck={false} /></label>
         <div><label htmlFor="login-password">{w("비밀번호", "Password")}</label><div className="login-password"><input id="login-password" required type={showPassword ? "text" : "password"} value={password} placeholder={w("비밀번호 입력", "Enter password")} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /><button type="button" className="secondary" aria-label={showPassword ? w("비밀번호 숨기기", "Hide password") : w("비밀번호 표시", "Show password")} aria-pressed={showPassword} onClick={() => setShowPassword(value => !value)}>{showPassword ? w("숨김", "Hide") : w("표시", "Show")}</button></div></div>
         {error && <div className="error" role="alert">{error}</div>}
-        <button className="primary" disabled={busy}>{busy ? w("확인 중…", "Signing in…") : w("로그인", "Sign in")}<Icon name="arrow" size={17} /></button>
+        <button type="submit" className="primary" disabled={busy}>{busy ? w("확인 중…", "Signing in…") : w("로그인", "Sign in")}<Icon name="arrow" size={17} /></button>
       </form>
     </main>
   );
@@ -442,7 +442,7 @@ function SingleTest({ onCreated, disabledReason, candidateConfiguration, onBusy 
       <div className="form-grid" id="single-test-extra" hidden={!extraOpen}><label>{w("이벤트 ID", "Event ID")}<input value={form.event_id} onChange={update("event_id")} placeholder={w("비워두면 ID 자동 생성", "Leave blank for an automatic ID")} /></label><label>{w("이벤트명", "Event name")}<input value={form.event_name} onChange={update("event_name")} placeholder={w("예: 검색 요청", "e.g. search request")} /></label><label>{w("출발지 포트", "Source port")}<input type="number" min="0" max="65535" value={form.src_port} onChange={update("src_port")} placeholder={w("예: 42310", "e.g. 42310")} /></label><label>{w("목적지 포트", "Destination port")}<input type="number" min="0" max="65535" value={form.dest_port} onChange={update("dest_port")} placeholder={w("예: 443", "e.g. 443")} /></label></div>
       {extraOpen && <InitialAssessmentFields value={initialAssessment} words={w} onChange={value => { setInitialAssessment(value); requestKey.current = null; }} />}
       {extraOpen && <label>{w("스키마 추가 필드 (JSON)", "Additional schema fields (JSON)")}<textarea value={additionalFields} rows={3} placeholder={'{"vendor_score": 2}'} onChange={event => { setAdditionalFields(event.target.value); requestKey.current = null; }} /></label>}
-      </fieldset><div className="action-row"><button className="primary" disabled={busy || Boolean(disabledReason)}>{busy ? w("접수 중…", "Submitting…") : w("분석 시작", "Start analysis")}</button><span aria-live="polite">{message}</span></div>
+      </fieldset><div className="action-row"><button type="submit" className="primary" disabled={busy || Boolean(disabledReason)}>{busy ? w("접수 중…", "Submitting…") : w("분석 시작", "Start analysis")}</button><span aria-live="polite">{message}</span></div>
     </form>
   );
 }
@@ -554,7 +554,7 @@ export function Settings({ onProductionChange, onViewDataset, tab: controlledTab
     <button type="button" role="tab" aria-selected={tab === "schema"} onClick={() => setTab("schema")}>입력 스키마</button>
     <button type="button" role="tab" aria-selected={tab === "egress"} onClick={() => setTab("egress")}>내부 연결 허용</button>
     <button type="button" role="tab" aria-selected={tab === "keys"} onClick={() => setTab("keys")}>서비스 API Key</button>
-  </div>}{tab === "models" ? <ModelSettings onProductionChange={onProductionChange} onConfigureAgents={() => setTab("agents")} onInternalEgress={() => setTab("egress")} onViewDataset={onViewDataset} /> : ["agents", "prompts"].includes(tab) ? <ReadOnlyAgentRoles /> : tab === "instructions" ? <PromptSettings /> : tab === "concurrency" ? <ConcurrencySettings /> : tab === "schema" ? <InputSchemaSettings /> : tab === "parsers" ? <ParserManagement route={parserRoute} onNavigate={onParserRoute} /> : tab === "egress" ? <InternalEgressSettings /> : <ServiceApiKeys />}</div>;
+  </div>}{tab === "models" ? <ModelSettings onProductionChange={onProductionChange} onConfigureAgents={() => setTab("agents")} onInternalEgress={() => setTab("egress")} onViewDataset={onViewDataset} /> : ["agents", "prompts"].includes(tab) ? <ReadOnlyAgentRoles /> : tab === "instructions" ? <PromptSettings /> : tab === "concurrency" ? <ConcurrencySettings /> : tab === "schema" ? <InputSchemaSettings /> : tab === "parsers" ? <ParserManagement route={parserRoute} onNavigate={onParserRoute} /> : tab === "signature-explanations" ? <SignatureExplanations /> : tab === "egress" ? <InternalEgressSettings /> : <ServiceApiKeys />}</div>;
 }
 
 export function ModelSettings({ onProductionChange, onInternalEgress, onViewDataset, onConfigureAgents }) {
@@ -766,7 +766,7 @@ export function ModelSettings({ onProductionChange, onInternalEgress, onViewData
         {openai && <div className="external-approval"><strong>외부 전송 및 비용 승인</strong><label className="checkbox-row"><input type="checkbox" checked={form.external_data_approved} onChange={update("external_data_approved")} required /><span>{EXTERNAL_DATA_APPROVAL}</span></label><p>빠른 테스트·전체 검증도 예시 입력을 OpenAI에 전송하며 비용이 발생할 수 있습니다. 전체 검증 통과는 판정 품질을 보증하지 않습니다.</p></div>}
         <p className="form-note">API Key는 서버에 암호화해 저장하며 이 화면에서 다시 조회하지 않습니다. 같은 공급자의 편집에서만 빈 입력은 기존 키 유지로 처리합니다.</p>
         </fieldset>
-        <div className="action-row"><button className="primary" disabled={Boolean(busy) || Boolean(targetError) || editingAssigned || Boolean(profilesError)}>{busy === "save" ? "저장 중…" : editingId ? "수정 저장" : "모델 등록"}</button></div>
+        <div className="action-row"><button type="submit" className="primary" disabled={Boolean(busy) || Boolean(targetError) || editingAssigned || Boolean(profilesError)}>{busy === "save" ? "저장 중…" : editingId ? "수정 저장" : "모델 등록"}</button></div>
       </form>
       </Dialog>
     </div>
@@ -833,7 +833,7 @@ function ConsoleApp() {
     try { setPrincipal(await api.me()); } catch { onUnauthorized(); }
     finally { setChecking(false); }
   }
-  useEffect(() => { checkSession(); }, []);
+  useEffect(() => { checkSession().catch(() => { setPrincipal(null); setChecking(false); }); }, []);
   useEffect(() => navigation.start(), [navigation]);
   useEffect(() => {
     if (!principal) return undefined;

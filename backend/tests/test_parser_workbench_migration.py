@@ -25,7 +25,7 @@ def test_fresh_workbench_migration(tmp_path, monkeypatch):
     config, engine = config_for(tmp_path, monkeypatch)
     command.upgrade(config, "head")
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0031_parser_rule_workbench"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0032_signature_explanations"
         assert {"parser_workbenches", "parser_workbench_jobs"} <= set(inspect(connection).get_table_names())
         indexes = {entry["name"] for entry in inspect(connection).get_indexes("parser_workbench_jobs")}
         assert "ix_parser_workbench_jobs_workbench_created" in indexes

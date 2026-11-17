@@ -78,7 +78,7 @@ def test_single_retry_preserves_initial_without_using_it_as_reference(client, ev
     with client.app.state.session_factory() as db:
         row = db.get(Analysis, identifier)
         row.status, row.error_code, row.completed_at = "failed", "primary_agent_failed", utcnow()
-        snapshot = make_execution_snapshot(row, db.get(VLLMProfile, profile_id), load_analysis_prompt(row, client.app.state.crypto), .75)
+        snapshot = make_execution_snapshot(row, db.get(VLLMProfile, profile_id), load_analysis_prompt(row, client.app.state.crypto), .75, crypto=client.app.state.crypto)
         row.execution_snapshot_ciphertext = client.app.state.crypto.encrypt_text(snapshot.model_dump_json())
         db.commit()
     response = retry(client, identifier)

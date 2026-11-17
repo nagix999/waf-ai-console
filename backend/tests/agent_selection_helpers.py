@@ -11,7 +11,9 @@ from app.agent.contracts import (EvidenceSelectionOutput, EvidenceSelectionCorre
 from app.agent.evidence import EvidenceSourceResolver
 
 
-def model_output(output, kwargs):
+def model_output(output, kwargs, *, evidence_supports="context"):
+    if evidence_supports not in {"attack_request", "normal_request", "context"}:
+        raise ValueError("synthetic_evidence_supports_invalid")
     if output is None:
         return None
     contract = kwargs.get("output_model")
@@ -45,7 +47,8 @@ def model_output(output, kwargs):
         value["evidence"] = [{"source_id": choose(item), "interpretation_ko": item.interpretation_ko} for item in output.evidence]
         if contract in (EvidenceAssessmentOutput, SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220):
             for item in value["evidence"]:
-                item["supports"] = "context"  # Explicit synthetic stub value, never inferred from verdict.
+                # Explicit test input, never inferred from the model verdict.
+                item["supports"] = evidence_supports
             value["decision_issue"] = None
         if contract in (SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220):
             # Explicit synthetic contract adapter, not production backfill.

@@ -12,7 +12,7 @@ OWNER_LABEL = "io.waf.deploy.owner"
 SOURCE_LABEL = "io.waf.deploy.source"
 GENERATION_LABEL = "io.waf.deploy.generation"
 EXCLUDED_DIRECTORIES = {".git", ".venv", "venv", "node_modules", "__pycache__", ".pytest_cache", ".mypy_cache",
-                        ".ruff_cache", ".cache", ".local-deploy", ".agents", ".codex", "dist", "build",
+                        ".ruff_cache", ".cache", ".local-deploy", ".local-sonarqube", ".agents", ".codex", "dist", "build",
                         "coverage", "htmlcov", "keys", "secrets"}
 IMAGE_ID = re.compile(r"sha256:[a-f0-9]{64}")
 

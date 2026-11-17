@@ -23,6 +23,7 @@ export function candidateIssue(catalog, value) {
   if (!catalog.prompts.items.some(item => item.id === value.prompt_policy_version_id)
       || !catalog.schemas.items.some(item => item.id === value.input_schema_version_id)) return "저장된 지침과 입력 스키마 버전을 선택하세요.";
   if (catalog.parsers && !catalog.parsers.items.some(item => item.id === (value.parser_version_id || "generic-http-v3"))) return "저장된 파서 버전을 선택하세요.";
+  if (value.signature_explanation_version_id && !catalog.signatureExplanations?.items.some(item => item.id === value.signature_explanation_version_id)) return "저장된 시그니처 설명집을 선택하세요.";
   return "";
 }
 

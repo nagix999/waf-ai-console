@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useWords } from "./LifecycleViews.jsx";
 import Dialog from "./Dialog.jsx";
 import { fetchTestExportPreview, fetchSelectedTestExport, saveTestExport, testExportError, testExportFilters } from "./testExport.js";
@@ -6,6 +6,7 @@ import "./testExport.css";
 
 export default function TestExport({ id, filters, onUnauthorized }) {
   const w = useWords(), current = useRef(null), previewRequest = useRef(null), initialized = useRef(false);
+  const fieldsId = useId();
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState(null), [selected, setSelected] = useState([]), [search, setSearch] = useState("");
   const [error, setError] = useState("");
@@ -63,9 +64,9 @@ export default function TestExport({ id, filters, onUnauthorized }) {
           <button type="button" className="secondary small" disabled={busy || loading} onClick={() => setSelected([])}>{w("모두 해제", "Clear all")}</button></div></div>
         <div className="test-export-fields" aria-busy={loading}>{groups.map(([group, label]) => {
           const fields = visible.filter(column => column.group === group);
-          return fields.length ? <fieldset key={group} disabled={busy || loading}><legend>{label}</legend><div className="test-export-field-grid">{fields.map(column => <label key={column.name}>
-            <input type="checkbox" checked={selected.includes(column.name)} onChange={event => setSelected(previous => event.target.checked ? [...previous, column.name] : previous.filter(name => name !== column.name))} />
-            <span><strong>{column.label_ko}</strong><code>{column.name}</code></span></label>)}</div></fieldset> : null;
+          return fields.length ? <fieldset key={group} disabled={busy || loading}><legend>{label}</legend><div className="test-export-field-grid">{fields.map((column, index) => <label key={column.name} htmlFor={`${fieldsId}-${group}-${index}`}>
+            <input id={`${fieldsId}-${group}-${index}`} type="checkbox" aria-labelledby={`${fieldsId}-${group}-${index}-label`} aria-describedby={`${fieldsId}-${group}-${index}-name`} checked={selected.includes(column.name)} onChange={event => setSelected(previous => event.target.checked ? [...previous, column.name] : previous.filter(name => name !== column.name))} />
+            <span><strong id={`${fieldsId}-${group}-${index}-label`}>{column.label_ko}</strong><code id={`${fieldsId}-${group}-${index}-name`}>{column.name}</code></span></label>)}</div></fieldset> : null;
         })}{!visible.length && <p className="muted">{w("검색한 필드가 없습니다.", "No matching fields.")}</p>}</div>
         <p className="test-export-note">{w("파일의 컬럼명은 영어입니다. 분석결과·컬럼안내 두 시트에 선택 필드와 형식 예시를 제공합니다. 긴 값은 이어짐 컬럼으로 나눕니다.", "English headers are used in the Analysis Results and Column Guide sheets. The guide includes illustrative examples. Long values use continuation columns.")}</p>
         {selected.includes("payload") && <p className="notice">{w("HTTP 원문과 Cookie가 마스킹 없이 포함될 수 있습니다. 파일을 안전하게 보관하세요.", "Unmasked HTTP and Cookie data may be included. Store the file securely.")}</p>}

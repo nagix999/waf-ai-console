@@ -31,11 +31,13 @@ from .api.runtime import router as runtime_router
 from .api.test_defaults import router as test_defaults_router
 from .api.parsers import router as parsers_router
 from .api.parser_workbench import router as parser_workbench_router
+from .api.signature_explanations import router as signature_explanations_router
 from .config import Settings, get_settings
 from .browser_security import BrowserSecurityMiddleware
 from .database import Base, build_engine, build_session_factory
 from .services.crypto import CryptoService
 from .services.input_schemas import InputSchemaError
+from .services.signature_explanations import SignatureExplanationError
 from .services.production_api import active_contract
 
 
@@ -129,6 +131,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
     app.include_router(test_defaults_router, prefix="/api/v1")
     app.include_router(parsers_router, prefix="/api/v1")
     app.include_router(parser_workbench_router, prefix="/api/v1")
+    app.include_router(signature_explanations_router, prefix="/api/v1")
 
     def live_openapi():
         # Cache only the static route contracts, never the active definition.
@@ -161,6 +164,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
                 or request.url.path.startswith("/api/v1/test-runs")
                 or request.url.path.startswith("/api/v1/test-sessions") or request.url.path.endswith("/evaluation-labels")
                 or request.url.path.startswith("/api/v1/admin/parsers")
+                or request.url.path.startswith("/api/v1/admin/signature-explanations")
                 or request.url.path.startswith("/api/v1/admin/parser-workbench")):
             response.headers["Cache-Control"] = "no-store"
         return response
@@ -170,6 +174,10 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
     @app.exception_handler(StoredResultInvalid)
     async def invalid_stored_result(_request: Request, _exc: StoredResultInvalid) -> JSONResponse:
         return JSONResponse(status_code=503, content={"detail": "analysis_result_invalid"})
+
+    @app.exception_handler(SignatureExplanationError)
+    async def invalid_signature_reference(_request: Request, exc: SignatureExplanationError) -> JSONResponse:
+        return JSONResponse(status_code=503, content={"detail": exc.code}, headers={"Cache-Control": "no-store"})
 
     @app.exception_handler(RequestValidationError)
     async def sanitized_validation_error(_request: Request, exc: RequestValidationError) -> JSONResponse:

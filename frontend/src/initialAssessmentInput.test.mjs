@@ -27,6 +27,9 @@ test("initial confidence is finite and numeric, with a paired two-class verdict"
   assert.throws(() => singleTestAdmission({ ...event, ...initial, initial_verdict: "inconclusive" }), /initial_verdict_invalid/);
   assert.throws(() => singleTestAdmission({ ...event, ...initial, initial_model_version: "x".repeat(256) }), /initial_model_version_invalid/);
   assert.equal(singleTestAdmission({ ...event, ...initial, initial_probability: 1 }).initial_probability, 1);
+  for (const initial_probability of [" ", "\t", "invalid", "Infinity", "NaN"]) {
+    assert.throws(() => singleTestAdmission(event, { ...initial, initial_probability }), /initial_probability_invalid/);
+  }
 });
 
 test("safe error messages explain the field without displaying arbitrary server content", () => {

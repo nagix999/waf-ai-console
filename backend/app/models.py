@@ -141,6 +141,8 @@ class Analysis(Base):
     internal_only: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
     parser_version_id: Mapped[str | None] = mapped_column(ForeignKey("parser_versions.id", ondelete="RESTRICT"))
     parser_snapshot_json: Mapped[dict | None] = mapped_column(JSON)
+    signature_explanation_version_id: Mapped[str | None] = mapped_column(ForeignKey("signature_explanation_versions.id", ondelete="RESTRICT"))
+    signature_explanation_snapshot_ciphertext: Mapped[str | None] = mapped_column(Text)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
@@ -458,6 +460,8 @@ class VLLMTestRun(Base):
     profile_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     parser_version_id: Mapped[str | None] = mapped_column(ForeignKey("parser_versions.id", ondelete="RESTRICT"))
     parser_snapshot_json: Mapped[dict | None] = mapped_column(JSON)
+    signature_explanation_version_id: Mapped[str | None] = mapped_column(ForeignKey("signature_explanation_versions.id", ondelete="RESTRICT"))
+    signature_explanation_snapshot_ciphertext: Mapped[str | None] = mapped_column(Text)
     include_dataset: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"), nullable=False)
     dataset_version: Mapped[str | None] = mapped_column(String(80))
     dataset_hash: Mapped[str | None] = mapped_column(String(64))
@@ -489,6 +493,7 @@ class TestConfigurationDefaults(Base):
     prompt_policy_version_id: Mapped[str] = mapped_column(ForeignKey("prompt_policy_versions.id", ondelete="RESTRICT"), nullable=False)
     input_schema_version_id: Mapped[str] = mapped_column(ForeignKey("input_schema_versions.id", ondelete="RESTRICT"), nullable=False)
     parser_version_id: Mapped[str | None] = mapped_column(ForeignKey("parser_versions.id", ondelete="RESTRICT"))
+    signature_explanation_version_id: Mapped[str | None] = mapped_column(ForeignKey("signature_explanation_versions.id", ondelete="RESTRICT"))
     revision: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
@@ -532,6 +537,8 @@ class TestRun(Base):
     configuration_hash: Mapped[str | None] = mapped_column(String(64))
     parser_version_id: Mapped[str | None] = mapped_column(ForeignKey("parser_versions.id", ondelete="RESTRICT"))
     parser_snapshot_json: Mapped[dict | None] = mapped_column(JSON)
+    signature_explanation_version_id: Mapped[str | None] = mapped_column(ForeignKey("signature_explanation_versions.id", ondelete="RESTRICT"))
+    signature_explanation_snapshot_ciphertext: Mapped[str | None] = mapped_column(Text)
     evaluation_mode: Mapped[str] = mapped_column(String(24), default="reference", server_default="reference", nullable=False)
     approved_item_version_ids: Mapped[list[str] | None] = mapped_column(JSON)
     metrics_version: Mapped[str | None] = mapped_column(String(64))
@@ -568,6 +575,31 @@ class TestRunItem(Base):
     case_name: Mapped[str | None] = mapped_column(String(240))
     ingest_status: Mapped[str] = mapped_column(String(24), nullable=False)
     error_code: Mapped[str | None] = mapped_column(String(120))
+
+
+class SignatureExplanationVersion(Base):
+    """Immutable encrypted reference catalog; never an event observation."""
+    __tablename__ = "signature_explanation_versions"
+    __table_args__ = (Index("ix_signature_explanations_created_id", "created_at", "id"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    version_no: Mapped[int] = mapped_column(Integer, unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    change_reason: Mapped[str] = mapped_column(String(1000), nullable=False)
+    parent_id: Mapped[str | None] = mapped_column(ForeignKey("signature_explanation_versions.id", ondelete="RESTRICT"))
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    entry_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    definition_ciphertext: Mapped[str] = mapped_column(Text, nullable=False)
+    encryption_key_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class SignatureExplanationConfiguration(Base):
+    __tablename__ = "signature_explanation_configuration"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_signature_explanation_configuration_singleton"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    active_version_id: Mapped[str | None] = mapped_column(ForeignKey("signature_explanation_versions.id", ondelete="RESTRICT"))
+    revision: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
 
 class ParserVersion(Base):

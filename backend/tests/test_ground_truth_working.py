@@ -137,6 +137,9 @@ def test_legacy_records_are_not_auto_published(client, event_payload, candidate)
 
 
 def test_official_uses_exact_published_membership_and_scope(client, event_payload, candidate):
+    # Membership evaluation has no model transport. Select an Editor-disabled
+    # candidate rather than pretending its asynchronous display job completed.
+    candidate = {**candidate, "evidence_editor_enabled": False, "evidence_editor_profile_id": None}
     dataset = create_dataset(client)
     for index, verdict in enumerate(("true_positive", "false_positive", "inconclusive")):
         assert save(client, dataset, {**event_payload, "vendor_score": 2, "signature": f"case-{index}"}, verdict=verdict).status_code == 201
@@ -154,6 +157,7 @@ def test_official_uses_exact_published_membership_and_scope(client, event_payloa
         finish(client, case["analysis_id"])
     with client.app.state.session_factory() as db:
         record = finalize_official_evaluation(db, run["id"])
+        assert record is not None
         assert record.summary_json["ground_truth"] == run["ground_truth"]
         assert len(db.get(Run, run["id"]).approved_item_version_ids) == 3
     preflight = client.get(f"/api/v1/admin/production-configurations/preflight/{run['id']}").json()
@@ -205,6 +209,9 @@ def test_conflicting_import_needs_attention_until_explicit_save(client, event_pa
 def test_overview_compares_only_exact_published_context(client, event_payload, candidate):
     from test_official_evaluations import approved_item, execute, finalize
     from test_production_promotion import BASE
+    # Exercise the actual official/promotion gates without an unprocessed
+    # optional display-model job in this Ground Truth comparison fixture.
+    candidate = {**candidate, "evidence_editor_enabled": False, "evidence_editor_profile_id": None}
     dataset = create_dataset(client)
     approved_item(client, dataset, {**event_payload, "vendor_score": 2})
 
@@ -212,7 +219,7 @@ def test_overview_compares_only_exact_published_context(client, event_payload, c
         run = execute(client, dataset, configuration)
         for item in run["items"]:
             finish(client, item["analysis_id"])
-        finalize(client, run)
+        assert finalize(client, run) is not None
         current = client.get(BASE).json()
         response = client.post(BASE + "/promote", json={"candidate_test_run_id": run["id"],
             "expected_production_configuration_hash": current["configuration_hash"], "acknowledge_schema_change": True})
@@ -231,7 +238,7 @@ def test_overview_compares_only_exact_published_context(client, event_payload, c
     third = execute(client, dataset, {**candidate, "verifier_profile_id": candidate["primary_profile_id"]})
     for item in third["items"]:
         finish(client, item["analysis_id"])
-    finalize(client, third)
+    assert finalize(client, third) is not None
     changed = client.get(BASE + "/overview").json()
     assert changed["comparison_key"] != overview["comparison_key"]
     assert len(changed["trend"]) == 1

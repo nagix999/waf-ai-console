@@ -72,6 +72,16 @@ def ports(service):
     return result
 
 
+def web_probe_command(service):
+    production = any(mount.get("target") == "/etc/nginx/waf-security" for mount in service.get("volumes", []))
+    if not production:
+        return ["wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+    # A request outside the approved gateway must stay forbidden. Never forge
+    # gateway headers or relax the admission policy merely to pass readiness.
+    return ["sh", "-c", "wget -S -O /dev/null http://127.0.0.1/ 2>&1 | "
+            "awk '/^[[:space:]]*HTTP\\/1\\.[01] / { status=$2 } END { exit(status != 403) }'"]
+
+
 def validate(model, rows):
     """Fail before mutation if the supplied Compose is not the live deployment."""
     services = model.get("services", {})
@@ -123,6 +133,9 @@ def target_model(model, project, stamp, source_root=None):
         service["image"] = f"{project}-{'backend' if backend else 'web'}:redeploy-{stamp}"
         service["build"] = {"context": str(source_root or ROOT), "dockerfile": "backend/Dockerfile" if backend else "frontend/Dockerfile"}
         service["pull_policy"] = "never"
+        service["user"] = "10001:10001" if backend else "101:101"
+        if not backend:
+            service["sysctls"] = {**service.get("sysctls", {}), "net.ipv4.ip_unprivileged_port_start": "0"}
     # Reuse resources by exact name. Missing resources must not create a fresh DB/network.
     for kind in ("volumes", "networks"):
         result[kind] = {key: {"name": value["name"], "external": True}
@@ -195,7 +208,11 @@ class Redeploy:
                          "-f", str(self.directory / "compose.json"), *args], **kwargs)
 
     def helper(self, image, command, *, live=False, migration=False):
+        # Explicit, isolated maintenance identity: backups live in a host-owned
+        # 0700 directory and old DB volumes may still be root-owned. The actual
+        # API and workers use the non-root user pinned in target_model().
         args = ["docker", "run", "--rm", "--pull", "never", "--network", "none",
+                "--user", "0:0",
                 "--mount", f"type=bind,source={self.directory},target=/backup"]
         if live:
             args += ["--mount", f"type=volume,source={self.volume},target=/data"]
@@ -203,6 +220,27 @@ class Redeploy:
             args += ["-e", "WAF_DATABASE_URL=" + (DB_URL if live else "sqlite+pysqlite:////backup/rehearsal.db")]
         return self.run([*args, "--entrypoint", command[0], image, *command[1:]],
                         "DB 백업·이전·보존 검사 실패. DB 자동 복원은 하지 않습니다.", timeout=1800)
+
+    def prepare_web_config(self, image, model):
+        """Grant only Nginx's group read access to its exact existing mounts."""
+        mounts = {item["target"]: item for item in model["services"][self.web].get("volumes", [])}
+        policy = mounts.get("/etc/nginx/waf-security")
+        if policy is None:  # Development image has no private production policy.
+            return
+        require(policy.get("type") == "bind" and policy.get("read_only"), "운영 웹 정책은 읽기 전용 bind mount여야 합니다.")
+        selected = [(policy, "/policy")]
+        site = mounts.get("/etc/nginx/conf.d/default.conf")
+        if site is not None:
+            require(site.get("type") == "bind" and site.get("read_only"), "운영 웹 설정은 읽기 전용 bind mount여야 합니다.")
+            selected.append((site, "/site.conf"))
+        args = ["docker", "run", "--rm", "--pull", "never", "--network", "none", "--user", "0:0"]
+        for mount, target in selected:
+            source = Path(mount["source"])
+            require(source.is_absolute() and all(not item.is_symlink() for item in (source, *source.parents)),
+                    "운영 웹 설정 경로의 symlink는 허용하지 않습니다.")
+            args += ["--mount", f"type=bind,source={source},target={target}"]
+        self.run([*args, "--entrypoint", "python", image, "/opt/waf-web-config-permissions.py", "--prepare"],
+                 "운영 웹 설정 권한 준비 실패. 기존 소유자와 manifest는 유지하며 정책 파일만 확인하세요.")
 
     def journal(self, phase):
         self.phase = phase
@@ -246,6 +284,9 @@ class Redeploy:
         self.journal("운영 DB 마이그레이션 및 기존 데이터 보존 검사 중")
         self.helper(image, ["alembic", "upgrade", "head"], live=True, migration=True)
         self.helper(image, ["python", "-c", self.db_code, "verify", "/data/waf.db", "/backup/baseline.json"], live=True)
+        self.journal("중지된 DB 볼륨의 non-root 실행 권한 준비 중")
+        self.helper(image, ["python", "/opt/waf-data-permissions.py", "--stopped-and-backed-up"], live=True)
+        self.prepare_web_config(image, updated)
         self.journal("API 시작 및 준비 상태 확인 중")
         self.compose("up", "-d", "--no-build", "--pull", "never", "--no-deps", "--force-recreate", "api")
         self.wait_api()
@@ -274,7 +315,12 @@ class Redeploy:
         require(validate(model, rows) == self.volume, "재배포 후 저장소가 다릅니다.")
         for row in rows.values():
             require(row["RestartCount"] == 0, "재배포 후 컨테이너가 재시작됐습니다.")
-        self.run(["docker", "exec", rows[self.web]["Id"], "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"], "웹 응답 확인 실패")
+        for role, row in rows.items():
+            require(row["Config"].get("User") == model["services"][role]["user"], "재배포 후 non-root 실행 사용자가 다릅니다.")
+        require((rows[self.web]["HostConfig"].get("Sysctls") or {}).get("net.ipv4.ip_unprivileged_port_start") == "0",
+                "웹 컨테이너 내부 포트 권한 설정이 다릅니다.")
+        self.run(["docker", "exec", rows[self.web]["Id"], "nginx", "-t"], "웹 설정 확인 실패")
+        self.run(["docker", "exec", rows[self.web]["Id"], *web_probe_command(model["services"][self.web])], "웹 응답 또는 운영 접근 제한 확인 실패")
         # Require heartbeats from the NEW containers, not recently stopped workers.
         heartbeat = """import sqlite3,sys
 import json
@@ -326,6 +372,7 @@ def main(argv=None):
             print("사전 확인 통과. 빌드·서비스 중지·DB 변경은 하지 않았습니다.")
             return 0
         print("기존 키·모델·지침·스키마 설정을 유지합니다. 최신 DB migration을 적용하며 잠시 서비스가 중단됩니다.")
+        print("백업과 이전 검증 후 DB 볼륨의 소유권을 UID/GID 10001로 준비하고 API·worker·웹을 non-root로 실행합니다. 공개 포트는 유지합니다.")
         print("기동 후 접수되는 분석은 기존 모델을 호출할 수 있습니다. 이미지 빌드에는 패키지 다운로드가 필요할 수 있습니다.")
         if not args.yes:
             require(sys.stdin.isatty(), "대화형 터미널에서 실행하거나 --yes를 지정하세요.")

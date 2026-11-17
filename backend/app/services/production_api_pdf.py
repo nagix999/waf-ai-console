@@ -41,9 +41,82 @@ class DocumentBlock:
     rows: tuple[tuple[str, ...], ...] = ()
 
 
+def _line_start(line):
+    index = 0
+    while index < len(line) and line[index] == " ":
+        index += 1
+    return index if index <= 3 else None
+
+
+def _opening_fence(line):
+    start = _line_start(line)
+    if start is None or start >= len(line) or line[start] not in "`~":
+        return None
+    end = start + 1
+    while end < len(line) and line[end] == line[start]:
+        end += 1
+    if end - start < 3 or "`" in line[end:]:
+        return None
+    return line[start:end], line[end:].strip()
+
+
+def _closes_fence(line, marker):
+    start = _line_start(line)
+    if start is None or start >= len(line) or line[start] != marker[0]:
+        return False
+    end = start
+    while end < len(line) and line[end] == marker[0]:
+        end += 1
+    if end - start < len(marker):
+        return False
+    while end < len(line) and line[end] in " \t":
+        end += 1
+    return end == len(line)
+
+
+def _heading(line):
+    start = _line_start(line)
+    if start is None:
+        return None
+    index = start
+    while index < len(line) and line[index] == "#":
+        index += 1
+    level = index - start
+    if not 1 <= level <= 6 or index == len(line) or line[index] not in " \t":
+        return None
+    space_start = index
+    while index < len(line) and line[index] in " \t":
+        index += 1
+    end = len(line)
+    # Retain the former parser's single character for an all-whitespace title.
+    if index == end and index - space_start > 1:
+        index -= 1
+    if index == end:
+        return None
+    while end > index + 1 and line[end - 1] in " \t":
+        end -= 1
+    return level, line[index:end]
+
+
+def _last_tick_runs(source):
+    # Avoid a new suffix search for each unmatched inline-code delimiter.
+    last, index = {}, 0
+    while index < len(source):
+        if source[index] != "`":
+            index += 1
+            continue
+        end = index + 1
+        while end < len(source) and source[end] == "`":
+            end += 1
+        last[end - index] = index
+        index = end
+    return last
+
+
 def table_row(line):
     """Split table delimiters, not pipes within inline code or escaped pipes."""
     source = line.strip()
+    closing_ticks = _last_tick_runs(source)
     cells, cell, ticks, separators, index = [], [], 0, 0, 0
     while index < len(source):
         char = source[index]
@@ -58,7 +131,7 @@ def table_row(line):
             width = end - index
             if ticks == width:
                 ticks = 0
-            elif not ticks and re.search(rf"(?<!`){re.escape('`' * width)}(?!`)", source[end:]):
+            elif not ticks and closing_ticks.get(width, -1) >= end:
                 ticks = width
             cell.append(source[index:end])
             index = end
@@ -92,13 +165,13 @@ def document_blocks(markdown):
         if not line.strip():
             index += 1
             continue
-        fence = re.fullmatch(r" {0,3}(`{3,}|~{3,})([^`]*)", line)
-        heading = re.fullmatch(r" {0,3}(#{1,6})[ \t]+(.+?)[ \t]*", line)
+        fence = _opening_fence(line)
+        heading = _heading(line)
         if fence:
-            marker, language = fence.groups()
+            marker, language = fence
             index += 1
             code = []
-            while index < len(lines) and not re.fullmatch(rf" {{0,3}}{re.escape(marker[0])}{{{len(marker)},}}[ \t]*", lines[index]):
+            while index < len(lines) and not _closes_fence(lines[index], marker):
                 code.append(lines[index])
                 index += 1
             if index == len(lines):
@@ -106,7 +179,7 @@ def document_blocks(markdown):
             blocks.append(DocumentBlock("code", "\n".join(code), language=language.strip()))
             index += 1
         elif heading:
-            blocks.append(DocumentBlock("heading", heading[2], level=len(heading[1])))
+            blocks.append(DocumentBlock("heading", heading[1], level=heading[0]))
             index += 1
         else:
             headers, separators = table_row(line)

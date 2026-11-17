@@ -9,6 +9,11 @@ COPY backend/app/data/production_api.md /backend/app/data/production_api.md
 RUN npm run build
 
 FROM nginx:1.27-alpine
-COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --chmod=0644 frontend/nginx.runtime.conf /etc/nginx/nginx.conf
+COPY --chmod=0644 frontend/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
+# Keep the existing internal port and read-only production config mounts.
+# Compose permits binding port 80 within this container's network namespace.
+USER nginx
+ENTRYPOINT ["nginx", "-g", "daemon off;"]
 EXPOSE 80

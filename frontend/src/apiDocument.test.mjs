@@ -92,6 +92,43 @@ test("pipes in inline code spans or escaped text do not split table cells", () =
   ]);
 });
 
+test("table cursors retain escaped ticks, unequal code runs and empty cells", () => {
+  const document = parseApiDocument("| left | right |\n| --- | --- |\n| \\`a|b` | end |\n| ``a`|b`` | \\| |\n| `a``|b` | tail |\n| | |");
+  assert.deepEqual(document.intro[0].rows, [
+    ["\\`a", "b`", "end"],
+    ["``a`|b``", "\\|"],
+    ["`a``|b`", "tail"],
+    ["", ""],
+  ]);
+});
+
+test("heading and list scanners preserve whitespace, Unicode and literal invalid markers", () => {
+  const document = parseApiDocument("   # 한글 😀 \t\n##  \t\n####### literal\n    ## indented\n2) 둘 😀\n- \t\n# trailing\u2028");
+  assert.equal(document.title, "한글 😀");
+  assert.equal(document.sections[0].title, "\t");
+  assert.deepEqual(document.sections[0].blocks, [
+    { type: "paragraph", text: "####### literal\n    ## indented" },
+    { type: "list", ordered: true, start: 2, items: ["둘 😀"] },
+    { type: "list", ordered: false, start: 1, items: [""] },
+    { type: "paragraph", text: "# trailing\u2028" },
+  ]);
+});
+
+test("long synthetic headings and invalid fence lines finish without losing text", { timeout: 5000 }, () => {
+  const title = "시작" + " ".repeat(50000) + "끝";
+  const invalidFence = "`".repeat(50000) + "\u2028not-a-fence";
+  const longMarker = "~".repeat(50000);
+  const literal = "  한글 😀\t\r\n| still code |\r\n";
+  const document = parseApiDocument(`# ${title}\n\n${invalidFence}\n\n${longMarker}text\n${literal}${longMarker}`);
+  assert.equal(document.title, title);
+  assert.deepEqual(document.intro, [
+    { type: "paragraph", text: invalidFence },
+    { type: "code", language: "text", text: literal },
+  ]);
+  const unclosed = parseApiDocument("```text\n" + "~".repeat(50000) + " not closed\n한글 😀\n");
+  assert.equal(unclosed.intro[0].text, "~".repeat(50000) + " not closed\n한글 😀\n");
+});
+
 test("table-like prose without a matching delimiter is not consumed as a table", () => {
   assert.deepEqual(parseApiDocument("left | right\nnot a delimiter\n\nnext").intro, [
     { type: "paragraph", text: "left | right\nnot a delimiter" },

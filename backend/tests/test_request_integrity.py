@@ -200,7 +200,7 @@ def test_small_budget_omits_whole_issues_instead_of_clipping_codes():
     hints = submitted_integrity(inspect(raw), [(0, len(raw))], 200)
     assert hints["omitted_issues"] and hints["issues"] == []
     assert "request_integrity" in FIXED_INSTRUCTIONS
-    assert "다른 온전한 구간의 명확한 공격은 유지" in FIXED_INSTRUCTIONS
+    assert "문제 구간을 정상 근거로 쓰지 않되 다른 온전한 구간의 명확한 공격 근거는 유지한다." in FIXED_INSTRUCTIONS
 
 
 def test_all_150_frozen_synthetic_inputs_remain_bounded_and_source_grounded():

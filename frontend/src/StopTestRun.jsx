@@ -10,7 +10,7 @@ export default function StopTestRun({ run, menu = false, onStopped, onUnauthoriz
   const w = useWords();
   const [open, setOpen] = useState(false), [fresh, setFresh] = useState(null);
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
-  const submitting = useRef(false);
+  const submitting = useRef(false), cancel = useRef(null);
   useEffect(() => {
     if (!open) return;
     const controller = new AbortController();
@@ -37,7 +37,7 @@ export default function StopTestRun({ run, menu = false, onStopped, onUnauthoriz
   return <>
     {menu ? <ConsolePopover label={w(`${run.name} 작업`, `Actions for ${run.name}`)} trigger="⋯">{close => <button type="button" onClick={() => { close(); setOpen(true); }}>{w("테스트 중지", "Stop test")}</button>}</ConsolePopover>
       : <button type="button" className="secondary" onClick={() => setOpen(true)}>{w("테스트 중지", "Stop test")}</button>}
-    <Dialog open={open} title={w("테스트 중지", "Stop test")} onClose={() => { if (!busy) setOpen(false); }}>
+    <Dialog open={open} title={w("테스트 중지", "Stop test")} initialFocusRef={cancel} onClose={() => { if (!busy) setOpen(false); }}>
       <p><strong>{run.name}</strong></p>
       {fresh ? <>
         <dl className="test-stop-counts"><div><dt>{w("완료 · 결과 보존", "Completed · preserved")}</dt><dd>{fresh.completed}</dd></div><div><dt>{w("대기·처리 중 · 중지 대상", "Queued / processing · to stop")}</dt><dd>{fresh.pending + fresh.processing}</dd></div></dl>
@@ -46,7 +46,7 @@ export default function StopTestRun({ run, menu = false, onStopped, onUnauthoriz
         <p className="ux-muted">{w("확인 중에도 완료 건수는 바뀔 수 있습니다. 이 테스트는 다시 시작할 수 없으며 공식 평가·운영 반영에 사용할 수 없습니다. 다시 실행하려면 새 테스트를 만드세요.", "Counts may change while you confirm. This test cannot resume or qualify for Production. To run again, create a new test.")}</p>
       </> : !error && <p role="status">{w("현재 상태를 확인하는 중…", "Checking current status…")}</p>}
       {error && <p className="error" role="alert">{error}</p>}
-      <div className="ux-toolbar"><button type="button" className="secondary" autoFocus disabled={busy} onClick={() => setOpen(false)}>{error || (fresh && !canStopTest(fresh)) ? w("닫기", "Close") : w("계속 실행", "Keep running")}</button><button type="button" className="primary danger test-stop-confirm" disabled={!canStopTest(fresh) || busy || Boolean(error)} onClick={stop}>{busy ? w("중지하는 중…", "Stopping…") : w("테스트 중지", "Stop test")}</button></div>
+      <div className="ux-toolbar"><button ref={cancel} type="button" className="secondary" disabled={busy} onClick={() => setOpen(false)}>{error || (fresh && !canStopTest(fresh)) ? w("닫기", "Close") : w("계속 실행", "Keep running")}</button><button type="button" className="primary danger test-stop-confirm" disabled={!canStopTest(fresh) || busy || Boolean(error)} onClick={stop}>{busy ? w("중지하는 중…", "Stopping…") : w("테스트 중지", "Stop test")}</button></div>
     </Dialog>
   </>;
 }

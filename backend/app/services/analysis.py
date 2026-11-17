@@ -16,6 +16,7 @@ from .prompt_policies import PromptPolicyError
 from .evaluation import attach_evaluations
 from .input_schemas import InputSchemaError, pin_schema, read_schema_snapshot, schema_metadata, validate_event
 from .parser_versions import ParserVersionError, pin_parser
+from .signature_explanations import SignatureExplanationError
 from ..evaluation_schemas import EvaluationMetadata
 
 
@@ -184,15 +185,20 @@ def enqueue_analysis(
                 db.rollback()
             raise AnalysisIngestError("input_schema_validation_failed", 422, issues)
         if prompt_snapshot is None:
-            pin_analysis_prompt(db, crypto, row)
+            admitted_prompt = pin_analysis_prompt(db, crypto, row)
         else:
             # Trusted named-test snapshot, never an external event/API field.
             # Do not reselect the active common policy for each run item.
             row.prompt_policy_version_id = prompt_snapshot.policy_version_id
             row.prompt_version = prompt_snapshot.prompt_version
             row.prompt_snapshot_ciphertext = crypto.encrypt_text(prompt_snapshot.model_dump_json())
-            load_analysis_prompt(row, crypto)
-    except (InputSchemaError, ParserVersionError) as exc:
+            admitted_prompt = load_analysis_prompt(row, crypto)
+        if admitted_prompt.fixed_rules_version == "waf-system-v2.23":
+            from .signature_explanations import ensure_state, pin_snapshot
+            selected_explanations = ensure_state(db).active_version_id if analysis_purpose == "production" else None
+            pin_snapshot(db, crypto, row, version_id=selected_explanations,
+                         selection_origin="production" if analysis_purpose == "production" else "test")
+    except (InputSchemaError, ParserVersionError, SignatureExplanationError) as exc:
         if commit:
             db.rollback()
         raise AnalysisIngestError(exc.code, exc.status_code) from None

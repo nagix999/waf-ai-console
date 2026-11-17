@@ -7,6 +7,7 @@ restores only the Gateway snapshot; databases and WAF migrations are not undone.
 from copy import deepcopy
 from pathlib import Path
 import re
+import stat
 import uuid
 from urllib.parse import urlsplit
 
@@ -24,6 +25,7 @@ PROJECT = "waf-ai-console-prod"
 OWNER_LABEL = "io.waf.deploy.owner"
 SERVICES = ("api", "waf-web", "worker", "model-tester")
 INCOMPLETE = {"switching", "gateway_changed", "recovery_failed"}
+WEB_CONFIG_ARTIFACTS = frozenset({"nginx.production.conf", "security/http.conf", "security/server.conf", "security/proxy.conf"})
 
 
 def require(value, code):
@@ -64,7 +66,15 @@ class Deployment:
             require(isinstance(name, str) and not Path(name).is_absolute() and ".." not in Path(name).parts, "generation_path_invalid")
             path = directory / name
             require(all(not p.is_symlink() for p in (path, *path.parents)), "generation_symlink_not_allowed")
-            require(digest(regular_file(path, private=True).read_bytes()) == expected, "generation_artifact_changed")
+            if name in WEB_CONFIG_ARTIFACTS:
+                regular_file(path)
+                metadata = path.stat()
+                mode = stat.S_IMODE(metadata.st_mode)
+                require(metadata.st_nlink == 1 and (mode == 0o600 or (mode == 0o640 and metadata.st_gid == 101)),
+                        "unsafe_web_config_permissions")
+            else:
+                regular_file(path, private=True)
+            require(digest(path.read_bytes()) == expected, "generation_artifact_changed")
         return result
 
     def compose(self, record, file, *arguments, timeout=180):
@@ -100,12 +110,40 @@ class Deployment:
                              managed_edge=self.settings["edge_name"] if active else None)
         run_team_checks(self.runner, team)
         resources = inspect_resources(self.runner, self.settings, self.owner, installation)
+        self.check_existing_data_identity(resources)
         self.team_health(team)
         source = source_fingerprint(self.root)
         if self.build_mode == "local":
             build_waf(self.runner, self.settings, "local", source, self.owner)
         return {"team": team, "resources": resources, "source": source, "active": active,
                 "installation": installation, "secrets": secret_state}
+
+    def check_existing_data_identity(self, resources):
+        """Fail before any changes when an old DB needs stopped-volume preparation.
+
+        The gateway workflow does not own the backup/maintenance transaction.
+        Existing deployments must use the regular backup-aware redeploy first;
+        never chown a live database as part of a gateway switch.
+        """
+        if not resources.get("volume"):
+            return
+        apis = [row for row in resources.get("containers", [])
+                if row.get("Config", {}).get("Labels", {}).get("com.docker.compose.service") == "api"]
+        require(len(apis) == 1, "existing_data_permissions_use_backup_aware_redeploy_first")
+        check = """import os,stat
+root=os.stat('/data')
+assert root.st_uid == os.getuid() == 10001 and root.st_mode & 0o700 == 0o700
+for name in ('waf.db','waf.db-wal','waf.db-shm','waf.db-journal'):
+    path='/data/'+name
+    if os.path.lexists(path):
+        item=os.lstat(path)
+        assert stat.S_ISREG(item.st_mode) and item.st_nlink == 1
+        assert item.st_uid == 10001 and item.st_mode & 0o600 == 0o600
+"""
+        self.runner.run(["docker", "run", "--rm", "--pull", "never", "--network", "none", "--user", "10001:10001",
+                         "--mount", "type=volume,source=waf-ai-console-production-data,target=/data,readonly",
+                         "--entrypoint", "python", apis[0]["Image"], "-c", check],
+                        code="existing_data_permissions_use_backup_aware_redeploy_first")
 
     def curl(self, team, host, path):
         bind = team["host_contract"]["PLATFORM_GATEWAY_BIND_IP"]
@@ -191,6 +229,24 @@ class Deployment:
                          "--subnet", self.settings["edge_subnet"], "--ip-range", self.settings["edge_range"],
                          self.settings["edge_name"]], code="waf_edge_creation_failed")
 
+    def prepare_web_config(self, directory, image):
+        """Mount only this new generation's proxy files, never DB/env/team data."""
+        mounts = [f"type=bind,source={directory / 'security'},target=/policy",
+                  f"type=bind,source={directory / 'nginx.production.conf'},target=/site.conf"]
+        command = ["docker", "run", "--rm", "--pull", "never", "--network", "none"]
+        writable = [value for mount in mounts for value in ("--mount", mount)]
+        self.runner.run([*command, "--user", "0:0", *writable, "--entrypoint", "python", image,
+                         "/opt/waf-web-config-permissions.py", "--prepare"],
+                        code="web_config_permission_preparation_failed")
+        readonly = [value for mount in mounts for value in ("--mount", mount + ",readonly")]
+        check = ("import os\n"
+                 "for path in ('/policy/http.conf','/policy/server.conf','/policy/proxy.conf','/site.conf'):\n"
+                 " descriptor=os.open(path,os.O_RDONLY|os.O_NOFOLLOW)\n"
+                 " try: os.read(descriptor,1)\n"
+                 " finally: os.close(descriptor)\n")
+        self.runner.run([*command, "--user", "101:101", *readonly, "--entrypoint", "python", image, "-c", check],
+                        code="nonroot_web_config_read_check_failed")
+
     def prepare(self, data):
         generation = "gen-" + uuid.uuid4().hex
         directory = secure_dir(self.state_dir / "generations" / generation)
@@ -212,6 +268,7 @@ class Deployment:
         for name, content in render(validate(values)).items():
             private_write(directory / "security" / name, content)
         private_write(directory / "nginx.production.conf", (self.root / "frontend/nginx.production.conf").read_text())
+        self.prepare_web_config(directory, images["backend"])
         model = compose_model(json_output(self.runner, ["docker", "compose", "--project-directory", str(self.root),
                               "--env-file", str(directory / "runtime.env"), "-p", PROJECT,
                               "-f", str(self.root / "docker-compose.production.yml"),

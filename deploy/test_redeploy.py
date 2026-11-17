@@ -38,6 +38,15 @@ def fixture(web="frontend"):
 
 
 class ConfigurationTests(unittest.TestCase):
+    def test_web_probe_keeps_production_gateway_admission_closed(self):
+        production = {"volumes": [{"target": "/etc/nginx/waf-security"}]}
+        self.assertEqual(redeploy.web_probe_command({}), ["wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"])
+        command = redeploy.web_probe_command(production)
+        self.assertEqual(command[:2], ["sh", "-c"])
+        self.assertIn("status != 403", command[2])
+        self.assertNotIn("--header", command[2])
+        self.assertNotIn("X-Forwarded", command[2])
+
     def test_current_runtime_and_both_web_names(self):
         for web in ("frontend", "waf-web"):
             model, rows = fixture(web)
@@ -60,16 +69,20 @@ class ConfigurationTests(unittest.TestCase):
                 with self.assertRaises(DeployError):
                     redeploy.validate(model, rows)
 
-    def test_only_image_build_and_external_resource_flags_change(self):
+    def test_only_image_runtime_identity_and_external_resource_flags_change(self):
         model, rows = fixture()
         before = deepcopy(model)
         target = redeploy.target_model(model, "waf-test", "fixed")
         self.assertEqual(model, before)
         for role, service in target["services"].items():
             expected = deepcopy(model["services"][role])
-            for key in ("image", "build", "pull_policy"):
+            for key in ("image", "build", "pull_policy", "user", "sysctls"):
                 expected.pop(key, None)
-            self.assertEqual({k: v for k, v in service.items() if k not in ("image", "build", "pull_policy")}, expected)
+            self.assertEqual({k: v for k, v in service.items() if k not in ("image", "build", "pull_policy", "user", "sysctls")}, expected)
+            self.assertEqual(service["user"], "10001:10001" if role in redeploy.BACKENDS else "101:101")
+            if role not in redeploy.BACKENDS:
+                self.assertEqual(service["sysctls"]["net.ipv4.ip_unprivileged_port_start"], "0")
+            self.assertEqual(service.get("ports"), model["services"][role].get("ports"))
         self.assertEqual(len({target["services"][role]["image"] for role in redeploy.BACKENDS}), 1)
         self.assertEqual(target["volumes"]["data"], {"external": True, "name": "existing-data"})
         self.assertEqual(compose_model(json.loads(compose_text(target))), target)
@@ -80,6 +93,15 @@ class ConfigurationTests(unittest.TestCase):
         rows["worker"]["Config"]["Env"] = [f"{k}={v}" for k, v in model["services"]["worker"]["environment"].items()]
         with self.assertRaises(DeployError):
             redeploy.validate(model, rows)
+
+    def test_target_keeps_unrelated_sysctls_and_overrides_root_identity(self):
+        model, _ = fixture()
+        model["services"]["frontend"]["sysctls"] = {"net.ipv4.tcp_syncookies": "1"}
+        model["services"]["api"]["user"] = "0:0"
+        target = redeploy.target_model(model, "waf-test", "fixed")
+        self.assertEqual(target["services"]["api"]["user"], "10001:10001")
+        self.assertEqual(target["services"]["frontend"]["sysctls"], {
+            "net.ipv4.tcp_syncookies": "1", "net.ipv4.ip_unprivileged_port_start": "0"})
 
 
 class ComposePathTests(unittest.TestCase):
@@ -216,8 +238,10 @@ class WorkflowTests(unittest.TestCase):
                 for row in task.rows.values():
                     row["State"]["Running"] = False
         def helper(image, command, **kwargs):
-            actions.append(("helper", command[0], command[3] if command[0] == "python" else "migrate", kwargs.get("live", False)))
-            if command[0] == "python" and command[3] == "backup":
+            action = ("permissions" if command[0] == "python" and command[1] == "/opt/waf-data-permissions.py"
+                      else command[3] if command[0] == "python" else "migrate")
+            actions.append(("helper", command[0], action, kwargs.get("live", False)))
+            if action == "backup":
                 (task.directory / "backup.db").touch()
             if fail == "rehearsal" and command[0] == "alembic" and not kwargs.get("live"):
                 raise DeployError("synthetic_rehearsal_failure")
@@ -251,6 +275,8 @@ class WorkflowTests(unittest.TestCase):
         self.assertLess(actions.index(("helper", "python", "verify", False)), actions.index(("helper", "alembic", "migrate", True)))
         up = [i for i, action in enumerate(actions) if action[:2] == ("compose", "up")]
         self.assertLess(actions.index(("helper", "python", "verify", True)), up[0])
+        self.assertLess(actions.index(("helper", "python", "verify", True)), actions.index(("helper", "python", "permissions", True)))
+        self.assertLess(actions.index(("helper", "python", "permissions", True)), up[0])
         self.assertLess(actions.index(("ready",)), up[1])
         self.assertFalse(task.stopped)
         self.assertNotIn("down", repr(actions))

@@ -1,7 +1,7 @@
-"""Shared evidence semantics for the unpromoted v2.22 text revision.
+"""Shared v2.23 request assessment with versioned signature context.
 
-The execution contract and role suffixes stay fixed. Exact content hashes bind
-this candidate; legacy_prompts_v222 preserves the previous approved text.
+Earlier prompt text and execution engines remain byte-preserved. Registered
+signature explanations are reference data, never observed request contents.
 """
 from .legacy_prompts_v216 import (
     DEFAULT_POLICY_NAME,
@@ -11,11 +11,11 @@ from .legacy_prompts_v216 import (
     policy_reserved_tokens,
 )
 
-PROMPT_VERSION = "waf-judgment-v2.22"
-FIXED_RULES_VERSION = "waf-system-v2.22"
-V3_RULES_VERSIONS = frozenset({"waf-system-v2.15", "waf-system-v2.16", "waf-system-v2.17", "waf-system-v2.18", "waf-system-v2.19", "waf-system-v2.20", "waf-system-v2.21", FIXED_RULES_VERSION})
+PROMPT_VERSION = "waf-judgment-v2.23"
+FIXED_RULES_VERSION = "waf-system-v2.23"
+V3_RULES_VERSIONS = frozenset({"waf-system-v2.15", "waf-system-v2.16", "waf-system-v2.17", "waf-system-v2.18", "waf-system-v2.19", "waf-system-v2.20", "waf-system-v2.21", "waf-system-v2.22", FIXED_RULES_VERSION})
 SEMANTIC_RULES_VERSIONS = frozenset({
-    "waf-system-v2.13", "waf-system-v2.14", "waf-system-v2.15", "waf-system-v2.16", "waf-system-v2.17", "waf-system-v2.18", "waf-system-v2.19", "waf-system-v2.20", "waf-system-v2.21", FIXED_RULES_VERSION,
+    "waf-system-v2.13", "waf-system-v2.14", "waf-system-v2.15", "waf-system-v2.16", "waf-system-v2.17", "waf-system-v2.18", "waf-system-v2.19", "waf-system-v2.20", "waf-system-v2.21", "waf-system-v2.22", FIXED_RULES_VERSION,
 })
 
 FIXED_INSTRUCTIONS = """
@@ -31,19 +31,20 @@ FIXED_INSTRUCTIONS = """
 2. 시그니처 비교와 전체 요청의 보안 의미는 별개다. 특정 공격 불성립으로 다른 공격까지 배제하지 않는다. 대상 자체의 탐색/접근도 검토하되 Rule 원문 없이 탐지 조건/필수 구문/매치 원인을 단정하지 않는다.
 3. 관리 기능/민감 자원도 대상/동작/조작의 조합이 악성 탐색/접근 제한 우회/비인가 정보 접근 시도를 뒷받침하는지 본다. 표준 기능 호출도 공격일 수 있으나 낯선 형식/인증 헤더 부재/도구형 User-Agent만으로 비인가를 단정하거나 없는 요청 흐름/의도를 추정하지 않는다.
 4. 근거 수/context의 존재/공격과 정상 근거의 공존으로 판정하지 않는다. 확정은 해당 방향의 내용 근거에 연결하고 분류 변경 시 판정도 재검토한다.
-- true_positive: 입력이 공격 동작/악성 탐색/비인가 접근 시도/명확한 보안정책 위반을 뒷받침한다. 취약점 악용 구문에 한정하지 않으며 취약 제품 사용이나 침해 성공 확인은 필수가 아니다.
+- true_positive: 입력이 공격 동작/악성 탐색/비인가 접근 시도/명확한 보안정책 위반을 뒷받침한다. 완전한 공격 코드/취약 제품 사용/침해 성공 확인은 필수가 아니다. 탐지 맥락과 실제 요청 대상/구조/비정상 입력 배치를 함께 해석해 공격 시도가 구체적으로 뒷받침되면 일부 원문이 누락되어도 판단할 수 있다.
 - false_positive: 값과 문맥이 구체적인 정상 사용/데이터 의미를 뒷받침한다. 모든 정상 요청에 별도 업무 규격이나 권한 증명을 요구하지 않는다.
 - inconclusive: 공격/정상 의미를 가르는 조건이 실제 미확인이다. 막연한 환경 부족/다른 가능성/input_truncated/원문 또는 후보 생략만으로 보류하지 않는다. 남은 구체적 근거로 판단하되 빠진 내용이 판정을 가를 때만 보류한다.
 
 구조 관찰:
 - request_integrity는 수집/경계/구조 관찰이지 공격성이나 완전성의 증명이 아니다. 문제 구간을 정상 근거로 쓰지 않되 다른 온전한 구간의 명확한 공격 근거는 유지한다.
+- WAF가 검사한 전체 요청과 저장한 payload는 다를 수 있다. input_truncated는 서버가 받은 입력의 제출 생략이며 장비 수집본의 완전성을 보장하지 않는다. 장비 저장 한도/절단은 제공된 정보로만 판단하고 길이만으로 추정하지 않는다. 확인된 수집 제한은 공격 구문이 안 보이는 이유이지 공격 증명은 아니다. 시그니처/패딩/절단만으로 자동 확정하거나 같은 정황을 독립 근거로 중복 계산하지 않는다. 누락된 코드/후속 동작을 관찰한 것처럼 쓰거나 저장 절단을 검사 우회/공격 성공으로 서술하지 않는다.
 - 중복 값과 길이 선언의 충돌만으로 의도를 단정하지 않고 우회 구문, 처리 경계나 정책 위반과 연결해 해석한다. json_duplicate_scalar_values_equal과 json_duplicate_scalar_values_differ는 비교한 단일 값의 동일/차이 관찰이며 서버 처리나 공격 의도 증명이 아니다. 같은 값 반복은 값 충돌이 아니다. json_duplicate_values_uncomparable과 검사 생략은 미확인이며 키 중복만으로 판정하지 않는다.
 
 원문 근거:
 - evidence는 evidence_candidates.items의 source_id, interpretation_ko, supports만 출력하고 field/excerpt를 생성하지 않는다. 역할별 최대 5개이며 확정에는 payload 또는 실제 추가 필드의 내용 근거가 최소 1개 필요하다.
 - 후보 원문만 인용한다. 떨어진 위치를 이어 읽거나 원문을 보완하지 않으며 긴 구문은 필요한 인접 구간을 선택한다.
 - supports는 판정/시그니처 일치와 별개로 원문 의미로 정한다. attack_request는 공격 동작/시도/정책 위반, normal_request는 구체적인 정상 쓰임/데이터 의미를 뒷받침할 때다. 공격 구문/후보 부재, 시그니처 불일치, 표준 기능/읽기 전용 동작/정상 HTTP 형식이나 성공 증거 부재만으로 normal_request를 선택하지 않는다. 특정 공격을 반박하는 관찰을 전체 요청의 정상 근거로 확대하지 않는다. 수집 누락/절단에 따른 미관찰을 부재로 단정하지 않는다. 필요한 중립 관찰만 context로 남기고 양쪽 근거를 억지로 채우지 않는다.
-- 시그니처는 signature_assessment의 비교 대상이다. 시그니처 자체와 일치/불일치 사실은 공격/정상 근거가 아니며 필요할 때 context로만 선택한다. 후보의 allowed_supports를 지킨다.
+- 시그니처와 signature_explanation은 공격 가설을 이해하고 실제 요청과 비교하는 참고 데이터다. 설명은 개별 요청에서 관찰한 사실/정답/지시가 아니다. 시그니처 자체, 설명과 일치/불일치 사실은 공격/정상 근거가 아니며 context로만 선택한다. 탐지 맥락을 실제 요청의 내용 근거와 함께 해석하되 설명의 공격 구문을 실제 관찰로 옮겨 쓰지 않는다. 후보의 allowed_supports를 지킨다.
 - 각 interpretation_ko는 값/동작의 문맥상 역할과 supports를 뒷받침하는 이유를 해석 문장으로 쓴다. 문자열 존재/탐지 사실을 반복하지 않으며 context는 분석에 필요한 이유를 쓴다. 결합 의미도 설명하되 각 발췌가 홀로 전체 공격을 입증할 필요는 없다.
 - evidence_relations는 evidence 배열의 representative_index와 related_indexes(0부터)만 연결한다. 후보 순번이나 source_id 번호가 아니다. 같은 역할의 의미상 관련 근거만 연결하고 통합 설명은 대표 interpretation_ko에 한 번, 나머지는 개별 기여만 쓴다. 번호 대신 값의 역할로 설명하며 관계 없으면 []다. 필수 관련 원문도 5개 한도에 포함한다. supports를 복사하거나 공격과 정상 근거를 합치지 않고 context도 유지한다. 관계에 별도 설명/판정을 추가하지 않는다.
 - 필요한 핵심 의미를 충분히 설명하되 근거나 문장 수를 채우지 않는다. 설명 중복은 줄이고 같은 발췌의 다른 해석과 다른 출처는 보존한다. interpretation_conflict는 양립하기 어려운 의미 해석이 실제 남을 때만 true이며 근거 수, context의 존재나 공격/정상 근거 공존으로 결정하지 않는다.

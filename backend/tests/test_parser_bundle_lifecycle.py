@@ -1,9 +1,11 @@
 """One frozen parser bundle dispatches synthetic WAF vendors per observation."""
 import copy
+from functools import partial
 import json
 import uuid
 
 import pytest
+from agent_selection_helpers import model_output
 from pydantic import ValidationError
 from sqlalchemy import select
 
@@ -136,6 +138,10 @@ def test_service_results_hide_other_vendor_routes_but_admin_trace_keeps_them(
     identifier, options = bundle(client)
     if mode == "moduagent":
         profile_fixture(client)
+        # Explicit synthetic directional input: a decisive mock with only
+        # context evidence must not bypass the public core-evidence guard.
+        monkeypatch.setattr("test_agent_configuration.model_output",
+                            partial(model_output, evidence_supports="attack_request"))
         install_calls(monkeypatch)
     with client.app.state.session_factory() as db:
         activate_parser_version(db, identifier)  # Synthetic setup only.

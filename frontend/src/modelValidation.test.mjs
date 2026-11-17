@@ -89,6 +89,16 @@ test("full-validation UI uses two radios and one execution action with selected-
   assert.match(html, /선택한 프로필로 검증/); assert.doesNotMatch(html, /현재 Production이 아니라/); assert.match(html, /Production·Test 지정을 바꾸지/); assert.match(html, /150회를 넘을 수/); assert.match(html, /OpenAI 외부 API로 전송/); assert.match(html, /API 비용/); assert.match(html, /공식 평가나 자동 승격에 사용하지 않습니다/); assert.doesNotMatch(html, /<script>/); assert.match(html, /&lt;script&gt;SYNTHETIC/);
   assert.doesNotMatch(html, /검증 대상 설명|연결·기능 검증 설명/); assert.match(html, /Test 지정 여부와 관계없이/); assert.match(html, /공통 활성 프롬프트를 사용합니다/);
   assert.match(html, /연결, 출력 형식, 지침 준수와 동시 요청/); assert.match(html, /판정 품질 평가는 아닙니다/);
+  const radios = [...html.matchAll(/<input\b[^>]*type="radio"[^>]*>/g)].map(match => match[0]);
+  for (const radio of radios) {
+    const id = radio.match(/\bid="([^"]+)"/)[1];
+    const title = radio.match(/aria-labelledby="([^"]+)"/)[1];
+    const description = radio.match(/aria-describedby="([^"]+)"/)[1];
+    assert.ok(html.includes(`for="${id}"`));
+    assert.ok(html.includes(`<strong id="${title}">`));
+    assert.ok(html.includes(`<small id="${description}">`));
+  }
+  assert.notEqual(radios[0].match(/\bid="([^"]+)"/)[1], radios[1].match(/\bid="([^"]+)"/)[1]);
   assert.doesNotMatch(render(FullValidationContent, { profile: profile(), busy: false }), /OpenAI를 선택했습니다/);
   const reconfirm = render(FullValidationContent, { profile: profile(), busy: false, needsReconfirm: true }); assert.equal((reconfirm.match(/disabled=""/g) || []).length, 1); assert.match(reconfirm, /class="secondary">취소<\/button>/);
 });

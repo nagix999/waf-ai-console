@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { EvaluationSummary } from "./ReferenceLabels.jsx";
 import { datasetEvaluationStatus, datasetListState } from "./modelValidation.js";
 import { providerLabel } from "./llmProfiles.js";
@@ -7,11 +7,12 @@ import "./fullValidation.css";
 
 export function FullValidationContent({ profile, name = "", onNameChange, busy, error, needsReconfirm, onCancel, onSubmit, cancelRef }) {
   const [includeDataset, setIncludeDataset] = useState(false);
+  const scopeId = useId();
   return <><div className="validation-dialog-heading"><h2 id="full-validation-title">전체 검증 범위 선택</h2><p id="full-validation-description">선택한 프로필의 연결·기능을 검증하고, 선택에 따라 테스트 WAF 150건의 판정도 평가합니다.</p></div>
     <dl className="validation-profile"><dt>테스트 대상</dt><dd>{profile.name}</dd><dt>공급자 / 모델</dt><dd>{providerLabel(profile)} · {profile.model_name}</dd></dl>
     <label className="test-name-field">테스트명 · 선택<input maxLength={120} value={name} disabled={busy} onChange={event => onNameChange?.(event.target.value)} placeholder="비워두면 자동 ID를 사용합니다" /></label>
     <p>Test 지정 여부와 관계없이 선택한 프로필로 검증하며 Production·Test 지정을 바꾸지 않습니다. 공통 활성 프롬프트를 사용합니다.</p>
-    <fieldset className="validation-options" disabled={busy}><legend>검증 범위</legend><label className="validation-choice"><input type="radio" name="validation-scope" checked={!includeDataset} onChange={() => setIncludeDataset(false)} /><span><strong>연결·기능 검증만</strong><small>연결, 출력 형식, 지침 준수와 동시 요청을 확인합니다. 판정 품질 평가는 아닙니다.</small></span></label><label className="validation-choice"><input type="radio" name="validation-scope" checked={includeDataset} onChange={() => setIncludeDataset(true)} /><span><strong>150건 판정 평가도 실행</strong><small>기능 검증 후 난이도별 50건을 분석합니다. 추가 검증·재시도로 호출은 150회를 넘을 수 있습니다. 공식 평가나 자동 승격에 사용하지 않습니다.</small></span></label></fieldset>
+    <fieldset className="validation-options" disabled={busy}><legend>검증 범위</legend><label className="validation-choice" htmlFor={`${scopeId}-connection`}><input id={`${scopeId}-connection`} type="radio" name={`${scopeId}-scope`} aria-labelledby={`${scopeId}-connection-title`} aria-describedby={`${scopeId}-connection-description`} checked={!includeDataset} onChange={() => setIncludeDataset(false)} /><span><strong id={`${scopeId}-connection-title`}>연결·기능 검증만</strong><small id={`${scopeId}-connection-description`}>연결, 출력 형식, 지침 준수와 동시 요청을 확인합니다. 판정 품질 평가는 아닙니다.</small></span></label><label className="validation-choice" htmlFor={`${scopeId}-dataset`}><input id={`${scopeId}-dataset`} type="radio" name={`${scopeId}-scope`} aria-labelledby={`${scopeId}-dataset-title`} aria-describedby={`${scopeId}-dataset-description`} checked={includeDataset} onChange={() => setIncludeDataset(true)} /><span><strong id={`${scopeId}-dataset-title`}>150건 판정 평가도 실행</strong><small id={`${scopeId}-dataset-description`}>기능 검증 후 난이도별 50건을 분석합니다. 추가 검증·재시도로 호출은 150회를 넘을 수 있습니다. 공식 평가나 자동 승격에 사용하지 않습니다.</small></span></label></fieldset>
     {profile.provider === "openai" && <p className="validation-cost" role="note">OpenAI를 선택했습니다. 두 실행 옵션 모두 테스트 입력을 OpenAI 외부 API로 전송하며 API 비용이 발생할 수 있습니다. 150건 판정 평가는 큰 입력과 추가 호출로 비용이 늘어날 수 있습니다.</p>}
     {error && <div className="error" role="alert">{error}</div>}
     <div className="validation-dialog-actions"><button ref={cancelRef} type="button" className="secondary" disabled={busy} onClick={onCancel}>취소</button><button type="button" className="primary" disabled={busy || needsReconfirm} onClick={() => onSubmit(includeDataset)}>{busy ? "접수 중…" : "검증 실행"}</button></div>

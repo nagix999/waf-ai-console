@@ -17,6 +17,7 @@ class CandidateConfiguration(BaseModel):
     # Missing in pre-parser clients means the immutable original parser, not
     # whichever version was most recently saved or applied to Production.
     parser_version_id: Identifier | None = None
+    signature_explanation_version_id: Identifier | None = None
 
     @model_validator(mode="after")
     def editor_requires_enable(self):
@@ -26,4 +27,5 @@ class CandidateConfiguration(BaseModel):
 
     def request_document(self):
         """Retain historical idempotency hashes when no parser was selected."""
-        return self.model_dump(mode="json", exclude={"parser_version_id"} if self.parser_version_id is None else set())
+        optional_versions = {"parser_version_id", "signature_explanation_version_id"}
+        return self.model_dump(mode="json", exclude={key for key in optional_versions if getattr(self, key) is None})

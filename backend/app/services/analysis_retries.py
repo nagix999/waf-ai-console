@@ -21,6 +21,7 @@ from .vllm_profiles import (TargetNotAllowedError, assignment_block_reason, norm
                            profile_fingerprint, validate_profile_provider_settings)
 from .evidence_editor import EditorSnapshot
 from .parser_versions import copy_parser_snapshot, parser_metadata, read_parser_snapshot
+from .signature_explanations import copy_snapshot as copy_explanations, read_snapshot as read_explanations, metadata as explanation_metadata
 
 
 class RetryError(ValueError):
@@ -48,10 +49,11 @@ class ExecutionSnapshot(BaseModel):
     # immutable generic-http-v3 parser, never an active or latest version.
     parser: dict | None = None
     evidence_pipeline: dict | None = None
+    signature_explanations: dict | None = None
 
     @model_validator(mode="after")
     def validate_roles(self):
-        if self.schema_version not in {1, 2, 3, 4, 5}:
+        if self.schema_version not in {1, 2, 3, 4, 5, 6}:
             raise ValueError("execution_snapshot_version_invalid")
         if self.schema_version >= 2 and (not self.verifier_profile_id or not self.verifier_profile_fingerprint):
             raise ValueError("execution_snapshot_verifier_missing")
@@ -61,15 +63,19 @@ class ExecutionSnapshot(BaseModel):
             raise ValueError("execution_snapshot_editor_invalid")
         if (self.schema_version >= 4) != (self.parser is not None):
             raise ValueError("execution_snapshot_parser_invalid")
-        if (self.schema_version == 5) != (self.evidence_pipeline is not None):
+        if (self.schema_version >= 5) != (self.evidence_pipeline is not None):
             raise ValueError("execution_snapshot_pipeline_invalid")
+        if (self.schema_version == 6) != (self.signature_explanations is not None):
+            raise ValueError("execution_snapshot_signature_explanations_invalid")
         return self
 
 
 def make_execution_snapshot(analysis, profile, prompt, threshold, verifier_profile=None, evidence_editor=None, *, crypto=None) -> ExecutionSnapshot:
     verifier_profile = verifier_profile or profile
     return ExecutionSnapshot(
-        schema_version=5 if prompt.evidence_pipeline is not None else 4,
+        schema_version=6 if prompt.fixed_rules_version == "waf-system-v2.23" else 5 if prompt.evidence_pipeline is not None else 4,
+        signature_explanations=(explanation_metadata(read_explanations(crypto, analysis, allow_legacy=False))
+                                if prompt.fixed_rules_version == "waf-system-v2.23" else None),
         evidence_pipeline=prompt.evidence_pipeline,
         verifier_profile_id=verifier_profile.id, evidence_editor=evidence_editor,
         verifier_profile_fingerprint=profile_fingerprint(verifier_profile),
@@ -87,6 +93,7 @@ def validate_snapshot_binding(analysis, crypto, snapshot):
         prompt = load_analysis_prompt(analysis, crypto)
         read_schema_snapshot(crypto, analysis)
         parser = parser_metadata(read_parser_snapshot(crypto, analysis))
+        explanations = read_explanations(crypto, analysis, allow_legacy=prompt.fixed_rules_version != "waf-system-v2.23")
     except (PromptSnapshotError, InputSchemaError, ValueError):
         raise RetryError("retry_input_or_prompt_snapshot_unavailable") from None
     if (snapshot.instructions_hash != prompt.instructions_hash
@@ -95,6 +102,11 @@ def validate_snapshot_binding(analysis, crypto, snapshot):
             or snapshot.event_fingerprint != analysis.event_fingerprint):
         raise RetryError("retry_execution_snapshot_invalid")
     if snapshot.evidence_pipeline != prompt.evidence_pipeline:
+        raise RetryError("retry_execution_snapshot_invalid")
+    if prompt.fixed_rules_version == "waf-system-v2.23":
+        if snapshot.schema_version != 6 or snapshot.signature_explanations != explanation_metadata(explanations):
+            raise RetryError("retry_execution_snapshot_invalid")
+    elif snapshot.signature_explanations is not None or explanations["version_id"] is not None:
         raise RetryError("retry_execution_snapshot_invalid")
     if snapshot.schema_version >= 4:
         if snapshot.parser != parser:
@@ -290,6 +302,7 @@ def enqueue_retry(db, crypto, settings, analysis_id, request, actor, *, commit=T
                    execution_snapshot_ciphertext=crypto.encrypt_text(snapshot.model_dump_json()),
                    model_profile=_profile.name, status="pending")
     copy_parser_snapshot(original, row)
+    copy_explanations(original, row, crypto=crypto)
     db.add(row)
     from .evidence_display_jobs import copy_job
     try:

@@ -61,8 +61,14 @@ class ImageTests(unittest.TestCase):
         self.runner = FakeRunner()
 
     def test_source_fingerprint_stable(self):
-        self.assertEqual(source_fingerprint(self.root), source_fingerprint(self.root))
-        self.assertEqual(len(source_fingerprint(self.root)), 64)
+        # Independent known answer: two non-executable Dockerfiles containing
+        # exactly b"FROM fixture:never-pulled\n", inventoried by relative path.
+        expected = "cf01f7a6f3e42c3d0f1ffd7d9c326079ba52ce653728545d44c8d7b81d4904ce"
+        actual = source_fingerprint(self.root)
+        self.assertEqual(actual, expected)
+        repeated = source_fingerprint(self.root)
+        self.assertEqual(repeated, actual)
+        self.assertEqual(len(actual), 64)
 
     def test_source_change_changes_fingerprint(self):
         before = source_fingerprint(self.root)
@@ -88,7 +94,7 @@ class ImageTests(unittest.TestCase):
         before = source_fingerprint(self.root)
         for name in (".env", ".env.production", "key.pem", "secret.key", "data.db", "data.db-wal", "app.pyc"):
             (self.root / name).write_text("private-value-must-not-change-source")
-        for name in ("node_modules", ".venv", ".git", ".local-deploy", "__pycache__", "dist"):
+        for name in ("node_modules", ".venv", ".git", ".local-deploy", ".local-sonarqube", "__pycache__", "dist"):
             directory = self.root / name
             directory.mkdir()
             (directory / "secret").write_text("private-value")

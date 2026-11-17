@@ -35,6 +35,8 @@ export const messages = {
   concurrency: ["동시 처리", "Concurrency"], api: ["Production API", "Production API"], keys: ["API 키", "API Keys"],
   schema: ["입력 스키마", "Input Schema"], targets: ["vLLM 연결", "vLLM Targets"], detail: ["분석 상세", "Analysis Detail"],
   parsers: ["파서 관리", "Parser Management"],
+  signatureExplanations: ["시그니처 설명", "Signature Explanations"],
+  "signatureExplanations.description": ["벤더와 시그니처별 탐지 설명을 관리하고 테스트에 사용합니다.", "Manage detection context by vendor and signature for use in Tests."],
   "parsers.description": ["로그 형식의 인식 결과를 비교하고 파서 버전을 관리합니다.", "Compare log format recognition and manage parser versions."],
   "status.description": ["운영 요청과 현재 설정을 확인합니다.", "Monitor Production requests and current settings."],
   "quality.description": ["현재 운영 구성에 연결된 공식 평가를 확인합니다.", "Review the official evaluation linked to the current Production configuration."],

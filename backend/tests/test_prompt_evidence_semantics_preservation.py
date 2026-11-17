@@ -17,7 +17,7 @@ from sqlalchemy import func, select
 from app import worker, worker_v222
 from app.agent import (
     evidence_pipeline_v222, legacy_prompts_v220, legacy_prompts_v221_reasoning,
-    legacy_prompts_v222, prompts,
+    legacy_prompts_v222, legacy_prompts_v222_capture as prompts,
 )
 from app.models import Analysis, ProductionPromotion, TestEvaluation as EvaluationRecord, TestRun as NamedRun, VLLMProfile, utcnow
 from app.services import prompt_snapshots, worker_runtime_v222
@@ -36,7 +36,7 @@ from test_production_promotion import BASE, qualified
 from test_validation_data import login
 
 
-pytestmark = pytest.mark.usefixtures("registered_vllm_target")
+pytestmark = pytest.mark.usefixtures("registered_vllm_target", "legacy_v222_capture_admissions")
 FROZEN_V222_SHA256 = "a9f0aa75f947cc9f6c779a60400e6eb7beb8686d62b9770746d79dd77b7ebd84"
 ENGINE_SHA256 = {
     **HISTORICAL_ENGINE_SHA256,

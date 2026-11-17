@@ -18,6 +18,8 @@ from .test_runs import describe_run, write_lock
 from .vllm_profiles import profile_fingerprint
 from .parser_versions import (BASELINE_ID, activate_parser_version, ensure_parser_state,
                               legacy_parser_snapshot, parser_metadata, pin_parser)
+from .signature_explanations import (ensure_state as explanation_state, pin_snapshot as pin_explanations,
+                                     activate_version as activate_explanations)
 
 
 def fail(code):
@@ -25,7 +27,7 @@ def fail(code):
 
 
 def live_snapshot(db, crypto, settings, *, roles=None, prompt_id=None, schema_id=None,
-                  parser_id=None, include_parser=None):
+                  parser_id=None, include_parser=None, signature_explanation_id=None):
     production = roles is None and prompt_id is None
     roles = roles or configuration_document(db)["assignments"]["production"]
     primary = db.get(VLLMProfile, roles["primary_profile_id"]) if roles["primary_profile_id"] else None
@@ -37,7 +39,13 @@ def live_snapshot(db, crypto, settings, *, roles=None, prompt_id=None, schema_id
         profile_metadata={"verifier_profile": profile_metadata(verifier) if verifier else {
             "model_profile_id": None, "profile_fingerprint": None},
             "verifier_confidence_threshold": settings.verifier_confidence_threshold})
-    pin_analysis_prompt(db, crypto, temporary, version_id=prompt_id, production=production)
+    queued_prompt = pin_analysis_prompt(db, crypto, temporary, version_id=prompt_id, production=production)
+    selected_explanations = explanation_state(db).active_version_id if production else signature_explanation_id
+    if queued_prompt.fixed_rules_version == "waf-system-v2.23":
+        pin_explanations(db, crypto, temporary, version_id=selected_explanations,
+                         selection_origin="production" if production else "candidate")
+    elif selected_explanations is not None:
+        raise ValueError("signature_explanation_requires_current_instructions")
     pin_schema(db, crypto, temporary, version=get_schema_version(db, schema_id) if schema_id else None)
     state = ensure_parser_state(db)
     pin_parser(db, crypto, temporary, version_id=parser_id or state.active_version_id,
@@ -81,6 +89,8 @@ def current_configuration(db, crypto, settings):
     digest = configuration_digest(snapshot)
     profile_names = {p.id: p.name for p in db.scalars(select(VLLMProfile))}
     version_names = {p.id: f"v{p.version_number} · {p.name}" for cls in (PromptPolicyVersion, InputSchemaVersion) for p in db.scalars(select(cls))}
+    from ..models import SignatureExplanationVersion
+    version_names.update({p.id: f"v{p.version_no} — {p.name}" for p in db.scalars(select(SignatureExplanationVersion))})
     return {"configuration_id": latest.id if latest else None, "configuration_hash": digest,
         "snapshot": snapshot, "profile_names": profile_names, "version_names": version_names,
         "source_test_run_id": latest.source_test_run_id if latest else None,
@@ -176,6 +186,7 @@ def preflight(db, crypto, settings, identifier):
                 "evidence_editor_profile_id": snapshot["evidence_editor"]["profile_id"]},
                 prompt_id=snapshot["prompt"]["policy_version_id"], schema_id=snapshot["input_schema"]["version_id"],
                 parser_id=parser["version_id"] if parser else BASELINE_ID,
+                signature_explanation_id=snapshot.get("signature_explanations", {}).get("version_id"),
                 include_parser=snapshot["schema_version"] >= 2)
             same_instructions = candidate_now == snapshot
         except ValueError:
@@ -221,11 +232,13 @@ def preflight(db, crypto, settings, identifier):
     baseline_eval = official_for_hash(db, current["configuration_hash"])
     left_gt = (baseline_eval.summary_json or {}).get("ground_truth") if baseline_eval else None
     right_gt = frozen.get("ground_truth") if frozen else None
+    explanations_changed = bool(snapshot and snapshot.get("signature_explanations") != current["snapshot"].get("signature_explanations"))
     return {"candidate_test_run_id": run.id, "candidate_name": run.name, "candidate": snapshot,
         "candidate_configuration_hash": run.configuration_hash, "current": current,
         "checks": checks, "eligible": all(c["passed"] for c in checks), **schema,
         "evaluation": official_document(evaluation), "baseline_evaluation": official_document(baseline_eval),
         "parser_changed": parser_changed,
+        "signature_explanations_changed": explanations_changed,
         "comparable": bool(left_gt and right_gt and left_gt.get("comparison_key") and
             left_gt.get("comparison_key") == right_gt.get("comparison_key") and baseline_eval.metrics_version == evaluation.metrics_version)}
 
@@ -267,6 +280,7 @@ def promote(db, crypto, settings, payload, actor):
     if schema.active_version_id != snapshot["input_schema"]["version_id"]:
         activate_schema_version(db, crypto, snapshot["input_schema"]["version_id"], schema.revision, actor)
     activate_parser_version(db, snapshot.get("parser", {}).get("version_id", BASELINE_ID))
+    activate_explanations(db, crypto, snapshot.get("signature_explanations", {}).get("version_id"))
     row = ProductionPromotion(kind="promotion", source_test_run_id=payload.candidate_test_run_id,
         evaluation_id=review["evaluation"]["id"], previous_configuration_hash=review["current"]["configuration_hash"],
         configuration_hash=review["candidate_configuration_hash"], snapshot_json=snapshot, actor_id=actor)

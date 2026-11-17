@@ -32,6 +32,6 @@ export default function DatasetAnalysis({ onCreated, disabledReason, candidateCo
     {dataset?.internal_only && <p className="notice">{w("내부 전용 문항은 모든 역할에 내부 vLLM을 사용해야 합니다.", "Internal cases require vLLM for every agent role.")}</p>}
     <label>{w("테스트명", "Test name")}<input disabled={busy} value={name} maxLength={120} onChange={e => setName(e.target.value)} placeholder={w("비워두면 날짜와 시간으로 생성", "Defaults to the test date and time")} /></label>
     <p className="v5-context">{w("선택한 구성으로 모델을 호출합니다. 외부 모델은 API 비용이 발생할 수 있습니다.", "Calls models with the selected configuration. External models may incur API charges.")}</p>
-    {error && <p className="error" role="alert">{error}</p>}<button className="primary" disabled={unavailable}>{busy ? w("접수 중…", "Submitting…") : w("테스트 시작", "Start test")}</button>
+    {error && <p className="error" role="alert">{error}</p>}<button type="submit" className="primary" disabled={unavailable}>{busy ? w("접수 중…", "Submitting…") : w("테스트 시작", "Start test")}</button>
   </form></section>;
 }

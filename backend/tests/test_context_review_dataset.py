@@ -113,11 +113,30 @@ def test_new_shared_prompt_keeps_each_existing_protocol_enabled():
 
     for revision in ("waf-system-v2.10", "waf-system-v2.20"):
         assert revision in RULES_VERSIONS & SELECTION_RULES_VERSIONS & INTEGRITY_RULES_VERSIONS
-    # The latest candidate has its own engine instead of mutating byte-pinned
-    # v2.20 registries. Its actual execution is covered by test_worker_v221.py.
-    from app.agent.execution_policy_v221 import INTEGRITY_RULES_VERSIONS as CURRENT_INTEGRITY
-    from app.agent.evidence_source_policy import RULES_VERSIONS as CURRENT_SELECTION
-    from app.agent.evidence_pipeline_v221 import RULES_VERSION
-    assert FIXED_RULES_VERSION == RULES_VERSION == "waf-system-v2.21"
-    assert FIXED_RULES_VERSION in CURRENT_INTEGRITY & CURRENT_SELECTION
+    # Keep the pinned registries intact. New selection versions add their
+    # context-only provenance without rewriting earlier source registries.
+    from app.agent.execution_policy_v221 import INTEGRITY_RULES_VERSIONS as V221_INTEGRITY
+    from app.agent.evidence_source_policy import RULES_VERSIONS as V221_SELECTION
+    from app.agent.execution_policy_v223 import INTEGRITY_RULES_VERSIONS as CURRENT_INTEGRITY
+    from app.agent.evidence_pipeline_v223 import RULES_VERSION
+    from app.agent.input_builder_v221 import build_agent_input as build_v221
+    from app.agent.input_builder_v223 import build_agent_input as build_current
+
+    assert "waf-system-v2.21" in V221_INTEGRITY & V221_SELECTION
+    assert FIXED_RULES_VERSION == RULES_VERSION == "waf-system-v2.23"
+    assert FIXED_RULES_VERSION in CURRENT_INTEGRITY
+    assert FIXED_RULES_VERSION not in V221_SELECTION
     assert FIXED_RULES_VERSION not in RULES_VERSIONS | SELECTION_RULES_VERSIONS | INTEGRITY_RULES_VERSIONS
+
+    event, _ = extract_test_upload_row(EVENTS[0])
+    raw = event["payload"]
+    parsed = parse_http_payload(raw)
+    arguments = (event, raw, parsed, 32768, 3072)
+    options = {"evidence_selection": True, "request_integrity": assess_request_integrity(raw, parsed)}
+    current = build_current(*arguments, fixed_rules_version=FIXED_RULES_VERSION, **options)
+    previous = build_v221(*arguments, fixed_rules_version="waf-system-v2.21", **options)
+    current_document, previous_document = json.loads(current.text), json.loads(previous.text)
+    assert current_document["evidence_candidates"]["version"] == "evidence-selection-v5"
+    current_document["evidence_candidates"]["version"] = previous_document["evidence_candidates"]["version"]
+    assert current_document == previous_document
+    assert current.retained_payload_spans == previous.retained_payload_spans

@@ -16,6 +16,7 @@ from ..services.input_schemas import InputSchemaError
 from ..services.manual_references import audit, utc_datetime
 from ..services.prompt_policies import PromptPolicyError
 from ..services.prompt_snapshots import PromptSnapshotError
+from ..services.signature_explanations import SignatureExplanationError
 from ..services.test_runs import describe_run, read_snapshot, write_lock
 from ..services.vllm_profiles import TargetNotAllowedError
 
@@ -28,7 +29,7 @@ Admin = Annotated[Principal, Depends(require_scope("admin"))]
 def errors(db):
     try:
         yield
-    except (AnalysisIngestError, InputSchemaError, PromptPolicyError) as exc:
+    except (AnalysisIngestError, InputSchemaError, PromptPolicyError, SignatureExplanationError) as exc:
         db.rollback()
         raise HTTPException(exc.status_code, {"code": exc.code, "issues": exc.issues} if getattr(exc, "issues", None) else exc.code) from None
     except PromptSnapshotError as exc:

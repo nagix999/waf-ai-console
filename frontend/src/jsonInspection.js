@@ -11,7 +11,9 @@ function decimalValue(literal) {
   if (!match || (match[4]?.length || 0) > 6) return null;
   const digits = (match[2] + (match[3] || "")).replace(/^0+/, "");
   if (!digits) return `${match[1]}0`;
-  const significant = digits.replace(/0+$/, "");
+  let significantEnd = digits.length;
+  while (significantEnd > 0 && digits[significantEnd - 1] === "0") significantEnd -= 1;
+  const significant = digits.slice(0, significantEnd);
   return `${match[1]}${significant}e${Number(match[4] || 0) - (match[3]?.length || 0) + digits.length - significant.length}`;
 }
 

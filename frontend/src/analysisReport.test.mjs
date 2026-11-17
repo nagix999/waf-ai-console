@@ -334,6 +334,16 @@ test("all ASCII punctuation, Unicode and surrounding whitespace round-trip throu
   assert.equal(decodeReportText("&quot; &#65;"), "&quot; &#65;");
 });
 
+test("long synthetic space runs remain exact in report cells", { timeout: 5000 }, () => {
+  const detail = fixture();
+  const spaces = " ".repeat(50000);
+  for (const value of [spaces, `한글 😀${spaces}`, `${spaces}한글 😀`, `한글${spaces}끝`, `한글${spaces}\t`]) {
+    detail.event_name = value;
+    assert.equal(cell(parsed(detail), "이벤트명"), value);
+    assert.equal(detail.event_name, value);
+  }
+});
+
 test("evidence fences preserve exact bytes after only the structural LF is removed", () => {
   for (const excerpt of ["", "plain", "line\n", "line\r\n", "line\r", "  \t\n  ", "`````\n## injected\n<script>synthetic</script>\n````\n&amplt;\\r\\n"]) {
     const detail = fixture();

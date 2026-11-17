@@ -1,10 +1,11 @@
 // Identity only; a difference is not evidence that a change caused a score.
 export function configurationPart(snapshot, key) {
+  if (key === "signature_explanations") return snapshot?.signature_explanations?.version_id || null;
   return key === "parser" ? snapshot?.parser?.version_id || "generic-http-v3" : JSON.stringify(snapshot?.[key]);
 }
 export function configurationChanges(snapshot, current) {
   if (!snapshot || !current) return null;
-  return ["primary", "verifier", "evidence_editor", "prompt", "input_schema", "parser"].filter(key => configurationPart(snapshot, key) !== configurationPart(current, key));
+  return ["primary", "verifier", "evidence_editor", "prompt", "input_schema", "parser", "signature_explanations"].filter(key => configurationPart(snapshot, key) !== configurationPart(current, key));
 }
 export function comparisonContext(run, current) {
   if (!run.ground_truth?.published) return "not_official";

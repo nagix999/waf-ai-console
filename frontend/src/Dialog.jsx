@@ -6,15 +6,24 @@ import "./ux.css";
 
 // Native modal supplies focus trapping, Escape and background inertness. Keep
 // this component mounted to retain form drafts when closing and reopening it.
-export default function Dialog({ open, title, onClose, children, className = "" }) {
+export default function Dialog({ open, title, onClose, children, className = "", initialFocusRef }) {
   const { t } = useConsolePreferences();
   const ref = useRef(null); const titleId = useId();
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
+    if (open && !dialog.open) {
+      const previous = document.activeElement;
+      dialog.showModal();
+      const initial = initialFocusRef?.current;
+      if (initial && dialog.contains(initial) && !initial.disabled) initial.focus({ preventScroll: true });
+      return () => {
+        if (dialog.open) dialog.close();
+        if (previous?.isConnected) previous.focus({ preventScroll: true });
+      };
+    }
     if (!open && dialog.open) dialog.close();
-  }, [open]);
+  }, [open, initialFocusRef]);
   if (typeof document === "undefined") return null;
   return createPortal(<dialog ref={ref} className={`ux-dialog ${className}`} aria-labelledby={titleId} onCancel={event => { event.preventDefault(); event.stopPropagation(); onClose(); }}>
     <div className="ux-dialog-head"><h2 id={titleId}>{title}</h2><button type="button" className="icon-button" aria-label={t("closeNamed", { title })} onClick={onClose}><Icon name="close" size={18} /></button></div>

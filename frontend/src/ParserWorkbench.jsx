@@ -18,7 +18,7 @@ const stepNames = { data: ["입력 선택", "Choose inputs"], formats: ["형식 
 export function ParserRuleCatalog({ catalog, loading, error, onRetry, onCreate }) {
   const { locale } = useConsolePreferences(), w = (ko, en) => locale === "en" ? en : ko;
   const [vendor, setVendor] = useState(""), [query, setQuery] = useState(""), [offset, setOffset] = useState(0), [selected, setSelected] = useState(null);
-  const rules = catalog?.rules || [], vendors = [...new Set(rules.map(rule => rule.waf_vendor).filter(Boolean))].sort();
+  const rules = catalog?.rules || [], vendors = [...new Set(rules.map(rule => rule.waf_vendor).filter(Boolean))].sort((left, right) => left.localeCompare(right, locale === "en" ? "en" : "ko"));
   const rows = rules.filter(rule => (!vendor || rule.waf_vendor === vendor) && `${rule.name} ${rule.waf_vendor}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
   const methods = { raw_payload: w("HTTP 요청 전체", "Whole HTTP request"), between_markers: w("시작 / 종료 표식", "Start / end markers"), json_string: w("JSON 키", "JSON key"), regex_capture: w("제한된 정규식", "Bounded regex") };
   return <section className="panel pw-rule-catalog" aria-busy={loading}>

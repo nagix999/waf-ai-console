@@ -167,9 +167,15 @@ def test_unchanged_jndi_warning_is_a_whole_bounded_model_hint():
 
 
 def test_agent_instructions_keep_lookup_candidates_distinct_from_observed_execution():
-    from app.agent.prompts import BASE_INSTRUCTIONS, PROMPT_VERSION
+    from app.agent.prompts import BASE_INSTRUCTIONS, FIXED_RULES_VERSION, PROMPT_VERSION
 
-    assert PROMPT_VERSION == "waf-judgment-v2.21"
+    # This checks the current guidance, independently of the archived v2.20
+    # worker fixture above. Decoder semantics must survive prompt revisions.
+    assert PROMPT_VERSION == FIXED_RULES_VERSION.replace("waf-system-", "waf-judgment-", 1)
     for marker in ["log4j_lookup_static", "unresolved_lookup", "default_lookup_candidate", "base64_padding_inferred"]:
         assert marker in BASE_INSTRUCTIONS
-    assert "성공 증거 부재로 시도를 부정하지 않는다" in BASE_INSTRUCTIONS
+    assert "디코딩 전 원문 후보만 인용한다" in BASE_INSTRUCTIONS
+    assert "정적 변환은 실제 서버 처리, 외부 연결, 침해나 취약 Log4j의 증명이 아니며" in BASE_INSTRUCTIONS
+    assert "JNDI/LDAP/RMI/DNS, 환경변수와 시스템 속성을 조회하지 않았다" in BASE_INSTRUCTIONS
+    assert "original=decoded와 빈 steps는 미변환이다" in BASE_INSTRUCTIONS
+    assert "완전한 공격 코드/취약 제품 사용/침해 성공 확인은 필수가 아니다" in BASE_INSTRUCTIONS

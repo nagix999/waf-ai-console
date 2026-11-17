@@ -1,10 +1,9 @@
 // Offline design fixtures only. Never loads a database, credentials, or real logs.
 // Reuse the web report's allowlist, wording, ordering and Markdown parser.
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
 import { buildAnalysisReport, decodeReportText } from "../../frontend/src/analysisReport.js";
 import { parseApiDocument } from "../../frontend/src/apiDocument.js";
+import { prepareOutputDirectory, writePreviewFile } from "./output.mjs";
 
 export const sampleNames = ["01-short", "02-long", "03-evidence"];
 const evidence = (number, supports, field, excerpt, interpretation_ko) => ({
@@ -98,8 +97,7 @@ function normalize(block) {
   return output;
 }
 
-const output = resolve(process.argv[2] || "/tmp/waf-reportlab-preview");
-await mkdir(output, { recursive: true });
+const output = await prepareOutputDirectory(process.argv[2]);
 for (const [index, detail] of fixtures().entries()) {
   const before = JSON.stringify(detail);
   const markdown = buildAnalysisReport(detail);
@@ -112,8 +110,9 @@ for (const [index, detail] of fixtures().entries()) {
   for (const excluded of ["PREVIEW-RAW-EXCLUDED", "PREVIEW-EXTRA-EXCLUDED", "PREVIEW-PRIMARY-EXCLUDED"]) assert(!markdown.includes(excluded));
   const name = sampleNames[index];
   // Exclusive writes: an existing preview is never silently replaced.
-  await writeFile(resolve(output, `${name}.json`), JSON.stringify(document, null, 2), { flag: "wx" });
-  await writeFile(resolve(output, `${name}.md`), markdown, { flag: "wx" });
-  await writeFile(resolve(output, `${name}.web.json`), JSON.stringify({ detail, decoding: null, includeAppendix: false, theme: "light" }), { flag: "wx" });
+  await writePreviewFile(output, `${name}.json`, JSON.stringify(document, null, 2));
+  await writePreviewFile(output, `${name}.md`, markdown);
+  await writePreviewFile(output, `${name}.web.json`, JSON.stringify({ detail, decoding: null, includeAppendix: false, theme: "light" }));
 }
 console.log("Prepared 3 fictional reports using the web report formatter; no LLM calls.");
+console.log(`Preview output: ${output}`);

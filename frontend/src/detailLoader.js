@@ -19,7 +19,7 @@ export function emptyDetailState(id) {
 }
 // One in-flight request per resource. Refresh/cancel also invalidates responses
 // from transports that cannot abort, so an old view can never publish late data.
-function resource({ fetchData, onData, onError, onLoading, shouldPoll, setTimer, clearTimer }) {
+function resource({ fetchData, onData, onError, onLoading, onUnexpectedError, isActive, shouldPoll, setTimer, clearTimer }) {
   let generation = 0;
   let controller;
   let timer;
@@ -37,13 +37,15 @@ function resource({ fetchData, onData, onError, onLoading, shouldPoll, setTimer,
   }
 
   async function load() {
+    if (!isActive()) return;
     clearTimer(timer);
     timer = undefined;
     const version = ++generation;
     controller = new AbortController();
-    onLoading(true);
     let delay;
     try {
+      onLoading(true);
+      if (version !== generation || !isActive()) return;
       const request = fetchData({ signal: controller.signal });
       const value = await Promise.race([request, new Promise((_, reject) => {
         deadline = setTimer(() => {
@@ -55,8 +57,15 @@ function resource({ fetchData, onData, onError, onLoading, shouldPoll, setTimer,
       })]);
       if (version !== generation) return;
       failures = 0;
-      onData(value);
-      if (shouldPoll()) delay = POLL_MS;
+      try {
+        onData(value);
+        if (shouldPoll()) delay = POLL_MS;
+      } catch {
+        // A display/callback error is not a transient transport failure.
+        const error = new Error("detail_callback_failed");
+        error.status = 400;
+        throw error;
+      }
     } catch (error) {
       if (version !== generation) return;
       failures += 1;
@@ -69,13 +78,24 @@ function resource({ fetchData, onData, onError, onLoading, shouldPoll, setTimer,
         deadline = undefined;
         controller = undefined;
         onLoading(false);
-        if (delay !== undefined) timer = setTimer(load, delay);
+        if (delay !== undefined) timer = setTimer(loadInBackground, delay);
       }
     }
   }
 
+  // Both user refreshes and timer callbacks need the same final boundary.
+  // Callback failures must stop polling, without logging arbitrary error text.
+  function loadInBackground() {
+    const version = generation + 1;
+    load().catch(() => {
+      if (version !== generation) return;
+      cancel();
+      onUnexpectedError();
+    });
+  }
+
   return {
-    refresh() { cancel(); failures = 0; return load(); },
+    refresh() { cancel(); failures = 0; if (isActive()) loadInBackground(); },
     cancel,
   };
 }
@@ -84,24 +104,40 @@ export function createDetailLoader({ id, api, onChange, includeLabels = true, se
   let state = emptyDetailState(id);
   let disposed = false;
   let agentVisible = false;
+  let observerFailed = false;
 
   function update(values) {
-    if (disposed) return;
+    if (disposed || observerFailed) return false;
     state = { ...state, ...values };
-    onChange(state);
+    try {
+      onChange(state);
+      return true;
+    } catch {
+      // A broken consumer cannot render its own error reliably. Keep a safe
+      // readable snapshot, stop all work, and retry notification only after an
+      // explicit refresh. Do not repeatedly call or log the failing observer.
+      observerFailed = true;
+      state = { ...state, error: "화면을 갱신하지 못했습니다. 새로고침으로 다시 시도하세요.",
+        loading: false, labelsLoading: false, runsLoading: false };
+      detail.cancel(); labels.cancel(); agent.cancel();
+      return false;
+    }
   }
 
   function makeResource(fetchData, dataKey, errorKey, loadingKey, shouldPoll, onData) {
     return resource({
-      fetchData, setTimer, clearTimer, shouldPoll,
+      fetchData, setTimer, clearTimer, shouldPoll, isActive: () => !disposed && !observerFailed,
       onLoading: (loading) => update({ [loadingKey]: loading }),
       onError: (error, retry) => update({
-        [errorKey]: `${error.message || "조회 실패"}${retry ? " · 잠시 후 다시 조회합니다." : " · 자동 조회를 중지했습니다. 새로고침으로 다시 시도하세요."}`,
+        [errorKey]: `${error?.status === 408 ? "조회 시간 초과" : "조회 실패"}${retry ? " · 잠시 후 다시 조회합니다." : " · 자동 조회를 중지했습니다. 새로고침으로 다시 시도하세요."}`,
+      }),
+      onUnexpectedError: () => update({
+        [errorKey]: "화면을 갱신하지 못했습니다. 새로고침으로 다시 시도하세요.", [loadingKey]: false,
       }),
       onData: (value) => {
         const previous = state[dataKey];
         const hadError = Boolean(state[errorKey]);
-        update({ [dataKey]: value, [errorKey]: "" });
+        if (!update({ [dataKey]: value, [errorKey]: "" })) return;
         onData?.(value, previous, hadError);
       },
     });
@@ -138,7 +174,8 @@ export function createDetailLoader({ id, api, onChange, includeLabels = true, se
   return {
     start() {
       if (disposed) return;
-      update(emptyDetailState(id));
+      observerFailed = false;
+      if (!update(emptyDetailState(id))) return;
       detail.refresh();
       if (includeLabels) labels.refresh();
     },
@@ -153,6 +190,7 @@ export function createDetailLoader({ id, api, onChange, includeLabels = true, se
     setEvidenceVisible() {},
     refresh() {
       if (disposed) return;
+      observerFailed = false;
       detail.refresh();
       if (includeLabels) labels.refresh();
       if (agentVisible) agent.refresh();
@@ -163,6 +201,7 @@ export function createDetailLoader({ id, api, onChange, includeLabels = true, se
     refreshRelations() {
       if (!disposed) detail.refresh();
     },
+    getState() { return state; },
     dispose() {
       disposed = true;
       detail.cancel();

@@ -51,7 +51,7 @@ function JsonNode({ value, name, arrayItem = false, depth = 0, onShowJson, inspe
 }
 
 export default function JsonTree({ value, label, wrap, onShowJson, inspectJsonStrings = false }) {
-  return <div className={`json-tree inspector-content${wrap ? " inspector-wrap" : ""}`} tabIndex={0} aria-label={`${label} 트리`}>
+  return <div className={`json-tree inspector-content${wrap ? " inspector-wrap" : ""}`} role="region" tabIndex={0} aria-label={`${label} 트리`}>
     <ul className="json-root"><JsonNode value={value} onShowJson={onShowJson} inspectJsonStrings={inspectJsonStrings} /></ul>
   </div>;
 }

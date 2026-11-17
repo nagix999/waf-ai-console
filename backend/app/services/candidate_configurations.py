@@ -11,6 +11,7 @@ from .input_schemas import read_schema_snapshot
 from .prompt_policies import get_policy_version, read_policy_text
 from .prompt_snapshots import load_analysis_prompt
 from .parser_versions import parser_metadata, read_parser_snapshot
+from .signature_explanations import read_snapshot as read_explanations, metadata as explanation_metadata, event_snapshot
 
 
 def resolve_profiles(db, crypto, candidate):
@@ -67,6 +68,12 @@ def snapshot_from_run(run, crypto, *, include_parser=None):
         snapshot["evidence_pipeline"] = prompt.evidence_pipeline
     if display:
         snapshot["evidence_editor"] = editor_metadata(display)
+    explanations = read_explanations(crypto, run, allow_legacy=prompt.fixed_rules_version != "waf-system-v2.23")
+    if prompt.fixed_rules_version == "waf-system-v2.23":
+        snapshot["schema_version"] = 4
+        snapshot["signature_explanations"] = explanation_metadata(explanations)
+    elif explanations["version_id"] is not None:
+        raise ValueError("signature_explanation_requires_current_instructions")
     return snapshot
 
 
@@ -101,6 +108,14 @@ def verify_configuration(run, crypto, analysis=None):
             queued_parser = parser_metadata(read_parser_snapshot(crypto, analysis))
             run_parser = parser_metadata(read_parser_snapshot(crypto, run))
             if queued_parser != run_parser:
+                raise ValueError()
+            run_explanations = read_explanations(crypto, run, allow_legacy=run_prompt.fixed_rules_version != "waf-system-v2.23")
+            queued_explanations = read_explanations(crypto, analysis, allow_legacy=run_prompt.fixed_rules_version != "waf-system-v2.23")
+            expected_explanations = event_snapshot(run_explanations, analysis.waf_vendor, analysis.signature)
+            if run_prompt.fixed_rules_version == "waf-system-v2.23":
+                if queued_explanations != expected_explanations:
+                    raise ValueError()
+            elif queued_explanations["version_id"] is not None:
                 raise ValueError()
             if run.display_editor_snapshot_ciphertext:
                 from .evidence_display_jobs import load_snapshot

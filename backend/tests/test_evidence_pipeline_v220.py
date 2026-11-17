@@ -397,14 +397,17 @@ def test_rehashed_v220_baseline_cannot_remove_or_replace_approved_pipeline(clien
 
 
 @pytest.mark.parametrize("damage", ["source_blocks.py", "../worker.py", "missing", "modified"])
+@pytest.mark.usefixtures("legacy_evidence_editor_admissions")
 def test_v220_promotion_preserves_pipeline_and_refuses_drift_or_rehashed_missing_manifest(
     client, event_payload, candidate, monkeypatch, damage,
 ):
     run = qualified(client, event_payload, candidate)
     baseline = client.get(PRODUCTION_BASE).json()
+    review = client.get(f"{PRODUCTION_BASE}/preflight/{run['id']}").json()
+    assert review["eligible"], [check["code"] for check in review["checks"] if not check["passed"]]
     response = client.post(f"{PRODUCTION_BASE}/promote", json={"candidate_test_run_id": run["id"],
         "expected_production_configuration_hash": baseline["configuration_hash"], "acknowledge_schema_change": True})
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
     crypto = client.app.state.crypto
     with client.app.state.session_factory() as db:
         approved = approved_production_prompt(db, crypto)

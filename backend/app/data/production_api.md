@@ -159,6 +159,8 @@ Content-Type: application/json
 
 정의되지 않은 벤더 확장 필드는 `extra_fields`에 보존된다. `occurred_at`, `attributes`는 현재 별도 타입·검색 필드가 아닌 확장 데이터다. `source_system`, 목적, 내부 ID, 상태, 판정, 모델·프롬프트 설정 등 서버 제어용 예약 필드는 요청에서 지정할 수 없다.
 
+`signature_explanation`은 서버 관리 필드이므로 요청 본문이나 `extra_fields`에 보내지 않는다. 운영에 승인된 설명집(일반 Test는 선택한 후보 또는 접수 당시 Test 기본 설명집)에서 벤더와 시그니처가 일치하면 추론용 이벤트에만 추가한다. 원본 이벤트와 중복 판별값은 바꾸지 않으며, 공개 v3 결과에 별도 필드를 추가하지 않는다.
+
 선택 요청 항목 `expected_verdict`는 `true_positive` / `false_positive` / `inconclusive` 또는 JSON null을 받는다. 누락·null이면 새 답안을 등록하지 않으며 기존 답안도 삭제하지 않는다. Test·Production 모두 분석 접수와 같은 트랜잭션에서 참고 답안으로 별도 저장하고 응답 `evaluation.reference_label`에서 확인한다. 입력 스키마의 사용자 필드가 아니며 이벤트 fingerprint·암호화 원문·LLM 입력에는 포함되지 않는다. 나머지 최상위 `label`, `reference_label`, `ground_truth`, `difficulty`, `expected_severity`, `rationale_ko`, `important_evidence` 등 평가 필드는 422 `evaluation_labels_require_separate_attachment`로 거부한다. 답안 정정은 아래 별도 연결 API 또는 웹의 참고 답안 입력을 사용한다. 이는 임의의 중첩 필드나 payload 본문에서 정답 문장을 찾아 제거하는 기능이 아니며, 기존 입력 내용을 조용히 삭제하거나 재해석하지 않는다.
 
 아래 요청은 기본 스키마의 예시 입력다. 운영 스키마에서 추가한 필수 필드·허용값·제한에 맞게 수정한 뒤 전송해야 한다.

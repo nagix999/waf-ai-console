@@ -35,6 +35,7 @@ const methods={
  modelProfiles:async()=>profiles,modelProfileTests:async profile=>[{id:id(12),profile_id:profile,status:'completed',mode:'full',completed_at:date,checks:[{name:'structured_output',status:'passed',latency_ms:120}],include_dataset:false}],
  agentSettings:async()=>agents,
  parsers:async()=>({items:[{id:'generic-http-v3',name:'기존 기본 파서',engine_version:'generic-http-v3',options:{line_endings:'actual',request_line_whitespace:'strict',skip_leading_blank_lines:false},content_hash:hash,created_at:date}],active_version_id:'generic-http-v3',revision:1}),
+ signatureExplanations:async()=>({items:[],active_version_id:null,revision:1,total:0,limit:100,offset:0}),
  promptPolicies:async()=>({items:policies,active_version_id:id(3),revision:1,max_policy_chars:4000,fixed_rules_version:'fixture-v1',fixed_instructions:'읽기 전용 안전 규칙'}),promptPolicy:async value=>policies.find(p=>p.id===value),
  inputSchemas:async()=>({items:schemas,active_version_id:id(5),revision:1,default_fields:fields}),inputSchema:async value=>schemas.find(s=>s.id===value),inputSchemaHistory:async()=>({items:[]}),
  concurrencySettings:async()=>({state_token:hash,production:3,test:2,servers:[{server_key:'vllm:10.1.2.3:8000',max_calls:4,profiles}],active:{production:1,test:0}}),

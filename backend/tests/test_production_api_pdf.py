@@ -170,6 +170,43 @@ def test_markdown_parser_retains_sections_code_whitespace_and_literal_table_pipe
     assert blocks[-1].text == "끝"
 
 
+def test_synthetic_long_headings_fences_and_whitespace_preserve_source():
+    title = "한글 😀" + " " * 50_000 + "끝"
+    marker = "~" * 50_000
+    code = '  {"합성": "😀"}\t  \r\n\r\n| code |\r\n'
+    blocks = pdf.document_blocks(f"# {title}\n\n{marker}json\n{code}{marker}\n")
+    assert blocks[0].text == title
+    assert blocks[1].kind == "code"
+    assert blocks[1].text == '  {"합성": "😀"}\t  \n\n| code |'
+    assert blocks[1].language == "json"
+    assert pdf.document_blocks("#  \t")[0].text == "\t"
+    assert pdf.document_blocks("####### literal")[0].kind == "text"
+    assert pdf.document_blocks("    ## literal")[0].kind == "text"
+
+
+def test_synthetic_unclosed_fences_reject_without_silent_completion():
+    for source in ["```text\n" + "x" * 50_000, "~" * 50_000 + "json\n{}\n~~~", "````text\n{}\n```"]:
+        with pytest.raises(pdf.ProductionAPIPDFError) as caught:
+            pdf.document_blocks(source)
+        assert caught.value.code == "production_api_pdf_unavailable"
+    # A backtick inside a language is literal prose, not a new code block.
+    for marker in ("`", "~"):
+        line = marker * 50_000 + "text`literal"
+        assert pdf.document_blocks(line) == (pdf.DocumentBlock("text", line),)
+
+
+def test_table_tick_cursor_preserves_escaped_and_unequal_runs():
+    assert pdf.table_row(r"| \`a|b` | end |") == ((r"\`a", "b`", "end"), 4)
+    assert pdf.table_row(r"| ``a`|b`` | \| |") == (("``a`|b``", r"\|"), 3)
+    assert pdf.table_row("| `a``|b` | tail |") == (("`a``|b`", "tail"), 3)
+    # Every unmatched width has a different size. Finding a closing run is a
+    # single pre-scan rather than a suffix search for every candidate.
+    source = "| " + " | ".join("`" * width + "x" for width in range(1, 160)) + " |"
+    cells, separators = pdf.table_row(source)
+    assert cells == tuple("`" * width + "x" for width in range(1, 160))
+    assert separators == 160
+
+
 def test_real_pdf_covers_current_full_document_and_korean_fonts(client):
     pytest.importorskip("reportlab")
     login(client)

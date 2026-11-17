@@ -140,6 +140,29 @@ def create_run_record(db, crypto, settings, *, name, idempotency_key, request_ha
             copy_parser_snapshot(model_test, run)
     except ParserVersionError as exc:
         raise AnalysisIngestError(exc.code, exc.status_code) from None
+    from .signature_explanations import pin_snapshot as pin_explanations, SignatureExplanationError
+    try:
+        if candidate is not None:
+            selected_explanations = candidate.signature_explanation_version_id
+        elif model_test is None:
+            # Service Test sessions retain their existing model-role contract,
+            # but new sessions pin the explicitly saved Test reference choice.
+            # A running session never re-reads this default for later items.
+            from ..models import TestConfigurationDefaults
+            defaults = db.get(TestConfigurationDefaults, 1)
+            selected_explanations = defaults.signature_explanation_version_id if defaults else None
+        else:
+            selected_explanations = None
+        if load_analysis_prompt(run, crypto).fixed_rules_version == "waf-system-v2.23":
+            pin_explanations(db, crypto, run, version_id=selected_explanations,
+                             selection_origin="candidate" if candidate else "test")
+            if model_test is not None:
+                from .signature_explanations import copy_snapshot as copy_explanations
+                copy_explanations(run, model_test, crypto=crypto)
+        elif selected_explanations is not None:
+            raise AnalysisIngestError("signature_explanation_requires_current_instructions", 409)
+    except SignatureExplanationError as exc:
+        raise AnalysisIngestError(exc.code, exc.status_code) from None
     pin_configuration(run, crypto)
     db.add(run)
     db.flush()
@@ -205,6 +228,8 @@ def add_run_items(db, crypto, settings, run, rows, *, ai_visible=None, source_re
                 )
                 if not duplicate:
                     pin_item_prompt(analysis, run)
+                    from .signature_explanations import copy_snapshot as copy_explanations
+                    copy_explanations(run, analysis, crypto=crypto)
                     analysis.internal_only = bool(trusted.get("internal_only", False))
                     if run.display_editor_snapshot_ciphertext and not run.model_test_run_id:
                         from .evidence_display_jobs import load_snapshot, pin_job

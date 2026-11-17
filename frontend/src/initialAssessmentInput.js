@@ -27,7 +27,7 @@ export function singleTestAdmission(observation, form = {}) {
     if (Object.hasOwn(event, key)) { metadata[key] = event[key]; delete event[key]; }
     if (form[key] !== undefined && form[key] !== "") {
       if (Object.hasOwn(metadata, key)) throw new Error("duplicate_test_metadata_location");
-      metadata[key] = key === "initial_probability" ? (String(form[key]).trim() ? Number(form[key]) : NaN) : form[key];
+      metadata[key] = key === "initial_probability" ? (String(form[key]).trim() ? Number(form[key]) : Number.NaN) : form[key];
     }
   }
   if (event.extra_fields && fields.some(key => Object.hasOwn(event.extra_fields, key))) throw new Error("initial_assessment_location_invalid");

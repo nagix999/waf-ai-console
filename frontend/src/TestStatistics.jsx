@@ -74,7 +74,7 @@ export default function TestStatistics({ run, filters, state: controlled, onChan
         </div>)}
         <button type="button" className="secondary" disabled={fields.length === 3} onClick={() => setState(current => addGrouping(current))}>{w("기준 추가", "Add field")}</button>
       </div>
-      <label className="test-stat-search">{w("항목 검색", "Search groups")}<input maxLength={500} value={state.draft} onChange={event => change({ draft: event.target.value })} placeholder={w("선택한 필드 값으로 검색", "Search selected field values")} /></label><button className="secondary" disabled={loading}>{w("검색", "Search")}</button>
+      <label className="test-stat-search">{w("항목 검색", "Search groups")}<input maxLength={500} value={state.draft} onChange={event => change({ draft: event.target.value })} placeholder={w("선택한 필드 값으로 검색", "Search selected field values")} /></label><button type="submit" className="secondary" disabled={loading}>{w("검색", "Search")}</button>
     </form>
     {error && <p className="error" role="alert">{error}</p>}
     {!data && !error && <p role="status">{w("통계를 불러오는 중…", "Loading statistics…")}</p>}

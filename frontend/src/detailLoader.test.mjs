@@ -38,7 +38,7 @@ function harness(id = "synthetic-a", sharedClock = clock()) {
   })]));
   const loader = createDetailLoader({ id, api, onChange: (value) => updates.push(value), setTimer: sharedClock.setTimer, clearTimer: sharedClock.clearTimer });
   return {
-    loader, clock: sharedClock, requests, updates,
+    loader, api, clock: sharedClock, requests, updates,
     get state() { return updates.at(-1); },
     calls(name) { return requests.filter((request) => request.name === name); },
     next(name) { return requests.find((request) => request.name === name && !request.settled && !request.signal.aborted); },
@@ -209,6 +209,115 @@ test("authorization/not-found errors do not automatically retry", async () => {
     assert.equal(h.clock.count, 0);
     h.loader.dispose();
   }
+});
+
+test("API exception text never leaks into detail errors", async () => {
+  const h = harness(); h.loader.start();
+  const request = h.next("analysis"); request.settled = true;
+  request.reject(Object.assign(new Error("SYNTHETIC_SECRET_MUST_NOT_RENDER"), { status: 403 }));
+  await h.answer("evaluationLabels", history());
+  assert.match(h.state.error, /조회 실패/);
+  assert.doesNotMatch(h.state.error, /SYNTHETIC_SECRET/);
+  assert.equal(h.clock.count, 0);
+  h.loader.dispose();
+});
+
+test("display callbacks fail safely without another network request and manual refresh can recover", async () => {
+  const h = harness();
+  h.api.analysisEvidenceMeta = () => { throw new Error("SYNTHETIC_PRIVATE_CALLBACK_TEXT"); };
+  h.loader.start();
+  await h.answer("analysis", analysis("completed")); await h.answer("evaluationLabels", history());
+  assert.match(h.state.error, /자동 조회를 중지/);
+  assert.doesNotMatch(h.state.error, /SYNTHETIC_PRIVATE_CALLBACK_TEXT/);
+  assert.equal(h.state.loading, false);
+  await h.clock.advance(60000);
+  assert.equal(h.calls("analysis").length, 1);
+  assert.equal(h.clock.count, 0);
+  delete h.api.analysisEvidenceMeta;
+  h.loader.refresh();
+  await h.answer("analysis", analysis("completed")); await h.answer("evaluationLabels", history());
+  assert.equal(h.state.error, "");
+  h.loader.dispose();
+});
+
+test("an error observer failure is closed by the background boundary and stops its scheduled polling", async () => {
+  const timers = clock(), updates = [];
+  let failedObserver = false, calls = 0;
+  const loader = createDetailLoader({ id: "synthetic-observer", includeLabels: false,
+    api: { analysis: async () => { calls += 1; throw new Error("SYNTHETIC_PRIVATE_FAILURE"); } },
+    setTimer: timers.setTimer, clearTimer: timers.clearTimer,
+    onChange(state) {
+      if (state.error && !failedObserver) { failedObserver = true; throw new Error("SYNTHETIC_ERROR_HANDLER_FAILURE"); }
+      updates.push(state);
+    },
+  });
+  loader.start(); await flush();
+  assert.equal(failedObserver, true);
+  assert.match(loader.getState().error, /화면을 갱신하지 못했습니다/);
+  assert.doesNotMatch(loader.getState().error, /SYNTHETIC/);
+  assert.equal(loader.getState().loading, false);
+  await timers.advance(60000);
+  assert.equal(calls, 1);
+  assert.equal(timers.count, 0);
+  loader.dispose();
+});
+
+test("an always-throwing observer cannot escape, request data or loop; its safe snapshot remains readable", async () => {
+  const timers = clock(); let reads = 0, notifications = 0;
+  const loader = createDetailLoader({ id: "synthetic-broken-observer", includeLabels: false,
+    api: { analysis: async () => { reads += 1; return analysis("completed"); } },
+    setTimer: timers.setTimer, clearTimer: timers.clearTimer,
+    onChange() { notifications += 1; throw new Error("SYNTHETIC_PRIVATE_OBSERVER"); },
+  });
+  assert.doesNotThrow(() => loader.start()); await flush();
+  assert.match(loader.getState().error, /화면을 갱신하지 못했습니다/);
+  assert.doesNotMatch(loader.getState().error, /SYNTHETIC/);
+  assert.equal(loader.getState().loading, false);
+  assert.equal(reads, 0); assert.equal(notifications, 1);
+  await timers.advance(60000); assert.equal(timers.count, 0);
+  assert.doesNotThrow(() => loader.refresh()); await flush();
+  assert.equal(reads, 0); assert.equal(notifications, 2);
+  assert.doesNotThrow(() => loader.dispose());
+});
+
+test("a repaired observer can explicitly refresh after a notification failure", async () => {
+  const timers = clock(), updates = [];
+  let broken = true, reads = 0;
+  const loader = createDetailLoader({ id: "synthetic-repaired-observer", includeLabels: false,
+    api: { analysis: async () => { reads += 1; return analysis("completed"); } },
+    setTimer: timers.setTimer, clearTimer: timers.clearTimer,
+    onChange(state) { if (broken) throw new Error("SYNTHETIC_OBSERVER"); updates.push(state); },
+  });
+  loader.start(); await flush(); assert.equal(reads, 0);
+  broken = false; loader.refresh(); await flush();
+  assert.equal(reads, 1); assert.equal(updates.at(-1).error, "");
+  assert.equal(updates.at(-1).detail.status, "completed");
+  assert.equal(timers.count, 0); loader.dispose();
+});
+
+test("a late background failure cannot cancel a newer manual refresh", async () => {
+  const timers = clock(), updates = [], pending = [];
+  let failed = false, loader;
+  loader = createDetailLoader({ id: "synthetic-late-callback", includeLabels: false,
+    api: { analysis: (_id, options) => new Promise(resolve => pending.push({ resolve, signal: options.signal })) },
+    setTimer: timers.setTimer, clearTimer: timers.clearTimer,
+    onChange(state) {
+      updates.push(state);
+      if (state.detail?.status === "completed" && !state.loading && !failed) {
+        failed = true;
+        queueMicrotask(() => loader.refresh());
+        throw new Error("SYNTHETIC_STALE_CALLBACK");
+      }
+    },
+  });
+  loader.start(); pending[0].resolve(analysis("completed")); await flush();
+  assert.equal(pending.length, 2);
+  assert.equal(pending[1].signal.aborted, false);
+  pending[1].resolve(analysis("completed")); await flush();
+  assert.equal(updates.at(-1).error, "");
+  assert.equal(updates.at(-1).loading, false);
+  assert.equal(timers.count, 0);
+  loader.dispose();
 });
 
 test("slow requests never overlap; refreshing keeps old detail and ignores the canceled response", async () => {

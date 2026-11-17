@@ -266,8 +266,13 @@ def test_stopped_test_cannot_start_display_call(client, event_payload, candidate
 
 def test_lane_recovers_coordination_failure_without_logging_exception_text(monkeypatch, caplog):
     from contextlib import nullcontext
+    import logging
     from threading import Event
     from types import SimpleNamespace
+    # Alembic's fileConfig in migration tests disables existing loggers. Keep
+    # this safety assertion independent of the order of the full test suite.
+    monkeypatch.setattr(logging.getLogger("waf-worker"), "disabled", False)
+    caplog.set_level(logging.ERROR, logger="waf-worker")
     stop = Event()
     count = 0
     def claim(*_args):
@@ -437,7 +442,7 @@ def test_fresh_and_existing_upgrade_preserve_prior_analysis_and_add_nullable_sna
         before = connection.execute(text("SELECT id,payload_ciphertext,result_json FROM analyses")).all()
     command.upgrade(configuration, "head")
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0031_parser_rule_workbench"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0032_signature_explanations"
         assert inspect(connection).has_table("evidence_display_jobs")
         column = next(c for c in inspect(connection).get_columns("test_runs") if c["name"] == "display_editor_snapshot_ciphertext")
         assert column["nullable"]
