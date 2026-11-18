@@ -125,6 +125,38 @@ vendor. The server retains that ID and increments its revision while preserving
 all other rules. Leaving the target empty creates a new rule. Model input uses
 short sample aliases, never server-assigned rule IDs or revision controls.
 
+### Rule-generation failures and correction
+
+Workbench model jobs use the selected profile's `max_output_tokens` instead of
+the former 1,536-token cap. The same configured output allowance is reserved in
+the existing conservative input/context estimate; the response-byte limit is
+unchanged. A higher profile limit is not an automatic guarantee of valid output.
+
+New jobs distinguish incomplete/refused model responses, malformed JSON, schema
+errors, RE2/rule validation errors and failed extraction on authoring samples.
+Correction includes the prior complete proposal, safe schema field/type errors
+and up to eight failing authoring aliases. It never includes validation-only
+samples, verdict labels, arbitrary exception messages or upstream HTTP bodies.
+Prior proposals stay in memory, are bounded to 16 KiB, and are omitted if needed
+to respect the same input budget. Incomplete/refused text is never reused as a
+proposal. Every request repeats profile, egress, shared-slot and lease checks.
+
+The existing total budget remains two calls for discovery or N + 2 calls for N
+rule groups (two shared corrections). Restarting a worker does not reset it.
+Rules must still pass all authoring extraction/source-span checks; partial
+groups are not published after a failure. Unsupported inputs are not made valid
+by weakening HTTP structure or provenance checks.
+
+`GET /sessions/{id}/jobs` and the session detail retain their existing shape.
+Job `summary.diagnostics` adds bounded attempts, stages, fixed error codes,
+correction counts, group numbers and safe numeric usage/finish metadata when
+available. Prior rules and raw model/source text are never stored in this
+unencrypted metadata. Existing tables suffice; no DB migration is required.
+The UI shows current job failures separately from earlier attempts and provides
+fixed KR/EN explanations with safe technical details. Historic
+`parser_workbench_invalid_rule` records cannot recover missing diagnostics
+retroactively and are explicitly displayed as an unspecified earlier failure.
+
 Public `waf-analysis-v3` field structure does not grow. Existing parser metadata
 can report the new `vendor-http-v2` engine identifier; encrypted options and
 cross-vendor routing definitions are not exposed in service results.
@@ -147,7 +179,20 @@ Synthetic automated and mocked-transport tests do not establish real-model
 generation quality, real WAF format coverage or Production performance. Those
 must be evaluated separately with authorized internal data and profiles.
 
-## Verification status (2026-11-16)
+## Rule-correction verification (2026-11-18)
+
+- 192 related backend tests passed: authoring, safe diagnostics, rule engine,
+  worker lane, runtime integration and fresh/existing-DB migration coverage.
+  The final engine-reason feedback change was rechecked in three focused
+  authoring tests. This is a targeted regression run, not the full backend suite.
+- All 779 frontend tests and the Vite production build passed. The existing
+  large-chunk build warning remains. This change was not browser-reviewed.
+- All model transports were mocked and samples synthetic. No real-model calls,
+  operational-data transfer, Production setting change, live-DB migration,
+  deployment or Git mutation was performed. Actual internal model generation
+  quality and success rate still require an explicitly requested model run.
+
+## Earlier verification status (2026-11-16)
 
 - The final parser and migration batch passed 205 tests, including all 178 new
   engine, encrypted snapshot, workbench, runtime and migration cases. Fresh

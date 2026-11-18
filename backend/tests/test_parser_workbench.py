@@ -291,7 +291,7 @@ def test_invalid_model_output_repair_budget_and_safe_failure(client, registered_
     assert run(client, settings)
     detail = client.get(PREFIX + f"/sessions/{session['id']}/jobs").json()["items"][0]
     assert len(calls) == 2 and detail["summary"]["call_count"] == 2
-    assert detail["error_code"] == "parser_workbench_invalid_discovery"
+    assert detail["error_code"] == "parser_workbench_schema_invalid"
     assert "synthetic-private-model-output" not in json.dumps(detail)
 
 
@@ -598,7 +598,9 @@ def test_generation_repairs_only_authoring_structure_with_shared_bound(client, r
     result = client.get(PREFIX + f"/sessions/{session['id']}").json()
     last = result["jobs"][-1]
     assert len(attempts) == (2 if corrected else 3)
-    assert attempts[1]["correction_code"] == "parser_authoring_not_qualified"
+    assert attempts[1]["correction_code"] == "parser_workbench_authoring_failed"
+    assert {"field": "extract", "type": "parser_authoring_not_qualified"} in attempts[1]["correction_feedback"]["issues"]
+    assert {"field": "extract", "type": "parser_json_pointer_missing"} in attempts[1]["correction_feedback"]["issues"]
     assert last["status"] == ("completed" if corrected else "failed")
     assert last["summary"]["call_count"] <= last["summary"]["call_limit"] == 3
     assert all(case["case_id"] not in json.dumps(attempts) for case in result["cases"] if case["role"] == "holdout")

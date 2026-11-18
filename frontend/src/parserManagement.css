@@ -91,6 +91,21 @@
 .pw-running, .pw-success { border-left: 3px solid var(--accent); background: var(--pw-soft); color: var(--text); border-radius: 7px; padding: 14px 17px; line-height: 1.8; font-size: 13px; }
 .pw-warning { padding: 13px 16px; background: color-mix(in srgb, #d99c32 12%, var(--panel)); border: 1px solid color-mix(in srgb, #d99c32 35%, var(--line)); border-radius: 8px; line-height: 1.8; font-size: 13px; }
 .pw-warning > .text-inspector { margin-top: 12px; }
+.pw-job-status { display: grid; gap: 12px; min-width: 0; overflow-wrap: anywhere; }
+.pw-job-status h3 { margin: 0; font-size: 14px; }
+.pw-current-jobs { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr)); }
+.pw-current-job { min-width: 0; padding: 12px 16px; border-radius: 8px; font-size: 13px; }
+.pw-current-job:not(.pw-warning) { border: 1px solid var(--line); background: var(--panel); }
+.pw-job-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 18px; }
+.pw-job-heading > div { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.pw-current-job p { margin: 10px 0 0; line-height: 1.7; }
+.pw-current-job .pw-job-next { color: var(--muted); }
+.pw-current-job small { display: block; margin-top: 9px; color: var(--muted); }
+.pw-job-history { border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; min-width: 0; background: var(--panel); }
+.pw-job-history > summary { cursor: pointer; font-size: 13px; font-weight: 600; }
+.pw-job-history > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+.pw-job-details { display: grid; gap: 12px; min-width: 0; overflow-wrap: anywhere; }
+.pw-job-details > p { margin: 0; line-height: 1.7; }
 .pw-empty { padding: 22px; border: 1px dashed var(--line); border-radius: 8px; line-height: 1.8; color: var(--muted); font-size: 13px; }
 .pw-pill { display: inline-block; padding: 4px 8px; border-radius: 5px; background: var(--raised); color: var(--muted); border: 1px solid var(--line); font-size: 11px; line-height: 1.5; }
 .pw-pill.production, .pw-pill.validation { color: var(--accent); background: var(--pw-soft); border-color: color-mix(in srgb, var(--accent) 28%, var(--line)); }
