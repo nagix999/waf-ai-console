@@ -117,13 +117,13 @@ def test_new_shared_prompt_keeps_each_existing_protocol_enabled():
     # context-only provenance without rewriting earlier source registries.
     from app.agent.execution_policy_v221 import INTEGRITY_RULES_VERSIONS as V221_INTEGRITY
     from app.agent.evidence_source_policy import RULES_VERSIONS as V221_SELECTION
-    from app.agent.execution_policy_v223 import INTEGRITY_RULES_VERSIONS as CURRENT_INTEGRITY
-    from app.agent.evidence_pipeline_v223 import RULES_VERSION
+    from app.agent.execution_policy_v224 import INTEGRITY_RULES_VERSIONS as CURRENT_INTEGRITY
+    from app.agent.evidence_pipeline_v224 import RULES_VERSION
     from app.agent.input_builder_v221 import build_agent_input as build_v221
-    from app.agent.input_builder_v223 import build_agent_input as build_current
+    from app.agent.input_builder_v224 import build_agent_input as build_current
 
     assert "waf-system-v2.21" in V221_INTEGRITY & V221_SELECTION
-    assert FIXED_RULES_VERSION == RULES_VERSION == "waf-system-v2.23"
+    assert FIXED_RULES_VERSION == RULES_VERSION == "waf-system-v2.24"
     assert FIXED_RULES_VERSION in CURRENT_INTEGRITY
     assert FIXED_RULES_VERSION not in V221_SELECTION
     assert FIXED_RULES_VERSION not in RULES_VERSIONS | SELECTION_RULES_VERSIONS | INTEGRITY_RULES_VERSIONS
@@ -138,5 +138,12 @@ def test_new_shared_prompt_keeps_each_existing_protocol_enabled():
     current_document, previous_document = json.loads(current.text), json.loads(previous.text)
     assert current_document["evidence_candidates"]["version"] == "evidence-selection-v5"
     current_document["evidence_candidates"]["version"] = previous_document["evidence_candidates"]["version"]
+    assert current_document.pop("input_policy_version") == "agent-input-v3"
+    assert previous_document.pop("input_policy_version") == "agent-input-v2"
+    assert current_document.pop("capture_context") == {
+        "received_payload_bytes": len(raw.encode("utf-8")),
+        "received_tail_submitted": True,
+        "payload_omitted": False,
+    }
     assert current_document == previous_document
     assert current.retained_payload_spans == previous.retained_payload_spans

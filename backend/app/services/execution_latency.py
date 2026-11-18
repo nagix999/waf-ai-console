@@ -107,6 +107,22 @@ def _sum_durations(attempts):
     return sum(durations) if all(value is not None for value in durations) else None
 
 
+def _slot_wait(metadata, calls):
+    grounding = _mapping(metadata.get("evidence_grounding_retry"))
+    nested = grounding.get("attempts")
+    if isinstance(nested, list) and len(nested) == len(calls):
+        waits = [_number(_mapping(_mapping(call).get("concurrency")).get("wait_ms"))
+                 for call in nested]
+        if all(value is not None for value in waits):
+            return sum(waits)
+        if len(calls) > 1 or any("concurrency" in _mapping(call) for call in nested):
+            return None
+    # Historical single calls keep their top-level wait. On old citation
+    # repair only the last call survives there; it is not the role total.
+    return (_number(_mapping(metadata.get("concurrency")).get("wait_ms"))
+            if len(calls) == 1 else None)
+
+
 def _role_observation(metadata):
     calls = _calls(metadata)
     unknown = dict.fromkeys(("invocation_ms", "first_attempt_ms", "output_retry_ms",
@@ -116,10 +132,7 @@ def _role_observation(metadata):
     attempts = [attempt for call in calls for attempt in call]
     kinds = Counter(_fixed(attempt.get("retry_kind"), RETRY_KINDS)
                     for call in calls for attempt in call[:-1])
-    # On citation repair the worker retains only the last call's slot wait.
-    # It cannot be presented as the whole role's wait or subtracted from it.
-    wait = (_number(_mapping(metadata.get("concurrency")).get("wait_ms"))
-            if len(calls) == 1 else None)
+    wait = _slot_wait(metadata, calls)
     return {"invocation_ms": _sum_durations(attempts),
             "first_attempt_ms": _number(calls[0][0].get("duration_ms")),
             "output_retry_ms": _sum_durations([attempt for call in calls for attempt in call[1:]]),
@@ -231,6 +244,6 @@ def summarize_execution_latency(records):
             "notes": ["model_attempt_includes_transport_framework_validation",
                       "nested_timings_overlap_do_not_add", "missing_is_not_zero",
                       "stage_not_observed_does_not_prove_skipped",
-                      "slot_wait_unrecorded_across_citation_calls", "dispatch_marker_is_not_http_count",
+                      "slot_wait_unknown_without_all_citation_calls", "dispatch_marker_is_not_http_count",
                       "display_processing_includes_setup_and_slot_wait",
                       "result_ready_elapsed_is_not_client_network_latency"]}

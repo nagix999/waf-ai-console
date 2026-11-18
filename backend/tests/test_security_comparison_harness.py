@@ -8,8 +8,9 @@ from sqlalchemy.orm import Session
 
 from scripts import compare_security_analysis_v3 as comparison
 from app.agent.contracts import SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SemanticAssessmentOutput
+from app.agent.contracts_v224 import SecurityAnalysisOutputV224
 from app.agent.executor import AgentCallResult
-from app import worker_v221, worker_v222, worker_v223
+from app import worker_v221, worker_v222, worker_v223, worker_v224
 from app.config import Settings
 from app.database import Base, build_engine
 from app.models import VLLMProfile, VLLMTestRun, utcnow
@@ -59,7 +60,7 @@ def test_changed_frozen_contract_refuses_diagnostic_before_runtime(monkeypatch):
 
 def test_manifest_models_match_pinned_worker_contracts():
     assert comparison.wire_model_for_revision(comparison.frozen_diagnostic_revision()) is SecurityAnalysisOutput
-    assert comparison.wire_model_for_revision(comparison.prompts) is SecurityAnalysisOutputV220
+    assert comparison.wire_model_for_revision(comparison.prompts) is SecurityAnalysisOutputV224
     assert comparison.wire_model_for_revision(comparison.legacy_prompts_v214) is SemanticAssessmentOutput
     class Unknown:
         FIXED_RULES_VERSION = "unknown"
@@ -162,10 +163,12 @@ def test_mocked_comparison_preserves_source_and_aborts_quota(tmp_path, monkeypat
         if quota:
             return AgentCallResult(None, "synthetic-quota", None, "error", None, "synthetic-safe-error",
                                    {"error_summary": {"code": "openai_http_429"}})
-        if kwargs["output_model"] in {SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220}:
+        if kwargs["output_model"] in {SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SecurityAnalysisOutputV224}:
             document = output().model_dump(mode="json")
-            if kwargs["output_model"] is SecurityAnalysisOutputV220:
+            if kwargs["output_model"] in {SecurityAnalysisOutputV220, SecurityAnalysisOutputV224}:
                 document["evidence_relations"] = []
+            if kwargs["output_model"] is SecurityAnalysisOutputV224:
+                document["capture_assessment"] = {"status": "unknown", "reason_ko": "합성 비교용 고정 관찰입니다."}
             value = kwargs["output_model"].model_validate(document)
         elif kwargs["output_model"] is SemanticAssessmentOutput:
             value = SemanticAssessmentOutput.model_validate(output().legacy_bridge().model_dump(mode="json"))
@@ -177,6 +180,7 @@ def test_mocked_comparison_preserves_source_and_aborts_quota(tmp_path, monkeypat
     monkeypatch.setattr(worker_v221, "execute_structured_agent", execute)
     monkeypatch.setattr(worker_v222, "execute_structured_agent", execute)
     monkeypatch.setattr(worker_v223, "execute_structured_agent", execute)
+    monkeypatch.setattr(worker_v224, "execute_structured_agent", execute)
     directory = tmp_path / "safe-results"
     result = comparison.main(["--execute-model-calls", "--profile-name", "Synthetic isolated profile",
                               "--output-dir", str(directory)])
@@ -188,6 +192,9 @@ def test_mocked_comparison_preserves_source_and_aborts_quota(tmp_path, monkeypat
     assert len(manifest["pipeline_code_hash"]) == 64 and len(manifest["default_input_schema_hash"]) == 64
     assert "backend/app/agent/executor.py" in manifest["pipeline_source_hashes"]
     assert "backend/app/worker_v223.py" in manifest["pipeline_source_hashes"]
+    assert "backend/app/worker_v224.py" in manifest["pipeline_source_hashes"]
+    assert "backend/app/agent/contracts_v224.py" in manifest["pipeline_source_hashes"]
+    assert "backend/app/agent/executor_v224.py" in manifest["pipeline_source_hashes"]
     assert "backend/app/services/signature_explanations.py" in manifest["pipeline_source_hashes"]
     checkpoints = list(directory.glob("waf-system-*.json"))
     assert len(checkpoints) == (1 if quota else 4)

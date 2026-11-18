@@ -186,10 +186,16 @@ def _load_steps(connection, identifiers):
         steps[row["id"]]["metadata"]["output_validation_retry"]["attempts"].append(_attempt_record(row))
     grounding_array = f"CASE WHEN json_type({meta},'$.evidence_grounding_retry.attempts')='array' THEN json_extract({meta},'$.evidence_grounding_retry.attempts') ELSE '[]' END"
     ground = "CASE WHEN g.type='object' THEN g.value ELSE '{}' END"
-    sql = cte + f"SELECT s.id,g.key AS idx,{_attempt_values(ground)}," + _bounded_count(ground, "$.output_validation_retry", 4) + f" AS validation_count FROM chosen s,json_each({grounding_array}) g WHERE CAST(g.key AS INTEGER)<2 ORDER BY s.id,CAST(g.key AS INTEGER)"
+    grounding_columns = ["s.id", "g.key AS idx", _attempt_values(ground),
+        _bounded_count(ground, "$.output_validation_retry", 4) + " AS validation_count",
+        _number(ground, "$.concurrency.wait_ms") + " AS wait_ms",
+        f"CASE WHEN json_type({ground},'$.concurrency') IS NOT NULL THEN 1 ELSE 0 END AS concurrency_present"]
+    sql = cte + "SELECT " + ",".join(grounding_columns) + f" FROM chosen s,json_each({grounding_array}) g WHERE CAST(g.key AS INTEGER)<2 ORDER BY s.id,CAST(g.key AS INTEGER)"
     grounding = {}
     for row in connection.execute(sql, params):
         value = _attempt_record(row)
+        if row["concurrency_present"]:
+            value["concurrency"] = {"wait_ms": row["wait_ms"]}
         value["output_validation_retry"] = {"attempt_count": row["validation_count"], "attempts": []}
         steps[row["id"]]["metadata"]["evidence_grounding_retry"]["attempts"].append(value)
         grounding[row["id"], row["idx"]] = value

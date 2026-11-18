@@ -193,7 +193,7 @@ def enqueue_analysis(
             row.prompt_version = prompt_snapshot.prompt_version
             row.prompt_snapshot_ciphertext = crypto.encrypt_text(prompt_snapshot.model_dump_json())
             admitted_prompt = load_analysis_prompt(row, crypto)
-        if admitted_prompt.fixed_rules_version == "waf-system-v2.23":
+        if admitted_prompt.fixed_rules_version in {"waf-system-v2.23", "waf-system-v2.24"}:
             from .signature_explanations import ensure_state, pin_snapshot
             selected_explanations = ensure_state(db).active_version_id if analysis_purpose == "production" else None
             pin_snapshot(db, crypto, row, version_id=selected_explanations,

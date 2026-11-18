@@ -117,6 +117,34 @@ def test_nested_retry_duration_counts_are_allowlisted_and_old_top_level_is_not_m
     assert MARKER not in json.dumps(loaded)
 
 
+def test_nested_slot_wait_is_numeric_only_and_does_not_double_count_last_call(tmp_path):
+    path = fixture_db(tmp_path / "nested-slot-wait.db")
+    metadata = {"timing_measured": True, "duration_ms": 70,
+        "concurrency": {"wait_ms": 13, "private": MARKER},
+        "evidence_grounding_retry": {"attempt_count": 2, "attempts": [
+            {"output_validation_retry": {"attempt_count": 1, "attempts": [{"duration_ms": 20}]},
+             "concurrency": {"wait_ms": 7, "private": MARKER}},
+            {"output_validation_retry": {"attempt_count": 1, "attempts": [{"duration_ms": 10}]},
+             "concurrency": {"wait_ms": 13, "private": MARKER}}]}}
+    with sqlite3.connect(path) as db:
+        db.execute("UPDATE agent_steps SET metadata_json=?", (json.dumps(metadata),))
+    record = read_fixture(path)[0]
+    assert MARKER not in json.dumps(record, default=str)
+    report = cli.summarize_file(path, "synthetic-run")
+    assert report["roles"]["primary"]["slot_wait_ms"]["p50_ms"] == 20
+
+
+def test_historical_single_nested_call_still_uses_top_level_slot_wait(tmp_path):
+    path = fixture_db(tmp_path / "historical-nested-slot.db")
+    metadata = {"concurrency": {"wait_ms": 11}, "evidence_grounding_retry": {
+        "attempt_count": 1, "attempts": [{"output_validation_retry": {
+            "attempt_count": 1, "attempts": [{"duration_ms": 20}]}}]}}
+    with sqlite3.connect(path) as db:
+        db.execute("UPDATE agent_steps SET metadata_json=?", (json.dumps(metadata),))
+    report = cli.summarize_file(path, "synthetic-run")
+    assert report["roles"]["primary"]["slot_wait_ms"]["p50_ms"] == 11
+
+
 @pytest.mark.parametrize("level", ["schema", "grounding", "nested_schema"])
 def test_oversized_attempt_arrays_do_not_look_complete_after_bounded_scan(tmp_path, level):
     path = fixture_db(tmp_path / "oversized-attempts.db")

@@ -153,7 +153,7 @@ def create_run_record(db, crypto, settings, *, name, idempotency_key, request_ha
             selected_explanations = defaults.signature_explanation_version_id if defaults else None
         else:
             selected_explanations = None
-        if load_analysis_prompt(run, crypto).fixed_rules_version == "waf-system-v2.23":
+        if load_analysis_prompt(run, crypto).fixed_rules_version in {"waf-system-v2.23", "waf-system-v2.24"}:
             pin_explanations(db, crypto, run, version_id=selected_explanations,
                              selection_origin="candidate" if candidate else "test")
             if model_test is not None:

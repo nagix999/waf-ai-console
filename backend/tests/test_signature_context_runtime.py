@@ -13,7 +13,7 @@ from app.agent import (
     evidence_pipeline_v222, evidence_pipeline_v223,
     execution_policy_v222, execution_policy_v223,
     input_builder_v223,
-    legacy_prompts_v222_capture, prompts,
+    legacy_prompts_v222_capture, legacy_prompts_v223 as prompts,
 )
 from app.agent.contracts import EvidenceSelectionCorrectionOutput, SecurityAnalysisOutputV220
 from app.agent.evidence_source_policy_v223 import (
@@ -34,6 +34,7 @@ from test_evidence_relations import wire
 from test_prompt_evidence_semantics_preservation import ENGINE_SHA256
 
 
+pytestmark = pytest.mark.usefixtures("legacy_v223_admissions")
 NEW = "waf-system-v2.23"
 DESCRIPTION = "특정 기능의 입력 처리 취약점을 탐지합니다. 탐지 사실과 실제 요청 내용을 구분하세요."
 RAW = "POST /service HTTP/1.1\r\nHost: synthetic.invalid\r\nContent-Length: 10\r\n\r\nvalue=test"

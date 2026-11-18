@@ -70,6 +70,35 @@ def test_citation_and_output_retries_are_counted_once_not_also_at_top_level():
     assert role["retry_kinds"] == {"schema_correction": 1}
 
 
+def test_each_new_citation_call_slot_wait_is_counted_once_not_last_call_twice():
+    metadata = {"concurrency": {"wait_ms": 9}, "output_validation_retry": retry(300),
+        "evidence_grounding_retry": {"attempt_count": 2, "attempts": [
+            {"output_validation_retry": retry(900, 200), "concurrency": {"wait_ms": 7}},
+            {"output_validation_retry": retry(300), "concurrency": {"wait_ms": 9}}]}}
+    report = summarize_execution_latency([record(steps=[phase(metadata)])])
+    role = report["roles"]["primary"]
+    assert role["slot_wait_ms"]["p50_ms"] == 16
+    assert role["invocation_ms"]["p50_ms"] == 1400
+    assert role["accounting"]["reported_output_attempts"] == 3
+
+
+@pytest.mark.parametrize("bad", [None, True, -1, "10", 1.5, {}])
+def test_partial_or_bad_citation_slot_wait_does_not_become_role_total(bad):
+    metadata = {"concurrency": {"wait_ms": 9}, "evidence_grounding_retry": {
+        "attempt_count": 2, "attempts": [
+            {"output_validation_retry": retry(400), "concurrency": {"wait_ms": bad}},
+            {"output_validation_retry": retry(300), "concurrency": {"wait_ms": 9}}]}}
+    role = summarize_execution_latency([record(steps=[phase(metadata)])])["roles"]["primary"]
+    assert role["slot_wait_ms"]["p50_ms"] is None and role["slot_wait_ms"]["unrecorded"] == 1
+
+
+def test_historical_single_grounding_call_keeps_its_original_top_level_wait():
+    metadata = {"evidence_grounding_retry": {"attempt_count": 1,
+        "attempts": [{"output_validation_retry": retry(400)}]}}
+    role = summarize_execution_latency([record(steps=[phase(metadata)])])["roles"]["primary"]
+    assert role["slot_wait_ms"]["p50_ms"] == 100
+
+
 def test_retry_time_is_not_a_pure_schema_error_or_http_count():
     report = summarize_execution_latency([record(steps=[phase({
         "output_validation_retry": retry(500, 400, 200, kinds=("compact_output", "timeout_recovery"))})])])
