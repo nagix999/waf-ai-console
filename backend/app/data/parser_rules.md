@@ -141,6 +141,20 @@ Prior proposals stay in memory, are bounded to 16 KiB, and are omitted if needed
 to respect the same input budget. Incomplete/refused text is never reused as a
 proposal. Every request repeats profile, egress, shared-slot and lease checks.
 
+Rules identify stable wrapper structure, not changing IPs, timestamps, HTTP
+methods, request paths or body values. The authoring instructions explicitly
+describe original-payload matching, literal prefixes, RE2 search and all/any.
+For `parser_rule_not_matched`, the workbench explains which conditions failed
+using the unchanged pinned engine's predicates. `attempts[].match_checks`
+contains at most 64 records (eight authoring aliases and eight conditions), with
+zero-based condition positions, kinds, booleans and fixed codes only. Correction
+feedback selects at most 12 failed checks and reduces them further if needed
+to fit the input budget. Predicate literals, raw fragments and held-out data are
+never added to plaintext diagnostics. This explanatory helper is not part of
+runtime rule selection; frozen engine files and approved artifact hashes remain
+unchanged. Conditions are not automatically dropped, relaxed or changed from
+all to any to force a pass.
+
 The existing total budget remains two calls for discovery or N + 2 calls for N
 rule groups (two shared corrections). Restarting a worker does not reset it.
 Rules must still pass all authoring extraction/source-span checks; partial
@@ -181,11 +195,16 @@ must be evaluated separately with authorized internal data and profiles.
 
 ## Rule-correction verification (2026-11-18)
 
-- 192 related backend tests passed: authoring, safe diagnostics, rule engine,
+- The initial correction batch passed 192 related backend tests: authoring, safe diagnostics, rule engine,
   worker lane, runtime integration and fresh/existing-DB migration coverage.
   The final engine-reason feedback change was rechecked in three focused
   authoring tests. This is a targeted regression run, not the full backend suite.
-- All 779 frontend tests and the Vite production build passed. The existing
+- The subsequent condition-feedback batch passed 86 backend tests covering
+  match diagnostics, existing workbench corrections and immutable parser
+  versions. The final 18-test rerun covered all 17 match-feedback cases and the
+  frozen-engine byte check, including feedback budget reduction. No pinned
+  runtime engine, schema or version file was modified.
+- All 783 frontend tests and the Vite production build passed. The existing
   large-chunk build warning remains. This change was not browser-reviewed.
 - All model transports were mocked and samples synthetic. No real-model calls,
   operational-data transfer, Production setting change, live-DB migration,

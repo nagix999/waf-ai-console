@@ -150,6 +150,70 @@ test("fixed authoring mismatch reasons remain available only in safe technical i
   ]);
   assert.doesNotMatch(parserJobFailure(row).message, /parser_/);
 });
+test("safe matching checks preserve fixed aliases, condition positions, kinds and results", () => {
+  const checks = [
+    ["starts_with", "parser_prefix_mismatch"], ["json_equals", "parser_json_value_mismatch"],
+    ["json_string_exists", "parser_json_string_missing"], ["marker_pair_exists", "parser_marker_missing"],
+    ["regex_match", "parser_regex_no_match"],
+  ].map(([kind, code], condition_index) => ({ sample_id: "c001", condition_index,
+    field: `match.all.${condition_index}`, kind, matched: false, code }));
+  checks.push({ sample_id: "c100", condition_index: 7, field: "match.any.7", kind: "starts_with", matched: true, code: "ok" });
+  const value = parserJobDiagnostics(job(1, "failed", { summary: { diagnostics: { attempts: [{ match_checks: checks }] } } }));
+  assert.deepEqual(value.attempts[0].match_checks, checks);
+});
+test("matching diagnostics cap rows and reject identifiers, arbitrary fields, values and types", () => {
+  const safe = { sample_id: "c001", condition_index: 0, field: "match.all.0", kind: "starts_with", matched: false,
+    code: "parser_prefix_mismatch" };
+  const malicious = [null, "PRIVATE_PAYLOAD",
+    ...["PRIVATE_ID", "c000", "c101", "c001\n", "C001", "c01", 1].map(sample_id => ({ ...safe, sample_id })),
+    ...[-1, 8, "0", true, Infinity].map(condition_index => ({ ...safe, condition_index })),
+    ...["PRIVATE_FIELD", "match.all.8", "match.all.00", "match.all.1", "match.any.0\n", null].map(field => ({ ...safe, field })),
+    { ...safe, kind: "PRIVATE_KIND" }, { ...safe, matched: "false" }, { ...safe, matched: 0 },
+  ];
+  const withUnknownCode = { ...safe, code: "PRIVATE_PROVIDER_BODY", value: "PRIVATE_VALUE", pattern: "PRIVATE_PATTERN",
+    payload: "PRIVATE_PAYLOAD", source_id: "PRIVATE_ID" };
+  const value = parserJobDiagnostics(job(1, "failed", { summary: { diagnostics: { attempts: [
+    { match_checks: [...malicious, withUnknownCode] }, { match_checks: Array.from({ length: 70 }, () => safe) },
+  ] } } }));
+  assert.doesNotMatch(JSON.stringify(value), /PRIVATE/);
+  assert.deepEqual(value.attempts[0].match_checks, [{ ...safe, code: "parser_match_condition_failed" }]);
+  assert.equal(value.attempts[1].match_checks.length, 64);
+  assert.deepEqual(parserJobDiagnostics(job(1, "failed", { summary: { diagnostics: {
+    attempts: [{ match_checks: "PRIVATE_BODY" }],
+  } } })).attempts[0].match_checks, undefined);
+});
+test("matching failures have concise KR and EN guidance without stale correction causes", () => {
+  const row = job(1, "failed", { error_code: "parser_workbench_authoring_failed", summary: { diagnostics: {
+    attempts: [{ code: "parser_workbench_authoring_failed", stage: "authoring", issues: [
+      { field: "extract", type: "parser_authoring_not_qualified" }, { field: "extract", type: "parser_rule_not_matched" },
+    ] }],
+  } } });
+  assert.equal(parserJobFailure(row).message, "형식 식별 조건이 일부 입력과 맞지 않습니다.");
+  assert.equal(parserJobFailure(row).action, "형식 묶음과 조건을 확인하세요.");
+  assert.equal(parserJobFailure(row, true).message, "The format matching conditions do not match some inputs.");
+  assert.equal(parserJobFailure(row, true).action, "Review the format groups and matching conditions.");
+  assert.equal(parserJobFailure(job(1, "failed", { error_code: "parser_rule_not_matched" })).message,
+    parserJobFailure(row).message);
+  row.summary.diagnostics.attempts.push({ code: "parser_workbench_authoring_failed", stage: "authoring",
+    issues: [{ field: "extract", type: "source_span_invalid" }] });
+  assert.match(parserJobFailure(row).message, /입력을 올바르게 추출하지/);
+  row.error_code = "parser_workbench_output_incomplete";
+  assert.match(parserJobFailure(row).message, /끝까지 생성하지/);
+});
+test("current matching failures explain the condition mismatch without exposing technical source data", () => {
+  const Page = load();
+  const html = renderToStaticMarkup(createElement(Page, { jobs: [job(1, "failed", {
+    error_code: "parser_workbench_authoring_failed", summary: { diagnostics: { attempts: [{
+      stage: "authoring", code: "parser_workbench_authoring_failed",
+      issues: [{ field: "extract", type: "parser_rule_not_matched" }],
+      match_checks: [{ sample_id: "c001", condition_index: 0, field: "match.all.0", kind: "starts_with",
+        matched: false, code: "parser_prefix_mismatch", payload: "PRIVATE_PAYLOAD" }],
+    }] } },
+  })] }));
+  assert.match(html, /형식 식별 조건이 일부 입력과 맞지 않습니다/);
+  assert.match(html, /형식 묶음과 조건을 확인하세요/);
+  assert.doesNotMatch(html, /parser_rule_not_matched|parser_prefix_mismatch|match\.all\.0|c001|PRIVATE_PAYLOAD/);
+});
 test("failed latest work shows a concise reason and corrections, with technical codes in details only", () => {
   const Page = load();
   const html = renderToStaticMarkup(createElement(Page, { jobs: [job(1, "failed", { summary: {

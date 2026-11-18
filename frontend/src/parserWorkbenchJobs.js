@@ -23,6 +23,7 @@ const ERROR_CODES = new Set([
   "parser_json_pointer_limit", "parser_json_value_limit", "parser_extraction_empty", "parser_extraction_not_string",
   "parser_source_mapping_invalid", "parser_source_invalid", "parser_source_encoding_invalid",
   "parser_rule_source_limit", "parser_rule_time_limit", "parser_request_not_qualified", "parser_rule_not_matched",
+  "parser_prefix_mismatch", "parser_json_value_mismatch", "parser_json_string_missing", "parser_match_condition_failed",
   "parser_rule_label_invalid", "parser_rule_text_invalid", "parser_rule_id_duplicate", "source_span_invalid",
   "vllm_output_incomplete", "vllm_refusal", "vllm_completion_not_finished", "vllm_invalid_response",
 ]);
@@ -35,6 +36,14 @@ const FIELD_PARTS = new Set(["$", "[]", "<unknown>", "schema_version", "groups",
   "case_ids", "description", "reason_ko", "limitations_ko", "match", "all", "any", "kind", "value", "json_pointer",
   "start_marker", "end_marker", "start_anchor", "pattern", "extract", "capture", "line_endings",
   "request_line_whitespace", "skip_leading_blank_lines", "target_rule_id"]);
+const MATCH_KINDS = new Set(["starts_with", "json_equals", "json_string_exists", "marker_pair_exists", "regex_match"]);
+const MATCH_FIELDS = new Set(["all", "any"].flatMap(mode => Array.from({ length: 8 }, (_, index) => `match.${mode}.${index}`)));
+const MATCH_CODES = new Set(["ok", "parser_prefix_mismatch", "parser_json_value_mismatch", "parser_json_string_missing",
+  "parser_match_condition_failed", "parser_extraction_empty", "parser_extraction_not_string", "parser_json_duplicate_keys",
+  "parser_json_invalid", "parser_json_limit", "parser_json_pointer_missing", "parser_marker_ambiguous",
+  "parser_marker_missing", "parser_regex_ambiguous", "parser_regex_capture_invalid", "parser_regex_empty_capture",
+  "parser_regex_invalid", "parser_regex_match_capture_forbidden", "parser_regex_no_match", "parser_regex_unavailable",
+  "parser_rule_bundle_invalid", "parser_rule_time_limit", "parser_source_invalid", "parser_source_mapping_invalid"]);
 const count = value => Number.isSafeInteger(value) && value >= 0 && value <= 1_000_000_000 ? value : null;
 const code = value => ERROR_CODES.has(value) ? value : "unrecorded_error";
 
@@ -73,6 +82,16 @@ function safeIssue(issue) {
   };
 }
 
+function safeMatchCheck(check) {
+  const index = count(check?.condition_index);
+  if (typeof check?.sample_id !== "string" || check.sample_id.length !== 4
+    || !/^c(?:00[1-9]|0[1-9][0-9]|100)$/.test(check.sample_id)
+    || index === null || index > 7 || !MATCH_FIELDS.has(check?.field) || !check.field.endsWith(`.${index}`)
+    || !MATCH_KINDS.has(check?.kind) || typeof check?.matched !== "boolean") return null;
+  return { sample_id: check.sample_id, condition_index: index, field: check.field, kind: check.kind,
+    matched: check.matched, code: MATCH_CODES.has(check.code) ? check.code : "parser_match_condition_failed" };
+}
+
 export function parserJobDiagnostics(job) {
   const diagnostics = job?.summary?.diagnostics;
   const attempts = (Array.isArray(diagnostics?.attempts) ? diagnostics.attempts : []).slice(0, 100).map(item => ({
@@ -87,6 +106,7 @@ export function parserJobDiagnostics(job) {
       ["input_tokens", "output_tokens", "prompt_tokens", "completion_tokens", "total_tokens"]
         .filter(key => count(item.usage[key]) !== null).map(key => [key, item.usage[key]])) } : {}),
     ...(Array.isArray(item?.issues) ? { issues: item.issues.slice(0, 20).map(safeIssue) } : {}),
+    ...(Array.isArray(item?.match_checks) ? { match_checks: item.match_checks.slice(0, 64).map(safeMatchCheck).filter(Boolean) } : {}),
     ...(Array.isArray(item?.failed_sample_ids) ? { failed_sample_count: item.failed_sample_ids.length } : {}),
   }));
   return {
@@ -103,6 +123,9 @@ export function parserJobDiagnostics(job) {
 export function parserJobFailure(job, english = false) {
   const w = (ko, en) => english ? en : ko;
   const diagnostics = parserJobDiagnostics(job), value = diagnostics.error_code;
+  const matchFailure = value === "parser_rule_not_matched"
+    || (["parser_workbench_authoring_failed", "parser_authoring_not_qualified"].includes(value)
+      && diagnostics.attempts.at(-1)?.issues?.some(issue => issue.type === "parser_rule_not_matched"));
   let message = w("작업을 완료하지 못했으며 자세한 원인은 기록되지 않았습니다.", "The job did not finish, and its cause was not recorded.");
   let action = w("다시 요청하면 새 작업 이력을 남깁니다.", "Request again to create a new job record.");
   if (["parser_workbench_output_incomplete", "vllm_output_incomplete", "parser_workbench_completion_not_finished", "vllm_completion_not_finished"].includes(value)) {
@@ -114,6 +137,9 @@ export function parserJobFailure(job, english = false) {
   } else if (["parser_workbench_schema_invalid", "parser_workbench_invalid_discovery", "parser_suggestion_invalid_output", "parser_groups_invalid", "parser_group_membership_invalid", "parser_group_partition_required", "parser_rule_bundle_invalid"].includes(value)) {
     message = w("모델 응답이 형식 또는 규칙 정의와 맞지 않습니다.", "The model response does not match the format or rule definition.");
     action = w("작업 상세에서 오류 항목을 확인한 뒤 다시 요청하세요.", "Review the validation issues in job details before requesting again.");
+  } else if (matchFailure) {
+    message = w("형식 식별 조건이 일부 입력과 맞지 않습니다.", "The format matching conditions do not match some inputs.");
+    action = w("형식 묶음과 조건을 확인하세요.", "Review the format groups and matching conditions.");
   } else if (["parser_workbench_authoring_failed", "parser_authoring_not_qualified", "parser_request_not_qualified", "parser_source_mapping_invalid", "source_span_invalid", "parser_extraction_empty", "parser_extraction_not_string", "parser_json_pointer_missing", "parser_marker_missing", "parser_marker_ambiguous", "parser_regex_no_match", "parser_regex_ambiguous", "parser_regex_empty_capture"].includes(value)) {
     message = w("제안한 규칙으로 일부 입력을 올바르게 추출하지 못했습니다.", "The proposed rule could not correctly extract some inputs.");
     action = w("형식 묶음과 제안용 입력을 대조한 뒤 다시 요청하세요.", "Review the format groups against the authoring inputs before requesting again.");

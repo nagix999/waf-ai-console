@@ -32,12 +32,13 @@ PROVIDER_CODES = {
 class WorkbenchOutputError(ValueError):
     """Only a fixed code enters args/repr. The prior rule is in-memory feedback only."""
 
-    def __init__(self, code, stage, *, issues=None, previous_rule=None, failed_sample_ids=None):
+    def __init__(self, code, stage, *, issues=None, previous_rule=None, failed_sample_ids=None, match_checks=None):
         super().__init__(code)
         self.code, self.stage = code, stage
         self.issues = issues or []
         self.previous_rule = previous_rule
         self.failed_sample_ids = failed_sample_ids or []
+        self.match_checks = match_checks or []
 
 
 def validation_issues(exc, output_model):
