@@ -147,7 +147,7 @@ def approved_production_record(db):
 def _baseline_rules(expected):
     """Restore the exact approved text, not the latest text with its label.
 
-    v2.21 text revisions share the unchanged execution contract, not approval.
+    Text revisions share the unchanged execution contract, not approval.
     Pre-compaction and compact text remain available by immutable content hash;
     no approval or evaluation transfers to the latest candidate instructions.
     """
@@ -156,14 +156,16 @@ def _baseline_rules(expected):
         legacy_prompts_v215, legacy_prompts_v216, legacy_prompts_v217,
         legacy_prompts_v218, legacy_prompts_v219, legacy_prompts_v220,
         legacy_prompts_v221, legacy_prompts_v221_compact, legacy_prompts_v221_reasoning,
-        legacy_prompts_v222, legacy_prompts_v222_capture, legacy_prompts_v223, prompts,
+        legacy_prompts_v222, legacy_prompts_v222_capture, legacy_prompts_v223,
+        legacy_prompts_v224, prompts,
     )
     modules = dict.fromkeys((
         legacy_prompts_v212, legacy_prompts_v213, legacy_prompts_v214,
         legacy_prompts_v215, legacy_prompts_v216, legacy_prompts_v217,
         legacy_prompts_v218, legacy_prompts_v219, legacy_prompts_v220,
         legacy_prompts_v221, legacy_prompts_v221_compact, legacy_prompts_v221_reasoning,
-        legacy_prompts_v222, legacy_prompts_v222_capture, legacy_prompts_v223, prompts,
+        legacy_prompts_v222, legacy_prompts_v222_capture, legacy_prompts_v223,
+        legacy_prompts_v224, prompts,
     ))
     matches = [module for module in modules
         if module.FIXED_RULES_VERSION == expected["fixed_rules_version"]
