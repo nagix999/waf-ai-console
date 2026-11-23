@@ -11,8 +11,9 @@ from app.agent.contracts import SecurityAnalysisOutput, SecurityAnalysisOutputV2
 from app.agent.contracts_v224 import SecurityAnalysisOutputV224
 from app.agent.contracts_v227 import SecurityAnalysisOutputV227
 from app.agent.contracts_v228 import SecurityAnalysisOutputV228
+from app.agent.contracts_v229 import SecurityAnalysisOutputV229
 from app.agent.executor import AgentCallResult
-from app import worker_v221, worker_v222, worker_v223, worker_v224, worker_v225, worker_v226, worker_v227, worker_v228
+from app import worker_v221, worker_v222, worker_v223, worker_v224, worker_v225, worker_v226, worker_v227, worker_v229
 from app.config import Settings
 from app.database import Base, build_engine
 from app.models import VLLMProfile, VLLMTestRun, utcnow
@@ -62,8 +63,9 @@ def test_changed_frozen_contract_refuses_diagnostic_before_runtime(monkeypatch):
 
 def test_manifest_models_match_pinned_worker_contracts():
     assert comparison.wire_model_for_revision(comparison.frozen_diagnostic_revision()) is SecurityAnalysisOutput
-    assert comparison.wire_model_for_revision(comparison.prompts) is SecurityAnalysisOutputV228
+    assert comparison.wire_model_for_revision(comparison.prompts) is SecurityAnalysisOutputV229
     assert comparison.wire_model_for_revision(comparison.legacy_prompts_v227) is SecurityAnalysisOutputV227
+    assert comparison.wire_model_for_revision(comparison.legacy_prompts_v228) is SecurityAnalysisOutputV228
     assert comparison.wire_model_for_revision(comparison.legacy_prompts_v214) is SemanticAssessmentOutput
     for version in ("waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26"):
         class Revision:
@@ -73,6 +75,15 @@ def test_manifest_models_match_pinned_worker_contracts():
         FIXED_RULES_VERSION = "unknown"
     with pytest.raises(ValueError, match="evaluation_wire_revision_unsupported"):
         comparison.wire_model_for_revision(Unknown)
+
+
+def test_v228_comparison_plan_uses_archived_baseline_without_runtime_or_model(monkeypatch, capsys):
+    monkeypatch.setattr(comparison, "get_settings", lambda: pytest.fail("dry run must not read runtime"))
+    assert comparison.main(["--baseline-version", "v2.28", "--samples-root", str(ROOT)]) == 0
+    plan = json.loads(capsys.readouterr().out)
+    assert plan["revisions"] == ["waf-system-v2.28", "waf-system-v2.29"]
+    assert plan["analyses"] == 60 and plan["model_calls_made"] == 0
+    assert plan["source_database_read"] is False
 
 
 def test_unreviewed_files_are_rejected_before_runtime_lookup(tmp_path, monkeypatch):
@@ -170,14 +181,14 @@ def test_mocked_comparison_preserves_source_and_aborts_quota(tmp_path, monkeypat
         if quota:
             return AgentCallResult(None, "synthetic-quota", None, "error", None, "synthetic-safe-error",
                                    {"error_summary": {"code": "openai_http_429"}})
-        if kwargs["output_model"] is SecurityAnalysisOutputV228:
+        if kwargs["output_model"] is SecurityAnalysisOutputV229:
             from test_flat_evidence_v228 import wire
             document = wire()
             source = next(item for item in json.loads(kwargs["user_input"])["evidence_candidates"]["items"]
                           if item["field"] == "payload")
             document["evidence"] = [document["evidence"][0]]
             document["evidence"][0].update(source_id=source["source_id"], related_evidence_ids=[])
-            return AgentCallResult(SecurityAnalysisOutputV228.model_validate(document),
+            return AgentCallResult(SecurityAnalysisOutputV229.model_validate(document),
                 "synthetic-comparison", None, "completed", None, None,
                 {"usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}})
         if kwargs["output_model"] in {SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SecurityAnalysisOutputV224}:
@@ -200,7 +211,7 @@ def test_mocked_comparison_preserves_source_and_aborts_quota(tmp_path, monkeypat
     monkeypatch.setattr(worker_v224, "execute_structured_agent", execute)
     monkeypatch.setattr(worker_v226, "execute_structured_agent", execute)
     monkeypatch.setattr(worker_v227, "execute_structured_agent", execute)
-    monkeypatch.setattr(worker_v228, "execute_structured_agent", execute)
+    monkeypatch.setattr(worker_v229, "execute_structured_agent", execute)
     directory = tmp_path / "safe-results"
     result = comparison.main(["--execute-model-calls", "--profile-name", "Synthetic isolated profile",
                               "--output-dir", str(directory)])

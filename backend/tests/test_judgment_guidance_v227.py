@@ -41,6 +41,6 @@ def test_current_comparison_can_plan_v226_to_latest_pair_without_db_or_model(mon
     monkeypatch.setattr(comparison, "get_settings", lambda: (_ for _ in ()).throw(AssertionError("No runtime read")))
     assert comparison.main(["--baseline-version", "v2.26"]) == 0
     plan = json.loads(capsys.readouterr().out)
-    assert plan["revisions"] == ["waf-system-v2.26", "waf-system-v2.28"]
+    assert plan["revisions"] == ["waf-system-v2.26", comparison.prompts.FIXED_RULES_VERSION]
     assert plan["analyses"] == 60 and plan["model_calls_made"] == 0
     assert plan["source_database_read"] is False
