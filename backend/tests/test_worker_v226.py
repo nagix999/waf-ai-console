@@ -16,6 +16,8 @@ from app.services.prompt_snapshots import _build_snapshot
 from app.services.worker_runtime_v226 import process_moduagent
 from test_evidence_relations import wire
 
+pytestmark = pytest.mark.usefixtures("legacy_v226_admissions")
+
 
 def result(*, succeeded=True):
     return AgentCallResult(None, "synthetic-run", None, "completed" if succeeded else "error",

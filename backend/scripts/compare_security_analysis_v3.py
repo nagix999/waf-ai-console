@@ -28,11 +28,13 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from app import worker
-from app.agent import legacy_prompts_v214, prompts, result_editor
+from app.agent import legacy_prompts_v214, legacy_prompts_v226, prompts, result_editor
 from app.agent.contracts import (SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220,
                                  SemanticAssessmentOutput, EvidenceSelectionCorrectionOutput)
 from app.agent.contracts_v224 import SecurityAnalysisOutputV224
-from app.agent.executor import SAFE_VALIDATION_TYPES, _output_schema_field_names
+from app.agent.contracts_v227 import SecurityAnalysisOutputV227
+from app.agent.executor_v227 import SAFE_VALIDATION_TYPES, _output_schema_field_names
+from app.agent.output_schema_v226 import compact_strict_schema
 from app.agent.structured_json import REJECTION_CODES as JSON_REJECTION_CODES
 from app.candidate_schemas import CandidateConfiguration
 from app.config import Settings, get_settings
@@ -120,7 +122,8 @@ def wire_model_for_revision(revision):
               "waf-system-v2.23": SecurityAnalysisOutputV220,
               "waf-system-v2.24": SecurityAnalysisOutputV224,
               "waf-system-v2.25": SecurityAnalysisOutputV224,
-              "waf-system-v2.26": SecurityAnalysisOutputV224}
+              "waf-system-v2.26": SecurityAnalysisOutputV224,
+              "waf-system-v2.27": SecurityAnalysisOutputV227}
     try:
         return models[revision.FIXED_RULES_VERSION]
     except KeyError:
@@ -216,7 +219,7 @@ def write_json(path, value):
 @lru_cache(maxsize=1)
 def validation_fields():
     return frozenset().union(*(_output_schema_field_names(model) for model in (
-        SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SecurityAnalysisOutputV224,
+        SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SecurityAnalysisOutputV224, SecurityAnalysisOutputV227,
         SemanticAssessmentOutput, EvidenceSelectionCorrectionOutput)))
 
 
@@ -291,6 +294,7 @@ def pipeline_hashes():
              root / "backend/app/worker_v224.py", root / "backend/app/worker_entrypoint_v224.py",
              root / "backend/app/worker_v225.py", root / "backend/app/worker_entrypoint_v225.py",
              root / "backend/app/worker_v226.py", root / "backend/app/worker_entrypoint_v226.py",
+             root / "backend/app/worker_v227.py", root / "backend/app/worker_entrypoint_v227.py",
              root / "backend/app/signature_explanation_schemas.py"]
     paths.extend((root / "backend/app/agent").glob("*.py"))
     paths.extend(root / "backend/app/services" / (name + ".py") for name in (
@@ -306,7 +310,8 @@ def pipeline_hashes():
         "worker_runtime_v225", "worker_concurrency_v225", "model_validation_worker_v225",
         "worker_coordinator_v225",
         "worker_runtime_v226", "worker_concurrency_v226", "model_validation_worker_v226",
-        "worker_coordinator_v226"))
+        "worker_coordinator_v226", "worker_runtime_v227", "worker_concurrency_v227",
+        "model_validation_worker_v227", "worker_coordinator_v227"))
     hashes = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(set(paths))}
     digest = hashlib.sha256(json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     return digest, hashes
@@ -428,7 +433,8 @@ def runtime_settings(args):
 
 def run(args):
     diagnostic = args.diagnostic_ten
-    revisions = (frozen_diagnostic_revision(),) if diagnostic else (legacy_prompts_v214, prompts)
+    baseline = legacy_prompts_v226 if args.baseline_version == "v2.26" else legacy_prompts_v214
+    revisions = (frozen_diagnostic_revision(),) if diagnostic else (baseline, prompts)
     cases = diagnostic_cases(args.samples_root) if diagnostic else synthetic_cases(args.samples_root)
     mode = "frozen-v215-diagnostic-ten" if diagnostic else "paired-comparison-thirty"
     if not args.execute_model_calls:
@@ -468,7 +474,8 @@ def run(args):
             "rules_hashes": {revision.FIXED_RULES_VERSION: hashlib.sha256(revision.FIXED_INSTRUCTIONS.encode()).hexdigest()
                              for revision in revisions},
             "wire_schema_hashes": {revision.FIXED_RULES_VERSION: hashlib.sha256(json.dumps(
-                strict_json_schema(model.model_json_schema()) if values["provider"] == "openai" else model.model_json_schema(),
+                (compact_strict_schema(model.model_json_schema()) if revision.FIXED_RULES_VERSION in {"waf-system-v2.26", "waf-system-v2.27"}
+                 else strict_json_schema(model.model_json_schema()) if values["provider"] == "openai" else model.model_json_schema()),
                 ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
                 for revision, model in ((revision, wire_model_for_revision(revision))
                                          for revision in revisions)},
@@ -522,7 +529,7 @@ def run(args):
                     started, previous_wait = time.monotonic(), authority.wait_ms
                     try:
                         authority()
-                        from app.services.worker_runtime_v226 import process_moduagent
+                        from app.services.worker_runtime_v227 import process_moduagent
                         process_moduagent(db, crypto, row, "", settings.verifier_confidence_threshold, request_check=authority)
                     except Exception as exc:
                         db.rollback()
@@ -563,6 +570,8 @@ def main(argv=None):
     parser.add_argument("--profile-name")
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--execute-model-calls", action="store_true")
+    parser.add_argument("--baseline-version", choices=("v2.14", "v2.26"), default="v2.14",
+                        help="Pinned baseline for comparison; no calls without --execute-model-calls")
     parser.add_argument("--diagnostic-ten", action="store_true", help="Exactly ten targeted cases, frozen v2.15 only; no baseline calls")
     parser.add_argument("--runtime-config-stdin", "--context-stdin", action="store_true",
                         help="Read only DB URL, encryption key/version and threshold from a direct private runtime pipe")

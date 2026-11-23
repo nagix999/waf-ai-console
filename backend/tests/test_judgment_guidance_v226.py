@@ -2,7 +2,7 @@
 import hashlib
 from pathlib import Path
 
-from app.agent import legacy_prompts_v225 as previous, prompts
+from app.agent import legacy_prompts_v225 as previous, legacy_prompts_v226 as prompts
 
 
 def test_new_instructions_preserve_the_exact_previous_revision_and_admin_policy():

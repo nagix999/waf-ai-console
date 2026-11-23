@@ -9,8 +9,9 @@ from sqlalchemy.orm import Session
 from scripts import compare_security_analysis_v3 as comparison
 from app.agent.contracts import SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SemanticAssessmentOutput
 from app.agent.contracts_v224 import SecurityAnalysisOutputV224
+from app.agent.contracts_v227 import SecurityAnalysisOutputV227
 from app.agent.executor import AgentCallResult
-from app import worker_v221, worker_v222, worker_v223, worker_v224, worker_v225, worker_v226
+from app import worker_v221, worker_v222, worker_v223, worker_v224, worker_v225, worker_v226, worker_v227
 from app.config import Settings
 from app.database import Base, build_engine
 from app.models import VLLMProfile, VLLMTestRun, utcnow
@@ -60,7 +61,7 @@ def test_changed_frozen_contract_refuses_diagnostic_before_runtime(monkeypatch):
 
 def test_manifest_models_match_pinned_worker_contracts():
     assert comparison.wire_model_for_revision(comparison.frozen_diagnostic_revision()) is SecurityAnalysisOutput
-    assert comparison.wire_model_for_revision(comparison.prompts) is SecurityAnalysisOutputV224
+    assert comparison.wire_model_for_revision(comparison.prompts) is SecurityAnalysisOutputV227
     assert comparison.wire_model_for_revision(comparison.legacy_prompts_v214) is SemanticAssessmentOutput
     for version in ("waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26"):
         class Revision:
@@ -167,6 +168,15 @@ def test_mocked_comparison_preserves_source_and_aborts_quota(tmp_path, monkeypat
         if quota:
             return AgentCallResult(None, "synthetic-quota", None, "error", None, "synthetic-safe-error",
                                    {"error_summary": {"code": "openai_http_429"}})
+        if kwargs["output_model"] is SecurityAnalysisOutputV227:
+            from test_evidence_interpretations_v227 import wire
+            document = wire()
+            source = next(item for item in json.loads(kwargs["user_input"])["evidence_candidates"]["items"]
+                          if item["field"] == "payload")
+            document["evidence"][0].update(source_id=source["source_id"], related_sources=[])
+            return AgentCallResult(SecurityAnalysisOutputV227.model_validate(document),
+                "synthetic-comparison", None, "completed", None, None,
+                {"usage": {"input_tokens": 10, "output_tokens": 5, "total_tokens": 15}})
         if kwargs["output_model"] in {SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SecurityAnalysisOutputV224}:
             document = output().model_dump(mode="json")
             if kwargs["output_model"] in {SecurityAnalysisOutputV220, SecurityAnalysisOutputV224}:
@@ -186,6 +196,7 @@ def test_mocked_comparison_preserves_source_and_aborts_quota(tmp_path, monkeypat
     monkeypatch.setattr(worker_v223, "execute_structured_agent", execute)
     monkeypatch.setattr(worker_v224, "execute_structured_agent", execute)
     monkeypatch.setattr(worker_v226, "execute_structured_agent", execute)
+    monkeypatch.setattr(worker_v227, "execute_structured_agent", execute)
     directory = tmp_path / "safe-results"
     result = comparison.main(["--execute-model-calls", "--profile-name", "Synthetic isolated profile",
                               "--output-dir", str(directory)])

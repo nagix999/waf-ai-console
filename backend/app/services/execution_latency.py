@@ -39,6 +39,9 @@ VALIDATION_FIELDS = ("$", "evidence", "evidence_relations", "signature_assessmen
     "interpretation_conflict", "capture_assessment", "corrections", "analyst_checks",
     "recommended_checks", "tuning_recommendation")
 VALIDATION_TYPES = (
+    "evidence_text_required", "evidence_source_repeated", "evidence_expansion_limit", "evidence_support_conflict",
+    "evidence_source_unavailable", "evidence_source_support_forbidden", "decisive_verdict_requires_directional_content",
+    "decision_source_unselected", "decision_source_repeated",
     "evidence_relation_invalid", "evidence_relation_conflicting_supports",
     "decisive_verdict_requires_evidence", "true_positive_requires_threat_severity",
     "false_positive_requires_none_severity", "inconclusive_requires_unknown_severity",
