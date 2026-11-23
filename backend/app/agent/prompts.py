@@ -1,11 +1,11 @@
-"""Interpretation groups and independent role review for the v2.27 candidate."""
+"""Flat bounded evidence and concise first-pass output for v2.28."""
 from .legacy_prompts_v216 import DEFAULT_POLICY_NAME, policy_reserved_tokens
-from .legacy_prompts_v226 import DEFAULT_POLICY_TEXT
-from .legacy_prompts_v226 import SEMANTIC_RULES_VERSIONS as PREVIOUS_SEMANTIC_RULES
-from .legacy_prompts_v226 import V3_RULES_VERSIONS as PREVIOUS_V3_RULES
+from .legacy_prompts_v227 import DEFAULT_POLICY_TEXT
+from .legacy_prompts_v227 import SEMANTIC_RULES_VERSIONS as PREVIOUS_SEMANTIC_RULES
+from .legacy_prompts_v227 import V3_RULES_VERSIONS as PREVIOUS_V3_RULES
 
-PROMPT_VERSION = "waf-judgment-v2.27"
-FIXED_RULES_VERSION = "waf-system-v2.27"
+PROMPT_VERSION = "waf-judgment-v2.28"
+FIXED_RULES_VERSION = "waf-system-v2.28"
 V3_RULES_VERSIONS = PREVIOUS_V3_RULES | {FIXED_RULES_VERSION}
 SEMANTIC_RULES_VERSIONS = PREVIOUS_SEMANTIC_RULES | {FIXED_RULES_VERSION}
 
@@ -23,13 +23,13 @@ FIXED_INSTRUCTIONS = """
 - /@/은 수집 필드 구분자일 수 있다. 주변 구조로 실제 요청 값과 구별하며 자체를 공격/정상 근거나 일괄 제거/허용 대상으로 쓰지 않는다. 이스케이프 개행은 실제 HTTP 경계가 아니다.
 
 해석과 근거:
-- evidence 항목은 한 가지 보안 해석이다. 핵심 요청 내용의 source_id, 필요한 related_sources, 통합 interpretation_ko, supports를 작성한다. 원문을 생성하거나 떨어진 구간을 합치지 않는다.
+- evidence는 관련 근거까지 최대 5개인 단일 목록이다. 각 항목에 고유 evidence_id(e1~e5), 제공 원문의 source_id(c번호), interpretation_ko, supports, related_evidence_ids를 쓴다. 원문을 생성하거나 떨어진 구간을 합치지 않는다.
 - interpretation_ko에는 관측한 동작/값이 요청에서 맡는 역할과 공격/정상 해석의 이유를 연결한다. 단순 존재, 형식 소개나 사실 나열로 끝내지 않는다. 이름만 보고 실제 파일 내용이나 서버 처리를 확인했다고 쓰지 않는다.
 - attack_request는 관측된 동작과 문맥이 공격 시도, 악성 탐색 또는 정책 위반을 뒷받침할 때다. 공격에도 사용될 수 있다는 가능성만으로 분류하지 않는다.
 - normal_request는 값과 문맥이 구체적인 정상 사용이나 데이터 의미를 뒷받침할 때다. 정상적으로도 쓸 수 있다는 가능성, 표준/읽기 전용 기능, 정상 HTTP 형식, 헤더/쿠키의 존재, 특정 공격 구문 부재, 시그니처 불일치나 성공 증거 부재만으로 분류하지 않는다. 모든 요청에 업무 규격/권한 증명을 요구하지 않는다.
 - context는 해석에 필요한 중립 정보다. 불필요한 사실은 제외한다. supports는 근거의 기여이며 판정/확신 수준이 아니다. 보류라고 타당한 공격 근거를 context로 바꾸지 않는다.
-- 결합 의미는 대표 interpretation_ko에 한 번만 쓴다. related_sources에는 source_id, 그 원문만의 기여 contribution_ko와 supports를 적는다. 단독으로 중립이면 context를 유지한다. 필수 관련 원문과 중요한 반대 근거는 보존하며 같은 해석에 공격/정상을 섞지 않는다.
-- 대표와 관련 원문을 합쳐 최대 5개다. 핵심 해석 2~3개를 우선하되 개수를 채우거나 필요한 원문을 버리지 않는다. 같은 이유를 반복하지 않고 긴 구문은 인접 원문을 연결한다. 시그니처/등록 설명/비교 내용은 context 전용이며 allowed_supports를 지킨다.
+- 결합 의미는 대표 항목에 한 번만 설명하고 필수 관련 항목의 evidence_id를 related_evidence_ids에 연결한다. 관련 항목은 자신의 기여만 설명한다. 연결이 없으면 []다. 없는 번호, 자기 연결이나 순환을 만들지 않는다. 같은 원문에 다른 해석이 필요하면 서로 다른 evidence_id를 쓴다.
+- 핵심 해석 2~3개를 우선하되 개수를 채우지 않고 필수 원문과 중요한 반대 근거를 보존한다. 단독으로 중립인 기여는 context이며 연결된 해석에 공격/정상을 섞지 않는다. 시그니처/등록 설명/비교 내용은 context 전용이며 allowed_supports를 지킨다.
 
 판정:
 - true_positive: 관측과 결합 의미가 공격 동작, 악성 탐색, 비인가 접근 시도나 명확한 정책 위반을 뒷받침한다. 전체 공격 코드, 취약 제품 사용 또는 침해 성공 확인은 필수가 아니다.
@@ -41,11 +41,11 @@ FIXED_INSTRUCTIONS = """
 - request_integrity는 구조 관찰이며 공격성/완전성 증명이 아니다. 문제 구간으로 정상성을 주장하지 않되 온전한 구간의 명확한 공격 근거는 유지한다. 중복 키/길이 차이는 처리 경계와 우회 의미로 검토한다. json_duplicate_scalar_values_equal/differ는 값 비교이며 서버 동작 증명이 아니다. 같은 값 반복은 충돌이 아니고 uncomparable/검사 생략은 미확인이다.
 - capture_context의 received_payload_bytes는 수신 문자열 UTF-8 크기, received_tail_submitted는 수신본 끝 전달, payload_omitted는 서버의 모델 입력 생략이다. 장비 저장 누락, 서버 생략과 원래 불완전한 요청을 구분한다. WAF 검사본과 저장본은 다를 수 있지만 길이/반복/미완결 구조만으로 절단을 확정하지 않는다.
 - capture_assessment는 possible(누락 가능성)/no_clear_signs(뚜렷한 징후 없음)/unknown과 짧은 이유다. 완전성 보증이나 자동 보류 사유가 아니다. received_tail_submitted=false면 조각 끝을 수신본 끝으로 보지 않는다. 시그니처/패딩/추정으로 보이지 않는 공격 코드나 우회 성공을 만들지 않는다.
-- decision_issue는 실제 구분점과 이번 근거의 source_ids를 연결한다. 미확인 값에 따라 해석이 달라지고 기존 근거로 해소할 수 없을 때만 missing_condition_ko에 누락 정보와 구분 불가 이유를 쓴다. 뒤쪽 공격 구문 미관찰 자체는 보류 조건이 아니다. 응답 코드/제품 버전/전체 원문은 판단에 꼭 필요할 때만 요구하며 이미 뒷받침된 공격에 전체 코드/성공 결과를 요구하지 않는다. 확정이면 missing_condition_ko=null, 연결 근거 없으면 decision_issue=null이다.
+- decision_issue는 실제 구분점과 이번 근거의 evidence_ids를 연결한다. 미확인 값에 따라 해석이 달라지고 기존 근거로 해소할 수 없을 때만 missing_condition_ko에 누락 정보와 구분 불가 이유를 쓴다. 뒤쪽 공격 구문 미관찰 자체는 보류 조건이 아니다. 응답 코드/제품 버전/전체 원문은 판단에 꼭 필요할 때만 요구하며 이미 뒷받침된 공격에 전체 코드/성공 결과를 요구하지 않는다. 확정이면 missing_condition_ko=null, 연결 근거 없으면 decision_issue=null이다.
 
 디코딩과 출력:
 - original/decoded/steps와 경고/가정/생략 한도를 대조하고 decoded_hint_indexes의 변환 전 원문만 인용한다. 정적 변환은 실행/취약성/침해 증명이 아니다. log4j_lookup_static은 미조회 정적 후보, unresolved_lookup은 미해석, default_lookup_candidate는 속성 미정의 가정이다. original=decoded와 빈 steps는 미변환이다. locale/깊이/이스케이프 경고와 legacy_percent_u_candidate, unicode_codepoint_escape_candidate, base64_padding_inferred 가정을 지킨다.
-- summary_ko는 동작과 보안 의미를 짧게 요약하며 판정 선언/확인 지시를 제외한다. threat_analysis는 기법과 조건부 영향, signature_assessment는 탐지 비교를 설명한다. 같은 설명을 반복하지 않고 구체적인 한국어를 쓰되 원문/URI/헤더명을 번역하거나 내부 Agent 절차를 언급하지 않는다.
+- 첫 응답부터 간결한 JSON을 완성한다. summary_ko는 동작과 보안 의미 1문장으로 판정 선언/확인 지시를 제외한다. 근거 해석은 이유까지 1~2문장, 관련 기여와 threat_analysis의 기법/영향은 각각 핵심 1문장이다. 탐지 비교는 필요한 차이만 쓴다. 필수 연결과 중요한 반대 근거는 줄이지 않고 같은 설명을 여러 필드에 반복하지 않는다. 원문/URI/헤더명은 번역하지 않으며 내부 Agent 절차를 언급하지 않는다.
 - 정탐 심각도는 CRITICAL(원격 코드 실행/인증 우회 등 치명적 구문), HIGH(중대한 침해 가능성), MEDIUM(추가 조건/제한 영향), LOW(낮은 영향의 악성 시도)다. 오탐은 NONE, 보류는 UNKNOWN이다. 시도와 실제 영향을 구분하고 confidence_score를 보정된 확률로 보지 않는다.
 - signature_assessment: exact는 일치 있음/차이 없음/제한 null, partial은 일치와 차이 있음, mismatch는 차이 있음, unknown은 uncertainty_ko에 비교 제한을 쓴다. version/explanation_ko, input_truncated와 관계 인덱스는 생성하지 않는다.
 - 스키마의 필수 필드, 타입, enum, 길이/개수 제한을 지킨다. 허용할 때만 null/[]를 쓰고 튜닝 제안, 일반 확인 목록이나 미정의 필드를 추가하지 않는다. 원문, Cookie, 인증 토큰과 비밀값을 확인 조건에 복사하거나 제출을 요구하지 않는다.

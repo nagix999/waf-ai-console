@@ -2,7 +2,7 @@
 import hashlib
 from pathlib import Path
 
-from app.agent import legacy_prompts_v226 as previous, prompts
+from app.agent import legacy_prompts_v226 as previous, legacy_prompts_v227 as prompts
 from app.agent.contracts_v227 import SecurityAnalysisOutputV227
 from app.agent.output_schema_v226 import compact_strict_schema
 
@@ -35,12 +35,12 @@ def test_general_criteria_and_internal_wire_agree_without_case_specific_rules():
     assert "contribution_ko" in common and "source_ids" in common
 
 
-def test_current_comparison_can_plan_v226_pair_without_db_or_model(monkeypatch, capsys):
+def test_current_comparison_can_plan_v226_to_latest_pair_without_db_or_model(monkeypatch, capsys):
     import json
     from scripts import compare_security_analysis_v3 as comparison
     monkeypatch.setattr(comparison, "get_settings", lambda: (_ for _ in ()).throw(AssertionError("No runtime read")))
     assert comparison.main(["--baseline-version", "v2.26"]) == 0
     plan = json.loads(capsys.readouterr().out)
-    assert plan["revisions"] == ["waf-system-v2.26", "waf-system-v2.27"]
+    assert plan["revisions"] == ["waf-system-v2.26", "waf-system-v2.28"]
     assert plan["analyses"] == 60 and plan["model_calls_made"] == 0
     assert plan["source_database_read"] is False

@@ -237,6 +237,16 @@ def test_output_failures_separate_recovered_attempts_from_final_stage_failure():
         {"field": "evidence_relations", "type": "evidence_relation_invalid", "attempts": 2}]
 
 
+@pytest.mark.parametrize("code", ["evidence_id_repeated", "evidence_link_repeated", "evidence_link_unknown",
+    "evidence_link_self", "evidence_link_cycle", "decision_evidence_unselected", "decision_evidence_repeated"])
+def test_flat_link_errors_are_counted_without_reading_model_output(code):
+    attempt = {"error_code": "output_validation_failed", "validation_issues": [{"field": "evidence", "type": code}]}
+    report = summarize_execution_latency([record(steps=[phase({"output_validation_retry": {
+        "attempt_count": 1, "attempts": [attempt]}})])])
+    assert report["roles"]["primary"]["output_failures"]["validation_issues"] == [
+        {"field": "evidence", "type": code, "attempts": 1}]
+
+
 @pytest.mark.parametrize(("reason", "outcome"), [
     ("length", "output_limit"), ("max_tokens", "output_limit"),
     ("timeout", "timeout"), ("stop", "incomplete_unspecified"), (None, "incomplete_unspecified")])

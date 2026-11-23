@@ -8,6 +8,7 @@ import { addGrouping, changeGrouping, initialStatistics, percent, statisticField
 import "./testStatistics.css";
 import TestCaseFilter from "./TestCaseFilter.jsx";
 import TestExecutionSummary from "./TestExecutionSummary.jsx";
+import TestPerformanceSummary from "./TestPerformanceSummary.jsx";
 
 const verdicts = [["true_positive", "정탐", "True positive"], ["false_positive", "오탐", "False positive"], ["inconclusive", "보류", "Inconclusive"]];
 
@@ -87,6 +88,9 @@ export default function TestStatistics({ run, filters, state: controlled, onChan
       <p className="test-stat-definition">{w("비율은 판정 완료 문항 기준입니다. 정확도는 보류를 포함한 답안 일치 ÷ 비교 가능 문항이며, 실행 실패·모의 실행 등 평가 제외 문항은 빼고 계산합니다.", "Distribution uses completed verdicts. Accuracy includes inconclusive answers: matches / comparable cases, excluding failures, stub runs and other ineligible results.")}</p>
       {data.case_filter_applied && <p className="test-stat-definition">{w("조건에 맞는 문항만 집계합니다. 오판만 선택하면 정확도는 0%이며, 전체 모델의 정확도를 뜻하지 않습니다. 접수 거부·중복 건수는 필터 전 범위입니다.", "Only matching cases are grouped. Selecting errors alone gives 0% accuracy, not the model's overall accuracy. Rejected and duplicate counts use the pre-filter scope.")}</p>}
       <p className="test-stat-basis">{w("답안 기준", "Reference basis")}: {w({ latest: "최신 참고 판정", initial: "접수 당시 기대 판정", saved: "저장한 평가", ground_truth: "공식 버전의 기대 판정" }[data.reference_basis] || "미확인", { latest: "Latest Reference Verdict", initial: "Expected verdict at admission", saved: "Saved evaluation", ground_truth: "Published version's expected verdict" }[data.reference_basis] || "Unknown")} · {w("접수 거부", "Rejected")} {data.rejected} · {w("중복 접수", "Duplicates")} {data.duplicates}</p>
+    </>}
+    <TestPerformanceSummary run={run} query={query} refresh={JSON.stringify([refresh, reload])} onUnauthorized={onUnauthorized} words={w} />
+    {data && <>
       <DataTable className={`test-stat-table test-stat-fields-${fields.length}`} label={w("필드별 통계", "Statistics by field")} data={data.items} columns={columns} getRowId={row => JSON.stringify(fields.map(field => rowValues(row)[field]))} sorting={serverSorting(state.sort_by, state.sort_order)} onSortingChange={update => change(changedSort(update, serverSorting(state.sort_by, state.sort_order)))} empty={w("조건에 맞는 집계 항목이 없습니다.", "No groups match this scope.")} />
       <Pagination label={w("통계 항목 페이지", "Statistics pages")} pageSizes={[10, 25, 50, 100]} total={data.total_groups} limit={state.limit} offset={state.offset} disabled={loading} onOffsetChange={offset => change({ offset })} onLimitChange={limit => change({ limit, offset: 0 })} />
       <p className="ux-muted">{w("항목명을 누르면 해당 문항을 확인할 수 있습니다. 답안이 없거나 비교 가능한 문항이 없으면 정확도는 —로 표시합니다.", "Select a group to inspect its cases. Accuracy is — when no comparable reference answers exist.")}</p>

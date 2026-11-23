@@ -7,6 +7,7 @@ test("only state changes invalidate Home; POST searches do not create a refresh 
   for (const path of ["/api/v1/validation-datasets/search", "/api/v1/validation-datasets/id/working/search", "/api/v1/evaluation-labels/selection", "/api/v1/test-runs/id/ground-truth-import/preview", "/api/v1/auth/login"]) assert.equal(affectsHome(path, "POST"), false);
   for (const [path, method] of [["/api/v1/admin/production-configurations/promote", "POST"], ["/api/v1/validation-datasets/id/working/items/id", "PUT"], ["/api/v1/validation-datasets/id/publish", "POST"], ["/api/v1/evaluation-labels/bulk", "POST"]]) assert.equal(affectsHome(path, method), true);
   assert.equal(affectsHome("/api/v1/admin/production-configurations/overview"), false);
+  assert.equal(affectsHome("/api/v1/test-runs/id/performance-summary", "POST"), false);
 });
 
 test("only running cases or pending official evaluation keep Test polling active", () => {

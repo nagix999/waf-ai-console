@@ -5,7 +5,7 @@ export function invalidateHome() {
 }
 export function affectsHome(path, method = "GET") {
   return ["POST", "PUT", "PATCH", "DELETE"].includes(method.toUpperCase()) &&
-    !/\/(search|selection|preview)(?:\?|$)/.test(path) && !path.startsWith("/api/v1/auth/");
+    !/\/(search|selection|preview|performance-summary)(?:\?|$)/.test(path) && !path.startsWith("/api/v1/auth/");
 }
 export function testRunActive(run) {
   if (run?.stopped_at || run?.status === "stopped") return false;

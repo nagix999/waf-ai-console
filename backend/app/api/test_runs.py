@@ -16,7 +16,7 @@ from ..validation_data_schemas import EvaluationCreate
 from ..services.manual_references import create_evaluation, evaluation_record
 from ..security import Principal, require_scope
 from ..test_run_schemas import TestRunCreate, TestRunDetail, TestRunList, TestRunSummary
-from ..test_filter_schemas import FilteredCasesRead, FilteredStatisticsRead, TestExportPreview, TestExportRequest
+from ..test_filter_schemas import FilteredCasesRead, FilteredStatisticsRead, TestReadScope, TestExportPreview, TestExportRequest
 from ..candidate_schemas import CandidateConfiguration
 from ..services.analysis import AnalysisIngestError
 from ..services.prompt_policies import PromptPolicyError
@@ -228,6 +228,13 @@ def filtered_statistics(run_id: str, payload: FilteredStatisticsRead, db: DbSess
 @router.post("/{run_id}/cases/search", response_model=TestRunDetail)
 def filtered_cases(run_id: str, payload: FilteredCasesRead, db: DbSession, _principal: Admin, request: Request, response: Response):
     return filtered_test_read(run_id, payload, db, request, response, describe_run)
+
+
+@router.post("/{run_id}/performance-summary")
+def test_performance_summary(run_id: str, payload: TestReadScope, db: DbSession, _principal: Admin,
+                             request: Request, response: Response):
+    from ..services.test_performance_summary import performance_summary
+    return filtered_test_read(run_id, payload, db, request, response, performance_summary)
 
 
 def filtered_test_read(run_id, payload, db, request, response, read):

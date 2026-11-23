@@ -1,0 +1,32 @@
+.test-performance-summary { min-width: 0; margin: 24px 0; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.test-performance-head { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 12px 20px; margin-bottom: 14px; }
+.test-performance-head h3 { margin: 0; color: var(--text); font-size: 16px; line-height: 1.5; }
+.test-performance-head button { flex: 0 0 auto; }
+.test-performance-note { margin: 8px 0; color: var(--muted); font-size: 12px; line-height: 1.7; overflow-wrap: anywhere; }
+.test-performance-summary h4 { margin: 0; color: var(--text); font-size: 13px; line-height: 1.6; }
+.test-performance-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 16px 0 12px; }
+.test-performance-kpis > div { min-width: 0; display: grid; gap: 8px; align-content: start; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--raised); }
+.test-performance-kpis > div:first-child { border-color: var(--accent); background: var(--accent-soft); }
+.test-performance-kpis dt { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.test-performance-kpis dd { margin: 0; color: var(--text); font-size: 26px; font-weight: 650; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.test-performance-kpis small,.test-performance-display small { color: var(--muted); font-size: 11px; line-height: 1.6; }
+.test-performance-summary .data-table-wrap { margin: 16px 0 12px; max-width: 100%; }
+.test-performance-role-table { min-width: 900px; }
+.test-performance-summary :is(th,td) { padding: 12px; vertical-align: top; white-space: normal; }
+.test-performance-summary th { line-height: 1.5; overflow-wrap: anywhere; }
+.test-performance-summary td strong { color: var(--text); font-size: 13px; font-weight: 600; }
+.test-performance-summary td small { display: block; color: var(--muted); font-size: 11px; line-height: 1.6; margin-top: 4px; }
+.test-performance-summary .numeric { font-variant-numeric: tabular-nums; }
+.test-performance-display { display: grid; grid-template-columns: minmax(170px, .75fr) minmax(0, 2fr); align-items: start; gap: 14px 24px; margin: 20px 0; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--raised); }
+.test-performance-display dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 0; }
+.test-performance-display dl > div { min-width: 0; display: grid; gap: 6px; align-content: start; }
+.test-performance-display dt { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.test-performance-display dd { margin: 0; color: var(--text); font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.test-performance-failures { margin-top: 20px; }
+.test-performance-recovery { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 10px; }
+.test-performance-recovery p { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; margin: 0; font-size: 12px; line-height: 1.7; color: var(--muted); }
+.test-performance-recovery strong { color: var(--text); font-weight: 600; }
+.test-performance-recovery .test-performance-outcomes { margin-top: 3px; font-size: 11px; }
+.test-performance-issue-table { min-width: 600px; }
+@media(max-width:1050px) { .test-performance-display { grid-template-columns: minmax(0, 1fr); gap: 12px; } }
+@media(max-width:680px) { .test-performance-summary { padding: 14px; }.test-performance-kpis { grid-template-columns: minmax(0, 1fr); gap: 10px; }.test-performance-kpis > div { padding: 14px; }.test-performance-display { padding: 14px; }.test-performance-display dl { grid-template-columns: minmax(0, 1fr); gap: 14px; }.test-performance-display dl > div + div { border-top: 1px solid var(--line); padding-top: 12px; } }

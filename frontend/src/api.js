@@ -2,6 +2,7 @@ import { modelTestPayload } from "./modelValidation.js";
 import { modelAssignmentPayload } from "./modelAssignments.js";
 import { affectsHome, invalidateHome } from "./readInvalidation.js";
 import { analysisEvidenceMeta, responseEvidenceMeta } from "./analysisEvidenceMeta.js";
+import { testPerformanceScope } from "./testPerformance.js";
 
 export async function request(path, options = {}) {
   const response = await fetch(path, {
@@ -120,6 +121,7 @@ export const api = {
   testStatistics: (id, query = {}, options = {}) => query.case_filter
     ? request(`/api/v1/test-runs/${encodeURIComponent(id)}/statistics/search`, { ...options, method: "POST", body: JSON.stringify(query), cache: "no-store" })
     : request(`/api/v1/test-runs/${encodeURIComponent(id)}/statistics?${new URLSearchParams(query)}`, { ...options, cache: "no-store" }),
+  testPerformance: (id, query = {}, options = {}) => request(`/api/v1/test-runs/${encodeURIComponent(id)}/performance-summary`, { ...options, method: "POST", body: JSON.stringify(testPerformanceScope(query)), cache: "no-store" }),
   stopTestRun: id => request(`/api/v1/test-runs/${encodeURIComponent(id)}/stop`, { method: "POST", cache: "no-store" }),
   testRetryEligibility: (id, options = {}) => request(`/api/v1/test-runs/${encodeURIComponent(id)}/retry-eligibility`, { ...options, cache: "no-store" }),
   retryTestFailures: (id, payload) => request(`/api/v1/test-runs/${encodeURIComponent(id)}/retry-failed`, { method: "POST", body: JSON.stringify(payload), cache: "no-store" }),
