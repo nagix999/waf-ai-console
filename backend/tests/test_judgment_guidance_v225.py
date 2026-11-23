@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from app.agent import legacy_prompts_v224_semantics as previous, prompts
+from app.agent import legacy_prompts_v224_semantics as previous, legacy_prompts_v225 as prompts
 
 
 def test_previous_revision_is_preserved_and_new_candidate_is_smaller():

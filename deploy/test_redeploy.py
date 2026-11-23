@@ -101,7 +101,7 @@ class ConfigurationTests(unittest.TestCase):
                 self.assertEqual(model, original)
                 for role in ("worker", "model-tester"):
                     self.assertEqual(target["services"][role]["command"],
-                                     ["python", "-m", "app.worker_entrypoint_v225"])
+                                     ["python", "-m", "app.worker_entrypoint_v226"])
                     self.assertEqual(target["services"][role]["environment"],
                                      original["services"][role]["environment"])
                     self.assertEqual(target["services"][role]["environment"]["WAF_AGENT_MODE"], "moduagent")
@@ -112,7 +112,7 @@ class ConfigurationTests(unittest.TestCase):
                 # silently change the other worker's launch configuration.
                 target["services"]["worker"]["command"].append("--synthetic")
                 self.assertEqual(target["services"]["model-tester"]["command"],
-                                 ["python", "-m", "app.worker_entrypoint_v225"])
+                                 ["python", "-m", "app.worker_entrypoint_v226"])
 
     def test_key_mismatch_between_workers_rejected(self):
         model, rows = fixture()

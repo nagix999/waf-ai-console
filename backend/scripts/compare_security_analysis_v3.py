@@ -119,7 +119,8 @@ def wire_model_for_revision(revision):
               "waf-system-v2.22": SecurityAnalysisOutputV220,
               "waf-system-v2.23": SecurityAnalysisOutputV220,
               "waf-system-v2.24": SecurityAnalysisOutputV224,
-              "waf-system-v2.25": SecurityAnalysisOutputV224}
+              "waf-system-v2.25": SecurityAnalysisOutputV224,
+              "waf-system-v2.26": SecurityAnalysisOutputV224}
     try:
         return models[revision.FIXED_RULES_VERSION]
     except KeyError:
@@ -289,6 +290,7 @@ def pipeline_hashes():
              root / "backend/app/worker_v223.py", root / "backend/app/worker_entrypoint_v223.py",
              root / "backend/app/worker_v224.py", root / "backend/app/worker_entrypoint_v224.py",
              root / "backend/app/worker_v225.py", root / "backend/app/worker_entrypoint_v225.py",
+             root / "backend/app/worker_v226.py", root / "backend/app/worker_entrypoint_v226.py",
              root / "backend/app/signature_explanation_schemas.py"]
     paths.extend((root / "backend/app/agent").glob("*.py"))
     paths.extend(root / "backend/app/services" / (name + ".py") for name in (
@@ -302,7 +304,9 @@ def pipeline_hashes():
         "worker_runtime_v224", "worker_concurrency_v224", "model_validation_worker_v224",
         "worker_coordinator_v224", "evidence_display_worker_v224",
         "worker_runtime_v225", "worker_concurrency_v225", "model_validation_worker_v225",
-        "worker_coordinator_v225"))
+        "worker_coordinator_v225",
+        "worker_runtime_v226", "worker_concurrency_v226", "model_validation_worker_v226",
+        "worker_coordinator_v226"))
     hashes = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(set(paths))}
     digest = hashlib.sha256(json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     return digest, hashes
@@ -518,7 +522,7 @@ def run(args):
                     started, previous_wait = time.monotonic(), authority.wait_ms
                     try:
                         authority()
-                        from app.services.worker_runtime_v225 import process_moduagent
+                        from app.services.worker_runtime_v226 import process_moduagent
                         process_moduagent(db, crypto, row, "", settings.verifier_confidence_threshold, request_check=authority)
                     except Exception as exc:
                         db.rollback()

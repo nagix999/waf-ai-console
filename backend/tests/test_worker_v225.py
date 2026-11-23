@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from app import worker_v225 as worker
+from app.agent import legacy_prompts_v225 as prompts
 from app.agent.contracts_v224 import SecurityAnalysisOutputV224
 from app.agent.executor import AgentCallResult
 from app.models import AgentRun, Analysis, ConcurrencyConfiguration, VLLMProfile
@@ -15,6 +16,12 @@ from app.services.prompt_policies import get_active_policy
 from app.services.prompt_snapshots import _build_snapshot
 from app.services.worker_runtime_v225 import process_moduagent
 from test_evidence_relations import wire
+
+
+@pytest.fixture(autouse=True)
+def pin_historical_revision(monkeypatch):
+    """Exercise the frozen v2.25 admission and runtime after later deployments."""
+    monkeypatch.setattr("app.agent.prompts", prompts)
 
 
 def result(*, succeeded=True):

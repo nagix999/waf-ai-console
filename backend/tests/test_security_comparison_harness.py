@@ -10,7 +10,7 @@ from scripts import compare_security_analysis_v3 as comparison
 from app.agent.contracts import SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SemanticAssessmentOutput
 from app.agent.contracts_v224 import SecurityAnalysisOutputV224
 from app.agent.executor import AgentCallResult
-from app import worker_v221, worker_v222, worker_v223, worker_v224, worker_v225
+from app import worker_v221, worker_v222, worker_v223, worker_v224, worker_v225, worker_v226
 from app.config import Settings
 from app.database import Base, build_engine
 from app.models import VLLMProfile, VLLMTestRun, utcnow
@@ -62,7 +62,7 @@ def test_manifest_models_match_pinned_worker_contracts():
     assert comparison.wire_model_for_revision(comparison.frozen_diagnostic_revision()) is SecurityAnalysisOutput
     assert comparison.wire_model_for_revision(comparison.prompts) is SecurityAnalysisOutputV224
     assert comparison.wire_model_for_revision(comparison.legacy_prompts_v214) is SemanticAssessmentOutput
-    for version in ("waf-system-v2.24", "waf-system-v2.25"):
+    for version in ("waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26"):
         class Revision:
             FIXED_RULES_VERSION = version
         assert comparison.wire_model_for_revision(Revision) is SecurityAnalysisOutputV224
@@ -185,7 +185,7 @@ def test_mocked_comparison_preserves_source_and_aborts_quota(tmp_path, monkeypat
     monkeypatch.setattr(worker_v222, "execute_structured_agent", execute)
     monkeypatch.setattr(worker_v223, "execute_structured_agent", execute)
     monkeypatch.setattr(worker_v224, "execute_structured_agent", execute)
-    monkeypatch.setattr(worker_v225, "execute_structured_agent", execute)
+    monkeypatch.setattr(worker_v226, "execute_structured_agent", execute)
     directory = tmp_path / "safe-results"
     result = comparison.main(["--execute-model-calls", "--profile-name", "Synthetic isolated profile",
                               "--output-dir", str(directory)])
@@ -206,6 +206,11 @@ def test_mocked_comparison_preserves_source_and_aborts_quota(tmp_path, monkeypat
     assert "backend/app/agent/executor_v224.py" in manifest["pipeline_source_hashes"]
     assert "backend/app/agent/executor_v225.py" in manifest["pipeline_source_hashes"]
     assert "backend/app/agent/relation_correction_v225.py" in manifest["pipeline_source_hashes"]
+    assert "backend/app/agent/executor_v226.py" in manifest["pipeline_source_hashes"]
+    assert "backend/app/agent/output_schema_v226.py" in manifest["pipeline_source_hashes"]
+    assert "backend/app/worker_v226.py" in manifest["pipeline_source_hashes"]
+    assert "backend/app/worker_entrypoint_v226.py" in manifest["pipeline_source_hashes"]
+    assert "backend/app/services/worker_runtime_v226.py" in manifest["pipeline_source_hashes"]
     assert "backend/app/services/signature_explanations.py" in manifest["pipeline_source_hashes"]
     checkpoints = list(directory.glob("waf-system-*.json"))
     assert len(checkpoints) == (1 if quota else 4)

@@ -10,7 +10,7 @@ import pytest
 from app import worker_v224, worker_v225
 from app.agent import evidence_pipeline_v224, evidence_pipeline_v225
 from app.agent import input_builder_v224, input_builder_v225, execution_policy_v224, execution_policy_v225
-from app.agent import legacy_prompts_v224_semantics, prompts
+from app.agent import legacy_prompts_v224_semantics, legacy_prompts_v225 as prompts
 from app.agent.policy import VerifierPolicyContext
 from app.models import Analysis, TestRun as NamedRun, VLLMProfile
 from app.services import worker_runtime_v225, prompt_snapshots
@@ -26,6 +26,12 @@ from test_execution_policy_v221 import output
 pytestmark = pytest.mark.usefixtures("registered_vllm_target")
 PRODUCTION = "/api/v1/admin/production-configurations"
 FROZEN_V224 = "7b7ad16e74c7b0784ad28d161f32443db4a1e304d1c03b01eccf06f6fe126830"
+
+
+@pytest.fixture(autouse=True)
+def pin_historical_revision(monkeypatch):
+    """Exercise the frozen v2.25 admission and runtime after later deployments."""
+    monkeypatch.setattr("app.agent.prompts", prompts)
 
 
 def without_editor(configuration):
