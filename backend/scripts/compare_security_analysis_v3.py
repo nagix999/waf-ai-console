@@ -31,6 +31,7 @@ from app import worker
 from app.agent import legacy_prompts_v214, prompts, result_editor
 from app.agent.contracts import (SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220,
                                  SemanticAssessmentOutput, EvidenceSelectionCorrectionOutput)
+from app.agent.contracts_v224 import SecurityAnalysisOutputV224
 from app.agent.executor import SAFE_VALIDATION_TYPES, _output_schema_field_names
 from app.agent.structured_json import REJECTION_CODES as JSON_REJECTION_CODES
 from app.candidate_schemas import CandidateConfiguration
@@ -116,10 +117,9 @@ def wire_model_for_revision(revision):
               "waf-system-v2.20": SecurityAnalysisOutputV220,
               "waf-system-v2.21": SecurityAnalysisOutputV220,
               "waf-system-v2.22": SecurityAnalysisOutputV220,
-              "waf-system-v2.23": SecurityAnalysisOutputV220}
-    if revision.FIXED_RULES_VERSION == "waf-system-v2.24":
-        from app.agent.contracts_v224 import SecurityAnalysisOutputV224
-        return SecurityAnalysisOutputV224
+              "waf-system-v2.23": SecurityAnalysisOutputV220,
+              "waf-system-v2.24": SecurityAnalysisOutputV224,
+              "waf-system-v2.25": SecurityAnalysisOutputV224}
     try:
         return models[revision.FIXED_RULES_VERSION]
     except KeyError:
@@ -215,7 +215,7 @@ def write_json(path, value):
 @lru_cache(maxsize=1)
 def validation_fields():
     return frozenset().union(*(_output_schema_field_names(model) for model in (
-        SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220,
+        SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SecurityAnalysisOutputV224,
         SemanticAssessmentOutput, EvidenceSelectionCorrectionOutput)))
 
 
@@ -288,6 +288,7 @@ def pipeline_hashes():
              root / "backend/app/worker_v222.py", root / "backend/app/worker_entrypoint_v222.py",
              root / "backend/app/worker_v223.py", root / "backend/app/worker_entrypoint_v223.py",
              root / "backend/app/worker_v224.py", root / "backend/app/worker_entrypoint_v224.py",
+             root / "backend/app/worker_v225.py", root / "backend/app/worker_entrypoint_v225.py",
              root / "backend/app/signature_explanation_schemas.py"]
     paths.extend((root / "backend/app/agent").glob("*.py"))
     paths.extend(root / "backend/app/services" / (name + ".py") for name in (
@@ -299,7 +300,9 @@ def pipeline_hashes():
         "worker_runtime_v223", "worker_concurrency_v223", "model_validation_worker_v223",
         "worker_coordinator_v223", "signature_explanations",
         "worker_runtime_v224", "worker_concurrency_v224", "model_validation_worker_v224",
-        "worker_coordinator_v224", "evidence_display_worker_v224"))
+        "worker_coordinator_v224", "evidence_display_worker_v224",
+        "worker_runtime_v225", "worker_concurrency_v225", "model_validation_worker_v225",
+        "worker_coordinator_v225"))
     hashes = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(set(paths))}
     digest = hashlib.sha256(json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     return digest, hashes
@@ -515,7 +518,7 @@ def run(args):
                     started, previous_wait = time.monotonic(), authority.wait_ms
                     try:
                         authority()
-                        from app.services.worker_runtime_v224 import process_moduagent
+                        from app.services.worker_runtime_v225 import process_moduagent
                         process_moduagent(db, crypto, row, "", settings.verifier_confidence_threshold, request_check=authority)
                     except Exception as exc:
                         db.rollback()

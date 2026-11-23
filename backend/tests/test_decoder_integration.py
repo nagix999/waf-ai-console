@@ -174,8 +174,8 @@ def test_agent_instructions_keep_lookup_candidates_distinct_from_observed_execut
     assert PROMPT_VERSION == FIXED_RULES_VERSION.replace("waf-system-", "waf-judgment-", 1)
     for marker in ["log4j_lookup_static", "unresolved_lookup", "default_lookup_candidate", "base64_padding_inferred"]:
         assert marker in BASE_INSTRUCTIONS
-    assert "디코딩 전 원문 후보만 인용한다" in BASE_INSTRUCTIONS
-    assert "정적 변환은 실제 서버 처리, 외부 연결, 침해나 취약 Log4j의 증명이 아니며" in BASE_INSTRUCTIONS
-    assert "JNDI/LDAP/RMI/DNS, 환경변수와 시스템 속성을 조회하지 않았다" in BASE_INSTRUCTIONS
+    assert "변환 전 원문만 인용한다" in BASE_INSTRUCTIONS
+    assert "정적 변환은 서버 실행이나 취약성/침해 증명이 아니다" in BASE_INSTRUCTIONS
+    assert "log4j_lookup_static은 조회하지 않은 정적 후보" in BASE_INSTRUCTIONS
     assert "original=decoded와 빈 steps는 미변환이다" in BASE_INSTRUCTIONS
-    assert "완전한 공격 코드/취약 제품 사용/침해 성공 확인은 필수가 아니다" in BASE_INSTRUCTIONS
+    assert "전체 공격 코드, 취약 제품 사용이나 침해 성공 확인은 필수가 아니다" in BASE_INSTRUCTIONS

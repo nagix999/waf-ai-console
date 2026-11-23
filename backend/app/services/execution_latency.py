@@ -5,7 +5,7 @@ attempt includes transport, framework and validation work. Retry times overlap
 the enclosing step, and output retries can overlap citation-repair time; never
 sum their percentiles or add them to the enclosing duration.
 
-Only fixed names, bounded numeric values and timestamps are consumed. Missing
+Only fixed diagnostic names, bounded numeric values and timestamps are consumed. Missing
 old telemetry stays unknown. Neither raw input, encrypted traces, model output
 nor arbitrary diagnostic strings are returned.
 """
@@ -28,6 +28,35 @@ ANALYSIS_STATUSES = ("pending", "processing", "completed", "failed", "canceled")
 STEP_STATUSES = ("pending", "running", "completed", "failed", "skipped", "canceled")
 DISPLAY_STATUSES = ("pending", "running", "completed", "skipped", "failed", "canceled")
 RETRY_KINDS = ("schema_correction", "compact_output", "timeout_recovery")
+# Closed diagnostic vocabulary. Never echo an upstream error, schema key or
+# model-produced value merely because it resembles a diagnostic string.
+OUTPUT_ERROR_CODES = ("output_validation_failed", "model_output_incomplete",
+                      "vllm_output_incomplete", "openai_output_incomplete")
+PROVIDER_FINISH_REASONS = ("stop", "length", "max_tokens", "timeout")
+ATTEMPT_FINISH_REASONS = ("completed", "failed", "error", "canceled")
+VALIDATION_FIELDS = ("$", "evidence", "evidence_relations", "signature_assessment", "summary_ko",
+    "verdict", "confidence_score", "threat_analysis", "decision_issue", "input_truncated",
+    "interpretation_conflict", "capture_assessment", "corrections", "analyst_checks",
+    "recommended_checks", "tuning_recommendation")
+VALIDATION_TYPES = (
+    "evidence_relation_invalid", "evidence_relation_conflicting_supports",
+    "decisive_verdict_requires_evidence", "true_positive_requires_threat_severity",
+    "false_positive_requires_none_severity", "inconclusive_requires_unknown_severity",
+    "recommended_tuning_requires_scope_proposal_risk_and_validation", "duplicate_correction_index",
+    "signature_exact_requires_match", "signature_exact_disallows_mismatch",
+    "signature_partial_requires_match_and_mismatch", "signature_mismatch_requires_difference",
+    "signature_unknown_requires_reason", "signature_v2_explanation_must_be_null",
+    "signature_legacy_requires_explanation", "signature_v2_requires_version",
+    "signature_detail_requires_explanation", "analyst_check_purpose_required",
+    "decisive_verdict_disallows_decision_condition", "recommended_checks_legacy_only",
+    "decisive_verdict_disallows_missing_condition", "summary_must_describe_request",
+    "json_invalid", "json_duplicate_key", "json_non_finite", "json_size_limit", "json_depth_limit",
+    "json_encoding_invalid", "json_top_level_object_required", "decode_error", "validation_error",
+    "missing", "extra_forbidden", "literal_error", "enum", "string_type", "string_too_short",
+    "string_too_long", "list_type", "too_short", "too_long", "int_type", "int_parsing",
+    "float_type", "float_parsing", "bool_type", "dict_type", "model_type", "none_required",
+    "greater_than", "greater_than_equal", "less_than", "less_than_equal", "finite_number", "value_error",
+)
 _TERMINAL = frozenset({"completed", "failed", "canceled", "skipped"})
 _MAX_MS = 7 * 24 * 60 * 60 * 1000
 
@@ -141,6 +170,76 @@ def _role_observation(metadata):
             "citation_repairs": len(calls) - 1, "retry_kinds": kinds}
 
 
+def _output_outcome(attempt):
+    code = _fixed(attempt.get("error_code"), OUTPUT_ERROR_CODES)
+    reason = _fixed(attempt.get("provider_finish_reason"), PROVIDER_FINISH_REASONS)
+    if code == "output_validation_failed":
+        return "output_validation"
+    if code in OUTPUT_ERROR_CODES[1:]:
+        return ("output_limit" if reason in {"length", "max_tokens"} else
+                "timeout" if reason == "timeout" else "incomplete_unspecified")
+    # A finish_reason alone is insufficient if a missing/unknown error code
+    # could have been discarded by the SQL allowlist.
+    if (attempt.get("finish_reason") == "completed" and attempt.get("error_code") is None
+            and attempt.get("error_code_present", False) is False):
+        return "completed"
+    return "unrecorded"
+
+
+@dataclass
+class _OutputFailures:
+    states: Counter = field(default_factory=Counter)
+    outcomes: Counter = field(default_factory=Counter)
+    issues: Counter = field(default_factory=Counter)
+    recorded_cases: int = 0
+    unrecorded_cases: int = 0
+    cases_with_output_failure: int = 0
+    completed_cases_with_output_failure: int = 0
+    validation_attempts_without_recorded_issues: int = 0
+
+    def add(self, metadata, state):
+        self.states[state] += 1
+        calls = _calls(metadata)
+        if calls is None:
+            self.unrecorded_cases += 1
+            return
+        self.recorded_cases += 1
+        observed_failure = False
+        for attempt in (attempt for call in calls for attempt in call):
+            outcome = _output_outcome(attempt)
+            self.outcomes[outcome] += 1
+            observed_failure |= outcome not in {"completed", "unrecorded"}
+            if outcome != "output_validation":
+                continue
+            issues = attempt.get("validation_issues")
+            if not isinstance(issues, list) or not 1 <= len(issues) <= 12:
+                self.validation_attempts_without_recorded_issues += 1
+                continue
+            # Count each field/type once per attempt; repeated Pydantic paths
+            # do not inflate the number of affected attempts.
+            seen = set()
+            for raw_issue in issues:
+                issue = _mapping(raw_issue)
+                path = issue.get("field")
+                root = path.split(".", 1)[0] if isinstance(path, str) else None
+                seen.add((_fixed(root, VALIDATION_FIELDS), _fixed(issue.get("type"), VALIDATION_TYPES)))
+            self.issues.update(seen)
+        if observed_failure:
+            self.cases_with_output_failure += 1
+            if state == "completed":
+                self.completed_cases_with_output_failure += 1
+
+    def present(self):
+        return {"stage_states": dict(sorted(self.states.items())),
+                "recorded_cases": self.recorded_cases, "unrecorded_cases": self.unrecorded_cases,
+                "attempt_outcomes": dict(sorted(self.outcomes.items())),
+                "cases_with_output_failure": self.cases_with_output_failure,
+                "completed_cases_with_output_failure": self.completed_cases_with_output_failure,
+                "validation_attempts_without_recorded_issues": self.validation_attempts_without_recorded_issues,
+                "validation_issues": [{"field": field, "type": kind, "attempts": count}
+                    for (field, kind), count in sorted(self.issues.items())]}
+
+
 def summarize_execution_latency(records):
     """Summarize selected current test attempts, not every retry in their history.
 
@@ -158,6 +257,7 @@ def summarize_execution_latency(records):
         for role in ROLES.values()}
     role_counts = {role: Counter() for role in ROLES.values()}
     retry_kinds = {role: Counter() for role in ROLES.values()}
+    output_failures = {role: _OutputFailures() for role in ROLES.values()}
     display_metrics = {name: _Metric() for name in ("queue_ms", "processing_ms", "post_decision_elapsed_ms")}
     display_call_marks = Counter()
     cases = no_display_job = 0
@@ -215,6 +315,7 @@ def summarize_execution_latency(records):
             if name not in ROLES:
                 continue
             role = ROLES[name]
+            output_failures[role].add(metadata, state)
             observation = _role_observation(metadata)
             for metric in roles[role]:
                 roles[role][metric].add(observation[metric])
@@ -237,6 +338,7 @@ def summarize_execution_latency(records):
                 "accounting": {key: role_counts[role][key] for key in (
                 "recorded_cases", "unrecorded_cases", "reported_output_attempts", "reported_output_retries",
                 "reported_citation_repairs")}, "retry_kinds": dict(sorted(retry_kinds[role].items())),
+                "output_failures": output_failures[role].present(),
                 **{name: metric.present() for name, metric in roles[role].items()}} for phase, role in ROLES.items()},
             "display": {"no_job_cases": no_display_job, "states": dict(sorted(display_states.items())),
                         "dispatch_markers": dict(sorted(display_call_marks.items())),
@@ -246,4 +348,6 @@ def summarize_execution_latency(records):
                       "stage_not_observed_does_not_prove_skipped",
                       "slot_wait_unknown_without_all_citation_calls", "dispatch_marker_is_not_http_count",
                       "display_processing_includes_setup_and_slot_wait",
-                      "result_ready_elapsed_is_not_client_network_latency"]}
+                      "result_ready_elapsed_is_not_client_network_latency",
+                      "output_failure_attempts_include_successfully_recovered_cases",
+                      "validation_issue_counts_are_per_attempt_and_not_additive"]}

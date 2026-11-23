@@ -75,6 +75,56 @@ def test_read_only_aggregate_and_no_identifiers_or_protected_content(tmp_path, c
     assert hashlib.sha256(path.read_bytes()).hexdigest() == before
 
 
+def test_output_diagnostics_are_allowlisted_in_sql_before_leaving_sqlite(tmp_path):
+    path = fixture_db(tmp_path / "output-failures.db")
+    metadata = {"output_validation_retry": {"attempt_count": 2, "attempts": [
+        {"error_code": "output_validation_failed", "provider_finish_reason": "stop", "finish_reason": "failed",
+         "validation_issues": [{"field": "evidence_relations", "type": "evidence_relation_invalid",
+             "message": MARKER}, {"field": MARKER, "type": MARKER}]},
+        {"error_code": MARKER, "finish_reason": "completed", "validation_issues": [MARKER]}]}}
+    with sqlite3.connect(path) as db:
+        db.execute("UPDATE agent_steps SET metadata_json=?", (json.dumps(metadata),))
+    records = read_fixture(path)
+    assert MARKER not in json.dumps(records, default=str)
+    attempts = records[0]["steps"][0]["metadata"]["output_validation_retry"]["attempts"]
+    assert attempts[0]["validation_issues"] == [
+        {"field": "evidence_relations", "type": "evidence_relation_invalid"}, {"field": None, "type": None}]
+    assert attempts[1]["error_code"] is None and attempts[1]["error_code_present"] is True
+    failures = cli.summarize_file(path, "synthetic-run")["roles"]["primary"]["output_failures"]
+    assert failures["attempt_outcomes"] == {"output_validation": 1, "unrecorded": 1}
+    assert MARKER not in json.dumps(failures)
+
+
+def test_missing_and_oversized_validation_details_are_not_invented(tmp_path):
+    path = fixture_db(tmp_path / "missing-validation.db")
+    attempts = [{"error_code": "output_validation_failed"},
+        {"error_code": "output_validation_failed", "validation_issues": [
+            {"field": "evidence_relations", "type": "evidence_relation_invalid"}] * 13},
+        {"error_code": "vllm_output_incomplete", "provider_finish_reason": "length"},
+        {"error_code": None, "finish_reason": "completed"}]
+    with sqlite3.connect(path) as db:
+        db.execute("UPDATE agent_steps SET metadata_json=?", (json.dumps({"output_validation_retry": {
+            "attempt_count": 4, "attempts": attempts}}),))
+    failures = cli.summarize_file(path, "synthetic-run")["roles"]["primary"]["output_failures"]
+    assert failures["attempt_outcomes"] == {"completed": 1, "output_limit": 1, "output_validation": 2}
+    assert failures["validation_attempts_without_recorded_issues"] == 2
+    assert failures["validation_issues"] == []
+
+
+@pytest.mark.parametrize("issue", [None, MARKER, [], {"field": [MARKER], "type": {"private": MARKER}},
+    {"field": True, "type": 1}, {"field": {"private": MARKER}, "type": [MARKER]}])
+def test_non_object_issues_and_non_string_labels_remain_unknown_without_leaks(tmp_path, issue):
+    path = fixture_db(tmp_path / "malformed-validation.db")
+    with sqlite3.connect(path) as db:
+        db.execute("UPDATE agent_steps SET metadata_json=?", (json.dumps({"output_validation_retry": {
+            "attempt_count": 1, "attempts": [{"error_code": "output_validation_failed",
+                "validation_issues": [issue]}]}}),))
+    loaded = read_fixture(path)
+    assert MARKER not in json.dumps(loaded, default=str)
+    failures = cli.summarize_file(path, "synthetic-run")["roles"]["primary"]["output_failures"]
+    assert failures["validation_issues"] == [{"field": "unrecorded", "type": "unrecorded", "attempts": 1}]
+
+
 def test_only_current_retry_latest_run_and_latest_same_type_step_are_selected(tmp_path):
     path = fixture_db(tmp_path / "retry.db")
     with sqlite3.connect(path) as db:

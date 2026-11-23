@@ -24,6 +24,8 @@ from sqlalchemy.dialects import sqlite
 
 from app.services.test_attempts import test_attempts
 from app.models import TestRunItem
+from app.services.execution_latency import (ATTEMPT_FINISH_REASONS, OUTPUT_ERROR_CODES,
+    PROVIDER_FINISH_REASONS, VALIDATION_FIELDS, VALIDATION_TYPES)
 
 CHUNK_SIZE = 100
 MAX_CASES = 10_000
@@ -142,11 +144,33 @@ def _attempt_values(document):
         _number(document, "$.attempt") + " AS attempt",
         _number(document, "$.duration_ms") + " AS duration_ms",
         _enum(f"json_extract({document},'$.retry_kind')", RETRY_KINDS) + " AS retry_kind",
+        _enum(f"json_extract({document},'$.error_code')", OUTPUT_ERROR_CODES) + " AS error_code",
+        f"CASE WHEN json_type({document},'$.error_code') IS NOT NULL AND "
+        f"json_type({document},'$.error_code')!='null' THEN 1 ELSE 0 END AS error_code_present",
+        _enum(f"json_extract({document},'$.provider_finish_reason')", PROVIDER_FINISH_REASONS) + " AS provider_finish_reason",
+        _enum(f"json_extract({document},'$.finish_reason')", ATTEMPT_FINISH_REASONS) + " AS finish_reason",
+        _validation_issues(document) + " AS validation_issues",
     ])
 
 
+def _validation_issues(document):
+    # Return only SQL-allowlisted scalar labels, never an upstream JSON object.
+    item = "CASE WHEN diagnostic_issue.type='object' THEN diagnostic_issue.value ELSE '{}' END"
+    path = f"CASE WHEN json_type({item},'$.field')='text' THEN json_extract({item},'$.field') END"
+    root = f"CASE WHEN instr({path},'.')>0 THEN substr({path},1,instr({path},'.')-1) ELSE {path} END"
+    field_name = _enum(root, VALIDATION_FIELDS)
+    issue_type = _enum(f"CASE WHEN json_type({item},'$.type')='text' THEN json_extract({item},'$.type') END", VALIDATION_TYPES)
+    return (f"CASE WHEN json_type({document},'$.validation_issues')='array' AND "
+        f"json_array_length({document},'$.validation_issues')<=12 THEN "
+        f"(SELECT json_group_array(json_object('field',{field_name},'type',{issue_type})) "
+        f"FROM json_each(json_extract({document},'$.validation_issues')) diagnostic_issue) END")
+
+
 def _attempt_record(row):
-    return {"attempt": row["attempt"], "duration_ms": row["duration_ms"], "retry_kind": row["retry_kind"]}
+    return {"attempt": row["attempt"], "duration_ms": row["duration_ms"], "retry_kind": row["retry_kind"],
+            "error_code": row["error_code"], "error_code_present": _as_bool(row["error_code_present"]),
+            "provider_finish_reason": row["provider_finish_reason"], "finish_reason": row["finish_reason"],
+            "validation_issues": json.loads(row["validation_issues"]) if row["validation_issues"] else None}
 
 
 def _load_steps(connection, identifiers):

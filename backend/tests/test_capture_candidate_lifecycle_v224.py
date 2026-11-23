@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.agent import evidence_pipeline_v223, evidence_pipeline_v224, legacy_prompts_v223, prompts
+from app.agent import evidence_pipeline_v223, evidence_pipeline_v224, legacy_prompts_v223, legacy_prompts_v224_semantics as prompts
 from app.agent import execution_policy_v223, execution_policy_v224
 from app.agent.evidence_source_policy_v224 import catalog_for_source_policy, signature_support_issues
 from app.agent.policy import VerifierPolicyContext
@@ -26,7 +26,7 @@ from app.agent.contracts import SecurityAnalysisOutputV220
 from test_signature_context_lifecycle import direct, promote, qualified, save_catalog, selected
 
 
-pytestmark = pytest.mark.usefixtures("registered_vllm_target")
+pytestmark = pytest.mark.usefixtures("registered_vllm_target", "legacy_v224_admissions")
 RULES = "waf-system-v2.24"
 
 

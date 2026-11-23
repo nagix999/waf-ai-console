@@ -220,6 +220,69 @@ def test_empty_report_is_valid_and_does_not_claim_zero_latency():
     assert report["timings"]["decision_elapsed_ms"]["recorded"] == 0
 
 
+def test_output_failures_separate_recovered_attempts_from_final_stage_failure():
+    bad = {"duration_ms": 20, "error_code": "output_validation_failed", "finish_reason": "failed",
+        "provider_finish_reason": "stop", "validation_issues": [
+            {"field": "evidence_relations", "type": "evidence_relation_invalid"}]}
+    good = {"duration_ms": 10, "error_code": None, "finish_reason": "completed"}
+    rows = [record(steps=[phase({"output_validation_retry": {"attempt_count": 2, "attempts": [bad, good]}})]),
+        record(status="failed", steps=[phase({"output_validation_retry": {
+            "attempt_count": 1, "attempts": [bad]}}, state="failed")])]
+    failures = summarize_execution_latency(rows)["roles"]["primary"]["output_failures"]
+    assert failures["stage_states"] == {"completed": 1, "failed": 1}
+    assert failures["attempt_outcomes"] == {"completed": 1, "output_validation": 2}
+    assert failures["cases_with_output_failure"] == 2
+    assert failures["completed_cases_with_output_failure"] == 1
+    assert failures["validation_issues"] == [
+        {"field": "evidence_relations", "type": "evidence_relation_invalid", "attempts": 2}]
+
+
+@pytest.mark.parametrize(("reason", "outcome"), [
+    ("length", "output_limit"), ("max_tokens", "output_limit"),
+    ("timeout", "timeout"), ("stop", "incomplete_unspecified"), (None, "incomplete_unspecified")])
+def test_incomplete_outputs_are_not_all_classified_as_json_or_token_limit_errors(reason, outcome):
+    attempts = [{"error_code": "vllm_output_incomplete", "provider_finish_reason": reason}]
+    row = record(steps=[phase({"output_validation_retry": {"attempt_count": 1,
+        "attempts": attempts}}, name="llm_verifier", state="failed")])
+    failures = summarize_execution_latency([row])["roles"]["verifier"]["output_failures"]
+    assert failures["attempt_outcomes"] == {outcome: 1}
+    assert failures["cases_with_output_failure"] == 1
+    assert failures["completed_cases_with_output_failure"] == 0
+
+
+def test_failure_causes_from_nested_calls_do_not_count_duplicated_top_level_again():
+    bad = {"attempt_count": 1, "attempts": [{"error_code": "output_validation_failed",
+        "validation_issues": [{"field": "evidence_relations", "type": "evidence_relation_invalid"}]}]}
+    good = {"attempt_count": 1, "attempts": [{"finish_reason": "completed"}]}
+    row = record(steps=[phase({"output_validation_retry": good, "evidence_grounding_retry": {
+        "attempt_count": 2, "attempts": [{"output_validation_retry": bad}, {"output_validation_retry": good}]}})])
+    failures = summarize_execution_latency([row])["roles"]["primary"]["output_failures"]
+    assert failures["attempt_outcomes"] == {"completed": 1, "output_validation": 1}
+    assert failures["validation_issues"][0]["attempts"] == 1
+
+
+def test_validation_labels_are_bounded_allowlisted_and_distinct_per_attempt():
+    secret = "SYNTHETIC_SECRET_IN_VALIDATION"
+    bad = {"error_code": "output_validation_failed", "validation_issues": [
+        {"field": "evidence.[].source_id", "type": "missing"},
+        {"field": "evidence.[].supports", "type": "missing"},
+        {"field": secret, "type": secret, "message": secret}]}
+    unknown = {"error_code": secret, "finish_reason": "completed", "validation_issues": [secret]}
+    rows = [record(steps=[phase({"output_validation_retry": {"attempt_count": 2, "attempts": [bad, unknown]}})]),
+        record(steps=[phase({"output_validation_retry": {"attempt_count": 1,
+            "attempts": [{"error_code": "output_validation_failed", "validation_issues": [bad] * 13}]}})]),
+        record(steps=[phase({"output_validation_retry": None})])]
+    report = summarize_execution_latency(rows)
+    assert secret not in json.dumps(report)
+    failures = report["roles"]["primary"]["output_failures"]
+    assert failures["validation_issues"] == [
+        {"field": "evidence", "type": "missing", "attempts": 1},
+        {"field": "unrecorded", "type": "unrecorded", "attempts": 1}]
+    assert failures["attempt_outcomes"] == {"output_validation": 2, "unrecorded": 1}
+    assert failures["validation_attempts_without_recorded_issues"] == 1
+    assert failures["unrecorded_cases"] == 1
+
+
 def test_absent_step_is_not_proof_of_zero_time_or_a_skipped_model_call():
     report = summarize_execution_latency([record(steps=[])])
     assert report["phases"]["llm_primary"]["entered_cases"] == 0

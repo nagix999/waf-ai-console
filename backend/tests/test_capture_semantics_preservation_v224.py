@@ -15,7 +15,7 @@ import pytest
 from sqlalchemy import func, select
 
 from app import worker, worker_v224
-from app.agent import evidence_pipeline_v224, legacy_prompts_v224, prompts
+from app.agent import evidence_pipeline_v224, legacy_prompts_v224, legacy_prompts_v224_semantics as prompts
 from app.models import (
     Analysis, ProductionPromotion, TestEvaluation as EvaluationRecord,
     TestRun as NamedRun, VLLMProfile, utcnow,
@@ -47,6 +47,9 @@ def forbid_current_model_calls(monkeypatch):
         pytest.fail("Prompt preservation tests must never invoke a model")
 
     monkeypatch.setattr(worker_v224, "execute_structured_agent", forbidden)
+    # This suite describes the historical v2.24 text-only revision. Current
+    # candidates have their own release tests and must not replace this fixture.
+    monkeypatch.setattr("app.agent.prompts", prompts)
 
 
 def text_hash(value):

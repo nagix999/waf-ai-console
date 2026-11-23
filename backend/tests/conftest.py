@@ -97,6 +97,17 @@ def legacy_v223_admissions(monkeypatch, request):
     monkeypatch.setattr(app.agent, "prompts", legacy_prompts_v223)
 
 
+@pytest.fixture(autouse=True)
+def legacy_v224_admissions(monkeypatch, request):
+    """Replay the final saved v2.24 instructions with its frozen runtime."""
+    if not any("legacy_v224_admissions" in marker.args
+               for marker in request.node.iter_markers("usefixtures")):
+        return
+    import app.agent
+    from app.agent import legacy_prompts_v224_semantics
+    monkeypatch.setattr(app.agent, "prompts", legacy_prompts_v224_semantics)
+
+
 @pytest.fixture
 def settings() -> Settings:
     return Settings(

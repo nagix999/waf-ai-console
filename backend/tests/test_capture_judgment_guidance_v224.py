@@ -5,7 +5,7 @@ the unchanged runtime; this suite protects the intent of the shared revision.
 """
 import pytest
 
-from app.agent import legacy_prompts_v224, prompts
+from app.agent import legacy_prompts_v224, legacy_prompts_v224_semantics as prompts
 
 
 @pytest.mark.parametrize("required", [
