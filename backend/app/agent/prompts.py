@@ -1,11 +1,11 @@
-"""Cycle-safe evidence links with lossless duplicate-reference recovery for v2.29."""
+"""Source-aware evidence selection and bounded source correction for v2.30."""
 from .legacy_prompts_v216 import DEFAULT_POLICY_NAME, policy_reserved_tokens
-from .legacy_prompts_v228 import DEFAULT_POLICY_TEXT
-from .legacy_prompts_v228 import SEMANTIC_RULES_VERSIONS as PREVIOUS_SEMANTIC_RULES
-from .legacy_prompts_v228 import V3_RULES_VERSIONS as PREVIOUS_V3_RULES
+from .legacy_prompts_v229 import DEFAULT_POLICY_TEXT
+from .legacy_prompts_v229 import SEMANTIC_RULES_VERSIONS as PREVIOUS_SEMANTIC_RULES
+from .legacy_prompts_v229 import V3_RULES_VERSIONS as PREVIOUS_V3_RULES
 
-PROMPT_VERSION = "waf-judgment-v2.29"
-FIXED_RULES_VERSION = "waf-system-v2.29"
+PROMPT_VERSION = "waf-judgment-v2.30"
+FIXED_RULES_VERSION = "waf-system-v2.30"
 V3_RULES_VERSIONS = PREVIOUS_V3_RULES | {FIXED_RULES_VERSION}
 SEMANTIC_RULES_VERSIONS = PREVIOUS_SEMANTIC_RULES | {FIXED_RULES_VERSION}
 
@@ -23,13 +23,13 @@ FIXED_INSTRUCTIONS = """
 - /@/은 수집 필드 구분자일 수 있다. 주변 구조로 실제 요청 값과 구별하며 자체를 공격/정상 근거나 일괄 제거/허용 대상으로 쓰지 않는다. 이스케이프 개행은 실제 HTTP 경계가 아니다.
 
 해석과 근거:
-- evidence는 관련 근거까지 최대 5개인 단일 목록이다. 각 항목에 고유 evidence_id(e1~e5), 제공 원문의 source_id(c번호), interpretation_ko, supports, related_evidence_ids를 쓴다. 원문을 생성하거나 떨어진 구간을 합치지 않는다.
+- evidence는 관련 근거까지 최대 5개인 단일 목록이다. 고유 evidence_id(e1~e5), source_id(c번호), interpretation_ko, supports, related_evidence_ids를 쓴다. source_id의 field와 원문을 대조한다. 공격/정상 해석은 실제 요청 후보에, 시그니처/등록 설명은 context에만 연결하며 allowed_supports를 지킨다. 단어가 비슷하다는 이유로 출처를 고르거나 원문을 생성/합성하지 않는다.
 - interpretation_ko에는 관측한 동작/값이 요청에서 맡는 역할과 공격/정상 해석의 이유를 연결한다. 단순 존재, 형식 소개나 사실 나열로 끝내지 않는다. 이름만 보고 실제 파일 내용이나 서버 처리를 확인했다고 쓰지 않는다.
 - attack_request는 관측된 동작과 문맥이 공격 시도, 악성 탐색 또는 정책 위반을 뒷받침할 때다. 공격에도 사용될 수 있다는 가능성만으로 분류하지 않는다.
 - normal_request는 값과 문맥이 구체적인 정상 사용이나 데이터 의미를 뒷받침할 때다. 정상적으로도 쓸 수 있다는 가능성, 표준/읽기 전용 기능, 정상 HTTP 형식, 헤더/쿠키의 존재, 특정 공격 구문 부재, 시그니처 불일치나 성공 증거 부재만으로 분류하지 않는다. 모든 요청에 업무 규격/권한 증명을 요구하지 않는다.
 - context는 해석에 필요한 중립 정보다. 불필요한 사실은 제외한다. supports는 근거의 기여이며 판정/확신 수준이 아니다. 보류라고 타당한 공격 근거를 context로 바꾸지 않는다.
 - 결합 의미는 대표 항목에 한 번만 설명하고 필수 관련 항목의 evidence_id를 related_evidence_ids에 연결한다. 관련 항목은 자신의 기여만 설명한다. 연결이 없으면 []다. 서로 필요한 근거는 상호 연결할 수 있으며 연결 자체가 논리적 입증은 아니다. 없는 번호나 자기 연결은 만들지 않는다. 같은 원문에 다른 해석이 필요하면 서로 다른 evidence_id를 쓴다.
-- 핵심 해석 2~3개를 우선하되 개수를 채우지 않고 필수 원문과 중요한 반대 근거를 보존한다. 단독으로 중립인 기여는 context이며 연결된 해석에 공격/정상을 섞지 않는다. 시그니처/등록 설명/비교 내용은 context 전용이며 allowed_supports를 지킨다.
+- 핵심 해석 2~3개를 우선하되 개수를 채우지 않고 필수 원문과 중요한 반대 근거를 보존한다. 단독으로 중립인 기여와 탐지 비교 내용은 context이며 연결된 해석에 공격/정상을 섞지 않는다.
 
 판정:
 - true_positive: 관측과 결합 의미가 공격 동작, 악성 탐색, 비인가 접근 시도나 명확한 정책 위반을 뒷받침한다. 전체 공격 코드, 취약 제품 사용 또는 침해 성공 확인은 필수가 아니다.
