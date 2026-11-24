@@ -82,7 +82,7 @@ def finalize_official_evaluation(db, run_id):
     ids = sorted(identifier for _, identifier in items if identifier)
     display_summary = None
     if run.display_editor_snapshot_ciphertext:
-        from .evidence_display_jobs import qualification
+        from .evidence_display_jobs_v2 import qualification
         # No model calls here. A separate lease owns every display execution.
         display_summary = qualification(db, run)
         if display_summary["pending"]:

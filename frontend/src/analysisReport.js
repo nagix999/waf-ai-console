@@ -9,6 +9,7 @@ import { decisionConditions } from "./decisionDetail.js";
 import { disagreementNotice, evidenceSections, legacySignatureNotice, severityMeaning, signatureSummary, verifierDisagreed, wafObservation } from "./decisionSemantics.js";
 import { isResultV3 } from "./assessmentData.js";
 import { isCoreEvidence } from "./analysisEvidenceMeta.js";
+import { evidenceSourceReferences, sharedSourceText } from "./evidenceSourceSharing.js";
 const punctuation = /[\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e]/;
 const escapedPunctuation = /\\([\x21-\x2f\x3a-\x40\x5b-\x60\x7b-\x7e])/g;
 const entities = {
@@ -196,8 +197,9 @@ export function buildAnalysisReport(input, { decoding = null, includeAppendix = 
     report.push(evidenceNotice);
     if (core) {
       report.push("API가 전달한 핵심 근거를 같은 순서로 표시합니다. 전체 원본 근거는 접근 기록이 남는 실행 이력에서 확인합니다.");
-      for (const item of assessment.evidence) report.push(`#### 근거 ${item.number} — ${{ attack_request: "공격 요청 근거", normal_request: "정상 요청 근거", context: "참고 내용" }[item.supports] || "구분 미기록"}`,
-        escapeText(item.interpretation_ko), table([["출처", analystFieldLabel(item.field)]]), fencedExcerpt(item.excerpt));
+      for (const { item, index, sourceIndex } of evidenceSourceReferences(assessment.evidence)) report.push(`#### 근거 ${item.number} — ${{ attack_request: "공격 요청 근거", normal_request: "정상 요청 근거", context: "참고 내용" }[item.supports] || "구분 미기록"}`,
+        escapeText(item.interpretation_ko), table([["출처", analystFieldLabel(item.field)]]), sourceIndex === index
+          ? fencedExcerpt(item.excerpt) : escapeText(sharedSourceText(assessment.evidence[sourceIndex].number)));
     } else if (modern && assessment.display) {
       const view = assessment.display;
       if (view.plan.status === "fallback") report.push("정리 실패 — 원본 근거를 유지합니다.");

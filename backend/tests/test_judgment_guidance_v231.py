@@ -2,7 +2,7 @@
 import hashlib
 from pathlib import Path
 
-from app.agent import legacy_prompts_v230 as previous, prompts
+from app.agent import legacy_prompts_v230 as previous, legacy_prompts_v231 as prompts
 from app.agent.contracts_v230 import SecurityAnalysisOutputV230
 from app.agent.contracts_v231 import SecurityAnalysisOutputV231
 from app.agent.output_schema_v226 import compact_strict_schema

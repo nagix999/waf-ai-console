@@ -9,6 +9,7 @@ import { decisionConditions, detailEvidence } from "./decisionDetail.js";
 import { evidenceRelationView } from "./evidenceRelations.js";
 import { evidenceDisplayView } from "./evidenceDisplayPlan.js";
 import { analysisEvidenceMeta, isCoreEvidence, receivedEvidence } from "./analysisEvidenceMeta.js";
+import { evidenceSourceReferences, sharedSourceText } from "./evidenceSourceSharing.js";
 import { disagreementNotice, evidenceSections, legacySignatureNotice, severityMeaning, signatureSummary, verifierDisagreed, wafObservation } from "./decisionSemantics.js";
 import { formatDate, formatDuration, executionDuration } from "./analysisView.js";
 import { isMockAnalysis } from "./labelEvaluation.js";
@@ -75,13 +76,20 @@ function CoreEvidenceStatus({ detail }) {
 }
 
 function CoreEvidenceCards({ detail, onViewInput, onExecution }) {
-  const w = useR5Words(), items = receivedEvidence(detail.result);
+  const w = useR5Words(), items = receivedEvidence(detail.result), id = useId(), excerpts = useRef(new Map());
+  function jumpToSource(index) {
+    const target = excerpts.current.get(index);
+    target?.scrollIntoView({ block: "nearest", behavior: "auto" });
+    target?.focus({ preventScroll: true });
+  }
   return <section className="panel decision-evidence-panel decision-core-evidence-panel"><div className="panel-head-inline"><h2>{w("보안 분석 근거", "Security analysis evidence")}</h2>{onViewInput && <NavigationAction onClick={() => onViewInput(null)}>{w("근거와 원문", "Evidence & input")}</NavigationAction>}</div>
     <CoreEvidenceStatus detail={detail} />
-    <div className="decision-display-groups">{items.map((item, index) => <article className={`decision-evidence-row decision-core-evidence evidence-${item.supports}`} key={`${item.evidence_id}:${index}`}>
+    <div className="decision-display-groups">{evidenceSourceReferences(items).map(({ item, index, sourceIndex }) => <article className={`decision-evidence-row decision-core-evidence evidence-${item.supports}`} key={`${item.evidence_id}:${index}`}>
       <div className="decision-evidence-label"><strong>{w("근거", "Evidence")} {item.number}</strong><Direction value={item.supports} />
         {!!item.roles.length && <span className="decision-evidence-roles">{item.roles.map(role => role === "primary" ? w("1차 분석", "Primary analysis") : w("추가 검증", "Additional verification")).join(" / ")}</span>}<span>{analystFieldLabel(item.field)}</span>
-      </div><div className="decision-evidence-content"><p className="decision-linked-interpretation">{item.interpretation_ko}</p><code dir="ltr">{item.excerpt}</code>
+      </div><div className="decision-evidence-content"><p className="decision-linked-interpretation">{item.interpretation_ko}</p>{sourceIndex === index
+        ? <code dir="ltr" id={`${id}-source-${index}`} tabIndex={0} aria-label={w(`근거 ${item.number} 원문 발췌`, `Evidence ${item.number} source excerpt`)} ref={node => { if (node) excerpts.current.set(index, node); else excerpts.current.delete(index); }}>{item.excerpt}</code>
+        : <button type="button" className="text-button decision-shared-source" aria-controls={`${id}-source-${sourceIndex}`} onClick={() => jumpToSource(sourceIndex)}>{w(`같은 원문 보기 (근거 ${items[sourceIndex].number})`, `View the source shared with evidence ${items[sourceIndex].number}`)}</button>}
         {onViewInput && <div className="decision-source-actions"><button type="button" className="text-button evidence-input-link" aria-label={w(`근거 ${item.number} 원문 보기`, `View evidence ${item.number} source`)} onClick={() => onViewInput(item)}>{w("원문에서 보기", "View source")} →</button></div>}
       </div>
     </article>)}</div>
@@ -254,7 +262,7 @@ export function EvidenceWorkspace({ detail, event, target, onSelect, error, onRe
   function select(item) { onSelect(item); if (window.matchMedia("(max-width: 800px)").matches) pane.current?.scrollIntoView({ block: "start", behavior: "auto" }); }
   return <section className="decision-evidence-workspace"><div className="panel decision-evidence-nav">
     <h2>{w("근거 선택", "Choose evidence")}</h2><p className="muted">{w("근거를 선택하면 접수 원문에서 같은 문구를 찾습니다.", "Select evidence to find its exact text in the received input.")}</p>
-    <div className="decision-source-list" aria-label={w("판정 근거 목록", "Decision evidence list")}>{items.map(item => <button type="button" key={item.number} aria-pressed={selected?.number === item.number} onClick={() => select(item)}><span><strong>{w("근거", "Evidence")} {item.number}</strong><Direction value={item.supports} label={sections.find(group => group.side === item.supports)?.label} /></span><small>{analystFieldLabel(item.field)}</small><code>{item.excerpt}</code></button>)}</div>
+    <div className="decision-source-list" aria-label={w("판정 근거 목록", "Decision evidence list")}>{(core ? evidenceSourceReferences(items) : items.map((item, index) => ({ item, index, sourceIndex: index }))).map(({ item, index, sourceIndex }) => <button type="button" key={item.number} aria-pressed={selected?.number === item.number} onClick={() => select(item)}><span><strong>{w("근거", "Evidence")} {item.number}</strong><Direction value={item.supports} label={sections.find(group => group.side === item.supports)?.label} /></span><small>{analystFieldLabel(item.field)}</small>{sourceIndex === index ? <code>{item.excerpt}</code> : <small className="decision-shared-source-note">{sharedSourceText(items[sourceIndex].number, w)}</small>}</button>)}</div>
     {!items.length && <p className="muted">{w("저장된 근거가 없습니다. 입력은 직접 확인할 수 있습니다.", "No evidence recorded. You can still inspect the input.")}</p>}
     {selected && <div className="decision-selected-explanation"><h3>{w("판단 이유", "Interpretation")}</h3><p>{selected.interpretation_ko}</p></div>}
   </div>

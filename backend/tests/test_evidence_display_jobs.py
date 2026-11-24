@@ -10,7 +10,7 @@ from app.agent.evidence_editor import EvidenceEditorOutput
 from app.agent.executor import AgentCallResult
 from app.models import AgentConfiguration, Analysis, EvidenceDisplayJob, InternalEgressTarget, TestRun as NamedRun, VLLMProfile, utcnow
 from app.result_contracts import validate_new_result
-from app.services import evidence_display_jobs as jobs
+from app.services import evidence_display_jobs_v2 as jobs
 from app.services.analysis_retries import make_execution_snapshot
 from app.services.candidate_configurations import verify_configuration
 from app.services.evidence_editor import capture_editor

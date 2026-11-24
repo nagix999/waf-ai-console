@@ -10,7 +10,7 @@ import pytest
 from app import worker_v230, worker_v231
 from app.agent import evidence_pipeline_v230, evidence_pipeline_v231
 from app.agent import input_builder_v230, input_builder_v231, execution_policy_v230, execution_policy_v231
-from app.agent import legacy_prompts_v230, prompts
+from app.agent import legacy_prompts_v230, legacy_prompts_v231 as prompts
 from app.agent.policy import VerifierPolicyContext
 from app.models import Analysis, ProductionPromotion, TestRun as NamedRun, VLLMProfile
 from app.services import worker_runtime_v231, prompt_snapshots
@@ -27,7 +27,7 @@ from test_candidate_configurations import candidate
 from test_signature_context_lifecycle import direct, qualified
 from test_execution_policy_v221 import output
 
-pytestmark = pytest.mark.usefixtures("registered_vllm_target")
+pytestmark = pytest.mark.usefixtures("registered_vllm_target", "legacy_v231_admissions")
 PRODUCTION = "/api/v1/admin/production-configurations"
 FROZEN_V230 = "9ba048d9570ed1b9e9aad103276bb1aa7cf58209cf1080d234791d62c9f6462f"
 

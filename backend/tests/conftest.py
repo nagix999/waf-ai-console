@@ -16,9 +16,10 @@ def legacy_evidence_editor_admissions(monkeypatch, request):
     historical = {"legacy_v220_admissions", "legacy_v221_admissions", "legacy_evidence_editor_admissions"}
     if not any(historical.intersection(marker.args) for marker in request.node.iter_markers("usefixtures")):
         return
-    from app.services import evidence_display_jobs
+    from app.services import evidence_display_jobs, evidence_display_jobs_v2
     from app.services.evidence_editor import capture_editor_profile
     monkeypatch.setattr(evidence_display_jobs, "capture_display_profile", capture_editor_profile)
+    monkeypatch.setattr(evidence_display_jobs_v2, "capture_display_profile", capture_editor_profile)
 
 
 @pytest.fixture(autouse=True)
@@ -161,6 +162,17 @@ def legacy_v230_admissions(monkeypatch, request):
     import app.agent
     from app.agent import legacy_prompts_v230
     monkeypatch.setattr(app.agent, "prompts", legacy_prompts_v230)
+
+
+@pytest.fixture(autouse=True)
+def legacy_v231_admissions(monkeypatch, request):
+    """Replay archived v2.31 admissions with the exact historical contract."""
+    if not any("legacy_v231_admissions" in marker.args
+               for marker in request.node.iter_markers("usefixtures")):
+        return
+    import app.agent
+    from app.agent import legacy_prompts_v231
+    monkeypatch.setattr(app.agent, "prompts", legacy_prompts_v231)
 
 
 @pytest.fixture

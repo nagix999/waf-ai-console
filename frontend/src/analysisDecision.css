@@ -43,6 +43,8 @@
 .decision-evidence-content > code { display: block; padding: 10px 12px; border-radius: 7px; background: #172332; color: #e7edf5; font-size: 12px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 .decision-evidence-content > p { font-size: 13px; margin: 9px 0 0; white-space: pre-wrap; }
 .decision-evidence-content > .decision-linked-interpretation { margin: 0 0 12px; }
+.decision-evidence-content > .decision-shared-source { display: block; margin: 0; padding: 7px 10px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); text-align: start; font-size: 12px; line-height: 1.6; }
+.decision-source-list .decision-shared-source-note { color: var(--accent); }
 .decision-evidence-content > .decision-representative-source { display: block; margin: 7px 0 3px; padding: 5px 0; font-size: 12px; }
 .decision-evidence-roles { font-weight: 650; }
 .decision-linked-sources { display: grid; gap: 14px; border-top: 1px solid var(--line); margin-top: 14px; padding-top: 12px; }

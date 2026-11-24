@@ -1,11 +1,11 @@
-"""Detector context and source-grounded decision review for v2.31."""
+"""One security point per evidence item, preserving source-grounded v2.31 review."""
 from .legacy_prompts_v216 import DEFAULT_POLICY_NAME, policy_reserved_tokens
-from .legacy_prompts_v230 import DEFAULT_POLICY_TEXT
-from .legacy_prompts_v230 import SEMANTIC_RULES_VERSIONS as PREVIOUS_SEMANTIC_RULES
-from .legacy_prompts_v230 import V3_RULES_VERSIONS as PREVIOUS_V3_RULES
+from .legacy_prompts_v231 import DEFAULT_POLICY_TEXT
+from .legacy_prompts_v231 import SEMANTIC_RULES_VERSIONS as PREVIOUS_SEMANTIC_RULES
+from .legacy_prompts_v231 import V3_RULES_VERSIONS as PREVIOUS_V3_RULES
 
-PROMPT_VERSION = "waf-judgment-v2.31"
-FIXED_RULES_VERSION = "waf-system-v2.31"
+PROMPT_VERSION = "waf-judgment-v2.32"
+FIXED_RULES_VERSION = "waf-system-v2.32"
 V3_RULES_VERSIONS = PREVIOUS_V3_RULES | {FIXED_RULES_VERSION}
 SEMANTIC_RULES_VERSIONS = PREVIOUS_SEMANTIC_RULES | {FIXED_RULES_VERSION}
 
@@ -28,8 +28,8 @@ FIXED_INSTRUCTIONS = """
 - attack_request는 관측된 동작과 문맥이 공격 시도, 악성 탐색 또는 정책 위반을 뒷받침할 때다. 공격에도 사용될 수 있다는 가능성만으로 분류하지 않는다.
 - normal_request는 값과 문맥이 구체적인 정상 사용이나 데이터 의미를 뒷받침할 때다. 정상적으로도 쓸 수 있다는 가능성, 표준/읽기 전용 기능, 정상 HTTP 형식, 헤더/쿠키의 존재, 특정 공격 구문 부재, 시그니처 불일치나 성공 증거 부재만으로 분류하지 않는다. 모든 요청에 업무 규격/권한 증명을 요구하지 않는다.
 - context는 판정에 활용하는 보조 정보이며 요청 자체의 공격/정상 관측과 구분한다. 불필요한 사실은 제외한다. supports는 근거의 기여이며 판정/확신 수준이 아니다. 보류라고 타당한 공격 근거를 context로 바꾸지 않는다.
-- 결합 의미는 대표 항목에 한 번만 설명하고 필수 관련 항목의 evidence_id를 related_evidence_ids에 연결한다. 관련 항목은 자신의 기여만 설명한다. 연결이 없으면 []다. 서로 필요한 근거는 상호 연결할 수 있으며 연결 자체가 논리적 입증은 아니다. 없는 번호나 자기 연결은 만들지 않는다. 같은 원문에 다른 해석이 필요하면 서로 다른 evidence_id를 쓴다.
-- 핵심 해석 2~3개를 우선하되 개수를 채우지 않고 필수 원문과 중요한 반대 근거를 보존한다. 단독으로 중립인 기여와 탐지 비교 내용은 context이며 연결된 해석에 공격/정상을 섞지 않는다.
+- 결합 의미는 대표 항목에 한 번만 설명하고 필수 관련 항목의 evidence_id를 related_evidence_ids에 연결한다. 관련 항목은 자신의 기여만 설명한다. 연결이 없으면 []다. 서로 필요한 근거는 상호 연결할 수 있으며 연결 자체가 논리적 입증은 아니다. 없는 번호나 자기 연결은 만들지 않는다. 같은 원문의 관측, 의도와 조건부 영향을 하나의 논점으로 설명하고 표현만 바꿔 나누지 않는다. 다른 동작, 성립 조건이나 필수 원문이 있는 해석과 반대 해석은 별도 evidence_id로 보존한다.
+- 핵심 해석만 남기고 개수를 채우지 않으며 필수 원문과 중요한 반대 근거를 보존한다. 단독으로 중립인 기여와 탐지 비교 내용은 context이며 연결된 해석에 공격/정상을 섞지 않는다.
 
 판정:
 - true_positive: 관측과 결합 의미가 공격 동작, 악성 탐색, 비인가 접근 시도나 명확한 정책 위반을 뒷받침한다. 전체 공격 코드, 취약 제품 사용 또는 침해 성공 확인은 필수가 아니다.

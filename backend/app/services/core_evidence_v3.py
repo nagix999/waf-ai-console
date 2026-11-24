@@ -45,7 +45,10 @@ def _code_groups(result, relations):
     for identifier in order:
         memberships = frozenset(index for index, issue in enumerate(result["decision_issues"])
                                 if identifier in issue["evidence_ids"])
-        required_sources = frozenset(_physical_key(indexed[other])[:3] for other in dependencies[identifier])
+        # In a code fallback, equal source text does not certify equal
+        # contributions. Keep distinct required meanings/directions unless a
+        # validated semantic plan explicitly groups the parent claims.
+        required_sources = frozenset(_physical_key(indexed[other]) for other in dependencies[identifier])
         key = (_physical_key(indexed[identifier]), memberships, required_sources)
         group = buckets.get(key)
         if group is None:

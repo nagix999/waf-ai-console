@@ -76,6 +76,6 @@ def read_many_evidence_relations(db, crypto, analyses):
 
 def read_display_view(db, crypto, analysis):
     """An audited HTTP/export read must never queue work or call a model."""
-    from .evidence_display_jobs import get_display_view
+    from .evidence_display_jobs_v2 import get_display_view
     relations = read_evidence_relations(db, crypto, analysis)
     return get_display_view(db, crypto, analysis, relations=relations)
