@@ -66,7 +66,8 @@ def test_citation_and_output_retries_are_counted_once_not_also_at_top_level():
     assert role["slot_wait_ms"]["p50_ms"] is None  # Only the last wait survives in old metadata.
     assert role["slot_wait_ms"]["unrecorded"] == 1
     assert role["accounting"] == {"recorded_cases": 1, "unrecorded_cases": 0,
-        "reported_output_attempts": 3, "reported_output_retries": 1, "reported_citation_repairs": 1}
+        "reported_output_attempts": 3, "reported_output_retries": 1, "reported_citation_repairs": 1,
+        "reported_decision_reviews": 0}
     assert role["retry_kinds"] == {"schema_correction": 1}
 
 

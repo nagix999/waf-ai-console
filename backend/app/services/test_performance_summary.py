@@ -51,6 +51,12 @@ def _array(document, path, maximum=4):
             f"THEN json_extract({document},'{path}') ELSE '[]' END")
 
 
+def _grounding_limit(document):
+    return (f"CASE WHEN json_type({document},'$.evidence_grounding_retry.decision_review_attempted')='true' "
+            f"AND json_extract({document},'$.evidence_grounding_retry.attempts[2].kind')='decision_review' "
+            "THEN 3 ELSE 2 END")
+
+
 def _validation_issues(document):
     item = "CASE WHEN diagnostic_issue.type='object' THEN diagnostic_issue.value ELSE '{}' END"
     path = f"CASE WHEN json_type({item},'$.field')='text' THEN json_extract({item},'$.field') END"
@@ -112,12 +118,14 @@ def _load_steps(db, cases):
     # The CTE metadata column is only used inside SQL JSON projections. The
     # SELECT crossing the application boundary contains small safe scalars.
     meta = _document("s.metadata_json")
+    grounding_limit = _grounding_limit(meta)
     columns = ["s.id", "s.analysis_id", _enum("s.step_type", latency.PHASES) + " AS step_type",
         _enum("s.status", latency.STEP_STATUSES) + " AS status",
         f"CASE WHEN json_type({meta},'$.evidence_grounding_retry') IS NOT NULL THEN 1 ELSE 0 END AS grounding_present",
         _number(meta, "$.duration_ms") + " AS duration_ms", _number(meta, "$.concurrency.wait_ms") + " AS wait_ms",
         _bounded_count(meta, "$.output_validation_retry", 4) + " AS validation_count",
-        _bounded_count(meta, "$.evidence_grounding_retry", 2) + " AS grounding_count",
+        _bounded_count(meta, "$.evidence_grounding_retry", grounding_limit) + " AS grounding_count",
+        _boolean(meta, "$.evidence_grounding_retry.decision_review_attempted") + " AS decision_review_attempted",
         _boolean(meta, "$.timing_measured") + " AS timing_measured",
         f"CASE WHEN json_type({meta},'$.timing_incomplete') IS NULL "
         f"OR json_type({meta},'$.timing_incomplete')='false' THEN 0 ELSE 1 END AS timing_incomplete"]
@@ -131,7 +139,8 @@ def _load_steps(db, cases):
             "concurrency": {"wait_ms": row["wait_ms"]},
             "output_validation_retry": {"attempt_count": row["validation_count"], "attempts": []}}
         if row["grounding_present"]:
-            metadata["evidence_grounding_retry"] = {"attempt_count": row["grounding_count"], "attempts": []}
+            metadata["evidence_grounding_retry"] = {"attempt_count": row["grounding_count"], "attempts": [],
+                "decision_review_attempted": row["decision_review_attempted"] == 1}
         value = {"step_type": row["step_type"], "status": row["status"], "metadata": metadata}
         steps[row["id"]] = value
         by_analysis[row["analysis_id"]].append(value)
@@ -142,15 +151,16 @@ def _load_steps(db, cases):
                        f"FROM performance_steps s,json_each({top}) a WHERE CAST(a.key AS INTEGER)<4 "
                        "ORDER BY s.id,CAST(a.key AS INTEGER)"):
         steps[row["id"]]["metadata"]["output_validation_retry"]["attempts"].append(_attempt_record(row))
-    ground_array = _array(meta, "$.evidence_grounding_retry.attempts", 2)
+    ground_array = _array(meta, "$.evidence_grounding_retry.attempts", grounding_limit)
     ground = "CASE WHEN g.type='object' THEN g.value ELSE '{}' END"
     columns = ["s.id", "g.key AS idx", _bounded_count(ground, "$.output_validation_retry", 4) + " AS validation_count",
+        _enum(f"json_extract({ground},'$.kind')", ("decision_review",)) + " AS kind",
         _number(ground, "$.concurrency.wait_ms") + " AS wait_ms",
         f"CASE WHEN json_type({ground},'$.concurrency') IS NOT NULL THEN 1 ELSE 0 END AS concurrency_present"]
     grounding = {}
     for row in execute("SELECT " + ",".join(columns) + f" FROM performance_steps s,json_each({ground_array}) g "
-                       "WHERE CAST(g.key AS INTEGER)<2 ORDER BY s.id,CAST(g.key AS INTEGER)"):
-        value = {"output_validation_retry": {"attempt_count": row["validation_count"], "attempts": []}}
+                       "WHERE CAST(g.key AS INTEGER)<3 ORDER BY s.id,CAST(g.key AS INTEGER)"):
+        value = {"output_validation_retry": {"attempt_count": row["validation_count"], "attempts": []}, "kind": row["kind"]}
         if row["concurrency_present"]:
             value["concurrency"] = {"wait_ms": row["wait_ms"]}
         steps[row["id"]]["metadata"]["evidence_grounding_retry"]["attempts"].append(value)
@@ -158,7 +168,7 @@ def _load_steps(db, cases):
     nested = _array(ground, "$.output_validation_retry.attempts")
     for row in execute(f"SELECT s.id,g.key AS ground_idx,a.key AS idx,{attempt_columns} "
                        f"FROM performance_steps s,json_each({ground_array}) g,json_each({nested}) a "
-                       "WHERE CAST(g.key AS INTEGER)<2 AND CAST(a.key AS INTEGER)<4 "
+                       "WHERE CAST(g.key AS INTEGER)<3 AND CAST(a.key AS INTEGER)<4 "
                        "ORDER BY s.id,CAST(g.key AS INTEGER),CAST(a.key AS INTEGER)"):
         grounding[row["id"], row["ground_idx"]]["output_validation_retry"]["attempts"].append(_attempt_record(row))
     return by_analysis
@@ -207,7 +217,8 @@ class _TokenMetric:
 def summarize_performance(records):
     tokens = {role: {name: _TokenMetric() for name in (
         "input_tokens", "output_tokens", "first_attempt_output_tokens")} for role in latency.ROLES.values()}
-    retries = {role: {"cases_with_output_retries": 0, "cases_with_citation_repairs": 0} for role in latency.ROLES.values()}
+    retries = {role: {"cases_with_output_retries": 0, "cases_with_citation_repairs": 0,
+        "cases_with_decision_reviews": 0} for role in latency.ROLES.values()}
     def observe():
         for record in records:
             seen = set()
@@ -222,6 +233,7 @@ def summarize_performance(records):
                 if calls is not None:
                     retries[role]["cases_with_output_retries"] += any(len(call) > 1 for call in calls)
                     retries[role]["cases_with_citation_repairs"] += len(calls) > 1
+                    retries[role]["cases_with_decision_reviews"] += len(calls) == 3
                     for name in ("input_tokens", "output_tokens"):
                         observed = [latency._mapping(attempt.get("usage")).get(name) for call in calls for attempt in call]
                         if all(type(value) is int and 0 <= value <= _TOKEN_LIMIT for value in observed):
@@ -243,6 +255,7 @@ def summarize_performance(records):
     mean(report)
     report["version"] = VERSION
     report["notes"].extend(("token_totals_include_output_retries_and_citation_repairs",
+        "token_totals_include_decision_review", "decision_review_is_not_citation_repair",
         "first_attempt_tokens_exclude_retries", "token_observation_is_not_generation_time"))
     return report
 

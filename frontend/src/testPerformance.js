@@ -1,8 +1,8 @@
 const version = "test-performance-summary-v1";
 const scopeFields = ["evaluation_id", "reference_basis", "difficulty", "test_category", "difficulty_missing", "test_category_missing", "case_filter"];
 const durationFields = ["reported_sum_ms", "min_ms", "p50_ms", "p95_ms", "max_ms", "mean_ms"];
-const accountingFields = ["recorded_cases", "unrecorded_cases", "reported_output_attempts", "reported_output_retries", "reported_citation_repairs", "cases_with_output_retries", "cases_with_citation_repairs"];
-const roleFields = ["first_attempt_ms", "output_retry_ms", "citation_repair_ms", "slot_wait_ms", "invocation_ms"];
+const accountingFields = ["recorded_cases", "unrecorded_cases", "reported_output_attempts", "reported_output_retries", "reported_citation_repairs", "reported_decision_reviews", "cases_with_output_retries", "cases_with_citation_repairs", "cases_with_decision_reviews"];
+const roleFields = ["first_attempt_ms", "output_retry_ms", "citation_repair_ms", "decision_review_ms", "slot_wait_ms", "invocation_ms"];
 const roleKeys = ["primary", "verifier", "legacy_evidence_editor"];
 const stateKeys = ["pending", "processing", "running", "completed", "failed", "canceled", "skipped"];
 const mapping = value => value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -39,6 +39,7 @@ const fieldNames = {
   decision_issue: ["확정 조건", "Decision conditions"], input_truncated: ["입력 범위", "Input scope"],
   interpretation_conflict: ["해석 차이", "Interpretation conflict"], capture_assessment: ["로그 수집 범위", "Capture assessment"],
   corrections: ["근거 교정", "Evidence correction"], analyst_checks: ["확인 사항", "Checks"],
+  retained_evidence_ids: ["재검토 근거", "Review evidence"],
   recommended_checks: ["확인 사항", "Checks"], tuning_recommendation: ["정책 제안", "Policy suggestion"],
 };
 const issueNames = {
@@ -61,6 +62,11 @@ const issueNames = {
   evidence_link_cycle: ["근거 순환 연결", "Circular evidence links"],
   decision_evidence_unselected: ["확정 조건의 근거 연결 실패", "Decision-condition evidence unavailable"],
   decision_evidence_repeated: ["확정 조건의 근거 중복", "Repeated decision-condition evidence"],
+  decision_review_context_invalid: ["근거 재검토 기준 확인 실패", "Evidence review context unavailable"],
+  review_evidence_repeated: ["재검토 근거 번호 중복", "Repeated review evidence"],
+  review_evidence_not_eligible: ["재검토 대상이 아닌 근거", "Evidence not eligible for review"],
+  review_evidence_omitted: ["재검토 근거 누락", "Missing review evidence"],
+  review_evidence_dependency_missing: ["재검토 관련 근거 누락", "Missing review dependency"],
   missing: ["필수 항목 누락", "Required value missing"], extra_forbidden: ["허용되지 않은 항목", "Unexpected field"],
   summary_must_describe_request: ["분석 요약 내용 오류", "Invalid analysis summary"],
 };

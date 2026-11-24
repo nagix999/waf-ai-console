@@ -1,0 +1,845 @@
+"""Flat evidence, concise first-pass generation and bounded v2.31 recovery."""
+
+import json
+from contextlib import AsyncExitStack
+from dataclasses import is_dataclass, replace
+from enum import Enum
+from importlib.metadata import PackageNotFoundError, version
+from time import monotonic
+from typing import Any, Callable, Mapping, get_args
+
+import httpx
+from pydantic import BaseModel
+from pydantic_core import ErrorType
+
+from ..models import VLLMProfile
+from ..services.provider_options import (
+    CompletionRejected,
+    completion_content,
+    generation_options,
+    provider_name,
+    safe_openai_usage,
+    strict_json_schema,
+)
+from .contracts import (CONTRACT_ERRORS, EvidenceCorrectionOutput, WAFAnalysisOutput,
+                        EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput,
+                        SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216,
+                        legacy_output_schema)
+from .contracts_v231 import (
+    SecurityAnalysisOutputV231, EvidenceDecisionReviewOutput, DECISION_REVIEW_VERSION,
+    CONTRACT_ERRORS as INTERPRETATION_ERRORS,
+    normalize_duplicate_references, REFERENCE_NORMALIZATION_VERSION,
+)
+from .evidence_editor import EvidenceEditorOutput, MAX_SECONDS as EDITOR_SECONDS, MAX_OUTPUT_TOKENS as EDITOR_TOKENS
+from .result_editor import ResultEditorOutput
+from .executor import AgentCallResult
+from .evidence_source_policy_v231 import source_support_issues
+from .structured_json import (REJECTION_CODES as JSON_REJECTION_CODES,
+                              VERSION as STRUCTURED_JSON_VERSION,
+                              StructuredJSONRejected, normalize_structured_json)
+from .output_schema_v226 import VERSION as SCHEMA_GUIDANCE_VERSION, compact_strict_schema, constraint_hints
+
+
+OUTPUT_VALIDATION_FAILURE_CODE = "output_validation_failed"
+OUTPUT_VALIDATION_MAX_ATTEMPTS = 4
+OUTPUT_RETRY_VERSION = "structured-output-repair-v2"
+OUTPUT_RETRY_RECOVERY_VERSION = "structured-output-repair-v11"
+INCOMPLETE_FAILURE_CODES = frozenset({"model_output_incomplete", "vllm_output_incomplete", "openai_output_incomplete"})
+INCOMPLETE_FINISH_REASONS = frozenset({"length", "max_tokens", "timeout"})
+CONTRACT_ERRORS = {**CONTRACT_ERRORS, **INTERPRETATION_ERRORS}
+SAFE_VALIDATION_TYPES = frozenset(get_args(ErrorType)) | CONTRACT_ERRORS.keys()
+OUTPUT_VALIDATION_REPAIR_INSTRUCTIONS = """
+이전 실행은 output_validation_failed로 종료되었다. 원본 이벤트를 처음부터 다시 분석하고,
+다음 교정 규칙을 모두 지켜 완전한 구조화 결과를 새로 생성하라.
+
+- 출력 스키마에 정의된 필수 필드를 하나도 빠뜨리지 말고 정의되지 않은 필드는 추가하지 않는다.
+- verdict, signature relation, severity와 tuning scope는 스키마에 정의된 enum 값만 사용한다.
+- threat_analysis, signature_assessment, tuning_recommendation의 중첩 객체 구조를 정확히 지킨다.
+- true_positive 또는 false_positive에는 원문에 실제 존재하는 발췌 근거를 최소 1개 포함한다.
+- evidence는 현재 출력 스키마를 따른다. source_id 계약이면 제공된 원문 후보 번호만 선택하고 field/excerpt를 쓰지 않는다. excerpt 계약이면 원문을 그대로 인용한다. interpretation_ko는 관찰과 판정의 연결을 설명한다.
+- 숫자 범위, 문자열 길이와 배열 최대 개수를 지킨다.
+- JSON 구조화 결과 외의 서문, 설명, Markdown 코드 블록을 출력하지 않는다.
+
+이전의 잘못된 출력을 추측하거나 언급하지 말고 전체 결과를 다시 작성하라.
+""".strip()
+
+
+class _TrackingOutputCodec:
+    def __init__(self, delegate: Any, *, strict: bool = False, output_model: type[BaseModel] = WAFAnalysisOutput,
+                 structured_output_recovery: bool = False, user_input: str | None = None,
+                 defer_source_support_validation: bool = False) -> None:
+        _validate_source_support_defer(defer_source_support_validation, output_model, structured_output_recovery)
+        if output_model is EvidenceDecisionReviewOutput and structured_output_recovery is not True:
+            raise ValueError("decision_review_requires_structured_recovery")
+        self.delegate = delegate
+        self.strict = strict
+        self.output_model = output_model
+        self.validation_issues: list[dict[str, str]] = []
+        self.structured_output_recovery = structured_output_recovery
+        self.json_normalizations: list[str] = []
+        self.evidence_reference_normalizations: list[str] = []
+        self.user_input = user_input
+        self.defer_source_support_validation = defer_source_support_validation
+        self.deferred_source_support_issues: list[dict[str, Any]] = []
+
+    def schema(self) -> Mapping[str, Any] | None:
+        schema = self.delegate.schema()
+        if schema is not None and self.output_model in {WAFAnalysisOutput, EvidenceSelectionOutput, EvidenceAssessmentOutput}:
+            schema = legacy_output_schema(schema)
+        if schema is not None and self.structured_output_recovery and self.output_model in {SecurityAnalysisOutputV231, EvidenceDecisionReviewOutput}:
+            # ModuAgent already requests JSON Schema from both providers. Give
+            # vLLM the same explicit required/null contract as OpenAI, and omit
+            # nested title annotations without changing domain validation.
+            return compact_strict_schema(schema)
+        return strict_json_schema(schema) if self.strict and schema is not None else schema
+
+    def decode(self, response: Any) -> BaseModel:
+        self.validation_issues = []
+        self.json_normalizations = []
+        self.evidence_reference_normalizations = []
+        self.deferred_source_support_issues = []
+        if self.structured_output_recovery:
+            content = _response_content_for_recovery(response)
+            if isinstance(content, (str, bytes, bytearray)):
+                try:
+                    normalized = normalize_structured_json(content)
+                except StructuredJSONRejected as exc:
+                    self.validation_issues = [{"field": "$", "type": exc.code}]
+                    raise ValueError(exc.code) from None
+                self.json_normalizations = list(normalized.normalizations)
+                # Pass only the validated wrapping-free JSON, not a rewritten
+                # provider envelope. The original domain codec remains final.
+                response = normalized.content
+                if self.output_model is SecurityAnalysisOutputV231:
+                    # Only identical, already-selected reference IDs may be
+                    # deduplicated. Complete JSON was checked above; all
+                    # domain, source and direction checks still run below.
+                    document, codes = normalize_duplicate_references(json.loads(response))
+                    self.evidence_reference_normalizations = list(codes)
+                    if codes:
+                        response = json.dumps(document, ensure_ascii=False, separators=(",", ":"))
+        try:
+            if self.output_model is EvidenceDecisionReviewOutput:
+                # The general Pydantic codec cannot supply trusted context.
+                # Decode only the already-complete, bounded JSON and validate
+                # the decision against the worker's separate review envelope.
+                return EvidenceDecisionReviewOutput.model_validate(
+                    json.loads(response), context=_decision_review_context(self.user_input))
+            result = self.delegate.decode(response)
+            if self.output_model is SecurityAnalysisOutputV231:
+                document = json.loads(self.user_input or "{}")
+                catalog = document.get("evidence_candidates")
+                if not isinstance(catalog, dict) or catalog.get("version") != "evidence-selection-v5":
+                    raise ValueError("evidence_selection_catalog_invalid")
+                result = self.output_model.model_validate(result.model_dump(mode="json"),
+                    context={"source_catalog": catalog,
+                             "defer_source_support_validation": self.defer_source_support_validation})
+                if self.defer_source_support_validation:
+                    self.deferred_source_support_issues = [
+                        {"index": issue["index"], "reason": issue["reason"]}
+                        for issue in source_support_issues(
+                            result, catalog, fixed_rules_version="waf-system-v2.31")
+                        if type(issue.get("index")) is int and 0 <= issue["index"] < 5
+                        and issue.get("reason") in {"signature_support_not_allowed", "source_support_not_allowed"}
+                    ]
+            return result
+        except Exception as exc:
+            self.validation_issues = _safe_validation_issues(exc, self.output_model)
+            raise
+
+
+
+def _decision_review_context(user_input: str | None) -> dict[str, Any]:
+    """Read only the worker-created envelope, never metadata from event/payload."""
+    def pairs(values):
+        result = {}
+        for key, value in values:
+            if key in result:
+                raise ValueError("decision_review_context_invalid")
+            result[key] = value
+        return result
+
+    def reject_constant(_value):
+        raise ValueError("decision_review_context_invalid")
+
+    try:
+        document = json.loads(user_input or "{}", object_pairs_hook=pairs, parse_constant=reject_constant)
+    except (ValueError, TypeError, RecursionError):
+        return {}
+    if type(document) is not dict:
+        return {}
+    envelope = document.get("evidence_decision_review")
+    if type(envelope) is not dict:
+        return {}
+    return {"source_catalog": envelope.get("source_catalog"),
+            "review_original_output": envelope.get("original_output"),
+            "review_eligible_evidence_ids": envelope.get("eligible_evidence_ids")}
+
+
+def _response_content_for_recovery(response: Any) -> Any:
+    """Read the same public response/message shapes accepted by ModuAgent."""
+    if isinstance(response, (str, bytes, bytearray)):
+        return response
+    if isinstance(response, Mapping):
+        message = response.get("message", response)
+    else:
+        message = getattr(response, "message", response)
+    return message.get("content") if isinstance(message, Mapping) else getattr(message, "content", None)
+
+
+class _OpenAICompletionTransport:
+    """Guard the public ModuAgent HTTP transport before its permissive decoder."""
+
+    def __init__(self, delegate: Any, before_request: Callable[[], None] | None = None) -> None:
+        self.delegate = delegate
+        self.before_request = before_request
+        self.failure_code: str | None = None
+        self.response_diagnostics: dict[str, Any] = {}
+
+    def reset(self) -> None:
+        self.failure_code = None
+        self.response_diagnostics = {}
+
+    async def post_json(self, *args: Any, **kwargs: Any) -> Mapping[str, Any]:
+        from moduagent import ModelProtocolError
+
+        self.reset()
+        if self.before_request is not None:
+            self.before_request()
+        try:
+            value = await self.delegate.post_json(*args, **kwargs)
+        except httpx.HTTPStatusError as exc:
+            self.failure_code = f"openai_http_{exc.response.status_code}"
+            raise
+        except httpx.TimeoutException:
+            self.failure_code = "openai_timeout"
+            raise
+        except httpx.ConnectError:
+            self.failure_code = "openai_connection_failed"
+            raise
+        except ModelProtocolError:
+            self.failure_code = "openai_invalid_response"
+            raise
+        self.response_diagnostics = _completion_diagnostics(value)
+        try:
+            completion_content(value, "openai")
+            usage = safe_openai_usage(value.get("usage"))
+        except CompletionRejected as exc:
+            self.failure_code = exc.code
+            raise ModelProtocolError(exc.code) from None
+        # Framework telemetry needs usage, not arbitrary provider metadata/text.
+        return {"choices": value["choices"], "usage": usage}
+
+
+class _VLLMEgressTransport:
+    """Recheck the shared allowlist for every call, including SDK retries."""
+
+    def __init__(self, delegate: Any, base_url: str, check: Callable[[], None]) -> None:
+        self.delegate = delegate
+        self.base_url = base_url
+        self.check = check
+        self.failure_code: str | None = None
+        self.response_diagnostics: dict[str, Any] = {}
+
+    def reset(self) -> None:
+        self.failure_code = None
+        self.response_diagnostics = {}
+
+    async def post_json(self, url: str, **kwargs: Any) -> Mapping[str, Any]:
+        from moduagent import ModelProtocolError
+        from ..services.vllm_profiles import TargetNotAllowedError
+
+        self.reset()
+        if url != f"{self.base_url}/chat/completions":
+            raise TargetNotAllowedError("vllm_target_not_allowed")
+        self.check()
+        value = await self.delegate.post_json(url, **kwargs)
+        self.response_diagnostics = _completion_diagnostics(value)
+        try:
+            completion_content(value, "vllm")
+        except CompletionRejected as exc:
+            # Keep ModuAgent's typed incomplete error and stable finish reason.
+            # Refusal/invalid envelopes must never become a corrective retry.
+            if (exc.code in {"vllm_output_incomplete", "vllm_completion_not_finished"}
+                    and self.response_diagnostics.get("provider_finish_reason") in INCOMPLETE_FINISH_REASONS):
+                return value
+            self.failure_code = exc.code
+            raise ModelProtocolError(exc.code) from None
+        return value
+
+
+def _completion_diagnostics(value: Any) -> dict[str, Any]:
+    """Capture only allowlisted finish reasons and counts, including truncation.
+
+    Incomplete output is rejected before framework usage aggregation. Never
+    retain its content, refusal text, reasoning or arbitrary provider fields.
+    """
+    if not isinstance(value, Mapping):
+        return {}
+    choices = value.get("choices")
+    if not isinstance(choices, list) or len(choices) != 1 or not isinstance(choices[0], Mapping):
+        return {}
+    reason = choices[0].get("finish_reason")
+    safe_reason = reason if isinstance(reason, str) and reason in INCOMPLETE_FINISH_REASONS | {"stop", "content_filter", "tool_calls"} else None
+    usage = value.get("usage")
+    counters = {target: usage.get(source) for source, target in (
+        ("prompt_tokens", "input_tokens"), ("completion_tokens", "output_tokens"), ("total_tokens", "total_tokens")
+    )} if isinstance(usage, Mapping) else None
+    return {"provider_finish_reason": safe_reason, "usage": _usage_jsonable(counters)}
+
+
+def _jsonable(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Enum):
+        return value.value
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json")
+    if isinstance(value, Mapping):
+        return {str(key): _jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(item) for item in value]
+    to_dict = getattr(value, "to_dict", None)
+    if callable(to_dict):
+        return _jsonable(to_dict())
+    return str(value)
+
+
+def _usage_jsonable(value: Any) -> dict[str, int | None] | None:
+    """Persist only numeric counters, never Usage's repr or provider contents.
+
+    ModuAgent 0.6.2 returns a slots dataclass and adds zero-filled Usage values
+    even when a provider omitted usage. An all-zero aggregate is therefore
+    unknown, not evidence of a free request. This adapter does not reconstruct
+    missing counts or rewrite earlier telemetry. A partial provider response
+    may already have defaulted/derived counters in the framework aggregate;
+    those cannot be recovered here and are not authoritative billing data.
+    """
+    if isinstance(value, Mapping):
+        read = value.get
+    elif is_dataclass(value) and not isinstance(value, type):
+        read = lambda key: getattr(value, key, None)
+    else:
+        return None
+    counters: dict[str, int | None] = {}
+    for key in ("input_tokens", "output_tokens", "total_tokens"):
+        count = read(key)
+        counters[key] = count if type(count) is int and count >= 0 else None
+    return counters if any(count is not None and count > 0 for count in counters.values()) else None
+
+
+def framework_version() -> str:
+    try:
+        return version("moduagent")
+    except PackageNotFoundError:
+        return "not-installed"
+
+
+def _error_code(error_summary: Any) -> str | None:
+    value = _jsonable(error_summary)
+    if not isinstance(value, Mapping):
+        return None
+    code = value.get("code")
+    return str(code) if code is not None else None
+
+
+def _safe_validation_issues(exc: Exception, output_model: type[BaseModel] = WAFAnalysisOutput) -> list[dict[str, str]]:
+    errors = getattr(exc, "errors", None)
+    if not callable(errors):
+        return [{"field": "$", "type": "decode_error"}]
+    try:
+        values = errors(include_url=False, include_context=False, include_input=False)
+    except TypeError:  # pragma: no cover - Pydantic v1 compatibility
+        values = errors()
+    issues: list[dict[str, str]] = []
+    allowed_fields = _output_schema_field_names(output_model)
+    for value in values[:12]:
+        if not isinstance(value, Mapping):
+            continue
+        location = value.get("loc", ())
+        if isinstance(location, (list, tuple)):
+            parts = [
+                "[]"
+                if isinstance(item, int)
+                else item
+                if isinstance(item, str) and item in allowed_fields
+                else "<unknown>"
+                for item in location
+            ]
+            field = ".".join(parts)
+        else:
+            field = location if isinstance(location, str) and location in allowed_fields else "<unknown>"
+        error_type = str(value.get("type") or "validation_error")
+        if error_type not in SAFE_VALIDATION_TYPES:
+            error_type = "validation_error"
+        if error_type in CONTRACT_ERRORS:
+            field = CONTRACT_ERRORS[error_type][0]
+        issues.append(
+            {
+                "field": (field or "$")[:256],
+                "type": error_type[:128],
+            }
+        )
+    return issues or [{"field": "$", "type": "validation_error"}]
+
+
+def _output_schema_field_names(output_model: type[BaseModel] = WAFAnalysisOutput) -> frozenset[str]:
+    schema = output_model.model_json_schema()
+    fields: set[str] = set()
+    pending: list[Any] = [schema]
+    seen: set[int] = set()
+    while pending and len(seen) < 512:
+        value = pending.pop()
+        identity = id(value)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        if isinstance(value, Mapping):
+            properties = value.get("properties")
+            if isinstance(properties, Mapping):
+                fields.update(str(name) for name in properties if isinstance(name, str))
+            pending.extend(value.values())
+        elif isinstance(value, (list, tuple)):
+            pending.extend(value)
+    return frozenset(fields)
+
+
+def _repair_instructions(validation_issues: list[dict[str, str]]) -> str:
+    if not validation_issues:
+        return OUTPUT_VALIDATION_REPAIR_INSTRUCTIONS
+    issue_lines = "\n".join(
+        f"- {issue['field']}: {issue['type']}"
+        + (f" — {CONTRACT_ERRORS[issue['type']][1]}" if issue["type"] in CONTRACT_ERRORS else "")
+        for issue in validation_issues
+    )
+    return (
+        f"{OUTPUT_VALIDATION_REPAIR_INSTRUCTIONS}\n\n"
+        "검증기가 식별한 실패 위치와 유형은 다음과 같다. 이전 출력값 자체는 보안상 제공하지 않는다.\n"
+        f"{issue_lines}"
+    )
+
+
+def _retry_kind(error_code: str | None, provider_finish_reason: str | None) -> str | None:
+    if error_code == OUTPUT_VALIDATION_FAILURE_CODE:
+        return "schema_correction"
+    if error_code in INCOMPLETE_FAILURE_CODES and provider_finish_reason in INCOMPLETE_FINISH_REASONS:
+        return "timeout_recovery" if provider_finish_reason == "timeout" else "compact_output"
+    return None
+
+
+_DEPENDENCY_ERRORS_V216 = frozenset({"decisive_verdict_disallows_missing_condition", "inconclusive_requires_unknown_severity"})
+
+
+def _dependency_feedback_v216(issues):
+    codes = {item.get("type") for item in issues if isinstance(item, dict)} & _DEPENDENCY_ERRORS_V216
+    if not codes:
+        return None
+    lines = []
+    if "decisive_verdict_disallows_missing_condition" in codes:
+        lines.append("확정 판정의 decision_issue.missing_condition_ko는 null이어야 한다.")
+    if "inconclusive_requires_unknown_severity" in codes:
+        lines.append("보류 판정의 threat_analysis.severity는 UNKNOWN이어야 한다.")
+    return ("\n".join(lines) + "\n원문을 다시 검토해 판정을 결정하고 그 판정에 맞춰 조건과 심각도를 작성한다. "
+            "검증을 통과하려고 판정·신뢰도를 바꾸거나 실제 미확인 조건을 무조건 삭제하지 않는다.")
+
+
+def _retry_instructions(attempts: list[dict[str, Any]], max_output_tokens: int,
+                        output_model: type[BaseModel] = WAFAnalysisOutput,
+                        *, structured_output_recovery: bool = False) -> str:
+    previous = attempts[-1]
+    codes = {item.get("type") for item in previous["validation_issues"] if isinstance(item, dict)}
+    dependency = (_dependency_feedback_v216(previous["validation_issues"])
+                  if output_model in {SecurityAnalysisOutputV216, SecurityAnalysisOutputV231}
+                  and previous["retry_kind"] == "schema_correction" else None)
+    if previous["retry_kind"] == "schema_correction":
+        codes = {item.get("type") for item in previous["validation_issues"] if isinstance(item, dict)}
+        if structured_output_recovery:
+            feedback = _structured_repair_instructions(previous["validation_issues"], output_model)
+            if dependency:
+                feedback += "\n" + dependency
+        elif dependency and codes <= _DEPENDENCY_ERRORS_V216:
+            feedback = "이전 출력의 판정 의존 필드가 서로 맞지 않는다. 같은 원본 입력과 필수 판정 기준으로 전체 JSON을 다시 작성한다.\n" + dependency
+        else:
+            feedback = _repair_instructions(previous["validation_issues"])
+            if dependency:
+                feedback += "\n\n" + dependency
+    else:
+        reason = previous["provider_finish_reason"]
+        explanation = "출력 한도에 도달해" if reason in {"length", "max_tokens"} else "응답 생성 시간이 초과되어"
+        feedback = (
+            f"이전 실행은 {previous['error_code']} ({reason})로 종료되었다. {explanation} 결과가 완성되지 않았다.\n"
+            "같은 원본 이벤트와 판정 기준으로 완전한 JSON 결과를 처음부터 다시 작성하라. "
+            "이전 응답을 이어 쓰거나 Markdown·서문을 출력하지 않는다."
+        )
+    # No repeated output or ever-growing conversation: only bounded, safe
+    # feedback. Escalate concision so deterministic models do not repeat an
+    # identical failed request, without loosening the evidence/schema checks.
+    level = min(len(attempts), 3)
+    compact = any(item["retry_kind"] in {"compact_output", "timeout_recovery"} for item in attempts) or level > 1
+    feedback += f"\n교정 단계 {level}. 출력 한도는 {max_output_tokens} 토큰이다."
+    if compact:
+        sentences = "1~2문장" if level == 1 else "1문장"
+        feedback += (
+            f"\n요약과 각 해석은 핵심 {sentences}으로 작성하고 같은 설명은 반복하지 않는다. "
+            "필수 필드·최소 길이·개수 조건과 판정을 뒷받침하는 원문 근거는 유지한다. "
+            "서로 다른 핵심 근거와 판정에 필요한 확인사항을 생략하지 않는다. "
+            "길이를 줄이기 위해 판정·심각도·신뢰도를 바꾸거나 보류를 선택하지 않는다."
+        )
+        if output_model is SecurityAnalysisOutputV231:
+            feedback += ("\nevidence는 관련 항목까지 합쳐 최대 5개의 단일 목록이다. "
+                "연결은 선택한 evidence_id만 참조하며 관련 항목을 중첩하거나 다시 설명하지 않는다. "
+                "요약, 기법과 영향은 각각 핵심 1문장으로 쓰고 탐지 비교도 같은 설명을 반복하지 않는다.")
+    if level == 3:
+        feedback += "\n불필요한 수식어·일반론·이미 다른 필드에서 한 설명을 빼고 모든 객체와 배열을 끝까지 닫는다."
+    if output_model in {SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV231}:
+        # Keep pinned historical repair text intact while the smaller new
+        # contract never asks the model to reconstruct retired output fields.
+        feedback = feedback.replace("verdict, signature relation, severity와 tuning scope", "verdict, signature relation, severity와 supports")
+        feedback = feedback.replace("threat_analysis, signature_assessment, tuning_recommendation", "threat_analysis, signature_assessment")
+        feedback = feedback.replace("서로 다른 핵심 근거와 판정에 필요한 확인사항", "서로 다른 핵심 근거와 실제 보류 조건")
+    return feedback
+
+
+def _structured_repair_instructions(issues: list[dict[str, str]], output_model: type[BaseModel]) -> str:
+    """Use fixed cause-specific feedback, never exception messages or values."""
+    codes = {issue.get("type") for issue in issues if isinstance(issue, dict)}
+    if output_model is SecurityAnalysisOutputV231:
+        lines = [
+            "이전 JSON이 검증을 통과하지 못했다. 아래 오류를 교정한 완전한 JSON 객체를 작성한다.",
+            "제공된 스키마의 필드, 타입과 제한을 지킨다. null을 허용하는 필드도 키를 명시하며 미정의 필드, 서문과 Markdown은 추가하지 않는다.",
+            "단순 형식 오류에서는 원래 의미를 보존한다. 내용/출처와 판정이 맞지 않는 오류에서는 원문과 공통 기준으로 해석과 판정을 함께 재검토한다.",
+        ]
+    else:
+        lines = [
+            "이전 응답이 구조화 출력 검증을 통과하지 못했다. 같은 원본 입력과 판정 기준으로 전체 JSON 객체를 새로 작성한다.",
+            "스키마의 필수 필드, 타입, enum, 길이와 개수 조건을 지키고 정의되지 않은 필드는 추가하지 않는다.",
+            "검증을 통과하려고 판정, 신뢰도, 심각도나 근거의 의미를 바꾸지 않는다. JSON 외의 서문이나 Markdown은 출력하지 않는다.",
+        ]
+    if codes & {"json_invalid", "decode_error"}:
+        lines.append("JSON 구문을 바로잡는다. 문자열과 키에는 큰따옴표를 쓰고, 문자열 안의 큰따옴표·역슬래시·줄바꿈은 JSON 규칙대로 이스케이프한다. 모든 객체와 배열을 닫고 쉼표 위치를 확인한다.")
+    if "json_duplicate_key" in codes:
+        lines.append("같은 객체 안의 키를 중복해서 쓰지 않는다. 기존 값을 덮어쓰는 여러 답을 함께 출력하지 않는다.")
+    if "json_non_finite" in codes:
+        lines.append("NaN이나 Infinity는 JSON 숫자가 아니다. 수치 필드는 원문과 스키마로 확인한 유한한 값만 쓴다.")
+    if codes & {"json_size_limit", "json_depth_limit"}:
+        lines.append("불필요한 중첩과 반복 설명을 제거한다. 정해진 스키마의 객체 구조와 필수 근거는 유지한다.")
+    if "json_encoding_invalid" in codes:
+        lines.append("올바른 UTF-8 JSON을 출력한다. 깨진 문자나 완성되지 않은 Unicode 이스케이프를 넣지 않는다.")
+    if "json_top_level_object_required" in codes:
+        lines.append("배열이나 JSON 문자열로 감싸지 말고 스키마에 맞는 단일 최상위 객체를 출력한다.")
+    if "extra_forbidden" in codes:
+        lines.append("오류 경로의 미정의 키를 제거하고 스키마에 정의된 키만 출력한다.")
+    if "missing" in codes:
+        lines.append("오류 경로의 필수 필드를 채운다. 확인되지 않은 선택 정보는 스키마가 허용하는 null 또는 빈 목록으로 표현하고 내용을 추측하지 않는다.")
+    if output_model is SecurityAnalysisOutputV231:
+        lines.append("evidence는 최대 5개의 단일 목록이다. 각 항목은 고유 evidence_id(e1~e5), source_id(c번호), interpretation_ko, supports, related_evidence_ids다. 연결과 decision_issue.evidence_ids는 이번 목록의 evidence_id만 참조한다. 관련 원문을 중첩하지 않으며 관계 인덱스와 input_truncated, 시그니처 version/explanation_ko는 생성하지 않는다.")
+        if codes & INTERPRETATION_ERRORS.keys():
+            lines.append("출처와 해석, 근거 분류 및 판정을 원문으로 함께 재검토한다. 오류를 없애려고 supports만 뒤집거나 없는 근거를 채우지 않는다. 필요한 관련 원문과 반대 근거를 보존한다.")
+    safe_types = SAFE_VALIDATION_TYPES | JSON_REJECTION_CODES | {"decode_error"}
+    allowed_path_parts = _output_schema_field_names(output_model) | {"[]", "<unknown>", "$"}
+    safe_paths = []
+    for issue in issues[:12]:
+        if not isinstance(issue, dict):
+            continue
+        code = issue.get("type")
+        if code not in safe_types:
+            code = "validation_error"
+        # Field paths were constructed only from the output model's schema in
+        # _safe_validation_issues, never from a provider exception's text.
+        candidate_path = issue.get("field", "$")
+        path = (candidate_path if isinstance(candidate_path, str) and len(candidate_path) <= 256
+                and all(part in allowed_path_parts for part in candidate_path.split(".")) else "$")
+        safe_paths.append(f"- {path}: {code}")
+        if code in CONTRACT_ERRORS:
+            safe_paths.append(CONTRACT_ERRORS[code][1])
+    if safe_paths:
+        lines.extend(["실패 위치와 유형:", *safe_paths])
+    if output_model is SecurityAnalysisOutputV231:
+        hints = constraint_hints(output_model.model_json_schema(), issues)
+        if hints:
+            lines.extend(["해당 필드의 스키마 조건:", *hints])
+    return "\n".join(lines)
+
+
+def _validate_attempt_limit(attempts: int) -> None:
+    if type(attempts) is not int or not 1 <= attempts <= OUTPUT_VALIDATION_MAX_ATTEMPTS:
+        raise ValueError("invalid_output_validation_attempt_limit")
+
+
+def _attempt_telemetry(
+    result: Any,
+    attempt: int,
+    validation_issues: list[dict[str, str]],
+    agent_fingerprint: str | None,
+) -> dict[str, Any]:
+    finish_reason = getattr(result.finish_reason, "value", result.finish_reason)
+    return {
+        "attempt": attempt,
+        "framework_run_id": str(result.run_id) if result.run_id is not None else None,
+        "agent_fingerprint": agent_fingerprint,
+        "finish_reason": str(finish_reason),
+        "failure_id": str(result.failure_id) if result.failure_id is not None else None,
+        "error_code": _error_code(result.error_summary),
+        "validation_issues": validation_issues,
+        "usage": _usage_jsonable(result.usage),
+        "run_usage": _jsonable(result.run_usage),
+    }
+
+
+def _validate_source_support_defer(value: bool, output_model: type[BaseModel], structured_output_recovery: bool) -> None:
+    if type(value) is not bool:
+        raise ValueError("invalid_source_support_validation_defer_flag")
+    if value and output_model is not SecurityAnalysisOutputV231:
+        raise ValueError("source_support_validation_defer_requires_v231")
+    if value and structured_output_recovery is not True:
+        raise ValueError("source_support_validation_defer_requires_recovery")
+
+
+def _validate_decision_review_mode(output_model: type[BaseModel], attempts: int,
+                                  structured_output_recovery: bool) -> None:
+    if output_model is EvidenceDecisionReviewOutput:
+        if type(attempts) is not int or attempts != 1:
+            raise ValueError("decision_review_requires_single_attempt")
+        if structured_output_recovery is not True:
+            raise ValueError("decision_review_requires_structured_recovery")
+
+
+async def execute_structured_agent(*, concurrency_engine=None,
+                                   defer_source_support_validation: bool = False, **kwargs) -> AgentCallResult:
+    _validate_source_support_defer(
+        defer_source_support_validation, kwargs.get("output_model", WAFAnalysisOutput),
+        kwargs.get("structured_output_recovery", False))
+    _validate_decision_review_mode(
+        kwargs.get("output_model", WAFAnalysisOutput),
+        kwargs.get("output_validation_max_attempts", OUTPUT_VALIDATION_MAX_ATTEMPTS),
+        kwargs.get("structured_output_recovery", False))
+    kwargs["defer_source_support_validation"] = defer_source_support_validation
+    if concurrency_engine is None:
+        return await _execute_structured_agent(**kwargs)
+    from ..services.concurrency import call_slot
+    profile = kwargs["profile"]
+    attempts = kwargs.get("output_validation_max_attempts", OUTPUT_VALIDATION_MAX_ATTEMPTS)
+    _validate_attempt_limit(attempts)
+    # Queue waiting must not consume the model's response/repair deadline.
+    deadline = min(profile.timeout_seconds, EDITOR_SECONDS) if kwargs.get("output_model") in {EvidenceEditorOutput, ResultEditorOutput} else profile.timeout_seconds * 2 * attempts + 5
+    async with call_slot(concurrency_engine, profile, kwargs.get("egress_check"), timeout_seconds=deadline) as admission:
+        result = await _execute_structured_agent(**kwargs)
+    return replace(result, telemetry={**result.telemetry, "concurrency": admission})
+
+
+async def _execute_structured_agent(
+    *,
+    profile: VLLMProfile,
+    api_key: str | None,
+    instructions: str,
+    user_input: str,
+    session_id: str,
+    agent_name: str,
+    egress_check: Callable[[], None] | None = None,
+    output_validation_max_attempts: int = OUTPUT_VALIDATION_MAX_ATTEMPTS,
+    output_model: type[BaseModel] = WAFAnalysisOutput,
+    structured_output_recovery: bool = False,
+    defer_source_support_validation: bool = False,
+) -> AgentCallResult:
+    _validate_source_support_defer(defer_source_support_validation, output_model, structured_output_recovery)
+    _validate_attempt_limit(output_validation_max_attempts)
+    _validate_decision_review_mode(output_model, output_validation_max_attempts, structured_output_recovery)
+    if type(structured_output_recovery) is not bool:
+        raise ValueError("invalid_structured_output_recovery_flag")
+    if output_model not in {WAFAnalysisOutput, EvidenceCorrectionOutput, EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput, SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV231, EvidenceDecisionReviewOutput, EvidenceEditorOutput, ResultEditorOutput}:
+        raise ValueError("unsupported_agent_output_contract")
+    if issubclass(output_model, EvidenceCorrectionOutput) and output_validation_max_attempts != 1:
+        raise ValueError("evidence_correction_requires_single_attempt")
+    editor = output_model in {EvidenceEditorOutput, ResultEditorOutput}
+    decision_review = output_model is EvidenceDecisionReviewOutput
+    single_turn = editor or decision_review
+    if editor and output_validation_max_attempts != 1:
+        raise ValueError("evidence_editor_requires_single_attempt")
+    timeout = min(profile.timeout_seconds, EDITOR_SECONDS) if editor else profile.timeout_seconds
+    provider = provider_name(profile)
+    base_url = profile.base_url
+    if provider == "vllm":
+        if egress_check is None:
+            raise ValueError("vllm_egress_check_required")
+        egress_check()
+    if provider == "openai":
+        if egress_check is not None:
+            egress_check()
+        from ..services.vllm_profiles import (
+            normalize_and_validate_profile_url,
+            validate_profile_provider_settings,
+        )
+
+        validate_profile_provider_settings(profile, has_api_key=bool(api_key))
+        base_url = normalize_and_validate_profile_url(profile, "")
+        if not isinstance(api_key, str) or not api_key or any(character.isspace() for character in api_key):
+            raise ValueError("openai_api_key_required")
+    # ModuAgent 0.6.2's public VLLMClient constructor does not document a TLS
+    # verification override. Never silently weaken or ignore an HTTPS profile.
+    if profile.base_url.startswith("https://") and not profile.tls_verify:
+        raise ValueError("moduagent_https_requires_tls_verification")
+
+    # Import lazily so stub mode and pure policy tests do not require ModuAgent.
+    from moduagent import Agent, HttpxTransport, OpenAICompatibleClient, RetryConfig, RunLimits, VLLMClient
+    from moduagent.output import PydanticOutputCodec
+
+    async with AsyncExitStack() as stack:
+        guarded_transport = None
+        client_kwargs = {
+            "base_url": base_url,
+            "model": profile.model_name,
+            "api_key": api_key,
+            "timeout": timeout,
+            "default_options": generation_options(profile, max_output_tokens=min(profile.max_output_tokens, EDITOR_TOKENS)) if editor else generation_options(profile),
+        }
+        client_type = VLLMClient
+        if provider == "openai":
+            http_client = await stack.enter_async_context(
+                httpx.AsyncClient(verify=True, follow_redirects=False, trust_env=False)
+            )
+            guarded_transport = _OpenAICompletionTransport(HttpxTransport(client=http_client), egress_check)
+            client_kwargs["transport"] = guarded_transport
+            client_type = OpenAICompatibleClient
+        else:
+            http_client = await stack.enter_async_context(
+                httpx.AsyncClient(verify=True, follow_redirects=False, trust_env=False)
+            )
+            guarded_transport = _VLLMEgressTransport(
+                HttpxTransport(client=http_client), base_url, egress_check,
+            )
+            client_kwargs["transport"] = guarded_transport
+        model = await stack.enter_async_context(client_type(**client_kwargs))
+        attempts: list[dict[str, Any]] = []
+        result = None
+        spec = None
+        for attempt in range(1, output_validation_max_attempts + 1):
+            repairing_output = attempt > 1
+            run_instructions = instructions
+            if repairing_output:
+                run_instructions += "\n\n" + _retry_instructions(
+                    attempts, profile.max_output_tokens, output_model,
+                    structured_output_recovery=structured_output_recovery)
+            elif output_model in {SecurityAnalysisOutputV231, EvidenceDecisionReviewOutput}:
+                run_instructions += (
+                    f"\n\n응답 예산은 {profile.max_output_tokens} 출력 토큰이다. "
+                    "이 안에서 완전한 JSON 객체를 끝까지 작성한다. "
+                    "JSON 밖의 설명과 가독성만을 위한 들여쓰기는 생략한다.")
+            output_codec = _TrackingOutputCodec(
+                PydanticOutputCodec(output_model), strict=provider == "openai", output_model=output_model,
+                structured_output_recovery=structured_output_recovery,
+                user_input=user_input if output_model in {SecurityAnalysisOutputV231, EvidenceDecisionReviewOutput} else None,
+                defer_source_support_validation=defer_source_support_validation,
+            )
+            agent = Agent.create(
+                name=f"{agent_name}-output-repair" if repairing_output else agent_name,
+                model=model,
+                instructions=run_instructions,
+                output=output_codec,
+                retry=RetryConfig(max_attempts=1 if single_turn else 2),
+                limits=RunLimits(
+                    max_model_turns=1 if single_turn else 2,
+                    no_progress_model_turn_threshold=2,
+                    timeout_seconds=timeout if single_turn else timeout * 2,
+                ),
+            )
+            spec = agent.inspect()
+            guarded_transport.reset()
+            started = monotonic()
+            result = await agent.run(
+                user_input,
+                session_id=session_id if not repairing_output else f"{session_id}:output-repair-{attempt - 1}",
+            )
+            attempts.append(
+                _attempt_telemetry(
+                    result,
+                    attempt,
+                    output_codec.validation_issues,
+                    str(spec.agent_fingerprint) if spec.agent_fingerprint is not None else None,
+                )
+            )
+            if guarded_transport is not None and guarded_transport.failure_code:
+                attempts[-1]["error_code"] = guarded_transport.failure_code
+            diagnostics = guarded_transport.response_diagnostics
+            summary = _jsonable(result.error_summary)
+            reason = diagnostics.get("provider_finish_reason")
+            if reason is None and isinstance(summary, Mapping):
+                candidate = summary.get("provider_finish_reason")
+                reason = candidate if isinstance(candidate, str) and candidate in INCOMPLETE_FINISH_REASONS else None
+            attempt_record = attempts[-1]
+            if structured_output_recovery:
+                attempt_record["json_normalizations"] = output_codec.json_normalizations
+                if output_model is SecurityAnalysisOutputV231:
+                    attempt_record["evidence_reference_normalizations"] = output_codec.evidence_reference_normalizations
+                    attempt_record["deferred_source_support_issues"] = output_codec.deferred_source_support_issues
+            attempt_record.update({
+                "provider_finish_reason": reason,
+                "duration_ms": round((monotonic() - started) * 1000),
+                "max_output_tokens": min(profile.max_output_tokens, EDITOR_TOKENS) if editor else profile.max_output_tokens,
+                "retry_kind": _retry_kind(attempt_record["error_code"], reason),
+            })
+            if attempt_record["usage"] is None:
+                attempt_record["usage"] = diagnostics.get("usage")
+            if (
+                result.output is not None
+                or attempt_record["retry_kind"] is None
+                or attempt == output_validation_max_attempts
+            ):
+                break
+
+        if result is None or spec is None:  # pragma: no cover - defensive invariant
+            raise RuntimeError("agent_execution_produced_no_result")
+        output = result.output if isinstance(result.output, output_model) else None
+        finish_reason = getattr(result.finish_reason, "value", result.finish_reason)
+        error_summary = _jsonable(result.error_summary)
+        safe_error = str(result.error) if result.error is not None else None
+        if provider == "openai" or guarded_transport.failure_code or structured_output_recovery:
+            error_code = attempts[-1]["error_code"]
+            # HTTP/protocol diagnostics never persist provider response text.
+            error_summary = {"code": error_code} if error_code else None
+            safe_error = error_code if result.error is not None else None
+        if error_summary and attempts[-1]["provider_finish_reason"]:
+            error_summary = {**error_summary, "provider_finish_reason": attempts[-1]["provider_finish_reason"]}
+        succeeded = str(finish_reason) == "completed" and output is not None
+        telemetry = {
+            "framework": "moduagent",
+            "framework_version": framework_version(),
+            "execution": "standard",
+            "usage": attempts[-1]["usage"],
+            "run_usage": _jsonable(result.run_usage),
+            "metadata": _jsonable(result.metadata),
+            "tool_trace": _jsonable(result.tool_trace),
+            "error_summary": error_summary,
+            "raw_provider_body_stored": False,
+            "provider": provider,
+            "thinking_enabled": None if provider == "openai" else False,
+            "output_validation_retry": {
+                "version": OUTPUT_RETRY_RECOVERY_VERSION if structured_output_recovery else OUTPUT_RETRY_VERSION,
+                "attempted": len(attempts) > 1,
+                "attempt_count": len(attempts),
+                "max_attempts": output_validation_max_attempts,
+                "recovered": len(attempts) > 1 and succeeded,
+                "stop_reason": "completed" if succeeded else "attempt_limit" if attempts[-1]["retry_kind"] else "not_retryable",
+                "max_transport_attempts_per_attempt": 1 if single_turn else 2,
+                "attempts": attempts,
+            },
+        }
+        if structured_output_recovery:
+            telemetry["structured_output"] = {"version": STRUCTURED_JSON_VERSION,
+                                               "bounded_wrapper_recovery": True}
+            if output_model is SecurityAnalysisOutputV231:
+                telemetry["structured_output"].update({"schema_preparation": SCHEMA_GUIDANCE_VERSION,
+                                                       "compact_strict_wire_schema": True,
+                                                       "reference_normalization_version": REFERENCE_NORMALIZATION_VERSION})
+            elif decision_review:
+                telemetry["structured_output"].update({"schema_preparation": SCHEMA_GUIDANCE_VERSION,
+                                                       "compact_strict_wire_schema": True,
+                                                       "decision_review_version": DECISION_REVIEW_VERSION})
+        return AgentCallResult(
+            output=output,
+            framework_run_id=str(result.run_id) if result.run_id is not None else None,
+            agent_fingerprint=str(spec.agent_fingerprint) if spec.agent_fingerprint is not None else None,
+            finish_reason=str(finish_reason),
+            failure_id=str(result.failure_id) if result.failure_id is not None else None,
+            error=safe_error,
+            telemetry=telemetry,
+        )

@@ -152,6 +152,17 @@ def legacy_v229_admissions(monkeypatch, request):
     monkeypatch.setattr(app.agent, "prompts", legacy_prompts_v229)
 
 
+@pytest.fixture(autouse=True)
+def legacy_v230_admissions(monkeypatch, request):
+    """Replay archived v2.30 admissions without later decision reconsideration."""
+    if not any("legacy_v230_admissions" in marker.args
+               for marker in request.node.iter_markers("usefixtures")):
+        return
+    import app.agent
+    from app.agent import legacy_prompts_v230
+    monkeypatch.setattr(app.agent, "prompts", legacy_prompts_v230)
+
+
 @pytest.fixture
 def settings() -> Settings:
     return Settings(

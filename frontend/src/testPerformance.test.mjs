@@ -17,6 +17,15 @@ test("flat evidence link errors have fixed KR and EN labels", () => {
     assert.ok(!performanceIssueLabel(code).includes(code));
   }
 });
+test("decision review errors and retained evidence use only fixed KR and EN labels", () => {
+  for (const code of ["decision_review_context_invalid", "review_evidence_repeated", "review_evidence_not_eligible", "review_evidence_omitted", "review_evidence_dependency_missing"]) {
+    assert.notEqual(performanceIssueLabel(code), "기타 출력 검증 오류");
+    assert.notEqual(performanceIssueLabel(code, (ko, en) => en), "Other output validation issue");
+    assert.ok(!performanceIssueLabel(code).includes(code));
+  }
+  assert.equal(performanceFieldLabel("retained_evidence_ids"), "재검토 근거");
+  assert.equal(performanceFieldLabel("retained_evidence_ids", (ko, en) => en), "Review evidence");
+});
 const duration = (mean = 12300, recorded = 10) => ({ recorded, unrecorded: 0, reported_sum_ms: mean * recorded, min_ms: mean / 2, p50_ms: mean, p95_ms: mean * 2, max_ms: mean * 3, mean_ms: mean });
 const tokens = mean => ({ recorded: 10, unrecorded: 0, sum: mean * 10, mean, p50: mean, p95: mean * 2, max: mean * 3 });
 const role = () => ({ accounting: { recorded_cases: 10, unrecorded_cases: 0, reported_output_attempts: 13, reported_output_retries: 3, reported_citation_repairs: 1, cases_with_output_retries: 2, cases_with_citation_repairs: 1 },
@@ -71,8 +80,72 @@ test("missing timing and token telemetry stays unknown and a recorded zero stays
   const raw = { version: "test-performance-summary-v1", cases: 0, display: {} }, source = JSON.stringify(raw), summary = performanceSummary(raw);
   assert.equal(summary.cases, 0); assert.equal(summary.display.states.pending, null); assert.equal(summary.roles.primary.tokens.output_tokens.mean, null);
   assert.equal(summary.roles.primary.output_retry_ms.mean_ms, null); assert.equal(JSON.stringify(raw), source);
+  assert.equal(summary.roles.primary.decision_review_ms.mean_ms, null);
+  assert.equal(summary.roles.primary.accounting.reported_decision_reviews, null);
+  assert.equal(summary.roles.primary.accounting.cases_with_decision_reviews, null);
   assert.equal(performanceSummary({ version: "future" }), null);
   assert.doesNotMatch(render(raw), /NaN|Infinity|0\.0초/);
+});
+
+test("optional decision review telemetry preserves missing values, recorded zero and independent case counts", () => {
+  const source = fixture();
+  source.roles.primary.accounting.reported_decision_reviews = 3;
+  source.roles.primary.accounting.cases_with_decision_reviews = 2;
+  source.roles.primary.decision_review_ms = duration(1500, 2);
+  source.roles.verifier.accounting.reported_decision_reviews = 0;
+  source.roles.verifier.accounting.cases_with_decision_reviews = 0;
+  source.roles.verifier.decision_review_ms = duration(0);
+  const before = JSON.stringify(source), normalized = performanceSummary(source);
+  assert.equal(normalized.roles.primary.accounting.reported_decision_reviews, 3);
+  assert.equal(normalized.roles.primary.accounting.cases_with_decision_reviews, 2);
+  assert.equal(normalized.roles.primary.decision_review_ms.mean_ms, 1500);
+  assert.equal(normalized.roles.verifier.accounting.reported_decision_reviews, 0);
+  assert.equal(normalized.roles.verifier.decision_review_ms.mean_ms, 0);
+  assert.equal(normalized.roles.legacy_evidence_editor.decision_review_ms.mean_ms, null);
+  assert.equal(JSON.stringify(source), before);
+  source.roles.primary.accounting.cases_with_decision_reviews = "PRIVATE_CASE_COUNT";
+  source.roles.primary.accounting.reported_decision_reviews = "PRIVATE_ATTEMPT_COUNT";
+  source.roles.primary.decision_review_ms.mean_ms = "PRIVATE_REVIEW_TIME";
+  assert.doesNotMatch(JSON.stringify(performanceSummary(source)), /PRIVATE_/);
+});
+
+test("decision reviews appear only for affected roles inside existing cells and remain distinct from citation repair", () => {
+  const source = fixture();
+  assert.doesNotMatch(render(source), /근거 재검토/);
+  source.roles.primary.accounting.reported_decision_reviews = 3;
+  source.roles.primary.accounting.cases_with_decision_reviews = 2;
+  source.roles.primary.decision_review_ms = duration(1500, 2);
+  source.roles.verifier.accounting.cases_with_decision_reviews = 0;
+  source.roles.verifier.decision_review_ms = duration(0);
+  const html = render(source), english = render(source, { words: (ko, en) => en });
+  assert.match(html, /근거 재검토 2문항/);
+  assert.match(html, /근거 재검토 평균 1\.5초/);
+  assert.equal((html.match(/근거 재검토/g) || []).length, 2);
+  assert.doesNotMatch(html, /근거 재검토 (?:0|3)문항/);
+  assert.match(html, /근거 연결 교정 1/);
+  assert.match(html, /근거 연결 교정 1\.0초/);
+  assert.match(english, /Evidence review 2 cases/);
+  assert.match(english, /Evidence review mean 1\.5 s/);
+  assert.match(english, /Citation repair 1/);
+  assert.doesNotMatch(english, /[가-힣]/);
+  assert.equal((html.match(/scope="col"/g) || []).length, (render(fixture()).match(/scope="col"/g) || []).length);
+  source.roles.primary.decision_review_ms = undefined;
+  assert.match(render(source), /근거 재검토 평균 —/);
+  source.roles.primary.accounting.cases_with_decision_reviews = undefined;
+  assert.doesNotMatch(render(source), /근거 재검토/);
+});
+
+test("review validation issues retain fixed field labels without reflecting arbitrary errors", () => {
+  const source = fixture();
+  source.roles.primary.output_failures.validation_issues = [
+    { field: "retained_evidence_ids", type: "review_evidence_omitted", attempts: 3 },
+    { field: "retained_evidence_ids.PRIVATE_FIELD", type: "PRIVATE_ERROR", attempts: 2 },
+  ];
+  const normalized = performanceSummary(source), html = render(source);
+  assert.deepEqual(normalized.roles.primary.output_failures.validation_issues[0], { field: "retained_evidence_ids", type: "review_evidence_omitted", attempts: 3 });
+  assert.match(html, /재검토 근거 누락/);
+  assert.doesNotMatch(html + JSON.stringify(normalized), /PRIVATE_/);
+  assert.doesNotMatch(html, /review_evidence_omitted/);
 });
 
 test("retry fraction uses recorded role cases and never treats absent counters as no retries", () => {

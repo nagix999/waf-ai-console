@@ -37,13 +37,15 @@ ATTEMPT_FINISH_REASONS = ("completed", "failed", "error", "canceled")
 VALIDATION_FIELDS = ("$", "evidence", "evidence_relations", "signature_assessment", "summary_ko",
     "verdict", "confidence_score", "threat_analysis", "decision_issue", "input_truncated",
     "interpretation_conflict", "capture_assessment", "corrections", "analyst_checks",
-    "recommended_checks", "tuning_recommendation")
+    "recommended_checks", "tuning_recommendation", "retained_evidence_ids")
 VALIDATION_TYPES = (
     "evidence_text_required", "evidence_source_repeated", "evidence_expansion_limit", "evidence_support_conflict",
     "evidence_source_unavailable", "evidence_source_support_forbidden", "decisive_verdict_requires_directional_content",
     "decision_source_unselected", "decision_source_repeated",
     "evidence_id_repeated", "evidence_link_repeated", "evidence_link_unknown",
     "evidence_link_self", "evidence_link_cycle", "decision_evidence_unselected", "decision_evidence_repeated",
+    "decision_review_context_invalid", "review_evidence_repeated", "review_evidence_not_eligible",
+    "review_evidence_omitted", "review_evidence_dependency_missing",
     "evidence_relation_invalid", "evidence_relation_conflicting_supports",
     "decisive_verdict_requires_evidence", "true_positive_requires_threat_severity",
     "false_positive_requires_none_severity", "inconclusive_requires_unknown_severity",
@@ -113,14 +115,34 @@ class _Metric:
                 "max_ms": values[-1] if values else None}
 
 
+def _grounding_calls(metadata):
+    """Recognize a bounded third decision review, never an arbitrary extra call."""
+    grounding = _mapping(metadata.get("evidence_grounding_retry"))
+    calls, count = grounding.get("attempts"), grounding.get("attempt_count")
+    if type(count) is not int or not isinstance(calls, list) or len(calls) != count:
+        return None
+    if grounding.get("decision_review_attempted") is True:
+        if count != 3 or _mapping(calls[2]).get("kind") != "decision_review":
+            return None
+        counts = [_mapping(_mapping(call).get("output_validation_retry")).get("attempt_count") for call in calls]
+        if (any(type(value) is not int for value in counts)
+                or not 1 <= counts[0] <= 3 or counts[1:] != [1, 1]):
+            return None
+        for call, expected in zip(calls, counts, strict=True):
+            attempts = _mapping(_mapping(call).get("output_validation_retry")).get("attempts")
+            if (not isinstance(attempts, list) or len(attempts) != expected
+                    or any(not isinstance(attempt, Mapping) for attempt in attempts)):
+                return None
+    elif not 1 <= count <= 2:
+        return None
+    return calls
+
+
 def _calls(metadata):
     """Prefer nested calls; the top-level retry repeats the LAST nested call."""
     if "evidence_grounding_retry" in metadata:
-        grounding = _mapping(metadata["evidence_grounding_retry"])
-        calls = grounding.get("attempts")
-        count = grounding.get("attempt_count")
-        if (type(count) is not int or not 1 <= count <= 2
-                or not isinstance(calls, list) or len(calls) != count):
+        calls = _grounding_calls(metadata)
+        if calls is None:
             return None
     else:
         calls = [metadata]
@@ -160,7 +182,8 @@ def _slot_wait(metadata, calls):
 def _role_observation(metadata):
     calls = _calls(metadata)
     unknown = dict.fromkeys(("invocation_ms", "first_attempt_ms", "output_retry_ms",
-                            "citation_repair_ms", "slot_wait_ms", "output_attempts", "citation_repairs"))
+                            "citation_repair_ms", "decision_review_ms", "slot_wait_ms", "output_attempts",
+                            "citation_repairs", "decision_reviews"))
     if calls is None:
         return {**unknown, "retry_kinds": {}}
     attempts = [attempt for call in calls for attempt in call]
@@ -170,9 +193,10 @@ def _role_observation(metadata):
     return {"invocation_ms": _sum_durations(attempts),
             "first_attempt_ms": _number(calls[0][0].get("duration_ms")),
             "output_retry_ms": _sum_durations([attempt for call in calls for attempt in call[1:]]),
-            "citation_repair_ms": _sum_durations([attempt for call in calls[1:] for attempt in call]),
+            "citation_repair_ms": _sum_durations([attempt for call in calls[1:2] for attempt in call]),
+            "decision_review_ms": _sum_durations([attempt for call in calls[2:] for attempt in call]),
             "slot_wait_ms": wait, "output_attempts": len(attempts),
-            "citation_repairs": len(calls) - 1, "retry_kinds": kinds}
+            "citation_repairs": int(len(calls) > 1), "decision_reviews": int(len(calls) == 3), "retry_kinds": kinds}
 
 
 def _output_outcome(attempt):
@@ -258,7 +282,7 @@ def summarize_execution_latency(records):
         "decision_elapsed_ms", "analysis_queue_ms", "analysis_processing_ms", "result_ready_elapsed_ms")}
     phases = {name: _Metric() for name in PHASES}
     roles = {role: {name: _Metric() for name in (
-        "invocation_ms", "first_attempt_ms", "output_retry_ms", "citation_repair_ms", "slot_wait_ms")}
+        "invocation_ms", "first_attempt_ms", "output_retry_ms", "citation_repair_ms", "decision_review_ms", "slot_wait_ms")}
         for role in ROLES.values()}
     role_counts = {role: Counter() for role in ROLES.values()}
     retry_kinds = {role: Counter() for role in ROLES.values()}
@@ -331,6 +355,7 @@ def summarize_execution_latency(records):
                 role_counts[role]["reported_output_attempts"] += observation["output_attempts"]
                 role_counts[role]["reported_output_retries"] += sum(observation["retry_kinds"].values())
                 role_counts[role]["reported_citation_repairs"] += observation["citation_repairs"]
+                role_counts[role]["reported_decision_reviews"] += observation["decision_reviews"]
                 retry_kinds[role].update(observation["retry_kinds"])
     return {"version": VERSION, "cases": cases,
             "statuses": dict(sorted(statuses.items())), "execution_modes": dict(sorted(modes.items())),
@@ -342,7 +367,7 @@ def summarize_execution_latency(records):
             "roles": {role: {"not_observed_cases": cases - sum(phase_states.get(phase, {}).values()),
                 "accounting": {key: role_counts[role][key] for key in (
                 "recorded_cases", "unrecorded_cases", "reported_output_attempts", "reported_output_retries",
-                "reported_citation_repairs")}, "retry_kinds": dict(sorted(retry_kinds[role].items())),
+                "reported_citation_repairs", "reported_decision_reviews")}, "retry_kinds": dict(sorted(retry_kinds[role].items())),
                 "output_failures": output_failures[role].present(),
                 **{name: metric.present() for name, metric in roles[role].items()}} for phase, role in ROLES.items()},
             "display": {"no_job_cases": no_display_job, "states": dict(sorted(display_states.items())),

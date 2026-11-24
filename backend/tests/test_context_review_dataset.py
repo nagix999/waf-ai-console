@@ -117,13 +117,13 @@ def test_new_shared_prompt_keeps_each_existing_protocol_enabled():
     # context-only provenance without rewriting earlier source registries.
     from app.agent.execution_policy_v221 import INTEGRITY_RULES_VERSIONS as V221_INTEGRITY
     from app.agent.evidence_source_policy import RULES_VERSIONS as V221_SELECTION
-    from app.agent.execution_policy_v230 import INTEGRITY_RULES_VERSIONS as CURRENT_INTEGRITY
-    from app.agent.evidence_pipeline_v230 import RULES_VERSION
+    from app.agent.execution_policy_v231 import INTEGRITY_RULES_VERSIONS as CURRENT_INTEGRITY
+    from app.agent.evidence_pipeline_v231 import RULES_VERSION
     from app.agent.input_builder_v221 import build_agent_input as build_v221
-    from app.agent.input_builder_v230 import build_agent_input as build_current
+    from app.agent.input_builder_v231 import build_agent_input as build_current
 
     assert "waf-system-v2.21" in V221_INTEGRITY & V221_SELECTION
-    assert FIXED_RULES_VERSION == RULES_VERSION == "waf-system-v2.30"
+    assert FIXED_RULES_VERSION == RULES_VERSION == "waf-system-v2.31"
     assert FIXED_RULES_VERSION in CURRENT_INTEGRITY
     assert FIXED_RULES_VERSION not in V221_SELECTION
     assert FIXED_RULES_VERSION not in RULES_VERSIONS | SELECTION_RULES_VERSIONS | INTEGRITY_RULES_VERSIONS

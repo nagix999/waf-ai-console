@@ -2,7 +2,7 @@
 import hashlib
 from pathlib import Path
 
-from app.agent import legacy_prompts_v229 as previous, prompts
+from app.agent import legacy_prompts_v229 as previous, legacy_prompts_v230 as prompts
 
 
 def test_old_instructions_remain_exact_and_roles_share_the_same_new_criteria():

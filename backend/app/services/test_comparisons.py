@@ -14,6 +14,7 @@ from ..test_comparison_schemas import (
     ComparisonTiming, ComparisonTokenCounter, ComparisonTokens, TestComparisonResponse,
 )
 from .evaluation import COMPARABLE, MATCHES, summarize_evaluations, summarize_evaluation_rows
+from .execution_latency import _grounding_calls
 from .test_runs import describe_run, fixed_reference_relation
 from .timing import elapsed_ms
 
@@ -115,11 +116,16 @@ def _timing(values):
 def _step_usage(metadata):
     grounding = _object(metadata.get("evidence_grounding_retry"))
     if isinstance(grounding.get("attempts"), list) and grounding["attempts"]:
+        calls = grounding["attempts"]
+        if len(calls) > 2 or grounding.get("decision_review_attempted") is True:
+            calls = _grounding_calls(metadata)
+            if calls is None:
+                return dict.fromkeys(TOKEN_KEYS)
         counters = []
-        for attempt in grounding["attempts"]:
+        for attempt in calls:
             counters.append(_step_usage(_object(attempt)))
         expected = grounding.get("attempt_count")
-        if type(expected) is int and expected > len(grounding["attempts"]):
+        if type(expected) is int and expected > len(calls):
             counters.append(None)
         return {key: sum(counter[key] for counter in counters)
                 if all(isinstance(counter, dict) and counter.get(key) is not None for counter in counters) else None

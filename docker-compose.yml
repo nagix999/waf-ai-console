@@ -44,7 +44,7 @@ services:
   worker:
     stop_grace_period: 120s
     build: *backend-build
-    command: ["python", "-m", "app.worker_entrypoint_v230"]
+    command: ["python", "-m", "app.worker_entrypoint_v231"]
     environment:
       <<: *backend-env
       WAF_WORKER_ROLE: analysis
@@ -58,7 +58,7 @@ services:
   model-tester:
     stop_grace_period: 120s
     build: *backend-build
-    command: ["python", "-m", "app.worker_entrypoint_v230"]
+    command: ["python", "-m", "app.worker_entrypoint_v231"]
     environment:
       <<: *backend-env
       WAF_WORKER_ROLE: model_test

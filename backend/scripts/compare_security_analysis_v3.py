@@ -28,7 +28,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 from app import worker
-from app.agent import legacy_prompts_v214, legacy_prompts_v226, legacy_prompts_v227, legacy_prompts_v228, legacy_prompts_v229, prompts, result_editor
+from app.agent import legacy_prompts_v214, legacy_prompts_v226, legacy_prompts_v227, legacy_prompts_v228, legacy_prompts_v229, legacy_prompts_v230, prompts, result_editor
 from app.agent.contracts import (SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220,
                                  SemanticAssessmentOutput, EvidenceSelectionCorrectionOutput)
 from app.agent.contracts_v224 import SecurityAnalysisOutputV224
@@ -36,7 +36,8 @@ from app.agent.contracts_v227 import SecurityAnalysisOutputV227
 from app.agent.contracts_v228 import SecurityAnalysisOutputV228
 from app.agent.contracts_v229 import SecurityAnalysisOutputV229
 from app.agent.contracts_v230 import SecurityAnalysisOutputV230
-from app.agent.executor_v230 import SAFE_VALIDATION_TYPES, _output_schema_field_names
+from app.agent.contracts_v231 import SecurityAnalysisOutputV231, EvidenceDecisionReviewOutput
+from app.agent.executor_v231 import SAFE_VALIDATION_TYPES, _output_schema_field_names
 from app.agent.output_schema_v226 import compact_strict_schema
 from app.agent.structured_json import REJECTION_CODES as JSON_REJECTION_CODES
 from app.candidate_schemas import CandidateConfiguration
@@ -54,6 +55,7 @@ from app.services.test_comparisons import _step_usage
 from app.services.test_runs import enqueue_named_run
 from app.services.vllm_profiles import profile_fingerprint
 from app.services.provider_options import strict_json_schema
+from app.services.execution_latency import _grounding_calls
 
 SOURCES = (
     ("medium", "waf-dummy-v1/medium_50.json", "e5b0f1dc37014e2ea7c04d40d05d7820d728ec574c26048e2f380ecc506b0c22"),
@@ -129,7 +131,8 @@ def wire_model_for_revision(revision):
               "waf-system-v2.27": SecurityAnalysisOutputV227,
               "waf-system-v2.28": SecurityAnalysisOutputV228,
               "waf-system-v2.29": SecurityAnalysisOutputV229,
-              "waf-system-v2.30": SecurityAnalysisOutputV230}
+              "waf-system-v2.30": SecurityAnalysisOutputV230,
+              "waf-system-v2.31": SecurityAnalysisOutputV231}
     try:
         return models[revision.FIXED_RULES_VERSION]
     except KeyError:
@@ -225,8 +228,8 @@ def write_json(path, value):
 @lru_cache(maxsize=1)
 def validation_fields():
     return frozenset().union(*(_output_schema_field_names(model) for model in (
-        SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SecurityAnalysisOutputV224, SecurityAnalysisOutputV227, SecurityAnalysisOutputV228, SecurityAnalysisOutputV229, SecurityAnalysisOutputV230,
-        SemanticAssessmentOutput, EvidenceSelectionCorrectionOutput)))
+        SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SecurityAnalysisOutputV224, SecurityAnalysisOutputV227, SecurityAnalysisOutputV228, SecurityAnalysisOutputV229, SecurityAnalysisOutputV230, SecurityAnalysisOutputV231,
+        SemanticAssessmentOutput, EvidenceSelectionCorrectionOutput, EvidenceDecisionReviewOutput)))
 
 
 def retry_accounting(metadata, depth=0):
@@ -241,7 +244,12 @@ def retry_accounting(metadata, depth=0):
     grounding = metadata.get("evidence_grounding_retry")
     nested = grounding.get("attempts") if isinstance(grounding, dict) else None
     if isinstance(nested, list) and nested:
-        children = [retry_accounting(attempt, depth + 1) for attempt in nested[:2]]
+        calls = nested[:2]
+        if len(nested) > 2 or grounding.get("decision_review_attempted") is True:
+            calls = _grounding_calls(metadata)
+            if calls is None:
+                return {**retry_accounting({}, depth + 1), "accounting_complete": False}
+        children = [retry_accounting(attempt, depth + 1) for attempt in calls]
         errors = Counter()
         kinds = Counter()
         for child in children:
@@ -304,6 +312,7 @@ def pipeline_hashes():
              root / "backend/app/worker_v228.py", root / "backend/app/worker_entrypoint_v228.py",
              root / "backend/app/worker_v229.py", root / "backend/app/worker_entrypoint_v229.py",
              root / "backend/app/worker_v230.py", root / "backend/app/worker_entrypoint_v230.py",
+             root / "backend/app/worker_v231.py", root / "backend/app/worker_entrypoint_v231.py",
              root / "backend/app/signature_explanation_schemas.py"]
     paths.extend((root / "backend/app/agent").glob("*.py"))
     paths.extend(root / "backend/app/services" / (name + ".py") for name in (
@@ -323,7 +332,8 @@ def pipeline_hashes():
         "model_validation_worker_v227", "worker_coordinator_v227",
         "worker_runtime_v228", "worker_concurrency_v228", "model_validation_worker_v228", "worker_coordinator_v228",
         "worker_runtime_v229", "worker_concurrency_v229", "model_validation_worker_v229", "worker_coordinator_v229",
-        "worker_runtime_v230", "worker_concurrency_v230", "model_validation_worker_v230", "worker_coordinator_v230"))
+        "worker_runtime_v230", "worker_concurrency_v230", "model_validation_worker_v230", "worker_coordinator_v230",
+        "worker_runtime_v231", "worker_concurrency_v231", "model_validation_worker_v231", "worker_coordinator_v231"))
     hashes = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(set(paths))}
     digest = hashlib.sha256(json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     return digest, hashes
@@ -447,7 +457,7 @@ def run(args):
     diagnostic = args.diagnostic_ten
     baseline = {"v2.14": legacy_prompts_v214, "v2.26": legacy_prompts_v226,
                 "v2.27": legacy_prompts_v227, "v2.28": legacy_prompts_v228,
-                "v2.29": legacy_prompts_v229}[args.baseline_version]
+                "v2.29": legacy_prompts_v229, "v2.30": legacy_prompts_v230}[args.baseline_version]
     revisions = (frozen_diagnostic_revision(),) if diagnostic else (baseline, prompts)
     cases = diagnostic_cases(args.samples_root) if diagnostic else synthetic_cases(args.samples_root)
     mode = "frozen-v215-diagnostic-ten" if diagnostic else "paired-comparison-thirty"
@@ -488,7 +498,7 @@ def run(args):
             "rules_hashes": {revision.FIXED_RULES_VERSION: hashlib.sha256(revision.FIXED_INSTRUCTIONS.encode()).hexdigest()
                              for revision in revisions},
             "wire_schema_hashes": {revision.FIXED_RULES_VERSION: hashlib.sha256(json.dumps(
-                (compact_strict_schema(model.model_json_schema()) if revision.FIXED_RULES_VERSION in {"waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30"}
+                (compact_strict_schema(model.model_json_schema()) if revision.FIXED_RULES_VERSION in {"waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31"}
                  else strict_json_schema(model.model_json_schema()) if values["provider"] == "openai" else model.model_json_schema()),
                 ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
                 for revision, model in ((revision, wire_model_for_revision(revision))
@@ -543,7 +553,7 @@ def run(args):
                     started, previous_wait = time.monotonic(), authority.wait_ms
                     try:
                         authority()
-                        from app.services.worker_runtime_v230 import process_moduagent
+                        from app.services.worker_runtime_v231 import process_moduagent
                         process_moduagent(db, crypto, row, "", settings.verifier_confidence_threshold, request_check=authority)
                     except Exception as exc:
                         db.rollback()
@@ -584,7 +594,7 @@ def main(argv=None):
     parser.add_argument("--profile-name")
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--execute-model-calls", action="store_true")
-    parser.add_argument("--baseline-version", choices=("v2.14", "v2.26", "v2.27", "v2.28", "v2.29"), default="v2.14",
+    parser.add_argument("--baseline-version", choices=("v2.14", "v2.26", "v2.27", "v2.28", "v2.29", "v2.30"), default="v2.14",
                         help="Pinned baseline for comparison; no calls without --execute-model-calls")
     parser.add_argument("--diagnostic-ten", action="store_true", help="Exactly ten targeted cases, frozen v2.15 only; no baseline calls")
     parser.add_argument("--runtime-config-stdin", "--context-stdin", action="store_true",
