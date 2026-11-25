@@ -55,7 +55,7 @@ export default function TabulatorTable({ data = [], columns = [], getRowId = def
 
   useEffect(() => {
     if (!element.current || renderFailed) return;
-    const mount = { alive: true, built: false, queued: false, regions: new Map(), table: null, classes: new WeakMap() };
+    const mount = { alive: true, built: false, queued: false, structure, regions: new Map(), table: null, classes: new WeakMap() };
     const placeholder = document.createElement("div");
     placeholder.className = "console-tabulator-empty";
     mount.regions.set("empty", { key: "empty", kind: "empty", element: placeholder });
@@ -82,7 +82,9 @@ export default function TabulatorTable({ data = [], columns = [], getRowId = def
     function updateSort() {
       if (!mount.built) return;
       for (const column of latest.current.columns) {
-        const node = mount.table.getColumn(column.id)?.getElement();
+        // Tabulator returns false (not null) for a column it cannot find.
+        const component = mount.table.getColumn(column.id);
+        const node = component ? component.getElement() : null;
         const sort = latest.current.sorting.find(sort => sort.id === column.id);
         if (sort) node?.setAttribute("aria-sort", sort.desc ? "descending" : "ascending");
         else node?.removeAttribute("aria-sort");
@@ -148,10 +150,15 @@ export default function TabulatorTable({ data = [], columns = [], getRowId = def
   }, [structure, renderFailed]);
 
   useEffect(() => { instance.current?.populate(); }, [data, structure]);
-  useLayoutEffect(() => { instance.current?.refresh(); }, [sorting, columns, rowClassName, onRowClick]);
+  useLayoutEffect(() => {
+    // Layout effects run before the effect that replaces a changed table.
+    // Never apply new columns to the previous instance during that commit.
+    const mount = instance.current;
+    if (mount?.structure === structure) mount.refresh();
+  }, [structure, sorting, columns, rowClassName, onRowClick]);
   useLayoutEffect(() => {
     const mount = instance.current;
-    if (!mount?.alive || !mount.built) return;
+    if (!mount?.alive || !mount.built || mount.structure !== structure) return;
     // Tabulator measures the empty portal hosts during construction. Reflow
     // after React fills rich headers, but only when their real heights change:
     // an unconditional redraw would create a renderComplete feedback loop.
@@ -161,7 +168,7 @@ export default function TabulatorTable({ data = [], columns = [], getRowId = def
       mount.headerHeights = heights;
       mount.table.redraw();
     }
-  }, [regions, columns]);
+  }, [structure, regions, columns]);
 
   function keyDown(event) {
     if (event.target.closest(interactive)) return;

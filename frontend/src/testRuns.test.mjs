@@ -156,6 +156,27 @@ test("named run rows and case names are escaped and rejected rows do not display
   assert.match(unmeasured, /Acc — · F1 — · Cov —/); assert.doesNotMatch(unmeasured, /확정 판정 0건|0.0%/);
 });
 
+test("expanded test metrics preserve all columns, grouped headers and unavailable server values", () => {
+  const metrics = ["accuracy", "precision", "recall", "f1", "coverage", "abstention_rate", "false_positive_rate", "false_negative_rate"];
+  const run = { id: "run", name: "지표 확인", status: "completed", evaluation_summary: summaryFixture() };
+  for (const onStopped of [undefined, () => {}]) {
+    const expanded = TestRunRows({ items: [run], onSelect() {}, expanded: true, onStopped });
+    const { columns, headerGroups } = expanded.props;
+    assert.deepEqual(Array.from(columns.slice(2, 10), column => column.id), metrics);
+    assert.equal(headerGroups.reduce((sum, group) => sum + group.span, 0), columns.length);
+    assert.equal(columns.some(column => column.id === "configuration" || column.id === "evaluation"), false);
+    for (const key of metrics) {
+      const column = columns.find(column => column.id === key);
+      assert.equal(column.render(run), metricText(run.evaluation_summary.metrics[key]));
+      assert.equal(column.render({ evaluation_summary: null }), "—");
+      assert.equal(column.render({ evaluation_summary: { metrics: { [key]: 0 } } }), "0.0%");
+    }
+    const html = render(TestRunRows, { items: [run], onSelect() {}, expanded: true, onStopped });
+    assert.match(html, /80.0%/); assert.match(html, /오류 방향/);
+    for (const key of metrics) assert.ok(html.includes(`aria-label="${key} 설명"`));
+  }
+});
+
 test("test list state preserves draft, applied search and page independently across navigation", () => {
   const initial = initialTestRunHistoryState(); const second = initialTestRunHistoryState();
   assert.notEqual(initial, second); assert.notEqual(initial.query, second.query);
