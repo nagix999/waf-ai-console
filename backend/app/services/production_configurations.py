@@ -59,7 +59,7 @@ def live_snapshot(db, crypto, settings, *, roles=None, prompt_id=None, schema_id
         include_parser = not (latest and latest.snapshot_json.get("schema_version") == 1
                               and state.active_version_id == BASELINE_ID)
     editor = capture_editor_profile(editor_profile, db=db if production else None) if editor_profile else None
-    from .evidence_display_jobs_v2 import DisplayEditorSnapshot, capture_display_profile
+    from .evidence_display_jobs_v3 import DisplayEditorSnapshot, capture_display_profile
     if editor_profile and not production:
         editor = capture_display_profile(editor_profile)
     if isinstance(editor, DisplayEditorSnapshot):
@@ -196,7 +196,7 @@ def preflight(db, crypto, settings, identifier):
     check("tested_profiles_still_valid", valid_profiles)
     check("tested_instructions_still_current", same_instructions)
     if run.display_editor_snapshot_ciphertext:
-        from .evidence_display_jobs_v2 import qualification
+        from .evidence_display_jobs_v3 import qualification
         try:
             ready_display = qualification(db, run, crypto)["ready"]
         except (ValueError, TypeError):

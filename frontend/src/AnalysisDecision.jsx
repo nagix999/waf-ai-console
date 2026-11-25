@@ -102,7 +102,7 @@ function CoreEvidenceCards({ detail, onViewInput, onExecution }) {
 export function EvidenceDisplaySummary({ detail, loading = false, stopped = false, error = false, onRetry }) {
   const w = useR5Words(), display = detail.evidence_display;
   const meta = analysisEvidenceMeta(detail) || analysisEvidenceMeta(detail.result);
-  if (meta?.view === "core-v1") return <section className="panel decision-display-execution"><h2>{w("핵심 근거 전달", "Core evidence delivery")}</h2><CoreEvidenceStatus detail={detail} /><p className="muted">{w("화면과 API는 같은 근거를 사용합니다. 아래 실행 이력에는 분석 당시의 전체 기록이 보존됩니다.", "The screen and API use the same evidence. The execution trace below preserves the complete original analysis record.")}</p></section>;
+  if (meta?.view === "core-v1" || meta?.view === "core-v2") return <section className="panel decision-display-execution"><h2>{w("핵심 근거 전달", "Core evidence delivery")}</h2><CoreEvidenceStatus detail={detail} /><p className="muted">{w("화면과 API는 같은 근거를 사용합니다. 아래 실행 이력에는 분석 당시의 전체 기록이 보존됩니다.", "The screen and API use the same evidence. The execution trace below preserves the complete original analysis record.")}</p></section>;
   const view = detail.status === "completed" && display?.version === "evidence-display-view-v1"
     ? evidenceDisplayView(detail.result, display) : null;
   if (!view) return null;

@@ -305,7 +305,7 @@ def enqueue_retry(db, crypto, settings, analysis_id, request, actor, *, commit=T
     copy_parser_snapshot(original, row)
     copy_explanations(original, row, crypto=crypto)
     db.add(row)
-    from .evidence_display_jobs_v2 import copy_job
+    from .evidence_display_jobs_v3 import copy_job
     try:
         copy_job(db, crypto, original, row)
     except ValueError:

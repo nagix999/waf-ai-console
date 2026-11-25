@@ -2,13 +2,14 @@
 // symbols to an API result, export it with the result, or infer missing sources.
 const metadata = new WeakMap();
 const statuses = new Set(["completed", "fallback", "skipped", "pending"]);
+const views = new Set(["core-v1", "core-v2"]);
 const record = value => value !== null && typeof value === "object" && !Array.isArray(value);
 
 export function analysisEvidenceMeta(value) { return record(value) ? metadata.get(value) ?? null : null; }
 
 export function rememberEvidenceMeta(detail, value) {
-  if (!record(detail) || value?.view !== "core-v1" || !statuses.has(value.status)) return null;
-  const safe = Object.freeze({ view: "core-v1", status: value.status });
+  if (!record(detail) || !views.has(value?.view) || !statuses.has(value.status)) return null;
+  const safe = Object.freeze({ view: value.view, status: value.status });
   metadata.set(detail, safe);
   if (record(detail.result)) metadata.set(detail.result, safe);
   return safe;
@@ -20,7 +21,7 @@ export function responseEvidenceMeta(detail, headers) {
 
 export function isCoreEvidence(result, evidenceView) {
   return result?.schema_version === "waf-analysis-v3"
-    && (evidenceView === "core-v1" || analysisEvidenceMeta(result)?.view === "core-v1");
+    && (views.has(evidenceView) || views.has(analysisEvidenceMeta(result)?.view));
 }
 
 // The server owns selection, ordering, interpretation and direction. Keep every

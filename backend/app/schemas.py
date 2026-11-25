@@ -9,6 +9,7 @@ from .services.label_fields import LABEL_FIELDS
 from .services.input_field_policy import SERVER_CONTROL_FIELDS
 from .initial_assessment_schemas import InitialAssessmentInput
 from .result_contracts import AnalysisResultV3
+from .core_result_contracts import CoreAnalysisResultV3, revalidate_core_result
 from .models import AnalysisPurpose, AnalysisStatus, IngestChannel, ModelProfileStatus, ModelProvider, ModelTestMode, ModelTestStatus, Verdict
 
 
@@ -141,6 +142,29 @@ class AnalysisDetail(AnalysisSummary):
             # branch reserved for immutable historical records.
             return AnalysisResultV3.model_validate(value)
         return value
+
+
+class CoreAnalysisDetail(AnalysisDetail):
+    """Public read projection; untrusted/raw v3 records remain strictly validated.
+
+    A cross-role representative is admitted only as a source-validated, sealed
+    response object. A plain dictionary cannot opt in to the relaxed response
+    reference rule and the canonical AnalysisDetail contract stays unchanged.
+    """
+    model_config = ConfigDict(revalidate_instances="always")
+    result: CoreAnalysisResultV3 | AnalysisResultV3 | AnalysisResultV2 | dict[str, Any] | None = Field(
+        description="Source-validated core evidence response, unchanged strict v3, explicit v2 compatibility response, or historical result.",
+        union_mode="left_to_right",
+    )
+
+    @field_validator("result", mode="before")
+    @classmethod
+    def validate_current_result_without_legacy_fallback(cls, value):
+        if isinstance(value, CoreAnalysisResultV3):
+            # Fail before union selection: a broken core seal must not fall
+            # through to the ordinary strict-v3 or historical dictionary arm.
+            return revalidate_core_result(value)
+        return super().validate_current_result_without_legacy_fallback(value)
 
 
 class RawEventResponse(BaseModel):

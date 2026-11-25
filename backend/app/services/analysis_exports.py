@@ -161,7 +161,7 @@ def build_report(detail: dict, *, generated_at: datetime | None = None, evidence
         ("안내", "자동 분석 결과입니다. 공격 시도와 실제 피해 발생을 구분하고 최종 판단은 분석가가 검토합니다."),
     ])
     review = {"issues": [], "checks": []} if current_contract else hold_review(detail, decision)
-    core_evidence = evidence_view == "core-v1" and current_contract
+    core_evidence = evidence_view in {"core-v1", "core-v2"} and current_contract
     considered = view["issues"] if view and verdict != "inconclusive" and not core_evidence else []
     if considered:
         issue_rows = []

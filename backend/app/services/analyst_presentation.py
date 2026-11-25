@@ -116,7 +116,7 @@ def _core_assessment(result):
 
 def assessment_view(result, *, display_view=None, evidence_view=None):
     """No raw input reads, role-result reads, inference or legacy rewrites."""
-    if evidence_view == "core-v1" and result.get("schema_version") == "waf-analysis-v3":
+    if evidence_view in {"core-v1", "core-v2"} and result.get("schema_version") == "waf-analysis-v3":
         return _core_assessment(result)
     if display_view is not None and result.get("schema_version") == "waf-analysis-v3":
         planned = _planned_assessment(result, display_view)

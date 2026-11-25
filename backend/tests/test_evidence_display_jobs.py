@@ -23,6 +23,14 @@ from test_validation_data import login
 pytestmark = pytest.mark.usefixtures("registered_vllm_target")
 
 
+@pytest.fixture
+def archived_v2_admission(monkeypatch):
+    """Replay V2 candidate gates without changing current V3 admissions."""
+    from app.services import evidence_display_jobs_v3 as admission
+    monkeypatch.setattr(admission, "capture_display_profile", lambda profile, *, version=jobs.VERSION:
+        admission.DisplayEditorSnapshot.model_validate(jobs.capture_display_profile(profile, version=version).model_dump()))
+
+
 def canonical(*, single=False):
     result = result_fixture()
     if not single:
@@ -246,6 +254,7 @@ def test_external_editor_requires_current_consent_and_respects_internal_only(
     assert accepted == []
 
 
+@pytest.mark.usefixtures("archived_v2_admission")
 def test_stopped_test_cannot_start_display_call(client, event_payload, candidate, monkeypatch):
     response = direct(client, {**event_payload, "vendor_score": 2}, candidate)
     assert response.status_code == 202, response.text
@@ -322,6 +331,7 @@ def test_read_view_is_batched_and_never_enqueues_or_calls_a_model(client, event_
     assert calls == []
 
 
+@pytest.mark.usefixtures("archived_v2_admission")
 def test_new_candidate_separates_core_editor_and_blocks_official_gate_until_display_finishes(
     client, event_payload, candidate, monkeypatch,
 ):
@@ -371,6 +381,7 @@ def test_retry_copies_original_display_snapshot_without_using_current_settings(c
 
 
 @pytest.mark.parametrize("failure", [False, True])
+@pytest.mark.usefixtures("archived_v2_admission")
 def test_official_evaluation_and_production_promotion_require_successful_new_display_job(
     client, event_payload, candidate, monkeypatch, failure,
 ):

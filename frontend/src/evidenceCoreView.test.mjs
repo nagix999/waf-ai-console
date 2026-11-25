@@ -50,9 +50,46 @@ test("response headers are WeakMap-only metadata; the API JSON and canonical evi
   assert.equal(analysisEvidenceMeta(copy(value)), null);
 });
 
-for (const [view, status] of [["core-v2", "completed"], ["core-v1", "unknown"], [null, "completed"], ["core-v1", null]]) test(`unrecognized metadata is not trusted: ${view}/${status}`, () => {
+for (const [view, status] of [["core-v3", "completed"], ["core-v1", "unknown"], [null, "completed"], ["core-v1", null]]) test(`unrecognized metadata is not trusted: ${view}/${status}`, () => {
   const value = detail(); responseEvidenceMeta(value, new Headers({ ...(view ? { "X-Evidence-View": view } : {}), ...(status ? { "X-Evidence-Status": status } : {}) }));
   assert.equal(analysisEvidenceMeta(value), null);
+});
+
+test("core-v2 keeps one received cross-role representative and mapped conditions without changing provenance", () => {
+  const value = detail();
+  value.result.evidence = [value.result.evidence[0]];
+  const representative = value.result.evidence[0];
+  representative.origins = [{ role: "primary", index: 0, source_id: "c1" }];
+  value.result.primary = { ...(value.result.primary || {}), evidence_ids: [representative.evidence_id] };
+  value.result.verifier = { executed: true, agreement: true, output: { evidence_ids: [] } };
+  value.result.verdict = "inconclusive";
+  value.result.decision_issues = [{ point_ko: "요청 문맥 확인", missing_condition_ko: "서비스 용도 확인", evidence_ids: [representative.evidence_id], origins: ["verifier"] }];
+  const before = JSON.stringify(value);
+  responseEvidenceMeta(value, new Headers({ "X-Evidence-View": "core-v2", "X-Evidence-Status": "completed" }));
+  assert.deepEqual(analysisEvidenceMeta(value), { view: "core-v2", status: "completed" });
+  const view = assessmentView(value.result, { display: value.evidence_display });
+  assert.equal(view.core, true);
+  assert.equal(view.evidence.length, 1);
+  assert.deepEqual(view.evidence[0].roles, ["primary"]);
+  assert.deepEqual(view.evidence[0].origins, representative.origins);
+  assert.deepEqual(decisionConditions(value).items[0].evidence_numbers, [Number(representative.evidence_id.slice(1))]);
+  const report = decodeReportText(buildAnalysisReport(value, { evidenceView: "core-v2" }));
+  assert.equal([...report.matchAll(/^#### 근거 (\d+) — /gm)].length, 1);
+  assert.equal(JSON.stringify(value), before);
+});
+
+test("React and offline PDF document use core-v2 list and never restore the old full-source plan", () => {
+  const value = detail();
+  value.result.evidence = [value.result.evidence[0]];
+  const before = JSON.stringify(value);
+  const document = buildReportDocument({ detail: value, evidenceView: "core-v2" });
+  const evidence = document.sections.find(section => section.title === "보안 분석 근거");
+  assert.equal(evidence.blocks.filter(block => block.type === "heading").length, 1);
+  module.exports.rememberEvidenceMeta(value, { view: "core-v2", status: "completed" });
+  const html = renderToStaticMarkup(createElement(module.exports.EvidenceCards, { detail: value }));
+  assert.equal((html.match(/class="decision-evidence-row decision-core-evidence /g) || []).length, 1);
+  assert.doesNotMatch(html, /decision-additional-toggle|decision-display-group /);
+  assert.equal(JSON.stringify(value), before);
 });
 
 test("the fetch client reads metadata without adding any response field", async () => {

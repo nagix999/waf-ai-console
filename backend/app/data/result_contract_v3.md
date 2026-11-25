@@ -3,6 +3,28 @@
 This is a result contract and candidate-instruction change, not an automatic
 Production configuration upgrade. The implementation starts from `eea2527`.
 
+## Cross-role core response revision (2026-11-25)
+
+The stored `AnalysisResultV3` contract below remains strict and unchanged.
+New candidates may pin `evidence-display-editor-v3` and obtain the explicitly
+typed `core-evidence-v2` response (`X-Evidence-View: core-v2`). This keeps the
+same public v3 fields but changes response reference semantics: an issue may
+refer to an equivalent representative authored by the other role. Its own
+authorship, text and missing condition are preserved, and the representative's
+actual origins are not expanded. Role evidence lists still contain only the
+selected items actually contributed by that role.
+
+An original strictly validated result, a new source-bound plan and an internal
+original-ID-to-representative map are required. This is not a global relaxation
+of stored-origin checks or a permissive historical-dictionary fallback. Old
+display plans, approved configurations and retries retain their earlier
+semantics. The old core-v1 description below applies to those earlier responses.
+Confidence scores or separate certainty grades are not merge criteria. Different
+actions, real preconditions and required source contributions remain separate.
+No new model stage, public JSON field or migration is introduced.
+
+See [the complete contract and validation scope](evidence_display_v3.md).
+
 ## Current v2.22 instruction revision (2026-11-12)
 
 Only the [shared instructions](../agent/prompts.py) change. The absence of a

@@ -215,7 +215,7 @@ def enqueue_analysis(
     db.add(row)
     try:
         if prompt_snapshot is None:
-            from .evidence_display_jobs_v2 import capture_for_purpose, pin_job
+            from .evidence_display_jobs_v3 import capture_for_purpose, pin_job
             try:
                 selected_display = capture_for_purpose(db, crypto, analysis_purpose)
                 if selected_display is not None:

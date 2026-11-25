@@ -64,7 +64,7 @@ def _rows_with_display(db, crypto, query, include_evidence):
                 and isinstance(row[1].result_json, dict) and row[1].result_json.get("schema_version") == "waf-analysis-v3"]
             if modern:
                 from .evidence_display_access import read_many_evidence_relations
-                from .evidence_display_jobs_v2 import get_display_views
+                from .evidence_display_jobs_v3 import get_display_views
                 relations = read_many_evidence_relations(db, crypto, modern)
                 views = get_display_views(db, crypto, modern, relations)
         for row in chunk:
@@ -172,15 +172,16 @@ def collect_rows(db, crypto, run, *, evaluation_id=None, reference_basis="latest
         if names & set(EVIDENCE_COLUMNS):
             evidence_view = None
             if result.get("schema_version") == "waf-analysis-v3":
-                from .core_evidence_v3 import build_core_result
+                from .core_result_response import build_response_result
                 if not isinstance(display_view, dict) or display_view.get("status") in {"pending", "running"}:
                     raise TestExportError("test_export_evidence_pending", 409)
                 try:
-                    result = build_core_result(result, relations=display_view.get("relations"),
-                                               display_view=display_view)["result"]
+                    projected = build_response_result(result, display_view)
+                    selected = projected["result"]
+                    result = selected.model_dump(mode="json", exclude_unset=True) if hasattr(selected, "model_dump") else selected
                 except (ValueError, TypeError, KeyError):
                     raise TestExportError() from None
-                evidence_view = "core-v1"
+                evidence_view = "core-v2" if projected["metadata"].get("version") == "core-evidence-v2" else "core-v1"
             special.update(evidence_columns(result, evidence_view=evidence_view))
         record = {}
         for column in columns:

@@ -38,6 +38,13 @@ def fixture(web="frontend"):
 
 
 class ConfigurationTests(unittest.TestCase):
+    def test_checked_in_compose_workers_use_the_same_current_launcher(self):
+        root = Path(__file__).resolve().parents[1]
+        command = "command: " + json.dumps(list(redeploy.WORKER_COMMAND))
+        for filename in ("docker-compose.yml", "docker-compose.production.yml"):
+            with self.subTest(compose=filename):
+                self.assertEqual((root / filename).read_text(encoding="utf-8").count(command), 2)
+
     def test_web_probe_keeps_production_gateway_admission_closed(self):
         production = {"volumes": [{"target": "/etc/nginx/waf-security"}]}
         self.assertEqual(redeploy.web_probe_command({}), ["wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"])
@@ -101,7 +108,7 @@ class ConfigurationTests(unittest.TestCase):
                 self.assertEqual(model, original)
                 for role in ("worker", "model-tester"):
                     self.assertEqual(target["services"][role]["command"],
-                                     ["python", "-m", "app.worker_entrypoint_v232"])
+                                     ["python", "-m", "app.worker_entrypoint_v233"])
                     self.assertEqual(target["services"][role]["environment"],
                                      original["services"][role]["environment"])
                     self.assertEqual(target["services"][role]["environment"]["WAF_AGENT_MODE"], "moduagent")
@@ -112,7 +119,7 @@ class ConfigurationTests(unittest.TestCase):
                 # silently change the other worker's launch configuration.
                 target["services"]["worker"]["command"].append("--synthetic")
                 self.assertEqual(target["services"]["model-tester"]["command"],
-                                 ["python", "-m", "app.worker_entrypoint_v232"])
+                                 ["python", "-m", "app.worker_entrypoint_v233"])
 
     def test_key_mismatch_between_workers_rejected(self):
         model, rows = fixture()

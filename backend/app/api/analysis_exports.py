@@ -38,7 +38,7 @@ def _download(analysis_id, request, db, principal, format, *, include_appendix=F
     try:
         projected, metadata = to_core_detail(db, request.app.state.crypto, row, include_field_metadata=False)
         detail = projected.model_dump(mode="json")
-        evidence_view = "core-v1"
+        evidence_view = "core-v2" if metadata.get("version") == "core-evidence-v2" else "core-v1"
         # Downloads follow the same readiness and evidence list as GET/POST.
         # A model deadline is handled by the worker, never by a download read.
         if metadata["status"] == "pending":

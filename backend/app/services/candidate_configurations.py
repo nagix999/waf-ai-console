@@ -22,7 +22,7 @@ def resolve_profiles(db, crypto, candidate):
     # The editor uses its own small, separately captured instructions.
     if any(not has_input_budget(profile, policy) for profile in (primary, verifier)):
         raise AnalysisIngestError("agent_context_budget_too_small", 422)
-    from .evidence_display_jobs_v2 import capture_display_profile
+    from .evidence_display_jobs_v3 import capture_display_profile
     return primary, verifier, capture_display_profile(editor) if editor else None
 
 
@@ -36,7 +36,7 @@ def snapshot_from_run(run, crypto, *, include_parser=None):
     prompt = load_analysis_prompt(run, crypto)
     schema = read_schema_snapshot(crypto, run)
     editor = EditorSnapshot.model_validate_json(crypto.decrypt_text(run.evidence_editor_snapshot_ciphertext)) if run.evidence_editor_snapshot_ciphertext else None
-    from .evidence_display_jobs_v2 import load_snapshot, editor_metadata
+    from .evidence_display_jobs_v3 import load_snapshot, editor_metadata
     display_ciphertext = getattr(run, "display_editor_snapshot_ciphertext", None)
     display = load_snapshot(crypto, display_ciphertext) if display_ciphertext else None
     if editor and display:
@@ -121,7 +121,7 @@ def verify_configuration(run, crypto, analysis=None):
             elif queued_explanations["version_id"] is not None:
                 raise ValueError()
             if run.display_editor_snapshot_ciphertext:
-                from .evidence_display_jobs_v2 import load_snapshot
+                from .evidence_display_jobs_v3 import load_snapshot
                 from ..models import EvidenceDisplayJob
                 display_job = analysis.__dict__.get("_display_admission_job")
                 if display_job is None:

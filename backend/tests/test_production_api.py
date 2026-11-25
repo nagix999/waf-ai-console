@@ -134,6 +134,7 @@ def test_openapi_describes_key_result_and_accepted_response(client):
     assert (key["type"], key["in"], key["name"]) == ("apiKey", "header", "X-API-Key")
     post = schema["paths"]["/api/v1/analyses"]["post"]
     assert {"ServiceAPIKey": []} in post["security"]
-    assert post["responses"]["202"]["content"]["application/json"]["schema"]["$ref"].endswith("/AnalysisDetail")
-    result = schema["components"]["schemas"]["AnalysisDetail"]["properties"]["result"]
+    assert post["responses"]["202"]["content"]["application/json"]["schema"]["$ref"].endswith("/CoreAnalysisDetail")
+    result = schema["components"]["schemas"]["CoreAnalysisDetail"]["properties"]["result"]
     assert any(branch.get("$ref", "").endswith("/AnalysisResultV2") for branch in result["anyOf"])
+    assert any(branch.get("$ref", "").endswith("/CoreAnalysisResultV3") for branch in result["anyOf"])

@@ -16,6 +16,7 @@ from ..schemas import (
     AgentStepResponse,
     AccessAuditResponse,
     AnalysisDetail,
+    CoreAnalysisDetail,
     AnalysisInput,
     AnalysisRequest,
     AnalysisListResponse,
@@ -153,8 +154,8 @@ def core_detail_response(db, crypto, row, response, principal, *, result_version
 
 @router.post(
     "/analyses",
-    response_model=AnalysisDetail,
-    responses={202: {"model": AnalysisDetail, "description": "Queued or still processing"}},
+    response_model=CoreAnalysisDetail,
+    responses={202: {"model": CoreAnalysisDetail, "description": "Queued or still processing"}},
 )
 async def create_analysis(
     payload: AnalysisRequest,
@@ -165,7 +166,7 @@ async def create_analysis(
     wait_seconds: int = Query(default=300, ge=0, le=600, description="응답에서 분석과 근거 정리 완료를 함께 기다릴 총 시간(초). 기본 300초, 최대 600초이며 0이면 즉시 반환합니다. 테스트명이나 모델 실행 시간 제한이 아닙니다. 미완료는 202이며 기한이 지나거나 연결이 끊겨도 접수된 작업은 계속 처리합니다."),
     test_run_id: str | None = Query(default=None, max_length=36, description="Test 키 전용. POST /api/v1/test-sessions 응답의 id를 전달합니다. 테스트명·임의 ID는 사용할 수 없으며 생략하면 테스트를 자동 생성합니다."),
     result_version: Literal["v2", "v3"] | None = Query(default=None, description="서비스 키는 기본 v2 호환 응답입니다. v3는 기존 필드 구조의 핵심 근거 응답이며 v2도 같은 핵심 근거만 변환합니다. 전체 원본은 내부에 보존하며 과거 결과는 원래 버전을 유지합니다."),
-) -> AnalysisDetail:
+) -> CoreAnalysisDetail:
     from ..services.initial_assessment import FIELDS
     if set(FIELDS).intersection(payload.model_fields_set) and not (
         principal.kind == "service_api_key" and principal.purpose in {"production", "test"}
@@ -193,8 +194,8 @@ async def create_analysis(
 
 
 @router.post(
-    "/test-analyses", response_model=AnalysisDetail,
-    responses={202: {"model": AnalysisDetail, "description": "Queued or still processing"}},
+    "/test-analyses", response_model=CoreAnalysisDetail,
+    responses={202: {"model": CoreAnalysisDetail, "description": "Queued or still processing"}},
 )
 async def create_test_analysis(
     payload: AnalysisRequest,
@@ -206,7 +207,7 @@ async def create_test_analysis(
     idempotency_key: str = Query(..., min_length=8, max_length=120),
     wait_seconds: int = Query(default=0, ge=0, le=60),
     result_version: Literal["v2", "v3"] | None = Query(default=None),
-) -> AnalysisDetail:
+) -> CoreAnalysisDetail:
     if set(request.query_params) - {"wait_seconds", "name", "idempotency_key", "result_version"}:
         raise HTTPException(422, "unsupported_query_parameter")
     from .test_runs import submit
@@ -268,7 +269,7 @@ def list_analyses(
     )
 
 
-@router.get("/analyses/by-event", response_model=AnalysisDetail)
+@router.get("/analyses/by-event", response_model=CoreAnalysisDetail)
 def get_analysis_by_event(
     request: Request,
     response: Response,
@@ -277,7 +278,7 @@ def get_analysis_by_event(
     event_id: str = Query(..., min_length=1, max_length=255),
     test_run_id: str | None = Query(default=None, min_length=1, max_length=36),
     result_version: Literal["v2", "v3"] = Query(default="v3"),
-) -> AnalysisDetail:
+) -> CoreAnalysisDetail:
     if set(request.query_params) - {"event_id", "test_run_id", "result_version"}:
         raise HTTPException(422, "unsupported_query_parameter")
     source = ServiceAnalysisScope(require_source(principal), principal.purpose)
@@ -290,14 +291,14 @@ def get_analysis_by_event(
     return core_detail_response(db, request.app.state.crypto, row, response, principal, result_version=result_version)
 
 
-@router.get("/analyses/{analysis_id}", response_model=AnalysisDetail)
+@router.get("/analyses/{analysis_id}", response_model=CoreAnalysisDetail)
 def get_analysis(
     analysis_id: str, db: DbSession,
     principal: Annotated[Principal, Depends(require_scope("ingest"))],
     request: Request = None,
     response: Response = None,
     result_version: Literal["v2", "v3"] = Query(default="v3", description="분석 조회는 기본 v3 핵심 근거 응답입니다. v2는 같은 핵심 근거의 기존 호환 형식입니다. 근거 정리 대기 중에는 status=processing, result=null이며 전체 원본과 과거 저장 결과는 보존합니다."),
-) -> AnalysisDetail:
+) -> CoreAnalysisDetail:
     begin_analysis_read_snapshot(db)
     row = fetch_analysis(db, analysis_id, visible_source(principal))
     if row is None:

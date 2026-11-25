@@ -26,7 +26,7 @@ def pdf_document(detail, *, decoding=None, include_appendix=False, theme="light"
     from .analyst_presentation import clean_display_view
     # A full-result plan is source-hash bound to the canonical collection. It
     # cannot be reapplied to a response that has already selected its evidence.
-    display = None if evidence_view == "core-v1" else clean_display_view(result, detail.get("evidence_display"))
+    display = None if evidence_view in {"core-v1", "core-v2"} else clean_display_view(result, detail.get("evidence_display"))
     if display is not None:
         # Validated IDs, enums and counts only. No job snapshots or provider IO.
         clean["evidence_display"] = display
@@ -53,7 +53,7 @@ def pdf_document(detail, *, decoding=None, include_appendix=False, theme="light"
         if isinstance(result.get("verifier"), dict):
             clean["result"]["verifier"]["output"] = pick(result["verifier"].get("output"), "verdict")
     document = {"detail": clean, "decoding": decoding, "includeAppendix": include_appendix, "theme": theme}
-    if evidence_view == "core-v1":
+    if evidence_view in {"core-v1", "core-v2"}:
         document["evidenceView"] = evidence_view
     return document
 

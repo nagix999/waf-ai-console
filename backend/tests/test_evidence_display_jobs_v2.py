@@ -20,7 +20,7 @@ from app.services.prompt_snapshots import approved_production_record
 from test_agent_openai import completion, install_http, openai_profile
 from test_candidate_configurations import candidate, direct
 from test_core_evidence_meaning_groups import two_role_same_excerpt
-from test_evidence_display_jobs import enqueue_job, install_model
+from test_evidence_display_jobs import archived_v2_admission, enqueue_job, install_model
 
 
 pytestmark = pytest.mark.usefixtures("registered_vllm_target")
@@ -178,6 +178,7 @@ def test_existing_v1_production_approval_is_not_recaptured_as_v2(client, event_p
 
 
 @pytest.mark.usefixtures("legacy_v231_admissions")
+@pytest.mark.usefixtures("archived_v2_admission")
 def test_new_old231_candidate_pins_v2_display_separately_and_never_runs_inline_editor(
         client, event_payload, candidate, monkeypatch):
     from app import worker_v231 as worker
@@ -297,6 +298,7 @@ def test_revoked_internal_target_prevents_v2_provider_dispatch(client, event_pay
         assert db.get(Analysis, analysis_id).status == "completed"
 
 
+@pytest.mark.usefixtures("archived_v2_admission")
 def test_stopped_test_never_dispatches_v2_editor(client, event_payload, candidate, monkeypatch):
     accepted = direct(client, {**event_payload, "vendor_score": 2}, candidate)
     assert accepted.status_code == 202, accepted.text

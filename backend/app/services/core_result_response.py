@@ -4,10 +4,22 @@ HTTP/export callers authorize their source and audit before passing an analysis.
 An injected display view permits batched exports without per-analysis queries.
 """
 from ..result_contracts import StoredResultInvalid, legacy_result_projection
+from ..schemas import CoreAnalysisDetail
+from ..core_result_contracts import CoreAnalysisResultV3
 from .analysis import to_detail
 
 UNSET = object()
 VERSION = "core-evidence-v1"
+VERSION_V2 = "core-evidence-v2"
+
+
+def build_response_result(result, display_view):
+    """Route only an explicitly versioned new view to response-only grouping."""
+    if display_view.get("version") == "evidence-display-view-v2":
+        from .core_evidence_v2 import build_core_result
+    else:
+        from .core_evidence_v3 import build_core_result
+    return build_core_result(result, relations=display_view.get("relations"), display_view=display_view)
 
 
 def to_core_detail(db, crypto, analysis, *, result_version="v3", display_view=UNSET, include_field_metadata=True):
@@ -29,6 +41,8 @@ def to_core_detail(db, crypto, analysis, *, result_version="v3", display_view=UN
         display_view = read_display_view(db, crypto, analysis)
     if not isinstance(display_view, dict):
         raise StoredResultInvalid()
+    if display_view.get("version") == "evidence-display-view-v2":
+        metadata["version"] = VERSION_V2
     if display_view.get("status") in {"pending", "running"}:
         # The DB decision is complete, but the response promised by this API
         # is not ready. Do not leak that decision as a ready public result.
@@ -39,21 +53,25 @@ def to_core_detail(db, crypto, analysis, *, result_version="v3", display_view=UN
             "processing_duration_ms": None, "evaluation": evaluation.model_dump(mode="json")})
         metadata["status"] = "pending"
         return detail, metadata
-    from .core_evidence_v3 import build_core_result
-    projected = build_core_result(result, relations=display_view.get("relations"), display_view=display_view)
+    projected = build_response_result(result, display_view)
     selected = projected["result"]
     if result_version == "v2":
-        selected = legacy_result_projection(selected)
+        if isinstance(selected, CoreAnalysisResultV3):
+            from ..core_result_contracts import core_legacy_result_projection
+            selected = core_legacy_result_projection(selected)
+        else:
+            selected = legacy_result_projection(selected)
     # Re-run the public union validator rather than model_copy bypassing it.
-    detail = type(detail).model_validate({**detail.model_dump(mode="json"), "result": selected})
+    detail = CoreAnalysisDetail.model_validate({**detail.model_dump(mode="json"), "result": selected})
     return detail, projected["metadata"]
 
 
 def set_core_headers(response, metadata):
     response.headers["Cache-Control"] = "no-store"
-    if metadata.get("version") != VERSION:
+    version = metadata.get("version")
+    if version not in {VERSION, VERSION_V2}:
         return
-    response.headers["X-Evidence-View"] = "core-v1"
+    response.headers["X-Evidence-View"] = "core-v2" if version == VERSION_V2 else "core-v1"
     response.headers["X-Evidence-Status"] = metadata["status"]
     response.headers["X-Evidence-Original-Count"] = str(metadata["original_count"])
     response.headers["X-Evidence-Returned-Count"] = str(metadata["returned_count"])

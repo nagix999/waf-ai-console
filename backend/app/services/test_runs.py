@@ -97,7 +97,7 @@ def create_run_record(db, crypto, settings, *, name, idempotency_key, request_ha
     temporary = Analysis()
     pin_analysis_prompt(db, crypto, temporary, version_id=candidate.prompt_policy_version_id if candidate else None)
     from .evidence_editor import capture_editor
-    from .evidence_display_jobs_v2 import DisplayEditorSnapshot, capture_for_purpose
+    from .evidence_display_jobs_v3 import DisplayEditorSnapshot, capture_for_purpose
     editor = candidate_editor if candidate is not None else capture_for_purpose(db, crypto, "test") if mode == "moduagent" and not model_test else None
     display = editor if isinstance(editor, DisplayEditorSnapshot) else None
     if display is not None:
@@ -232,7 +232,7 @@ def add_run_items(db, crypto, settings, run, rows, *, ai_visible=None, source_re
                     copy_explanations(run, analysis, crypto=crypto)
                     analysis.internal_only = bool(trusted.get("internal_only", False))
                     if run.display_editor_snapshot_ciphertext and not run.model_test_run_id:
-                        from .evidence_display_jobs_v2 import load_snapshot, pin_job
+                        from .evidence_display_jobs_v3 import load_snapshot, pin_job
                         pin_job(db, crypto, analysis, load_snapshot(crypto, run.display_editor_snapshot_ciphertext))
                 if run.model_test_run_id:
                     analysis.model_test_run_id = run.model_test_run_id
