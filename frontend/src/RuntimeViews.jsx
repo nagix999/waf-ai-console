@@ -10,6 +10,7 @@ import { EvaluationTrend } from "./DashboardView.jsx";
 import { useConsolePreferences } from "./consolePreferences.jsx";
 import { startVisiblePolling } from "./visiblePolling.js";
 import packageInfo from "../package.json";
+import "./settingsWorkspaceDesign.css";
 
 export function RuntimeFilters({ days, onDaysChange, serviceApiKeyId, onKeyChange, updatedAt, onUnauthorized }) {
   const { t, locale } = useConsolePreferences(); const [keys, setKeys] = useState([]); const [failed, setFailed] = useState(false);
@@ -107,7 +108,7 @@ export function RuntimeStatus({ summary, error, onNavigate, onOpen, onFilter, on
   const { t } = useConsolePreferences(); const stats = error ? null : summary?.counts;
   const count = key => stats?.[key]?.toLocaleString() ?? "—";
   const filter = values => summary && onFilter({ ...values, created_from: summary.window.created_from, created_to: summary.window.created_to, ...(filters.serviceApiKeyId ? { service_api_key_id: filters.serviceApiKeyId } : {}) });
-  return <div className="page-stack runtime-page"><RuntimeFilters {...filters} onUnauthorized={onUnauthorized} />
+  return <div className="page-stack runtime-page settings-workspace"><RuntimeFilters {...filters} onUnauthorized={onUnauthorized} />
     {error && <p className="error" role="alert">{t("readError")}</p>}
     <section className="runtime-health-grid" aria-label={t("status")}>{[
       ["API", error ? t("healthError") : summary ? t("apiResponding") : t("loading"), "apiNote", "globe"],
@@ -122,7 +123,7 @@ export function RuntimeStatus({ summary, error, onNavigate, onOpen, onFilter, on
 
 export function RuntimeQuality({ summary, error, onNavigate, onUnauthorized, ...filters }) {
   const { t } = useConsolePreferences();
-  return <div className="page-stack"><section className="panel runtime-pending"><Icon name="test" size={28} /><h2>{t("officialNotLinked")}</h2><p>{t("officialNotLinkedNote")}</p><button type="button" className="secondary" onClick={() => onNavigate("runs")}>{t("viewRuns")}</button></section>
+  return <div className="page-stack settings-workspace"><section className="panel runtime-pending"><Icon name="test" size={28} /><h2>{t("officialNotLinked")}</h2><p>{t("officialNotLinkedNote")}</p><button type="button" className="secondary" onClick={() => onNavigate("runs")}>{t("viewRuns")}</button></section>
     <div><h2>{t("referenceComparison")}</h2><p className="ux-muted">{t("referenceComparisonNote")}</p></div><RuntimeFilters {...filters} onUnauthorized={onUnauthorized} />
     <EvaluationOverview summary={error ? null : summary?.evaluation_summary} loading={!error && !summary} error={error ? t("readError") : ""} scopeLabel={t("referenceComparison")} />
     <EvaluationTrend trend={error ? [] : summary?.trend || []} />

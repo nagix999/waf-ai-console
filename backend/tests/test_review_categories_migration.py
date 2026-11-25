@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from app.config import Settings
 from app.database import build_engine
 from app.models import Analysis, Review
+from migration_test_helpers import run_isolated_migration
 
 HISTORICAL_COLUMNS = (
     "id,analysis_id,source_system,external_review_id,event_id,decision,rating,"
@@ -76,20 +77,36 @@ def test_fresh_and_existing_upgrade_preserves_reviews_and_ciphertext(tmp_path, m
     command.upgrade(config, "head")
     command.upgrade(config, "head")
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0032_signature_explanations"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0033_feedback_provenance"
         check_structure(connection)
         if existing:
             assert connection.execute(text(f"SELECT {HISTORICAL_COLUMNS} FROM reviews ORDER BY id")).all() == before_reviews
             assert connection.execute(text("SELECT DISTINCT feedback_categories FROM reviews")).all() == [("[]",)]
             assert connection.execute(text("SELECT * FROM analyses")).all() == before_analysis
-    command.downgrade(config, "0027_review_feedback")
+    if existing:
+        # The new provenance migration refuses to rebuild populated fresh
+        # parents. Verify that guard before testing this older child migration
+        # in isolation; no analysis parent or its history is reconstructed.
+        with pytest.raises(RuntimeError, match="production_provenance_downgrade_requires_pre_upgrade_backup"):
+            command.downgrade(config, "0027_review_feedback")
+        with engine.begin() as connection:
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0033_feedback_provenance"
+            assert connection.execute(text(f"SELECT {HISTORICAL_COLUMNS} FROM reviews ORDER BY id")).all() == before_reviews
+            assert connection.execute(text("SELECT * FROM analyses")).all() == before_analysis
+            run_isolated_migration(connection, "0028_review_categories", "downgrade")
+    else:
+        command.downgrade(config, "0027_review_feedback")
     with engine.connect() as connection:
         assert "feedback_categories" not in {column["name"] for column in inspect(connection).get_columns("reviews")}
         assert connection.execute(text("PRAGMA foreign_key_check")).all() == []
         if existing:
             assert connection.execute(text(f"SELECT {HISTORICAL_COLUMNS} FROM reviews ORDER BY id")).all() == before_reviews
             assert connection.execute(text("SELECT * FROM analyses")).all() == before_analysis
-    command.upgrade(config, "head")
+    if existing:
+        with engine.begin() as connection:
+            run_isolated_migration(connection, "0028_review_categories", "upgrade")
+    else:
+        command.upgrade(config, "head")
     with engine.connect() as connection:
         check_structure(connection)
     engine.dispose()
@@ -106,12 +123,12 @@ def test_nonempty_categories_prevent_lossy_downgrade(tmp_path, monkeypatch):
             feedback_categories=["insufficient_evidence", "other"], comment="설명 보완 요청",
         ))
         before = connection.execute(text("SELECT * FROM reviews")).all()
-    with pytest.raises(RuntimeError, match="review_categories_history_requires_current_schema"):
+    with pytest.raises(RuntimeError, match="production_provenance_downgrade_requires_pre_upgrade_backup"):
         command.downgrade(config, "0027_review_feedback")
-    with engine.connect() as connection:
-        # The unused parser migration can downgrade, but feedback history must
-        # still stop the next step at its own revision rather than the new head.
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0028_review_categories"
+    with engine.begin() as connection:
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0033_feedback_provenance"
+        with pytest.raises(RuntimeError, match="review_categories_history_requires_current_schema"):
+            run_isolated_migration(connection, "0028_review_categories", "downgrade")
         assert connection.execute(text("SELECT * FROM reviews")).all() == before
         assert connection.execute(text("PRAGMA foreign_key_check")).all() == []
     engine.dispose()

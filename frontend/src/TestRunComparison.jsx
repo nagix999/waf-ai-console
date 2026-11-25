@@ -13,6 +13,7 @@ import Dialog from "./Dialog.jsx";
 import DetailTabs from "./DetailTabs.jsx";
 import { comparisonDelta } from "./testComparison.js";
 import { officialComparisonAllowed } from "./candidateConfiguration.js";
+import "./overviewEvaluationDesign.css";
 
 const emptyRead = () => ({ key: "", data: null, loading: true, error: "" });
 const countText = value => Number.isFinite(value) ? value.toLocaleString() : "미기록";
@@ -98,7 +99,7 @@ export default function TestRunComparison({ candidateId, state: controlledState,
     return watchComparisonRead({ read: async options => { const data = await api.compareTestRuns(candidateId, testComparisonQuery(state), options); if (data?.baseline?.id !== state.baselineId || data?.candidate?.id !== candidateId || !Array.isArray(data?.items)) throw new Error("invalid_comparison"); return data; },
       onUpdate: patch => setComparisonRead({ ...patch, key: comparisonKey }), onUnauthorized: () => unauthorized.current?.() });
   }, [comparisonKey]);
-  const content = <section className="panel test-run-comparison">
+  const content = <section className="panel test-run-comparison oe-comparison">
     {state.open && <><div className="comparison-toolbar"><p className="ux-muted">같은 입력·기대 판정의 저장된 결과만 비교하며 모델을 호출하지 않습니다. 모델·지침 변경만의 효과를 입증하는 실험은 아닙니다.</p><div className="ux-toolbar">{state.baselineId && <button type="button" className="secondary" aria-expanded={showPicker} onClick={() => setPickerOpen(value => !value)}>{showPicker ? "선택 닫기" : "비교 기준 변경"}</button>}<button type="button" className="secondary" disabled={catalog.loading || (state.baselineId && result.loading)} onClick={() => setReload(value => value + 1)}>새로고침</button></div></div>
       {showPicker && <div className="comparison-picker"><p>비교 기준이 될 테스트를 선택하세요.</p><form className="test-run-search" onSubmit={event => { event.preventDefault(); change({ type: "search" }); }}><label>비교 기준 테스트명 검색<input value={state.queryText} placeholder="테스트명으로 찾기" maxLength={120} onChange={event => change({ type: "draft", value: event.target.value })} /></label><button type="submit" className="secondary" disabled={catalog.loading}>검색</button></form>
       {catalog.loading && <p role="status">비교 기준 목록을 조회하는 중…</p>}{catalog.error && <p className="error" role="alert">{catalog.error}</p>}

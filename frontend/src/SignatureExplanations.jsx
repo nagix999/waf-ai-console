@@ -9,6 +9,7 @@ import { Icon } from "./Icon.jsx";
 import { emptySignatureExplanation, filteredSignatureEntries, signatureDraftIssue, signatureEntryIssue,
   signatureExplanationDraft, signatureExplanationLimits, signatureVersionPayload } from "./signatureExplanations.js";
 import "./signatureExplanations.css";
+import { SettingsSectionHeader } from "./SettingsWorkspace.jsx";
 
 const useWords = () => { const { locale } = useConsolePreferences(); return (ko, en) => locale === "en" ? en : ko; };
 const date = value => value ? new Date(value).toLocaleString() : "—";
@@ -52,10 +53,10 @@ export function SignatureExplanationEntries({ entries, editing, disabled = false
   return <><div className="signature-catalog-filters"><label>{w("벤더", "Vendor")}<select value={vendor} onChange={e => onVendorChange(e.target.value)}><option value="">{w("전체 벤더", "All vendors")}</option>{vendors.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
     <label>{w("검색", "Search")}<input type="search" maxLength={500} value={query} onChange={e => onQueryChange(e.target.value)} placeholder={w("시그니처 또는 설명 검색", "Search signatures or explanations")} /></label></div>
     <DataTable label={w("시그니처 설명 목록", "Signature explanations")} data={filtered.slice(offset, offset + limit)} empty={entries.length ? w("조건에 맞는 설명이 없습니다.", "No explanations match these filters.") : w("아직 등록한 설명이 없습니다.", "No explanations have been added.")} columns={[
-      { id: "waf_vendor", header: w("벤더", "Vendor"), width: "16%" },
-      { id: "signature", header: w("시그니처", "Signature"), width: "31%", render: row => <button type="button" disabled={disabled} className="text-button signature-catalog-signature" onClick={() => onOpen(row._index)}>{row.signature}</button> },
-      { id: "signature_explanation", header: w("설명", "Explanation"), render: row => <span className="signature-catalog-preview">{row.signature_explanation}</span> },
-      { id: "open", header: w("상세", "Details"), width: "90px", render: row => <button type="button" disabled={disabled} className="secondary" aria-label={`${row.signature} ${editing ? w("수정", "edit") : w("상세 보기", "details")}`} onClick={() => onOpen(row._index)}>{editing ? w("수정", "Edit") : w("보기", "View")}</button> },
+      { id: "waf_vendor", header: w("벤더", "Vendor"), width: "16%", minWidth: 140 },
+      { id: "signature", header: w("시그니처", "Signature"), width: "31%", minWidth: 200, render: row => <button type="button" disabled={disabled} className="text-button signature-catalog-signature" onClick={() => onOpen(row._index)}>{row.signature}</button> },
+      { id: "signature_explanation", header: w("설명", "Explanation"), minWidth: 280, render: row => <span className="signature-catalog-preview">{row.signature_explanation}</span> },
+      { id: "open", header: w("상세", "Details"), width: "90px", minWidth: 90, render: row => <button type="button" disabled={disabled} className="secondary" aria-label={`${row.signature} ${editing ? w("수정", "edit") : w("상세 보기", "details")}`} onClick={() => onOpen(row._index)}>{editing ? w("수정", "Edit") : w("보기", "View")}</button> },
     ]} /><Pagination total={filtered.length} limit={limit} offset={offset} onOffsetChange={onOffsetChange} onLimitChange={onLimitChange} pageSizes={[10, 25, 50]} disabled={disabled} label={w("설명 목록", "Explanation list")} /></>;
 }
 
@@ -112,11 +113,12 @@ export default function SignatureExplanations() {
   function closeMatch() { matchRequest.current?.abort(); setMatchOpen(false); setMatching(false); setMatchResult(null); setMatchError(false); }
   const entries = draft?.entries || version?.entries || [], versions = catalog?.items || [];
   const draftError = draft ? signatureDraftIssue(draft) : "";
-  return <div className="page-stack signature-catalog">
-    <SignatureExplanationNotice />
+  return <div className="page-stack signature-catalog settings-workspace">
+    <SettingsSectionHeader title={w("시그니처 설명", "Signature explanations")} actions={<><button type="button" className="secondary" disabled={busy || Boolean(draft)} onClick={() => setReload(value => value + 1)}>{w("새로고침", "Refresh")}</button><button type="button" className="primary" disabled={busy || Boolean(draft)} onClick={() => startDraft(null)}>{w("새 설명집", "New collection")}</button></>} />
     <div className="signature-catalog-bar"><label className="signature-catalog-picker">{w("설명집 버전", "Explanation collection")}<select value={selectedId} disabled={loading || busy || Boolean(draft)} onChange={event => { setSelectedId(event.target.value); setNotice(""); }}><option value="">{w("버전 선택", "Select version")}</option>{selectedId && !versions.some(item => item.id === selectedId) && <option value={selectedId}>{version ? versionLabel(version) : w("선택한 버전", "Selected version")}</option>}{versions.map(item => <option key={item.id} value={item.id}>{versionLabel(item)}{item.id === catalog.active_version_id ? w(" · 운영 사용 중", " · Production") : ""}</option>)}</select></label>
-      <div className="signature-catalog-actions"><button type="button" className="text-button" disabled={busy || Boolean(draft)} onClick={() => setReload(value => value + 1)}>{w("새로고침", "Refresh")}</button><button type="button" className="primary" disabled={busy || Boolean(draft)} onClick={() => startDraft(null)}>{w("새 설명집", "New collection")}</button></div></div>
+      <span className="ux-muted">{version ? w(`${version.entry_count ?? version.entries?.length ?? 0}개 설명`, `${version.entry_count ?? version.entries?.length ?? 0} explanations`) : "—"}</span></div>
     {catalog && catalog.total > 25 && <Pagination total={catalog.total} limit={25} offset={catalogOffset} disabled={busy || Boolean(draft)} onOffsetChange={setCatalogOffset} label={w("버전 목록", "Collection versions")} />}
+    <SignatureExplanationNotice />
     {loading && <p role="status">{w("설명집을 불러오는 중입니다…", "Loading collections…")}</p>}
     {notice && <p role="status" className="notice">{w("새 버전을 저장했습니다. 운영 설정은 변경되지 않았습니다.", "New version saved. Production settings are unchanged.")}</p>}
     {error && <p role="alert" className="error">{issueWords[error] ? w(...issueWords[error]) : error === "save" ? w("저장하지 못했습니다. 중복 항목과 입력 제한을 확인한 뒤 다시 시도하세요.", "Could not save. Check duplicate entries and input limits, then retry.") : w("설명집 목록을 불러오지 못했습니다. 다시 조회하세요.", "Could not load collections. Please refresh.")}</p>}

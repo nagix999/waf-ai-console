@@ -41,12 +41,14 @@ test("assignment diff uses saved and proposed roles, including inherited Verifie
   assert.match(render(AssignmentChanges, { catalog, draft: catalog.assignments }), /변경 사항이 없습니다/);
 });
 
-test("API keys show metadata only with ten-row desktop pagination and collapsed secondary actions", () => {
+test("API keys show metadata with ten-row pagination and explicit delete without exposing technical identifiers", () => {
   const { ServiceApiKeysView } = load("./ServiceApiKeys.jsx");
   const items = Array.from({ length: 12 }, (_, n) => ({ id: `private-id-${n}`, name: `Collector ${n}`, source_system: "fixture", purpose: "test", scopes: ["ingest"], api_key: "NEVER_RENDER_THIS", key_prefix: "HIDDEN_PREFIX" }));
   const html = render(ServiceApiKeysView, { state: { catalog: { items }, draft: { scopes: [] } }, controller: {} });
   assert.match(html, /<table/); assert.match(html, /API 키 목록 페이지/); assert.match(html, /Collector 9/); assert.doesNotMatch(html, /Collector 10|NEVER_RENDER_THIS|private-id-|HIDDEN_PREFIX/);
-  assert.match(html, /관리" aria-expanded="false"/); assert.doesNotMatch(html, />삭제<\/button>/);
+  assert.match(html, /관리" aria-expanded="false"/); assert.match(html, />삭제<\/button>/);
+  assert.match(html, /<th scope="col">용도<\/th>/); assert.match(html, /<th scope="col">권한<\/th>/); assert.match(html, /<th scope="col">발급일<\/th>/);
+  assert.doesNotMatch(html, /<dialog/);
 });
 
 test("overflow trigger has a visible affordance and no mounted destructive action until opened", () => {

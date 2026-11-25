@@ -176,7 +176,7 @@ test("actual list exposes basic comparison and quality overview while retaining 
   assert.match(html, /aria-label="적용된 검색 조건"/);
   assert.match(html, /기대 판정 출처 \/ 버전: synthetic-reference 조건 해제/);
   assert.match(html, /aria-controls="analysis-label-attachment"/);
-  assert.match(html, /<section class="panel evaluation-overview" aria-label="평가 지표">/);
+  assert.match(html, /<section class="panel evaluation-overview[^\"]*" aria-label="평가 지표">/);
   assert.match(html, /참고 판정 표본 기준 · 운영 전체 정확도는 아닙니다/);
   assert.doesNotMatch(html, /aria-label="평가 범위 설명"/);
   assert.match(html, /aria-expanded="false" aria-controls="advanced-filters"/);

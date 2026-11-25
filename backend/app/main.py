@@ -11,6 +11,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from . import __version__
 from .api.analyses import router as analyses_router
 from .api.event_reviews import router as event_reviews_router
+from .api.feedback import router as feedback_router
 from .api.analysis_exports import router as analysis_exports_router
 from .api.auth import router as auth_router
 from .api.agent_settings import router as agent_settings_router
@@ -113,6 +114,7 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
     app.include_router(agent_settings_router, prefix="/api/v1")
     app.include_router(analyses_router, prefix="/api/v1", responses=ANALYSIS_ERROR_RESPONSES)
     app.include_router(event_reviews_router, prefix="/api/v1", responses=ANALYSIS_ERROR_RESPONSES)
+    app.include_router(feedback_router, prefix="/api/v1")
     app.include_router(analysis_exports_router, prefix="/api/v1")
     app.include_router(dashboard_router, prefix="/api/v1", responses=ANALYSIS_ERROR_RESPONSES)
     app.include_router(model_profiles_router, prefix="/api/v1")

@@ -2,7 +2,7 @@ import { formatDuration } from "./analysisView.js";
 import { recordedProfiles } from "./inferenceDetail.js";
 import { useConsolePreferences } from "./consolePreferences.jsx";
 
-export default function InferenceSummary({ detail, runs, children, onMetadata, title }) {
+export default function InferenceSummary({ detail, runs, children, onMetadata, title, compact = false }) {
   const { t } = useConsolePreferences();
   const profiles = recordedProfiles(detail, runs);
   const missing = t("detail.missing");
@@ -18,12 +18,13 @@ export default function InferenceSummary({ detail, runs, children, onMetadata, t
     [t("detail.queue"), formatDuration(detail.queue_wait_ms, t("unmeasured"))],
     [t("detail.processingTime"), formatDuration(detail.processing_duration_ms, t("unmeasured"))],
     [t("detail.total"), formatDuration(detail.total_elapsed_ms, t("unmeasured"))],
-  ];
-  return <div className={`inference-overview${children ? "" : " execution-only"}`}>
+  ].filter((_, index) => !compact || [2, 3, 4, 5, 6].includes(index));
+  return <div className={`inference-overview${children ? "" : " execution-only"}${compact ? " is-compact" : ""}`}>
     <section className="panel inference-execution">
       <div className="panel-head-inline"><h2>{title || t("detail.execution")}</h2><button type="button" className="text-button" onClick={onMetadata}>{t("detail.metadata")}</button></div>
-      <dl className="inference-facts">{cells.map(([label, value], index) => <div key={label}><dt>{label}</dt><dd>{index === 1 ? <span className={`runtime-status-text outcome-${detail.status}`}><i />{value}</span> : value}</dd></div>)}</dl>
+      <dl className="inference-facts">{cells.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{label === t("detail.status") ? <span className={`runtime-status-text outcome-${detail.status}`}><i />{value}</span> : value}</dd></div>)}</dl>
       <p className="ux-muted inference-record-note">{t("detail.recordNote")}</p>
+      {!compact && <p className="ux-muted inference-record-note">{t("detail.timingNote")}</p>}
     </section>
     {children && <section className="panel inference-result-snapshot">{children}</section>}
   </div>;

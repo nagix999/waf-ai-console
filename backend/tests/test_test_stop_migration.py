@@ -8,6 +8,7 @@ from sqlalchemy import inspect, text
 
 from app.config import Settings
 from app.database import build_engine
+from migration_test_helpers import run_isolated_migration
 
 
 @pytest.mark.parametrize("existing", [False, True])
@@ -32,24 +33,36 @@ def test_stop_migration_additive_and_reversible_without_history(tmp_path, monkey
     command.upgrade(config, "head")
     command.upgrade(config, "head")
     with engine.connect() as db:
-        assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0032_signature_explanations"
+        assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0033_feedback_provenance"
         fields = {row["name"]: row for row in inspect(db).get_columns("test_runs")}
         assert fields["stopped_at"]["nullable"] and fields["stopped_by"]["nullable"]
         assert db.execute(text("PRAGMA foreign_key_check")).all() == []
         if existing:
             assert db.execute(text("SELECT * FROM analyses")).all() == before
-    command.downgrade(config, "0025_analysis_read_index")
+    if existing:
+        with pytest.raises(RuntimeError, match="production_provenance_downgrade_requires_pre_upgrade_backup"):
+            command.downgrade(config, "0025_analysis_read_index")
+        with engine.begin() as db:
+            assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0033_feedback_provenance"
+            assert db.execute(text("SELECT * FROM analyses")).all() == before
+            run_isolated_migration(db, "0026_test_run_stop", "downgrade")
+    else:
+        command.downgrade(config, "0025_analysis_read_index")
     with engine.connect() as db:
         assert "stopped_at" not in {row["name"] for row in inspect(db).get_columns("test_runs")}
         if existing:
             assert db.execute(text("SELECT * FROM analyses")).all() == before
-    command.upgrade(config, "head")
+    if existing:
+        with engine.begin() as db:
+            run_isolated_migration(db, "0026_test_run_stop", "upgrade")
+    else:
+        command.upgrade(config, "head")
     if existing:
         with engine.begin() as db:
             db.execute(text("UPDATE analyses SET status='canceled' WHERE id='fixture'"))
-        with pytest.raises(RuntimeError, match="test_stop_history_requires_current_schema"):
-            command.downgrade(config, "0025_analysis_read_index")
-        with engine.connect() as db:
-            assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0026_test_run_stop"
+        with engine.begin() as db:
+            with pytest.raises(RuntimeError, match="test_stop_history_requires_current_schema"):
+                run_isolated_migration(db, "0026_test_run_stop", "downgrade")
+            assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0033_feedback_provenance"
             assert db.scalar(text("SELECT status FROM analyses WHERE id='fixture'")) == "canceled"
     engine.dispose()

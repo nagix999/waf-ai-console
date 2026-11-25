@@ -1,6 +1,7 @@
 import NavigationAction from "./NavigationAction.jsx";
 import { useR5Words } from "./R5Evaluation.jsx";
 import TestDefaults from "./R5TestDefaults.jsx";
+import "./settingsWorkspaceDesign.css";
 
 export default function SetupProgress({ setup, onNavigate, onPromotion }) {
   const w = useR5Words(); if (!setup) return null;

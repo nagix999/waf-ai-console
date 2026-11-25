@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useR5Words, verdictText } from "./R5Evaluation.jsx";
 import { useConsolePreferences } from "./consolePreferences.jsx";
 import { analysisNotices, analystFieldLabel, analystGuidance, analystItems, analystSummary, analystText, finalValue, hasTuningContent } from "./analystView.js";
@@ -11,21 +11,41 @@ import { evidenceDisplayView } from "./evidenceDisplayPlan.js";
 import { analysisEvidenceMeta, isCoreEvidence, receivedEvidence } from "./analysisEvidenceMeta.js";
 import { evidenceSourceReferences, sharedSourceText } from "./evidenceSourceSharing.js";
 import { disagreementNotice, evidenceSections, legacySignatureNotice, severityMeaning, signatureSummary, verifierDisagreed, wafObservation } from "./decisionSemantics.js";
-import { formatDate, formatDuration, executionDuration } from "./analysisView.js";
+import { formatDate, formatDuration } from "./analysisView.js";
 import { isMockAnalysis } from "./labelEvaluation.js";
 import { CompactEvaluationDetail } from "./ReferenceLabels.jsx";
 import AnalysisSelectionActions from "./AnalysisSelection.jsx";
 import NavigationAction from "./NavigationAction.jsx";
+import { Icon } from "./Icon.jsx";
 import RawEventView from "./RawEventView.jsx";
 import AgentHistory from "./AgentHistory.jsx";
 import InferenceSummary from "./InferenceSummary.jsx";
-import TextInspector from "./TextInspector.jsx";
-import { stepLabel } from "./inspection.js";
+import DataTable from "./DataTable.jsx";
+import DecodingView from "./DecodingView.jsx";
+import ExactSourceText, { revealInPane } from "./ExactSourceText.jsx";
+import { inputFieldRows, resolveEvidenceInput, splitHighlightedText } from "./evidenceInputSource.js";
+import useWorkspaceHeight from "./useWorkspaceHeight.js";
 import "./analysisDecision.css";
+import "./testAnalysisWorkspace.css";
 
 function Direction({ value, label }) {
   const w = useR5Words();
   return <span className={`decision-direction direction-${value}`}>{label ? w(...label) : ({ attack_request: w("공격 요청 근거", "Attack request evidence"), normal_request: w("정상 요청 근거", "Normal request evidence"), context: w("참고 내용", "Context"), unclassified: w("구분 미기록", "Unclassified") })[value]}</span>;
+}
+
+function evidenceSelection(item, target, onViewInput, selectOnCard) {
+  if (!selectOnCard) return {};
+  const selected = target && item.field === target.field && item.excerpt === target.excerpt
+    && (item.evidence_id && target.evidence_id ? item.evidence_id === target.evidence_id : item.number === target.number);
+  return {
+    tabIndex: 0, "data-evidence-selected": selected ? "true" : undefined,
+    onClick: event => {
+      if (!event.target.closest("button,a,input,select,textarea,summary,details") && !window.getSelection()?.toString()) onViewInput?.(item);
+    },
+    onKeyDown: event => {
+      if (event.target === event.currentTarget && ["Enter", " "].includes(event.key)) { event.preventDefault(); onViewInput?.(item); }
+    },
+  };
 }
 
 export function DecisionHero({ detail }) {
@@ -34,20 +54,32 @@ export function DecisionHero({ detail }) {
   const severity = finished && detail.result?.threat_analysis?.severity;
   const label = finished ? verdictText(verdict, w) : ({ canceled: w("중지됨", "Stopped"), failed: w("실행 실패", "Execution failed"), pending: w("분석 대기", "Queued"), processing: w("분석 중", "Processing") })[detail.status] || w("상태 미확인", "Unknown status");
   const omitted = finalValue(detail, "input_truncated");
-  return <>
-    <header className="decision-page-heading"><h1>{detail.event_name || w("분석 상세", "Analysis detail")}</h1><p>{formatDate(detail.created_at)}{(detail.src_ip || detail.dest_ip) && <span>{detail.src_ip || "—"} → {detail.dest_ip || "—"}</span>}</p>{detail.signature && <p>{w("WAF 탐지", "WAF detection")}: {detail.signature}</p>}</header>
-    <section className={`decision-hero decision-hero-${verdict}`} aria-label={w("판정 요약", "Decision summary")}>
-      <div className="decision-hero-main"><div><div className="decision-verdict-line"><strong className={`decision-verdict verdict-${verdict}`}>{label}</strong>{severity && <span className={`severity severity-${String(severity).toLowerCase()}`}>{severity === "NONE" ? w("해당 없음", "Not applicable") : severity === "UNKNOWN" ? w("미확정", "Undetermined") : severity}</span>}{isMockAnalysis(detail) && <span className="status">{w("모의 분석", "Simulated analysis")}</span>}</div>{severity && <small className="muted">{w(...severityMeaning)}</small>}<p className="decision-hero-summary">{detail.status === "canceled" ? w("테스트가 중지되어 이 문항의 판정을 완료하지 않았습니다. 실패나 오답으로 집계하지 않습니다.", "This case stopped before a final decision. It is not counted as a failure or an incorrect verdict.") : analystSummary(detail)}</p></div>
-        <dl className="decision-hero-facts">{[
+  return <section className={`decision-hero decision-hero-${verdict}`} aria-label={w("판정 요약", "Decision summary")}>
+      <div className="decision-hero-kicker"><span className={`decision-purpose purpose-${detail.analysis_purpose || "legacy"}`}>{detail.analysis_purpose === "production" ? "Production" : detail.analysis_purpose === "test" ? "Test" : w("기존 미분류", "Legacy / unknown")}</span>{detail.company_name && <span>{detail.company_name}</span>}{isMockAnalysis(detail) && <span className="status">{w("모의 분석", "Simulated analysis")}</span>}</div>
+      <div className="decision-verdict-line"><strong className={`decision-verdict verdict-${verdict}`}>{label}</strong>{severity && <span className={`severity severity-${String(severity).toLowerCase()}`} title={w(...severityMeaning)}>{severity === "NONE" ? w("해당 없음", "Not applicable") : severity === "UNKNOWN" ? w("미확정", "Undetermined") : severity}</span>}</div>
+      <h1>{detail.event_name || detail.signature || w("분석 상세", "Analysis detail")}</h1>
+      <p className="decision-hero-summary">{detail.status === "canceled" ? w("테스트가 중지되어 이 문항의 판정을 완료하지 않았습니다. 실패나 오답으로 집계하지 않습니다.", "This case stopped before a final decision. It is not counted as a failure or an incorrect verdict.") : analystSummary(detail)}</p>
+      <dl className="decision-hero-timing">{[
+        [w("접수부터 판정까지", "Admission to decision"), detail.total_elapsed_ms], [w("초기 대기", "Initial queue wait"), detail.queue_wait_ms], [w("분석 처리", "Analysis processing"), detail.processing_duration_ms],
+      ].map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{formatDuration(value, w("미측정", "Not measured"))}</dd></div>)}</dl>
+      <details className="decision-hero-observations"><summary>{w("이벤트 정보와 시간 기준", "Event details and timing boundaries")}</summary><dl className="decision-hero-facts">{[
           [w("WAF 조치", "WAF action"), detail.waf_action === "D" ? w("차단", "Blocked") : detail.waf_action === "A" ? w("허용", "Allowed") : w("미기록", "Not recorded")],
-          [w("전체 소요 시간", "Total elapsed"), formatDuration(detail.total_elapsed_ms, w("미측정", "Not measured"))],
           [w("입력 생략", "Input omitted"), omitted === true ? w("있음", "Yes") : omitted === false ? w("없음", "No") : w("미기록", "Not recorded")],
-          [w("용도", "Purpose"), detail.analysis_purpose === "production" ? "Production" : detail.analysis_purpose === "test" ? "Test" : w("기존 미분류", "Legacy / unknown")],
+          [w("WAF 탐지", "WAF detection"), detail.signature || w("미기록", "Not recorded")],
+          [w("접수 시각", "Received at"), formatDate(detail.created_at)],
+          [w("출발지 IP", "Source IP"), detail.src_ip || w("미기록", "Not recorded")],
+          [w("목적지 IP", "Destination IP"), detail.dest_ip || w("미기록", "Not recorded")],
         ].map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl>
-      </div>
+      <p className="decision-timing-boundary muted">{w("접수부터 판정까지는 초기 대기를 포함합니다. 분석 처리는 초기 대기를 제외하며 내부 재시도와 복구 시간을 포함합니다.", "Admission to decision includes the initial queue wait. Analysis processing excludes that wait and includes internal retries and recovery.")}</p>
+      {severity && <p className="decision-severity-note muted">{w(...severityMeaning)}</p>}</details>
       {analysisNotices(detail).map(notice => <p className="decision-hero-notice" key={notice}>{notice}</p>)}
-    </section>
-  </>;
+    </section>;
+}
+
+function EvidenceOrigin({ roles = [], field }) {
+  const w = useR5Words();
+  if (!roles.length && !field) return null;
+  return <details className="decision-evidence-origin"><summary>{w("작성 출처", "Authorship")}</summary>{!!roles.length && <p>{roles.map(role => role === "primary" ? w("1차 분석", "Primary analysis") : w("추가 검증", "Additional verification")).join(" / ")}</p>}{field && <p><code>{field}</code></p>}</details>;
 }
 
 function DisplayStatus({ display, view, loading, stopped, error, onRetry }) {
@@ -75,7 +107,7 @@ function CoreEvidenceStatus({ detail }) {
       : w(`핵심 근거 ${count}개`, `${count} core evidence items`)}</span></div>;
 }
 
-function CoreEvidenceCards({ detail, onViewInput, onExecution }) {
+function CoreEvidenceCards({ detail, onViewInput, onExecution, selectedTarget, selectOnCard }) {
   const w = useR5Words(), items = receivedEvidence(detail.result), id = useId(), excerpts = useRef(new Map());
   function jumpToSource(index) {
     const target = excerpts.current.get(index);
@@ -84,9 +116,9 @@ function CoreEvidenceCards({ detail, onViewInput, onExecution }) {
   }
   return <section className="panel decision-evidence-panel decision-core-evidence-panel"><div className="panel-head-inline"><h2>{w("보안 분석 근거", "Security analysis evidence")}</h2>{onViewInput && <NavigationAction onClick={() => onViewInput(null)}>{w("근거와 원문", "Evidence & input")}</NavigationAction>}</div>
     <CoreEvidenceStatus detail={detail} />
-    <div className="decision-display-groups">{evidenceSourceReferences(items).map(({ item, index, sourceIndex }) => <article className={`decision-evidence-row decision-core-evidence evidence-${item.supports}`} key={`${item.evidence_id}:${index}`}>
+    <div className="decision-display-groups">{evidenceSourceReferences(items).map(({ item, index, sourceIndex }) => <article className={`decision-evidence-row decision-core-evidence evidence-${item.supports}`} key={`${item.evidence_id}:${index}`} {...evidenceSelection(item, selectedTarget, onViewInput, selectOnCard)}>
       <div className="decision-evidence-label"><strong>{w("근거", "Evidence")} {item.number}</strong><Direction value={item.supports} />
-        {!!item.roles.length && <span className="decision-evidence-roles">{item.roles.map(role => role === "primary" ? w("1차 분석", "Primary analysis") : w("추가 검증", "Additional verification")).join(" / ")}</span>}<span>{analystFieldLabel(item.field)}</span>
+        <span>{analystFieldLabel(item.field)}</span><EvidenceOrigin roles={item.roles} field={item.field} />
       </div><div className="decision-evidence-content"><p className="decision-linked-interpretation">{item.interpretation_ko}</p>{sourceIndex === index
         ? <code dir="ltr" id={`${id}-source-${index}`} tabIndex={0} aria-label={w(`근거 ${item.number} 원문 발췌`, `Evidence ${item.number} source excerpt`)} ref={node => { if (node) excerpts.current.set(index, node); else excerpts.current.delete(index); }}>{item.excerpt}</code>
         : <button type="button" className="text-button decision-shared-source" aria-controls={`${id}-source-${sourceIndex}`} onClick={() => jumpToSource(sourceIndex)}>{w(`같은 원문 보기 (근거 ${items[sourceIndex].number})`, `View the source shared with evidence ${items[sourceIndex].number}`)}</button>}
@@ -112,7 +144,7 @@ export function EvidenceDisplaySummary({ detail, loading = false, stopped = fals
   </section>;
 }
 
-function CompactEvidenceCards({ detail, onViewInput, relations, relationsError, relationsLoading, displayPollingStopped, onRetryRelations }) {
+function CompactEvidenceCards({ detail, onViewInput, relations, relationsError, relationsLoading, displayPollingStopped, onRetryRelations, selectedTarget, selectOnCard }) {
   const w = useR5Words(), id = useId(), [additionalOpen, setAdditionalOpen] = useState(false), [sourcesOpen, setSourcesOpen] = useState(new Set());
   const display = detail.evidence_display, view = evidenceDisplayView(detail.result, display, relations ?? display?.relations ?? null);
   useEffect(() => { setAdditionalOpen(false); setSourcesOpen(new Set()); }, [detail.id, view?.plan.source_hash]);
@@ -121,9 +153,9 @@ function CompactEvidenceCards({ detail, onViewInput, relations, relationsError, 
   const rows = groups => <div className="decision-display-groups">{groups.map(item => {
     const extraSources = [...item.member_sources.filter(source => source.evidence_id !== item.representative_id), ...item.related_sources];
     const opened = sourcesOpen.has(item.group_id), sourceId = `${id}-${item.group_id}-sources`;
-    return <article className={`decision-evidence-row decision-display-group evidence-${item.supports}${item.relation ? " has-linked-sources" : ""}`} key={item.group_id}>
+    return <article className={`decision-evidence-row decision-display-group evidence-${item.supports}${item.relation ? " has-linked-sources" : ""}`} key={item.group_id} {...evidenceSelection(item, selectedTarget, onViewInput, selectOnCard)}>
       <div className="decision-evidence-label"><strong>{w("근거", "Evidence")} {item.number}</strong><Direction value={item.supports} />
-        {!!item.roles.length && <span className="decision-evidence-roles">{item.roles.map(role => role === "primary" ? w("1차 분석", "Primary analysis") : w("추가 검증", "Additional verification")).join(" / ")}</span>}
+        <EvidenceOrigin roles={item.roles} field={item.field} />
         <span>{analystFieldLabel(item.field)}</span>{item.visibility_reasons.includes("counter_evidence") && <small className="decision-protected-reason">{w("반대 근거", "Counter-evidence")}</small>}
         {item.visibility_reasons.includes("decision_issue") && <small className="decision-protected-reason">{w("확인 조건에 연결됨", "Linked to a decision condition")}</small>}
       </div>
@@ -147,16 +179,16 @@ function CompactEvidenceCards({ detail, onViewInput, relations, relationsError, 
   </section>;
 }
 
-export function EvidenceCards({ detail, onViewInput, onExecution, relations, relationsError = false, relationsLoading = false, displayPollingStopped = false, onRetryRelations }) {
+export function EvidenceCards({ detail, onViewInput, onExecution, relations, relationsError = false, relationsLoading = false, displayPollingStopped = false, onRetryRelations, selectedTarget, selectOnCard = false }) {
   const w = useR5Words();
-  if (isCoreEvidence(detail.result)) return <CoreEvidenceCards {...{ detail, onViewInput, onExecution }} />;
-  if (isResultV3(detail.result)) return <CompactEvidenceCards {...{ detail, onViewInput, relations, relationsError, relationsLoading, displayPollingStopped, onRetryRelations }} />;
+  if (isCoreEvidence(detail.result)) return <CoreEvidenceCards {...{ detail, onViewInput, onExecution, selectedTarget, selectOnCard }} />;
+  if (isResultV3(detail.result)) return <CompactEvidenceCards {...{ detail, onViewInput, relations, relationsError, relationsLoading, displayPollingStopped, onRetryRelations, selectedTarget, selectOnCard }} />;
   const relationView = evidenceRelationView(detail.result, relations), items = relationView.rows || relationView.items;
   const classified = Boolean(assessmentView(detail.result));
   const groups = evidenceSections(finalValue(detail, "verdict")).map(group => ({ ...group, items: items.filter(item => item.supports === group.side) })).filter(group => group.items.length);
-  const rows = group => <div className="decision-evidence-rows">{group.items.map(item => <article className={`decision-evidence-row${item.relation ? " has-linked-sources" : ""}`} key={`${item.number}:${item.roles?.join(",") || "all"}`}>
-    <div className="decision-evidence-label"><strong>{w("근거", "Evidence")} {item.number}</strong>{!!item.roles?.length && <span className="decision-evidence-roles">{item.roles.map(role => role === "primary" ? w("1차 분석", "Primary analysis") : w("추가 검증", "Additional verification")).join(" / ")}</span>}<span>{analystFieldLabel(item.field)}</span><small>{item.field}</small></div>
-    <div className="decision-evidence-content">{item.relation && <p className="decision-linked-interpretation">{analystText(item.interpretation_ko)}</p>}<span className="sr-only">{w("원문 발췌", "Source excerpt")}</span><code dir="ltr">{item.excerpt}</code>{item.relation && onViewInput && <button type="button" className="text-button decision-representative-source" onClick={() => onViewInput(item)}>{w(`근거 ${item.number} 원문 보기`, `View evidence ${item.number} source`)} →</button>}{!item.relation && <p>{analystText(item.interpretation_ko)}</p>}{!!item.related_numbers.length && <small className="muted">{w("같은 로그 발췌", "Same excerpt")}: {item.related_numbers.join(", ")}</small>}
+  const rows = group => <div className="decision-evidence-rows">{group.items.map(item => <article className={`decision-evidence-row${item.relation ? " has-linked-sources" : ""}`} key={`${item.number}:${item.roles?.join(",") || "all"}`} {...evidenceSelection(item, selectedTarget, onViewInput, selectOnCard)}>
+    <div className="decision-evidence-label"><strong>{w("근거", "Evidence")} {item.number}</strong><span>{analystFieldLabel(item.field)}</span><EvidenceOrigin roles={item.roles} field={item.field} /></div>
+    <div className="decision-evidence-content"><p className="decision-linked-interpretation">{analystText(item.interpretation_ko)}</p><span className="sr-only">{w("원문 발췌", "Source excerpt")}</span><code dir="ltr">{item.excerpt}</code>{item.relation && onViewInput && <button type="button" className="text-button decision-representative-source" onClick={() => onViewInput(item)}>{w(`근거 ${item.number} 원문 보기`, `View evidence ${item.number} source`)} →</button>}{!!item.related_numbers.length && <small className="muted">{w("같은 로그 발췌", "Same excerpt")}: {item.related_numbers.join(", ")}</small>}
       {!!item.related_sources?.length && <div className="decision-linked-sources"><h4>{w("함께 본 원문", "Related sources")}</h4>{item.related_sources.map(source => <section className="decision-linked-source" key={source.evidence_id} aria-label={`${w("관련 근거", "Related evidence")} ${source.number}`}><div className="decision-linked-source-heading"><strong>{w("근거", "Evidence")} {source.number}</strong><Direction value={source.supports} /><span>{analystFieldLabel(source.field)}</span></div><code dir="ltr">{source.excerpt}</code>{onViewInput && <button type="button" className="text-button evidence-input-link" onClick={() => onViewInput(source)}>{w("원문과 개별 해석 보기", "View source and interpretation")} →</button>}</section>)}</div>}
     </div>
     {!item.relation && onViewInput && item.field && item.excerpt && <button type="button" className="text-button evidence-input-link" onClick={() => onViewInput(item)}>{w("원문에서 보기", "View source")} →</button>}
@@ -240,7 +272,7 @@ export function PolicySuggestion({ detail }) {
   return <section className="panel decision-policy"><details><summary>{w("정책 검토 제안", "Policy review suggestion")}{!tuning.recommended && <small>{w("주의사항", "Cautions")}</small>}</summary><dl className="decision-definitions">{[[w("범위", "Scope"), tuning.scope], [w("제안", "Suggestion"), tuning.proposal_ko], [w("변경 시 주의사항", "Risks"), tuning.risk_ko], [w("적용 전 확인", "Before applying"), tuning.validation_ko]].filter(([, value]) => analystText(value, "")).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{analystText(value)}</dd></div>)}</dl><p className="muted">{w("WAF 설정은 자동 변경하지 않습니다.", "WAF settings are never changed automatically.")}</p></details></section>;
 }
 
-export function DecisionContext({ detail, history, historyError, onSaved, onExecution }) {
+export function DecisionContext({ detail, history, historyError, onSaved, onExecution, onFeedback }) {
   const w = useR5Words(), initial = detail.initial_assessment, result = detail.result;
   return <aside className="decision-sidebar">
     <section className="panel decision-context"><h2>{w("판정 맥락", "Decision context")}</h2>
@@ -248,6 +280,7 @@ export function DecisionContext({ detail, history, historyError, onSaved, onExec
       <div className="decision-reference"><h3>{w("참고 판정", "Reference Verdict")}</h3><CompactEvaluationDetail detail={detail} history={history} historyError={historyError} />{(!detail.evaluation || detail.evaluation.outcome === "unlabeled") && !historyError && <p className="muted">{w("등록된 참고 판정이 없습니다.", "No Reference Verdict is attached.")}</p>}<AnalysisSelectionActions key={detail.id} allowDataset={detail.analysis_purpose !== "test"} ids={[detail.id]} single compact onSaved={onSaved} /></div>
     </section>
     <section className="panel decision-process"><h2>{w("판정 과정 요약", "Decision process")}</h2><dl className="decision-context-rows"><div><dt>Primary</dt><dd>{verdictText(result?.primary?.verdict, w)}</dd></div><div><dt>Verifier</dt><dd>{result?.verifier?.executed === false ? w("실행하지 않음", "Not run") : result?.verifier?.error || result?.verifier?.failure_id ? w("실행 미완료", "Incomplete") : verdictText(result?.verifier?.output?.verdict, w)}</dd></div><div><dt>{w("최종 판정", "Final decision")}</dt><dd>{detail.status === "completed" ? verdictText(finalValue(detail, "verdict"), w) : w("미완료", "Not completed")}</dd></div></dl><NavigationAction onClick={onExecution}>{w("전체 실행 상세", "Execution details")}</NavigationAction></section>
+    {onFeedback && <section className="panel decision-feedback"><h2>{w("분석 피드백", "Analysis feedback")}</h2><p className="muted">{w("이 분석에 API로 등록된 의견을 확인합니다.", "View feedback registered through the API for this analysis.")}</p><NavigationAction onClick={onFeedback}>{w("이 분석의 피드백", "Feedback for this analysis")}</NavigationAction></section>}
     {detail.status === "completed" && <PolicySuggestion detail={detail} />}
   </aside>;
 }
@@ -270,19 +303,56 @@ export function EvidenceWorkspace({ detail, event, target, onSelect, error, onRe
   </section>;
 }
 
-export function ExecutionView({ detail, runs, runsError, runsLoading, onRetry, onMetadata, initialJson = false, active, displayLoading, displayError, displayPollingStopped, onRetryDisplay }) {
-  const { t } = useConsolePreferences(), w = useR5Words();
-  const [expanded, setExpanded] = useState(false), [jsonOpen, setJsonOpen] = useState(initialJson);
-  useEffect(() => { if (initialJson) setJsonOpen(true); }, [initialJson]);
-  const steps = runs?.[0]?.steps || [];
-  return <div className="decision-execution">
-    <InferenceSummary detail={detail} runs={runs} onMetadata={onMetadata} title={w("실행 설정·시간", "Configuration & timing")} />
-    <EvidenceDisplaySummary detail={detail} loading={displayLoading} error={displayError} stopped={displayPollingStopped} onRetry={onRetryDisplay} />
-    <section className="panel"><div className="panel-head-inline"><h2>{w("실행 요약", "Execution summary")}</h2>{runs !== null && <button type="button" className="secondary" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? w("전체 단계 접기", "Hide full trace") : w("전체 단계 보기", "View full trace")}</button>}</div><p className="muted">{t("detail.audit")}</p>
-      {runsError && <div className="error" role="alert"><p>{t("detail.agentError")}</p><button type="button" className="secondary" disabled={runsLoading} onClick={onRetry}>{t("retry")}</button></div>}
-      {runs === null ? !runsError && <p role="status">{t("loading")}</p> : !runs.length ? <p className="muted">{w("기록된 실행 이력이 없습니다.", "No execution history recorded.")}</p> : <><p className="muted">{w("최근 실행", "Latest execution")} · {executionDuration(runs[0])}{runs.length > 1 && ` · ${w("전체 실행", "Recorded runs")} ${runs.length}`}</p><ol className="decision-stage-summary">{steps.map((step, index) => <li key={step.id || index}><span>{stepLabel(step.step_type || step.name, step.metadata)}</span><strong>{step.metadata?.error_code === "test_run_stopped" ? w("테스트 중지", "Test stopped") : ({ completed: w("완료", "Completed"), passed: w("통과", "Passed"), failed: w("실패", "Failed"), skipped: w("건너뜀", "Skipped"), running: w("실행 중", "Running"), pending: w("대기", "Pending") })[step.status] || w("미기록", "Not recorded")}</strong><span>{executionDuration(step)}</span></li>)}</ol></>}
-      {expanded && runs && <AgentHistory runs={runs} active={active} />}
+export function TestAnalysisWorkspace({ detail, event, target, onSelect, error, onRetry, active = true, relations,
+  relationsError, relationsLoading, displayPollingStopped, onRetryRelations, history, historyError, onSaved, onExecution, onFeedback, children }) {
+  const w = useR5Words(), workspace = useRef(null), selectedField = useRef(null);
+  const [allFields, setAllFields] = useState(false);
+  const compactFields = ["company_name", "src_ip", "dest_ip", "waf_vendor", "waf_action", "signature"];
+  const location = useMemo(() => resolveEvidenceInput(event, detail, target), [event, detail, target]);
+  const fields = useMemo(() => inputFieldRows(detail, event), [detail, event]);
+  const visibleFields = allFields ? fields : fields.filter(row => compactFields.includes(row.field));
+  useWorkspaceHeight(workspace, active);
+  useEffect(() => { setAllFields(false); }, [detail.id]);
+  useEffect(() => { if (location?.found && location.section === "fields" && !compactFields.includes(location.rowField)) setAllFields(true); }, [target, location]);
+  useEffect(() => { if (location?.found && location.section === "fields") revealInPane(selectedField.current); }, [target, location, allFields]);
+  const select = item => onSelect?.(item ? { ...item } : null);
+  const completed = detail.status === "completed" && detail.result;
+  return <div ref={workspace} className="test-analysis-workspace">
+    <section className="test-analysis-pane test-results-pane" aria-label={w("판정과 근거", "Decision and evidence")} tabIndex={0}>
+      <header className="test-pane-heading"><h2><Icon name="shield" size={16} />{w("판정과 근거", "Decision and evidence")}</h2><span>{w("근거를 눌러 원문 확인", "Select evidence to view its source")}</span></header>
+      <div className="test-pane-content"><DecisionHero detail={detail} />
+        {completed ? <><EvidenceCards {...{ detail, relations, relationsError, relationsLoading, displayPollingStopped, onRetryRelations }} selectedTarget={target} selectOnCard onViewInput={select} onExecution={onExecution} /><FinalDecisionReason detail={detail} /><TechnicalInterpretation detail={detail} onExecution={onExecution} /><DecisionConditions detail={detail} onViewInput={select} /></>
+          : <section className="panel decision-awaiting"><h2>{detail.status === "failed" ? w("실행 확인", "Check execution") : detail.status === "canceled" ? w("테스트 중지", "Test stopped") : detail.status === "completed" ? w("결과 본문 미기록", "Result body not recorded") : w("분석 진행", "Analysis progress")}</h2><p>{detail.status === "failed" ? w("실패한 단계와 기존 기록은 실행 탭에서 확인할 수 있습니다.", "Check the Execution tab for the failed step and saved records.") : detail.status === "canceled" ? w("이 문항은 판정 전에 중지되었습니다. 입력과 기존 실행 기록은 확인할 수 있습니다.", "This case stopped before a final decision. Input and saved execution records remain available.") : detail.status === "completed" ? w("처리는 완료되었지만 저장된 결과 본문이 없습니다. 실행 기록을 확인하세요.", "Processing completed, but the result body is unavailable. Check the execution record.") : w("완료된 판정 근거를 기다리고 있습니다.", "Waiting for completed decision evidence.")}</p><NavigationAction onClick={onExecution}>{w("실행 상세", "Execution details")}</NavigationAction></section>}
+        <DecisionContext {...{ detail, history, historyError, onSaved, onExecution, onFeedback }} />{children}
+      </div>
     </section>
-    <section className="panel decision-json"><details open={jsonOpen} onToggle={event => setJsonOpen(event.currentTarget.open)}><summary>{w("결과 JSON", "Result JSON")}</summary><p className="muted">{t("detail.jsonNote")}</p>{jsonOpen && <TextInspector label={w("결과 JSON", "Result JSON")} value={detail.result} />}</details></section>
+    <section className="test-analysis-pane test-input-pane" aria-label={w("접수된 입력", "Received input")} tabIndex={0}>
+      <header className="test-pane-heading"><h2><Icon name="code" size={16} />{w("입력과 원문", "Input and source")}</h2><span>{target ? w(`근거 ${target.number ?? ""} 선택`, `Evidence ${target.number ?? ""} selected`) : w("원문 보존", "Original preserved")}</span></header>
+      {error ? <div className="panel error" role="alert"><p>{w("입력을 조회하지 못했습니다.", "Could not load the input.")}</p><button type="button" className="secondary" onClick={onRetry}>{w("다시 시도", "Retry")}</button></div> : !event ? <p className="panel loading" role="status">{w("입력을 불러오는 중…", "Loading input…")}</p> : <>
+        {location && <p className="test-source-status" role="status"><strong>{w("선택한 근거", "Selected evidence")}: {target.number ?? target.evidence_id ?? "—"} / {target.field}</strong><span>{location.found ? location.reason === "recorded_positions" ? w("기록된 원문 위치와 발췌문이 일치합니다.", "Recorded source positions exactly match the excerpt.") : w("지정 필드에서 발췌문과 정확히 일치하는 한 곳을 확인했습니다.", "One exact excerpt match was found in the specified field.") : w("정확한 위치를 확인하지 못해 강조하지 않습니다. 반복 문구, 변환된 표현이나 원문 위치 기록을 확인하세요.", "The exact location could not be verified. Repeated text, transformed content, or missing position records may need review.")}</span></p>}
+        <div className="test-pane-content"><section className="panel test-input-fields"><div className="test-input-fields-heading"><h3>{w("입력 필드", "Input fields")}</h3><button type="button" className="text-button" aria-expanded={allFields} onClick={() => setAllFields(value => !value)}>{allFields ? w("전체 입력 필드 접기", "Collapse input fields") : w(`전체 입력 필드 보기 (${fields.length})`, `View all input fields (${fields.length})`)}</button></div><DataTable label={w("접수 입력 필드", "Received input fields")} data={visibleFields} rowClassName={row => location?.found && location.section === "fields" && row.field === location.rowField ? "test-input-field-selected" : undefined} columns={[
+          { id: "field", width: "42%", header: w("필드", "Field"), render: row => <><span className="test-field-label">{w(analystFieldLabel(row.field), ({ company_name: "Company", src_ip: "Source IP", dest_ip: "Destination IP", waf_vendor: "WAF vendor", waf_action: "WAF action", signature: "Signature" })[row.field] || row.field)}</span>{analystFieldLabel(row.field) !== row.field && <code className="test-field-key">{row.field}</code>}</> },
+          { id: "value", header: w("수신 값", "Received value"), render: row => <span className="test-field-value" ref={node => { if (row.field === location?.rowField) selectedField.current = node; }}>{row.text === null ? row.value === null ? "null" : JSON.stringify(row.value) : splitHighlightedText(row.text, location?.found && location.section === "fields" && row.field === location.rowField ? location.ranges : []).map((part, index) => part.highlighted ? <mark key={index}>{part.text}</mark> : part.text)}</span> },
+        ]} /></section>
+          <section className="panel test-payload-panel"><h3>{w("HTTP 원문", "Raw HTTP payload")}</h3><ExactSourceText value={event.payload} ranges={location?.found && location.section === "payload" ? location.ranges : []} target={target} label={w("HTTP 원문", "Raw HTTP payload")} /></section>
+          <p className="test-input-notice muted"><Icon name="shield" size={13} />{w("관리자 열람 기록이 남습니다. 접수 원문과 Cookie를 마스킹하지 않으며, 분석 당시 모델 입력은 생략 범위에 따라 다를 수 있습니다.", "Administrator access is audited. Received source and cookies are unmasked; the original model input may differ where content was omitted.")}</p>
+          <section className="panel"><details><summary>{w("인코딩과 난독화", "Encoding and obfuscation")}</summary>{active && <DecodingView decoding={event.decoding} />}</details></section>
+        </div>
+      </>}
+    </section>
+  </div>;
+}
+
+export function ExecutionView({ detail, runs, runsError, runsLoading, onRetry, onMetadata, initialJson = false, active, displayLoading, displayError, displayPollingStopped, onRetryDisplay, executionSelection, onExecutionSelectionChange }) {
+  const { t } = useConsolePreferences(), w = useR5Words();
+  const test = detail.analysis_purpose === "test";
+  const configuration = <><InferenceSummary detail={detail} runs={runs} onMetadata={onMetadata} compact title={w("사용한 설정", "Recorded settings")} /><EvidenceDisplaySummary detail={detail} loading={displayLoading} error={displayError} stopped={displayPollingStopped} onRetry={onRetryDisplay} /></>;
+  return <div className={`decision-execution${test ? " test-execution" : ""}`}>
+    <section className="test-execution-overview" aria-label={w("실행 시간", "Execution timing")}><dl>{[
+      [w("접수부터 판정까지", "Admission to decision"), detail.total_elapsed_ms, w("초기 대기 포함", "Includes initial queue wait"), "clock"], [w("초기 대기", "Initial queue wait"), detail.queue_wait_ms, w("접수부터 첫 분석 시작", "Admission to first start"), "clock"], [w("분석 처리", "Analysis processing"), detail.processing_duration_ms, w("첫 시작부터 종료", "First start to finish"), "analyses"],
+    ].map(([label, value, note, icon], index) => <div key={label} className={`execution-timing-${index}`}><dt>{label}<Icon name={icon} size={16} /></dt><dd>{formatDuration(value, w("미측정", "Not measured"))}</dd><small>{note}</small></div>)}</dl><p className="muted">{w("분석 처리는 초기 대기를 제외하며 내부 대기, 재시도와 복구를 포함합니다. 병렬 단계의 합이나 HTTP 요청부터 응답까지의 시간은 아닙니다.", "Processing excludes the initial queue wait and includes internal waits, retries and recovery. It is neither a sum of parallel stages nor HTTP request-to-response time.")}</p></section>
+    <p className="muted decision-audit-note"><Icon name="shield" size={13} />{t("detail.audit")}</p>
+    {runsError && <div className="panel error" role="alert"><p>{t("detail.agentError")}</p><button type="button" className="secondary" disabled={runsLoading} onClick={onRetry}>{t("retry")}</button></div>}
+    {runs === null ? !runsError && <p role="status">{t("loading")}</p> : <AgentHistory runs={runs || []} active={active} selection={executionSelection} onSelectionChange={onExecutionSelectionChange} compact={test} finalResult={detail.result ?? null} configuration={configuration} initialJson={initialJson} />}
   </div>;
 }

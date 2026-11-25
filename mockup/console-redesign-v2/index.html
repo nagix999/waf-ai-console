@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ko" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>WAF AI Console — 새로운 작업 공간</title>
+  <link rel="stylesheet" href="vendor/tabulator.min.css">
+  <link rel="stylesheet" href="ui.css">
+  <link rel="stylesheet" href="analysis.css">
+  <link rel="stylesheet" href="evaluation.css">
+  <link rel="stylesheet" href="settings.css">
+  <link rel="stylesheet" href="test-split.css">
+  <link rel="stylesheet" href="execution.css">
+  <link rel="stylesheet" href="spacing.css">
+  <link rel="stylesheet" href="feedback.css">
+</head>
+<body>
+  <a class="skip-link" href="#main-content">본문으로 이동</a>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="주 메뉴">
+      <a class="brand" href="#home" aria-label="WAF AI Console 홈"><span class="brand-symbol" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3 20 6v5c0 5-4 8-8 10-4-2-8-5-8-10V6l8-3Z" stroke="currentColor" stroke-width="1.7"/><path d="m8.5 12 2.3 2.2 4.7-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span>WAF AI <strong>Console</strong><small>SECURITY WORKSPACE</small></span></a>
+      <div class="workspace-label"><span class="workspace-avatar">W</span><span>보안 분석 워크스페이스<small>디자인 미리보기</small></span><span class="workspace-dot"></span></div>
+      <nav id="navigation"></nav>
+      <div class="sidebar-bottom"><span class="prototype-pill"><i></i>인터랙티브 시안</span><p>예시 데이터만 표시합니다.<br>실제 서비스와 연결되지 않습니다.</p></div>
+    </aside>
+    <div class="main-shell">
+      <header class="topbar">
+        <div class="topbar-left"><button class="icon-button menu-toggle" data-action="toggle-menu" aria-label="메뉴 열기" aria-expanded="false"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button><nav id="breadcrumb" aria-label="현재 위치"></nav></div>
+        <div class="topbar-actions"><button class="global-search" data-action="global-search"><span id="global-search-icon"></span><span>분석 검색</span><kbd>/</kbd></button><button class="icon-button" data-action="toggle-density" aria-label="촘촘한 표" aria-pressed="false" title="표 간격 전환" id="density-button"></button><button class="icon-button" data-action="toggle-theme" aria-label="테마 변경" title="Light / Dark / SK" id="theme-button"></button><button class="account-button" data-action="account"><span class="avatar">A</span><span>관리자<small>시안 계정</small></span><span aria-hidden="true">⌄</span></button></div>
+      </header>
+      <div class="demo-banner"><span><i></i><strong>디자인 시안</strong><span class="demo-banner-copy">모든 수치와 사례는 예시이며 실제 분석, 모델 호출, 운영 변경은 실행하지 않습니다.</span></span><button data-action="prototype-guide">사용 안내 <span aria-hidden="true">↗</span></button></div>
+      <main id="main-content" tabindex="-1"></main>
+      <footer class="app-footer"><span>WAF AI Console <span class="footer-separator">/</span> Design exploration 02</span><span>명확한 판정, 연결된 근거</span></footer>
+    </div>
+  </div>
+  <div class="mobile-backdrop" data-action="close-menu"></div>
+  <dialog id="app-dialog" aria-labelledby="dialog-title"></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="vendor/tabulator.min.js"></script>
+  <script src="data.js"></script>
+  <script src="feedback-stats.js"></script>
+  <script src="timing.js"></script>
+  <script src="app.js"></script>
+  <script src="analysis.js"></script>
+  <script src="evaluation.js"></script>
+  <script src="settings.js"></script>
+  <script>window.WAF.start();</script>
+</body>
+</html>

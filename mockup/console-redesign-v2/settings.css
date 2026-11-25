@@ -1,0 +1,202 @@
+/* Configuration and integrations: shared tokens keep all three themes aligned. */
+.hidden { display: none !important; }
+
+.cell-title {
+  color: var(--ink-strong);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.65;
+  margin-bottom: 3px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.button-text {
+  background: transparent;
+  border-color: transparent;
+  color: var(--accent-text);
+  min-height: 32px;
+  padding: 5px 9px;
+  font-size: 11px;
+}
+.button-text:hover {
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+.tabulator-cell .button-text + .button-text { margin-left: 5px; }
+.table-frame { padding: 0 16px 10px; min-width: 0; }
+.timeline > li:not(:has(.timeline-node)) {
+  display: block;
+  padding: 0 0 21px 20px;
+  border-left: 1px solid var(--line);
+}
+.timeline > li:not(:has(.timeline-node)):last-child { padding-bottom: 0; border-left-color: transparent; }
+.timeline > li:not(:has(.timeline-node)):before {
+  left: -4px;
+  top: 7px;
+  bottom: auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--surface);
+}
+.timeline > li:not(:has(.timeline-node)) > strong { display: block; font-size: 12px; }
+.timeline > li:not(:has(.timeline-node)) > span { display: block; margin-top: 5px; color: var(--muted); font-size: 11px; }
+
+.api-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  align-items: start;
+  gap: 22px;
+  min-width: 0;
+}
+.api-layout > * { min-width: 0; }
+.api-index {
+  position: sticky;
+  top: 94px;
+  overflow: hidden;
+}
+.api-index .panel-header { padding: 18px 16px 13px; }
+.api-index .panel-header h2 { font-size: 13px; }
+.api-index .panel-header > span { font-size: 10px; }
+.api-index nav { padding: 9px; }
+.api-section-link {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 11px;
+  text-align: left;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font-size: 11px;
+  line-height: 1.5;
+  margin: 2px 0;
+}
+.api-section-link > span {
+  font-size: 10px;
+  font-weight: 650;
+  opacity: .7;
+  font-variant-numeric: tabular-nums;
+}
+.api-section-link:hover { color: var(--ink-strong); background: var(--surface-2); }
+.api-section-link.active {
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 16%, transparent);
+  font-weight: 700;
+}
+.api-layout > .panel:not(.api-index) .panel-header { padding: 22px 25px; }
+.api-layout > .panel:not(.api-index) .panel-header h2 { font-size: 23px; margin-top: 5px; }
+.api-layout > .panel:not(.api-index) .panel-body { padding: 25px; }
+.api-layout .panel-body > p { font-size: 13px; line-height: 1.95; max-width: 74ch; }
+.api-layout .code-block { min-height: 120px; padding: 21px 22px; line-height: 1.95; }
+.api-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 5px;
+  border-top: 1px solid var(--line);
+  padding-top: 22px;
+}
+.api-pagination .button { min-width: 0; max-width: 50%; white-space: normal; text-align: left; }
+
+.workflow-steps {
+  padding: 0;
+  margin: 0 0 24px;
+  list-style: none;
+  gap: 12px;
+}
+.workflow-steps .step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  color: var(--muted);
+  border-color: var(--line);
+  border-radius: 10px;
+  padding: 12px 17px;
+  font-size: 11px;
+  flex: 1;
+  min-width: 0;
+}
+.workflow-steps .step > span {
+  height: 25px;
+  width: 25px;
+  border-radius: 50%;
+  background: var(--surface-3);
+  color: var(--muted);
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 750;
+}
+.workflow-steps .step.active {
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+}
+.workflow-steps .step.active > span { background: var(--accent); color: var(--surface); }
+[data-theme="dark"] .workflow-steps .step.active > span { color: #1c1731; }
+
+.role-card { min-width: 0; }
+.role-card > strong { display: block; font-size: 13px; margin: 9px 0; overflow-wrap: anywhere; }
+.role-card > .icon-tile { margin-bottom: 9px; }
+.role-card > .badge { margin-top: 12px; }
+.role-card > .muted.small { line-height: 1.8; }
+.role-card > .button { margin-top: 13px; }
+.role-card .check-row { margin-top: 15px; font-size: 11px; }
+.setting-banner h2 { font-size: 20px; margin-top: 8px; }
+.setting-banner .page-actions { flex-wrap: wrap; }
+.version-item { flex-wrap: wrap; }
+.version-item > .muted { flex-basis: 100%; }
+#main-content .timeline > li > span { display: block; color: var(--muted); font-size: 11px; margin-top: 4px; line-height: 1.8; }
+.form-grid .field + .field, .form-grid-three .field + .field { margin-top: 0; }
+.field input[readonly] { color: var(--muted); background: var(--surface-2); }
+.field input:disabled, .field select:disabled { opacity: .75; }
+.check-row:has(input:disabled) { color: var(--muted); }
+fieldset.field { border: 1px solid var(--line); padding: 15px; border-radius: 9px; }
+fieldset.field > legend { padding: 0 6px; font-size: 11px; }
+.context-item > strong { overflow-wrap: anywhere; }
+
+@media (max-width: 1150px) {
+  .api-layout { grid-template-columns: 190px minmax(0, 1fr); gap: 16px; }
+  .api-index .panel-header { padding: 15px 12px; }
+  .api-index nav { padding: 6px; }
+  .api-section-link { padding: 9px 8px; gap: 8px; }
+  .api-layout > .panel:not(.api-index) .panel-body { padding: 20px; }
+}
+
+@media (max-width: 720px) {
+  .api-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .api-index { position: static; }
+  .api-index .panel-header { padding: 13px 15px; }
+  .api-index nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); padding: 8px; gap: 3px; }
+  .api-section-link { font-size: 10px; min-height: 38px; margin: 0; }
+  .api-section-link > span { display: none; }
+  .workflow-steps { gap: 7px; }
+  .workflow-steps .step { gap: 6px; padding: 10px; align-items: flex-start; }
+  .workflow-steps .step > span { height: 20px; width: 20px; font-size: 9px; }
+  .workflow-steps .step strong { font-size: 10px; line-height: 1.7; }
+}
+
+@media (max-width: 450px) {
+  .api-index nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .api-section-link { font-size: 11px; padding: 8px 10px; }
+  .api-layout > .panel:not(.api-index) .panel-header { padding: 17px; }
+  .api-layout > .panel:not(.api-index) .panel-header h2 { font-size: 20px; }
+  .api-layout > .panel:not(.api-index) .panel-body { padding: 17px; }
+  .api-layout .code-block { padding: 15px; min-height: 100px; font-size: 10px; }
+  .api-pagination { gap: 8px; padding-top: 17px; }
+  .api-pagination .button { font-size: 10px; padding: 8px 10px; flex: 1; }
+  .workflow-steps .step { flex-direction: column; }
+  .setting-banner h2 { font-size: 18px; }
+  .setting-banner .page-actions { width: 100%; }
+  .setting-banner .page-actions .button { flex-basis: 100%; }
+  .table-frame { padding: 0 10px 9px; }
+}

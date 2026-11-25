@@ -4,7 +4,7 @@ export const consoleGroups = [
   { key: "overview", icon: "dashboard", items: ["status"] },
   { key: "evaluate", icon: "test", items: ["runs", "groundTruth", "quality"] },
   { key: "configure", icon: "settings", items: ["profiles", "agents", "instructions", "schema", "parsers", "signatureExplanations"] },
-  { key: "operate", icon: "analyses", items: ["runtime", "history", "changes"] },
+  { key: "operate", icon: "analyses", items: ["runtime", "history", "feedback", "changes"] },
   { key: "connect", icon: "server", items: ["api", "keys", "targets"] },
 ];
 const settings = { profiles: "models", agents: "agents", instructions: "instructions", concurrency: "concurrency", keys: "keys", schema: "schema", parsers: "parsers", signatureExplanations: "signature-explanations", targets: "egress" };
@@ -12,7 +12,7 @@ export function consoleDestination(state, key) {
   if (["promote", "runtime"].includes(key)) return { ...state, page: key };
   if (["concurrency", "diagnostics"].includes(key)) return { ...state, page: "runtime" };
   if (Object.hasOwn(settings, key)) return { ...state, page: "settings", settingsTab: settings[key] };
-  if (["quality", "diagnostics", "deployment", "changes"].includes(key)) return { ...state, page: key };
+  if (["quality", "diagnostics", "deployment", "changes", "feedback"].includes(key)) return { ...state, page: key };
   if (key === "runs") return { ...state, page: "analyses", resultsPurpose: "test", testResults: { ...state.testResults, view: "runs", runId: null } };
   if (key === "history") return { ...state, page: "analyses", resultsPurpose: "production", listState: { ...state.listState, draft: { ...state.listState.draft, analysis_purpose: "production" }, applied: { ...state.listState.applied, analysis_purpose: "production" } }, testResults: { ...state.testResults, view: "items", runId: null } };
   if (key === "groundTruth") return { ...state, page: "datasets", datasetId: null };

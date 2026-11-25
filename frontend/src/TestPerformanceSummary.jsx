@@ -5,6 +5,7 @@ import { useWords } from "./LifecycleViews.jsx";
 import { watchTestRunRead } from "./TestRuns.jsx";
 import { durationText, performanceFieldLabel, performanceIsRunning, performanceIssueLabel, performanceNumber, performanceSummary, retryFraction, testPerformanceScope, topPerformanceIssues } from "./testPerformance.js";
 import "./testPerformance.css";
+import "./overviewEvaluationDesign.css";
 
 const roleLabel = (role, w) => role === "primary" ? w("1차 분석", "Primary") : role === "verifier" ? w("추가 검증", "Verifier") : w("이전 근거 정리", "Legacy evidence editor");
 const recorded = (metric, w) => `${w("기록", "Recorded")} ${performanceNumber(metric.recorded)} / ${w("미기록", "Missing")} ${performanceNumber(metric.unrecorded)}`;
@@ -14,10 +15,17 @@ function MetricCell({ metric, words: w, note }) {
   return <><strong>{durationText(metric.mean_ms, w)}</strong><small>{note || recorded(metric, w)}</small></>;
 }
 
-export function PerformanceSummaryContent({ summary, words: w = ko => ko }) {
+export function PerformanceSummaryContent({ summary, words: w = ko => ko, compact = false }) {
   const data = performanceSummary(summary);
   if (!data) return <p className="test-performance-note">{w("이 테스트에는 처리 시간 통계가 제공되지 않습니다.", "Performance statistics are not available for this test.")}</p>;
-  const { timings, display } = data;
+  const { display } = data;
+  const timings = data.completed_timings || data.timings;
+  const timingCards = [
+    ["decision_elapsed_ms", w("접수 → 판정 완료", "Admission → decision"), w("초기 대기 포함", "Includes initial queue")],
+    ["analysis_queue_ms", w("초기 대기", "Initial queue"), w("접수 → 첫 분석 시작", "Admission → first start")],
+    ["analysis_processing_ms", w("분석 처리", "Analysis processing"), w("첫 시작 → 판정 완료", "First start → decision")],
+    ["result_ready_elapsed_ms", w("접수 → 결과 준비", "Admission → result ready"), w("근거 정리 완료까지", "Includes evidence presentation")],
+  ];
   const roles = ["primary", "verifier", ...(data.phases.llm_evidence_editor.entered_cases > 0 ? ["legacy_evidence_editor"] : [])].map(role => ({ role, ...data.roles[role], phase: data.phases[role === "primary" ? "llm_primary" : role === "verifier" ? "llm_verifier" : "llm_evidence_editor"] }));
   const issues = topPerformanceIssues(data);
   const outcomeLabels = [["output_validation", w("출력 검증 실패", "Validation failure")], ["output_limit", w("출력 한도 초과", "Output limit")], ["timeout", w("응답 시간 초과", "Response timeout")], ["incomplete_unspecified", w("완료되지 않은 출력", "Incomplete output")]];
@@ -36,15 +44,15 @@ export function PerformanceSummaryContent({ summary, words: w = ko => ko }) {
     { id: "attempts", header: w("시도", "Attempts"), width: "15%", className: "numeric", render: row => performanceNumber(row.attempts) },
   ];
   const pendingDisplay = [display.states.pending, display.states.running].every(value => value !== null) ? display.states.pending + display.states.running : null;
+  const Detail = compact ? "details" : "div";
   return <>
     <p className="test-performance-note">{w("선택한 문항 조건에 맞는 전체 범위입니다. 집계 기준, 항목 검색과 페이지 변경에는 영향을 받지 않습니다.", "Covers all cases matching the case filters. Grouping, group search and pagination do not change the scope.")} {w("전체 문항", "All cases")} {performanceNumber(data.cases)}.</p>
     <dl className="test-performance-kpis">
-      <div><dt>{w("평균 결과 준비 시간", "Mean result-ready time")}</dt><dd>{durationText(timings.result_ready_elapsed_ms.mean_ms, w)}</dd><small>{recorded(timings.result_ready_elapsed_ms, w)}</small></div>
-      <div><dt>{w("결과 준비 시간 P95", "Result-ready time P95")}</dt><dd>{durationText(timings.result_ready_elapsed_ms.p95_ms, w)}</dd><small>{w("기록된 문항의 95%가 이 시간 이내에 준비됩니다.", "95% of recorded cases were ready within this time.")}</small></div>
-      <div><dt>{w("평균 분석 처리 시간", "Mean analysis processing time")}</dt><dd>{durationText(timings.analysis_processing_ms.mean_ms, w)}</dd><small>{w("분석 대기", "Analysis queue")} {durationText(timings.analysis_queue_ms.mean_ms, w)} / {w("판정까지", "Until decision")} {durationText(timings.decision_elapsed_ms.mean_ms, w)}</small></div>
+      {timingCards.map(([key, label, note]) => <div key={key}><dt>{label}</dt><dd>{durationText(timings[key].mean_ms, w)}</dd><small>{note}</small><small>P95 {durationText(timings[key].p95_ms, w)}</small><small>{recorded(timings[key], w)}</small></div>)}
     </dl>
-    <p className="test-performance-note">{w("결과 준비는 접수부터 판정과 근거 정리 완료까지이며, 시간별로 기록된 문항만 계산합니다.", "Result-ready time runs from admission until the verdict and evidence presentation are ready, using recorded measurements only.")}</p>
-    <DataTable className="test-performance-role-table" label={w("단계별 처리 시간과 출력량", "Stage timing and output tokens")} columns={columns} data={roles} getRowId={row => row.role} />
+    <p className="test-performance-note">{data.completed_timings ? w(`시간 평균과 P95는 완료된 ${performanceNumber(data.completed_cases)}문항 중 각 시간 기록이 있는 문항 기준입니다. 실패, 중지와 처리 중인 문항은 제외합니다.`, `Timing means and P95 use recorded measurements among ${performanceNumber(data.completed_cases)} completed cases. Failed, stopped and in-flight cases are excluded.`) : w("이 서버의 시간 집계는 완료와 실패 등 기록된 문항을 포함합니다. 완료 문항 전용 집계를 보려면 API 업데이트가 필요합니다.", "This server's timing aggregates include recorded finished cases, including failures. Update the API for completed-only statistics.")}</p>
+    <p className="test-performance-note">{w("분석 처리는 초기 큐 대기만 제외하며 내부 대기, 재시도와 복구 시간을 포함합니다. HTTP 요청부터 응답까지의 시간은 별도로 측정하지 않았습니다.", "Processing excludes only the initial queue; internal waiting, retries and recovery remain included. HTTP request-to-response time is not measured here.")}</p>
+    <Detail className={compact ? "oe-performance-details" : undefined}>{compact && <summary>{w("단계별 시간과 출력 상세", "Stage timing and output details")}</summary>}<DataTable className="test-performance-role-table" label={w("단계별 처리 시간과 출력량", "Stage timing and output tokens")} columns={columns} data={roles} getRowId={row => row.role} />
     <p className="test-performance-note">{w("문항당 평균이며 출력량 단위는 토큰입니다. 첫 호출에는 통신과 검증이 포함되고, 재시도 비율은 호출 기록이 있는 문항 기준입니다.", "Means are per case; output is in tokens. First-attempt time includes transport and validation. Retry rates use cases with call records.")}</p>
     <p className="test-performance-note">{w("기록 문항 수가 다르면 첫 출력량과 전체 출력량의 차이를 재시도로 늘어난 양으로 볼 수 없습니다.", "When recorded case counts differ, the difference between first and total output means is not the added retry output.")}</p>
     <p className="test-performance-note">{w("미관측은 실행 기록 없음이며 건너뛰었다는 뜻은 아닙니다. 미기록은 0이 아니며, 겹치는 단계 시간은 더하지 않습니다.", "Not observed means no stage record, not confirmed skipping. Missing is not zero; overlapping durations cannot be added.")}</p>
@@ -58,11 +66,12 @@ export function PerformanceSummaryContent({ summary, words: w = ko => ko }) {
       {!!issues.length && <><DataTable className="test-performance-issue-table" label={w("많이 발생한 출력 검증 사유", "Most frequent output validation issues")} data={issues} columns={issueColumns} getRowId={row => row.rowKey} /><p className="test-performance-note">{w("많이 기록된 검증 사유를 최대 5개 표시합니다. 한 시도에 여러 사유가 있을 수 있으며, 교정 후 성공한 문항도 포함합니다.", "Shows up to 5 most frequently recorded validation issues. One attempt can have several issues; successfully recovered cases are included.")}</p></>}
       <p className="test-performance-note">{w("출력량, 재시도 시간과 근거 정리 대기를 함께 비교하세요. 집계만으로 지연 원인이 확정되지는 않습니다.", "Compare output tokens, retry time and evidence-presentation waiting. Aggregates alone do not establish the cause of slowness.")}</p>
     </div>
+    </Detail>
   </>;
 }
 
 const emptyRead = () => ({ key: null, data: null, error: "", loading: true });
-export default function TestPerformanceSummary({ run, query = {}, refresh, onUnauthorized, words: suppliedWords }) {
+export default function TestPerformanceSummary({ run, query = {}, refresh, onUnauthorized, words: suppliedWords, compact = false }) {
   const contextWords = useWords(), w = suppliedWords || contextWords, headingId = useId();
   const [read, setRead] = useState(emptyRead), [reload, setReload] = useState(0);
   const unauthorized = useRef(onUnauthorized); unauthorized.current = onUnauthorized;
@@ -80,10 +89,10 @@ export default function TestPerformanceSummary({ run, query = {}, refresh, onUna
     errorMessage: "performance_summary_unavailable",
     onUnauthorized: () => unauthorized.current?.() });
   }, [key]);
-  return <section className="test-performance-summary" aria-labelledby={headingId} aria-busy={current.loading}>
-    <header className="test-performance-head"><div><h3 id={headingId}>{w("처리 시간과 출력", "Processing time and output")}</h3><p className="test-performance-note">{w("응답 길이, 출력 재시도와 대기 시간을 한눈에 비교합니다.", "Compare output size, retries and waiting time at a glance.")}</p></div><button type="button" className="secondary" disabled={current.loading} onClick={() => setReload(value => value + 1)}>{w("다시 조회", "Refresh")}</button></header>
+  return <section className="test-performance-summary oe-performance" aria-labelledby={headingId} aria-busy={current.loading}>
+    <header className="test-performance-head"><div><h3 id={headingId}>{compact ? w("처리 시간", "Processing time") : w("처리 시간과 출력", "Processing time and output")}</h3><p className="test-performance-note">{compact ? w("초기 대기, 분석 처리와 결과 준비 시간을 구분합니다.", "Distinguishes initial queue, processing and result readiness.") : w("응답 길이, 출력 재시도와 대기 시간을 한눈에 비교합니다.", "Compare output size, retries and waiting time at a glance.")}</p></div><button type="button" className="secondary" disabled={current.loading} onClick={() => setReload(value => value + 1)}>{w("다시 조회", "Refresh")}</button></header>
     {current.error && <p className="error" role="alert">{current.error === "performance_summary_unavailable" ? w("처리 시간 통계를 조회하지 못했습니다. 다시 조회해 주세요.", "Unable to load performance statistics. Try again.") : w("로그인 세션이 만료되었습니다. 다시 로그인하세요.", "Your session expired. Sign in again.")}</p>}
     {!current.data && !current.error && <p className="test-performance-note" role="status">{w("처리 시간 통계를 불러오는 중…", "Loading performance statistics…")}</p>}
-    {current.data && <PerformanceSummaryContent summary={current.data} words={w} />}
+    {current.data && <PerformanceSummaryContent summary={current.data} words={w} compact={compact} />}
   </section>;
 }

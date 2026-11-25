@@ -2,17 +2,29 @@
 .console-page-heading.is-analysis-detail { margin-bottom: 12px; }
 .decision-page-heading h1 { margin: 0; font-size: 23px; line-height: 1.45; overflow-wrap: anywhere; }
 .decision-page-heading p { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--muted); font-size: 12px; margin: 7px 0 0; }
-.decision-hero { border: 1px solid var(--line); border-left: 5px solid var(--info); border-radius: 14px; background: var(--panel); padding: 22px 24px; box-shadow: var(--shadow); }
+.decision-hero { border: 1px solid var(--line); border-left: 4px solid var(--info); border-radius: 14px; background: linear-gradient(120deg, var(--panel) 50%, var(--raised)); padding: 23px 27px; box-shadow: var(--shadow); min-width: 0; }
 .decision-hero-true_positive, .decision-hero-failed { border-left-color: var(--danger); }
 .decision-hero-false_positive { border-left-color: var(--ok); }
 .decision-hero-inconclusive { border-left-color: var(--warn); }
 .decision-hero-main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 290px); align-items: start; gap: 24px; }
 .decision-verdict-line { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.decision-hero-kicker { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; color: var(--muted); font-size: 11px; margin-bottom: 12px; }
+.decision-purpose { display: inline-flex; padding: 3px 8px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); font-size: 10px; font-weight: 650; }
+.decision-purpose.purpose-production { color: var(--info); background: color-mix(in srgb, var(--info) 10%, var(--panel)); }
+.decision-hero > h1 { font-size: 24px; line-height: 1.45; letter-spacing: -.04em; margin: 10px 0 8px; overflow-wrap: anywhere; }
+.decision-hero-timing { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 20px; margin: 17px 0 0; color: var(--muted); font-size: 10px; }
+.decision-hero-timing > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 7px; }
+.decision-hero-timing dd { font-variant-numeric: tabular-nums; margin: 0; font-weight: 650; color: var(--text); }
+.decision-hero-observations { margin-top: 13px; font-size: 10px; color: var(--muted); }
+.decision-hero-observations summary { display: list-item; width: fit-content; cursor: pointer; padding: 3px 0; }
+.decision-hero-observations[open] { padding-top: 10px; border-top: 1px solid var(--line); }
+.decision-hero-observations .decision-hero-facts { margin-top: 14px; }
+.decision-severity-note { font-size: 10px; margin: 8px 0 0; line-height: 1.7; }
 .decision-verdict { display: inline-flex; border-radius: 24px; padding: 7px 12px; font-size: 14px; background: var(--raised); }
 .decision-verdict.verdict-true_positive, .decision-verdict.verdict-failed { color: var(--danger); background: var(--danger-soft); }
 .decision-verdict.verdict-false_positive { color: var(--ok); background: var(--ok-soft); }
 .decision-verdict.verdict-inconclusive { color: var(--warn); background: var(--warn-soft); }
-.decision-hero-summary { margin: 13px 0 0; font-size: 16px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
+.decision-hero-summary { margin: 0; font-size: 14px; line-height: 1.85; white-space: pre-wrap; overflow-wrap: anywhere; }
 .decision-hero-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 14px; margin: 0; }
 .decision-hero-facts > div { border-left: 1px solid var(--line); padding-left: 12px; min-width: 0; }
 .decision-hero-facts dt { color: var(--muted); font-size: 11px; margin-bottom: 5px; }
@@ -33,10 +45,14 @@
 .decision-direction { font-size: 11px; font-weight: 700; color: var(--muted); }
 .direction-attack_request { color: var(--danger); }
 .direction-normal_request { color: var(--ok); }
-.decision-evidence-row { display: grid; grid-template-columns: 115px minmax(0, 1fr); column-gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.decision-evidence-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 16px 0; border-bottom: 1px solid var(--line); min-width: 0; }
 .decision-evidence-row:first-child { padding-top: 0; }
 .decision-evidence-row:last-child { padding-bottom: 0; border-bottom: 0; }
-.decision-evidence-label { display: grid; gap: 6px; align-content: start; font-size: 12px; overflow-wrap: anywhere; }
+.decision-evidence-label { display: flex; align-items: baseline; flex-wrap: wrap; gap: 7px 12px; font-size: 11px; overflow-wrap: anywhere; }
+.decision-evidence-label > strong { display: inline-flex; align-items: center; justify-content: center; padding: 3px 7px; border-radius: 5px; border: 1px solid var(--line); font-size: 10px; }
+.decision-evidence-origin { margin-left: auto; color: var(--muted); font-size: 10px; min-width: 0; }
+.decision-evidence-origin summary { cursor: pointer; }
+.decision-evidence-origin p { margin: 6px 0 0; line-height: 1.7; }
 .decision-evidence-label span, .decision-evidence-label small { color: var(--muted); }
 .decision-evidence-label small { font-size: 10px; }
 .decision-evidence-content { min-width: 0; }
@@ -71,7 +87,7 @@
 .decision-additional-evidence { margin-top: 16px; }
 .decision-additional-toggle { min-height: 36px; margin-bottom: 12px; }
 .decision-evidence-footnote { margin: 14px 0 0; color: var(--muted); font-size: 11px; line-height: 1.6; }
-.decision-evidence-row > button { grid-column: 2; justify-self: start; margin: 6px 0 0; font-size: 12px; padding: 5px 0; }
+.decision-evidence-row > button { grid-column: 1; justify-self: start; margin: 2px 0 0; font-size: 11px; padding: 5px 0; }
 .decision-context-evidence { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 12px; }
 .decision-context-evidence > summary { margin-bottom: 12px; }
 .decision-conditions > .muted { margin: 8px 0 14px; }
@@ -125,7 +141,7 @@
 .decision-stage-summary li { display: grid; grid-template-columns: minmax(0, 1fr) auto 85px; align-items: center; gap: 14px; border-bottom: 1px solid var(--line); padding: 11px 4px; font-size: 12px; }
 .decision-stage-summary li > span:first-child { overflow-wrap: anywhere; }
 .decision-stage-summary li > span:last-child { color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
-.decision-execution .agent-history { border-top: 1px solid var(--line); padding-top: 18px; margin-top: 18px; }
+.decision-execution .agent-history { margin: 0; padding: 0; border: 0; }
 .decision-json .text-inspector { margin-top: 14px; }
 @media (max-width: 1150px) {
   .decision-hero-main { grid-template-columns: minmax(0, 1fr); gap: 18px; }

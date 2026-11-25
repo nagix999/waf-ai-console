@@ -42,6 +42,21 @@ const module = { exports: {} };
 runInNewContext(bundled, { module, exports: module.exports, require: createRequire(import.meta.url), process, Date, URL, setTimeout, clearTimeout, AbortController });
 const render = (summary, extra = {}) => renderToStaticMarkup(createElement(module.exports.PerformanceSummaryContent, { summary, ...extra }));
 
+test("completed-only timing cards retain their own denominators and distinguish queue from processing", () => {
+  const source = fixture();
+  source.completed_cases = 4;
+  source.completed_timings = Object.fromEntries(Object.keys(source.timings).map(key => [key, { ...duration(1000, 3), unrecorded: 1 }]));
+  const normalized = performanceSummary(source);
+  assert.equal(normalized.completed_cases, 4);
+  assert.equal(normalized.completed_timings.analysis_processing_ms.unrecorded, 1);
+  const html = render(source);
+  assert.ok(html.includes("완료된 4문항"));
+  assert.ok(html.includes("기록 3 / 미기록 1"));
+  assert.ok(html.includes("실패, 중지와 처리 중인 문항은 제외"));
+  assert.ok(html.includes("초기 큐 대기만 제외"));
+  assert.ok(!html.includes("31.0초"));
+});
+
 test("output limit, validation and timeout attempts are distinct from affected case counts", () => {
   const source = fixture();
   source.roles.primary.output_failures.attempt_outcomes = { output_validation: 4, output_limit: 3, timeout: 1 };
@@ -180,11 +195,21 @@ test("fixed validation labels and normalization never reflect arbitrary error te
 
 test("compact tables preserve role denominators, first versus all-attempt tokens and accessible labels", () => {
   const html = render(fixture());
-  for (const phrase of ["평균 결과 준비 시간", "결과 준비 시간 P95", "첫 출력량", "전체 출력량", "출력 재시도 문항", "20.0%", "근거 정리", "평균 대기", "출력 문제와 교정", "근거 분류 충돌", "겹치는 단계 시간은 더하지 않습니다", "미기록은 0이 아니며"]) assert.ok(html.includes(phrase), phrase);
+  for (const phrase of ["접수 → 결과 준비", "초기 대기 포함", "첫 시작 → 판정 완료", "HTTP 요청부터 응답까지의 시간은 별도로 측정하지 않았습니다", "첫 출력량", "전체 출력량", "출력 재시도 문항", "20.0%", "근거 정리", "평균 대기", "출력 문제와 교정", "근거 분류 충돌", "겹치는 단계 시간은 더하지 않습니다", "미기록은 0이 아니며"]) assert.ok(html.includes(phrase), phrase);
   assert.match(html, />600</); assert.match(html, />850</); assert.match(html, /2 \/ 10/);
   assert.match(html, /role="region" aria-label="단계별 처리 시간과 출력량" tabindex="0"/);
   assert.match(html, /scope="col"/); assert.doesNotMatch(html, /PRIVATE_|evidence_support_conflict|llm_primary/);
   const english = render(fixture(), { words: (ko, en) => en });
-  for (const phrase of ["Mean result-ready time", "First output tokens", "All output tokens", "Stage recovered", "Conflicting evidence direction"]) assert.ok(english.includes(phrase), phrase);
+  for (const phrase of ["Admission → result ready", "Initial queue", "First output tokens", "All output tokens", "Stage recovered", "Conflicting evidence direction"]) assert.ok(english.includes(phrase), phrase);
   assert.doesNotMatch(english, /[가-힣]/);
+});
+
+test("statistics compact mode keeps all four timing cards visible and retains stage telemetry in a closed disclosure", () => {
+  const source = fixture(), before = JSON.stringify(source);
+  const html = render(source, { compact: true });
+  assert.match(html, /<details class="oe-performance-details"><summary>단계별 시간과 출력 상세<\/summary>/);
+  assert.doesNotMatch(html, /<details[^>]*open/);
+  for (const phrase of ["접수 → 판정 완료", "초기 대기", "분석 처리", "접수 → 결과 준비"]) assert.ok(html.indexOf(phrase) < html.indexOf("<details"), phrase);
+  for (const phrase of ["첫 출력량", "전체 출력량", "출력 문제와 교정", "20.0%", "2 / 10"]) assert.ok(html.indexOf(phrase) > html.indexOf("<details"), phrase);
+  assert.equal(JSON.stringify(source), before);
 });

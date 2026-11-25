@@ -195,7 +195,7 @@ test("run detail filters preserve population scope during row and page changes a
 test("test list supports preserved controlled search, default navigation guidance and custom headings as inert text", () => {
   const controlled = { queryText: "draft <script>", query: { q: "applied <script>", limit: 10, offset: 20 } };
   const html = render(TestRunHistory, { state: controlled, onStateChange() {}, onSelect() {} });
-  assert.match(html, /<h2>테스트 목록<\/h2>/); assert.match(html, /테스트 설정과 평가 기준을 함께 확인/); assert.match(html, /value="draft &lt;script&gt;"/); assert.match(html, /applied &lt;script&gt;/); assert.doesNotMatch(html, /<script/);
+  assert.match(html, /<h2>테스트 목록<\/h2>/); assert.match(html, /실행 당시 설정과 평가 기준으로 결과를 비교/); assert.match(html, /value="draft &lt;script&gt;"/); assert.match(html, /applied &lt;script&gt;/); assert.doesNotMatch(html, /<script/);
   const custom = render(TestRunHistory, { title: "<img> 제목", description: "<script> 설명", onSelect() {} });
   assert.match(custom, /&lt;img&gt; 제목/); assert.match(custom, /&lt;script&gt; 설명/); assert.doesNotMatch(custom, /<img|<script/);
   const detail = render(TestRunDetail, { id: "synthetic-run", filters: { ...initialTestRunFilters(), offset: 50 }, onFiltersChange() {}, onBack() {}, onOpen() {} });

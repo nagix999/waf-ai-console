@@ -42,7 +42,7 @@ test("analysis results Test tab starts with named runs, not individual result/ev
   assert.match(html, /aria-selected="true">테스트<\/button>/);
   assert.match(html, /테스트 목록/);
   assert.match(html, /테스트명 검색/);
-  assert.match(html, /테스트 설정과 평가 기준을 함께 확인/);
+  assert.match(html, /실행 당시 설정과 평가 기준으로 결과를 비교/);
   assert.match(html, /테스트 문항 전체 보기/);
   assert.match(html, /테스트명 없이 저장된 이전 결과/);
   assert.doesNotMatch(html, /\banalysis-data-table\b|analysis-evaluation-overview|name="source_system"/);
@@ -91,7 +91,7 @@ test("selected Test execution uses the shared detail within analysis results", (
   options.testState.filters.offset = 25;
   const before = JSON.stringify(options.testState);
   const html = render(options);
-  assert.match(html, /class="page-stack test-run-detail"/);
+  assert.match(html, /class="page-stack test-run-detail(?: [^"]*)?"/);
   assert.match(html, /← 테스트/);
   assert.match(html, /실행 정보를 불러오는 중/);
   assert.doesNotMatch(html, /테스트명 검색|\banalysis-data-table\b/);

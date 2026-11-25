@@ -297,6 +297,7 @@ def enqueue_retry(db, crypto, settings, analysis_id, request, actor, *, commit=T
         "prompt_version", "prompt_policy_version_id", "prompt_snapshot_ciphertext",
         "input_schema_version_id", "input_schema_snapshot_ciphertext", "internal_only",
         "initial_verdict", "initial_probability", "initial_model_version",
+        "production_configuration_id",
     )
     row = Analysis(id=str(uuid.uuid4()), **{name: getattr(original, name) for name in fields},
                    retry_of_analysis_id=original.id, retry_idempotency_key=request.idempotency_key,

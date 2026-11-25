@@ -2,11 +2,13 @@ import { useEffect, useRef } from "react";
 import { providerLabel } from "./llmProfiles.js";
 import { assignmentBlockReason, testModelAvailability } from "./modelAssignments.js";
 import "./modelAssignments.css";
+import { Icon } from "./Icon.jsx";
+import "./settingsWorkspaceDesign.css";
 
 export function ModelAssignmentCards({ profiles, loading, error, busy, onUnassignTest }) {
-  return <section className="model-assignment-cards" aria-label="용도별 LLM 지정">{[["production", "Production"], ["test", "Test"]].map(([role, label]) => {
+  return <section className="model-assignment-cards settings-workspace" aria-label="용도별 LLM 지정">{[["production", "Production"], ["test", "Test"]].map(([role, label]) => {
     const profile = profiles.find(item => role === "production" ? item.status === "production" : item.is_test === true);
-    return <article key={role} className={`panel model-assignment-card model-assignment-${role}`}><div className="model-assignment-heading"><strong>{role === "production" ? "운영" : "테스트"} <span>{label}</span></strong></div>{loading ? <p role="status">지정 상태 확인 중…</p> : error ? <p className="error" role="alert">최신 지정 상태를 조회하지 못했습니다.</p> : profile ? <><h3>{profile.name}</h3><p>{providerLabel(profile)} · {profile.model_name}</p>{!profile.can_assign && <p className="error">{assignmentBlockReason(profile)}</p>}{role === "test" && <button type="button" className="text-button small" disabled={busy} onClick={() => onUnassignTest(profile)}>Test 지정 해제</button>}</> : <><h3>미지정</h3><p>{role === "test" ? "Test 모델을 지정하세요. Production으로 자동 대체하지 않습니다." : "검증된 프로필을 Production으로 지정하세요."}</p></>}</article>;
+    return <article key={role} className={`panel model-assignment-card model-assignment-${role}`}><div className="model-assignment-heading"><span className="settings-role-icon"><Icon name={role === "production" ? "shield" : "test"} size={19} /></span><strong>{role === "production" ? "운영" : "테스트"} <span>{label}</span></strong></div>{loading ? <p role="status">지정 상태 확인 중…</p> : error ? <p className="error" role="alert">최신 지정 상태를 조회하지 못했습니다.</p> : profile ? <><h3>{profile.name}</h3><p>{providerLabel(profile)} · {profile.model_name}</p>{!profile.can_assign && <p className="error">{assignmentBlockReason(profile)}</p>}{role === "test" && <button type="button" className="text-button small" disabled={busy} onClick={() => onUnassignTest(profile)}>Test 지정 해제</button>}</> : <><h3>미지정</h3><p>{role === "test" ? "Test 모델을 지정하세요. Production으로 자동 대체하지 않습니다." : "검증된 프로필을 Production으로 지정하세요."}</p></>}</article>;
   })}</section>;
 }
 

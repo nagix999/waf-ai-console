@@ -94,6 +94,8 @@ export function performanceSummary(raw) {
   if (mapping(raw).version !== version) return null;
   const source = mapping(raw), display = mapping(source.display);
   return { version, cases: performanceCount(source.cases), statuses: counts(source.statuses),
+    completed_cases: performanceCount(source.completed_cases),
+    completed_timings: source.completed_timings && typeof source.completed_timings === "object" ? Object.fromEntries(["decision_elapsed_ms", "analysis_queue_ms", "analysis_processing_ms", "result_ready_elapsed_ms"].map(key => [key, performanceMetric(source.completed_timings[key])])) : null,
     timings: Object.fromEntries(["decision_elapsed_ms", "analysis_queue_ms", "analysis_processing_ms", "result_ready_elapsed_ms"].map(key => [key, performanceMetric(mapping(source.timings)[key])])),
     phases: Object.fromEntries(["llm_primary", "llm_verifier", "llm_evidence_editor"].map(key => { const phase = mapping(mapping(source.phases)[key]); return [key, { entered_cases: performanceCount(phase.entered_cases), not_observed_cases: performanceCount(phase.not_observed_cases), states: counts(phase.states), duration: performanceMetric(phase.duration) }]; })),
     roles: Object.fromEntries(roleKeys.map(key => [key, roleSummary(mapping(source.roles)[key])])),

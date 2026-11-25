@@ -5,6 +5,7 @@ import "./styles.css";
 import "./console.css";
 import "./lifecycle.css";
 import "./r3.css";
+import "./workspacePolish.css";
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>

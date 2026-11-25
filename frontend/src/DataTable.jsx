@@ -1,49 +1,11 @@
-import { useMemo } from "react";
-import { useTable, tableFeatures, rowSortingFeature } from "@tanstack/react-table";
-import "./dataTable.css";
+import NativeDataTable from "./NativeDataTable.jsx";
+import TabulatorTable from "./TabulatorTable.jsx";
+export { Table } from "./NativeDataTable.jsx";
 
-const features = tableFeatures({ rowSortingFeature });
-const noSorting = [];
-const rowId = row => row.id;
-
-// Documents and fixed-order matrices share the same visual foundation without
-// adding list controls or changing their row/column semantics.
-export function Table({ className = "", children, ...props }) {
-  return <table {...props} className={`console-table ${className}`}>{children}</table>;
-}
-
-// Data is already filtered/paged by the API. Sorting is controlled by the
-// caller and must trigger a server query; never reorder just the loaded page.
-// Column renderers are plain render callbacks (no hooks), not component types.
-export default function DataTable({ data, columns, getRowId = rowId, rowClassName, onRowClick,
-  sorting = noSorting, onSortingChange, label, headerGroups, className = "", empty = "표시할 항목이 없습니다." }) {
-  const definitions = useMemo(() => columns.map(column => ({
-    id: column.id, accessorFn: row => row[column.id], header: column.header,
-    enableSorting: Boolean(onSortingChange && column.sortable), meta: column,
-  })), [columns, onSortingChange]);
-  const table = useTable({ features, data, columns: definitions, getRowId,
-    manualSorting: true, enableMultiSort: false, enableSortingRemoval: false,
-    state: { sorting }, onSortingChange });
-  return <div className="table-wrap data-table-wrap" role="region" aria-label={label} tabIndex={0}>
-    <Table className={`data-table ${className}`}>
-      {label && <caption className="sr-only">{label}</caption>}
-      <colgroup>{columns.map(column => <col key={column.id} style={column.width ? { width: column.width } : undefined} />)}</colgroup>
-      <thead>{headerGroups && <tr className="r3-group-header">{headerGroups.map((group, index) => <th key={index} scope="colgroup" colSpan={group.span}>{group.label}</th>)}</tr>}{table.getHeaderGroups().map(group => <tr key={group.id}>{group.headers.map(header => {
-        const sorted = header.column.getIsSorted();
-        return <th key={header.id} scope="col" className={header.column.columnDef.meta.className}
-          aria-sort={sorted === "asc" ? "ascending" : sorted === "desc" ? "descending" : undefined}>
-          {header.column.getCanSort() ? <button type="button" className="table-sort" onClick={header.column.getToggleSortingHandler()}>
-            {header.column.columnDef.header}<span aria-hidden="true">{sorted === "asc" ? "↑" : sorted === "desc" ? "↓" : "↕"}</span>
-          </button> : header.column.columnDef.header}
-        </th>;
-      })}</tr>)}</thead>
-      <tbody>{table.getRowModel().rows.map(row => <tr key={row.id} className={rowClassName?.(row.original)} onClick={onRowClick ? event => { if (!event.target.closest("button,a,input,select,textarea,[role=button]")) onRowClick(row.original); } : undefined} style={onRowClick ? { cursor: "pointer" } : undefined}>
-        {row.getAllCells().map(cell => <td key={cell.id} className={cell.column.columnDef.meta.className}>
-          {cell.column.columnDef.meta.render ? cell.column.columnDef.meta.render(row.original, row.index) : String(cell.getValue() ?? "—")}
-        </td>)}
-      </tr>)}{!data.length && <tr><td className="empty" colSpan={columns.length}>{empty}</td></tr>}</tbody>
-    </Table>
-  </div>;
+// The API owns ordering and pagination. Both renderers preserve the supplied
+// page and expose the same controlled sorting and React cell callbacks.
+export default function DataTable(props) {
+  return typeof document === "undefined" ? <NativeDataTable {...props} /> : <TabulatorTable {...props} />;
 }
 
 export function serverSorting(sortBy, sortOrder) { return [{ id: sortBy, desc: sortOrder === "desc" }]; }

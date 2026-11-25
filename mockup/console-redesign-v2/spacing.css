@@ -1,0 +1,51 @@
+/* Shared rhythm for the offline wireframe. Keep spacing on one owner only:
+   stacked layouts use gap, while unwrapped page sections use sibling spacing. */
+:root {
+  --space-1: 8px;
+  --space-2: 12px;
+  --space-3: 16px;
+  --space-4: 20px;
+  --space-5: 24px;
+}
+
+/* These page sections are deliberately not wrapped in .stack. Without an
+   explicit sibling gap, toolbars, tables and configuration cards touch. */
+#main-content > :is(.toolbar, .role-grid, .detail-grid, .panel)
+  + :is(.toolbar, .role-grid, .detail-grid, .panel, .split, .metrics, .stack, .callout) {
+  margin-block-start: var(--space-4);
+}
+
+/* A grid gap already separates these components. Their standalone bottom
+   margins would otherwise produce a second, larger gap inside the grid. */
+.stack > :is(.metrics, .setting-banner, .configuration-disclosure, .filter-row, .detail-hero, .verdict-hero) {
+  margin-block-end: 0;
+}
+.stack > .panel:has(.configuration-comparison) { margin-block: 0; }
+
+/* Small card contents need breathing room too, without adding margins to
+   forms, source text, table rows, or containers that already own a grid gap. */
+.panel-header :is(h2, h3) + p { margin-block-start: 4px; }
+.panel-body:not(.stack) > :is(p, .row, .definition-list, .context-grid, .context-item, .form-grid, .code-block)
+  + :is(.button, .row, .toolbar, .callout, .context-item) {
+  margin-block-start: var(--space-2);
+}
+.panel-body:not(.stack) > :is(.row, .context-item, .form-grid, .code-block) + p {
+  margin-block-start: var(--space-2);
+}
+.callout > strong + p { margin-block-start: 4px; }
+.callout > :is(p, .button, .row) + :is(p, .button, .row) { margin-block-start: var(--space-1); }
+
+/* Some Tabulator action cells contain inline buttons rather than a toolbar. */
+.cell-content > .button + .button { margin-inline-start: var(--space-1); }
+
+.timing-scope-note { margin-block-end: var(--space-4); line-height: 1.9; }
+.timing-statistics .definition-list > div { display: grid; grid-template-columns: 120px minmax(0, 1fr); align-items: start; gap: var(--space-3); }
+.timing-statistics .definition-list dd { text-align: left; line-height: 1.9; overflow-wrap: anywhere; }
+
+@media (max-width: 600px) {
+  .timing-statistics .definition-list > div { grid-template-columns: minmax(0, 1fr); gap: 5px; }
+  #main-content > :is(.toolbar, .role-grid, .detail-grid, .panel)
+    + :is(.toolbar, .role-grid, .detail-grid, .panel, .split, .metrics, .stack, .callout) {
+    margin-block-start: var(--space-3);
+  }
+}

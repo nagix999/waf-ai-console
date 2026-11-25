@@ -5,8 +5,8 @@
 .console-table tbody tr:last-child > :is(td, th) { border-bottom: 0; }
 .console-table td { white-space: normal; overflow-wrap: anywhere; }
 .console-table small { display: block; color: var(--muted); margin-top: 3px; }
-.data-table-wrap { max-width: 100%; border-radius: 10px; outline-offset: -2px; }
-.data-table { table-layout: fixed; min-width: 720px; }
+.data-table-wrap { min-width: 0; max-width: 100%; border-radius: 10px; outline-offset: -2px; }
+.console-table.data-table { table-layout: fixed; min-width: 720px; }
 .console-table .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .data-table .analysis-row-pending { background: var(--analysis-wait-row, var(--raised)); }
 .data-table .analysis-row-processing { background: var(--analysis-running-row, var(--accent-soft)); }
@@ -28,4 +28,5 @@
 .data-table .unified-company strong { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; white-space: normal; }
 .data-table .unified-event-title { font-weight: 600; }
 .data-table .table-meta small { white-space: normal; }
+.table-sort:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 3px; }
 @media (max-width: 760px) { .console-table :is(th, td) { padding: 10px 12px; } }

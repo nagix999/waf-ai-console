@@ -7,6 +7,7 @@ from alembic.config import Config
 from sqlalchemy import create_engine, inspect, text
 
 from app.config import Settings
+from migration_test_helpers import run_isolated_migration
 
 
 @pytest.mark.parametrize("existing", [False, True])
@@ -30,7 +31,7 @@ def test_read_index_migration_preserves_data_and_is_reversible(tmp_path, monkeyp
     command.upgrade(config, "head")
     command.upgrade(config, "head")
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0032_signature_explanations"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0033_feedback_provenance"
         assert any(index["name"] == "ix_analyses_created_id" and index["column_names"] == ["created_at", "id"] for index in inspect(connection).get_indexes("analyses"))
         plan = connection.execute(text("EXPLAIN QUERY PLAN SELECT id,status FROM analyses WHERE created_at >= '2020-01-01' ORDER BY created_at DESC,id DESC LIMIT 20")).all()
         assert any("ix_analyses_created_id" in row[3] for row in plan)
@@ -38,7 +39,15 @@ def test_read_index_migration_preserves_data_and_is_reversible(tmp_path, monkeyp
         assert connection.execute(text("PRAGMA foreign_key_check")).all() == []
         if existing:
             assert connection.execute(text("SELECT * FROM analyses")).all() == before
-    command.downgrade(config, "0024_r5_contract")
+    if existing:
+        with pytest.raises(RuntimeError, match="production_provenance_downgrade_requires_pre_upgrade_backup"):
+            command.downgrade(config, "0024_r5_contract")
+        with engine.begin() as connection:
+            assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0033_feedback_provenance"
+            assert connection.execute(text("SELECT * FROM analyses")).all() == before
+            run_isolated_migration(connection, "0025_analysis_read_index", "downgrade")
+    else:
+        command.downgrade(config, "0024_r5_contract")
     with engine.connect() as connection:
         assert all(index["name"] != "ix_analyses_created_id" for index in inspect(connection).get_indexes("analyses"))
         if existing:

@@ -7,10 +7,14 @@ import MoreActions from "./MoreActions.jsx";
 import DataTable from "./DataTable.jsx";
 import RegistryFilters from "./RegistryFilters.jsx";
 import "./internalEgressSettings.css";
+import NavigationAction from "./NavigationAction.jsx";
+import { SettingsSectionHeader } from "./SettingsWorkspace.jsx";
+import { useConsolePreferences } from "./consolePreferences.jsx";
 
 const profileStatus = { production: "운영 사용", verified: "검증 완료", draft: "미검증", disabled: "사용 중지" };
 
 export function InternalEgressView({ state, controller, addressRef }) {
+  const { locale } = useConsolePreferences(); const w = (ko, en) => locale === "en" ? en : ko;
   const addressId = useId();
   const [editorOpen, setEditorOpen] = useState(false); const [deleting, setDeleting] = useState(null); const [technical, setTechnical] = useState(null);
   const [discardOpen, setDiscardOpen] = useState(false);
@@ -23,29 +27,27 @@ export function InternalEgressView({ state, controller, addressRef }) {
   const targetChanged = latest && !sameInternalTarget(state.draft, latest);
   const update = (field) => (event) => controller?.update(field, event.target.value);
 
-  return <div className="internal-egress-settings">
-    <section className="panel egress-overview">
-      <div className="egress-heading"><div><h2>내부 연결 허용</h2><p>vLLM에서 사용할 서버 주소를 등록합니다. OpenAI 설정에는 영향이 없으며 방화벽 설정·연결 검증을 대신하지 않습니다.</p></div><div className="egress-actions">
-        <button type="button" className="secondary" disabled={busy || state.loading} onClick={() => controller?.refresh()}>새로고침</button><button type="button" className="primary" disabled={blocked} onClick={() => setEditorOpen(true)}>{state.editing ? "편집 계속" : "내부 대상 추가"}</button></div></div>
-    </section>
+  return <div className="internal-egress-settings settings-workspace">
+    <SettingsSectionHeader icon="server" title={w("내부 연결 허용", "Allowed internal targets")} description={w("vLLM 요청을 허용할 내부 IP와 포트를 관리합니다. OpenAI 연결에는 영향을 주지 않습니다.", "Manage internal IP addresses and ports permitted for vLLM requests. OpenAI connections are unchanged.")} actions={<><button type="button" className="secondary" disabled={busy || state.loading} onClick={() => controller?.refresh()}>새로고침</button><button type="button" className="primary" disabled={blocked} onClick={() => setEditorOpen(true)}>{state.editing ? "편집 계속" : "내부 대상 추가"}</button></>} />
 
     {state.error && <div className="error" role="alert">{state.error}</div>}
     {state.notice && <div className="notice" role="status">{state.notice}</div>}
 
-    <div className="egress-layout egress-list-first">
+    <div className="settings-detail-grid">
       <section className="panel egress-list" aria-label="내부 허용 대상 목록">
         <div className="panel-head"><h2>내부 허용 대상</h2><span>{state.items ? `${state.items.length}개` : "미조회"}</span></div>
         <RegistryFilters search={search} onSearch={setSearch} placeholder="IP · 포트 · 설명 · 연결 프로필" />
         {!state.items ? <p className="egress-empty" role="status">{state.loading ? "허용 대상을 불러오는 중…" : "목록을 확인하지 못했습니다. 새로고침해 주세요."}</p>
           : <DataTable label="vLLM 연결 대상" data={items} columns={[
-            {id:"address", header:"IP / 포트", render:item => <strong>{internalTargetAddress(item)}</strong>},
-            {id:"description", header:"설명", render:item => <span className="v5-clamp" title={item.description}>{item.description || "—"}</span>},
-            {id:"profiles", header:"연결 프로필", render:item => item.in_use_profiles.length ? <ul className="egress-profiles" aria-label="사용 중인 vLLM 프로필">{item.in_use_profiles.map(profile => <li key={profile.id}><span>{profile.name}</span><small>{profileStatus[profile.status] || profile.status}</small></li>)}</ul> : <span className="ux-muted">사용 안 함</span>},
-            {id:"actions", header:"관리", width:160, render:item => <div className="egress-actions"><button type="button" className="secondary small" disabled={blocked} onClick={() => { if (state.editing?.id !== item.id) controller?.edit(item); setEditorOpen(true); }} aria-label={`${internalTargetAddress(item)} 편집`}>편집</button><MoreActions label={`${internalTargetAddress(item)} 관리`}><button type="button" disabled={blocked || item.in_use_profiles.length > 0} onClick={() => setDeleting(item)} aria-label={`${internalTargetAddress(item)} 삭제`}>삭제</button><button type="button" onClick={() => setTechnical(item)}>기술정보</button></MoreActions></div>},
+            {id:"address", header:"IP / 포트", minWidth:150, render:item => <strong>{internalTargetAddress(item)}</strong>},
+            {id:"description", header:"설명", minWidth:180, render:item => <span className="v5-clamp" title={item.description}>{item.description || "—"}</span>},
+            {id:"profiles", header:"연결 프로필", minWidth:180, render:item => item.in_use_profiles.length ? <ul className="egress-profiles" aria-label="사용 중인 vLLM 프로필">{item.in_use_profiles.map(profile => <li key={profile.id}><span>{profile.name}</span><small>{profileStatus[profile.status] || profile.status}</small></li>)}</ul> : <span className="ux-muted">사용 안 함</span>},
+            {id:"actions", header:"관리", width:160, minWidth:160, render:item => <div className="egress-actions"><button type="button" className="secondary small" disabled={blocked} onClick={() => { if (state.editing?.id !== item.id) controller?.edit(item); setEditorOpen(true); }} aria-label={`${internalTargetAddress(item)} 편집`}>편집</button><MoreActions label={`${internalTargetAddress(item)} 관리`}><button type="button" disabled={blocked || item.in_use_profiles.length > 0} onClick={() => setDeleting(item)} aria-label={`${internalTargetAddress(item)} 삭제`}>삭제</button><button type="button" onClick={() => setTechnical(item)}>기술정보</button></MoreActions></div>},
           ]} empty={search ? "검색 조건에 맞는 대상이 없습니다." : "등록된 내부 대상이 없습니다. vLLM을 사용하려면 IP와 포트를 등록하세요."} />}
         {state.items?.some(item => item.in_use_profiles.length > 0) && <p className="egress-description">사용 중인 대상은 설명만 수정할 수 있습니다. 주소 변경·삭제는 연결 프로필을 모두 비활성화한 뒤 가능합니다.</p>}
         {state.needsRefresh && state.items && <p className="egress-empty">이전 조회 목록입니다. 최신 목록 조회에 성공할 때까지 변경할 수 없습니다.</p>}
       </section>
+      <aside className="settings-context-stack"><section className="panel settings-context-card"><h3>{w("연결 허용 기준", "Connection requirements")}</h3><p>{w("vLLM 프로필의 IP와 포트가 등록한 대상과 일치해야 합니다. 여러 내부 서버를 등록할 수 있습니다.", "A vLLM profile must match a registered IP address and port. Multiple internal servers are supported.")}</p><p>{w("OpenAI 설정에는 영향이 없으며 방화벽 설정·연결 검증을 대신하지 않습니다.", "OpenAI settings are unchanged. This list does not replace firewall policy or a connection test.")}</p><NavigationAction href="#configure/llm-profiles">{w("LLM 프로필", "LLM Profiles")}</NavigationAction></section><section className="panel settings-context-card"><h3>{w("변경 전 확인", "Before changing a target")}</h3><p>{w("사용 중인 대상은 설명만 바꿀 수 있습니다. 주소 변경과 삭제는 연결 프로필을 비활성화한 뒤 가능합니다.", "Only the description can be changed while a target is in use. Disable connected profiles before changing or deleting the address.")}</p></section></aside>
     </div>
     <Dialog open={editorOpen} title={state.editing ? "내부 대상 편집" : "내부 대상 추가"} onClose={() => { if (!busy) setEditorOpen(false); }} className="internal-egress-settings egress-dialog">
       <form className="egress-editor" onSubmit={async (event) => { event.preventDefault(); if (await controller?.save()) setEditorOpen(false); }} noValidate>

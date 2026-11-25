@@ -171,6 +171,10 @@ def enqueue_analysis(
     # Pin the complete instructions with the new event. Duplicate submissions
     # above retain the original version and do not acquire the current policy.
     try:
+        if analysis_purpose == "production":
+            from .prompt_snapshots import approved_production_record
+            approved = approved_production_record(db)
+            row.production_configuration_id = approved.id if approved else None
         pin_parser(db, crypto, row, version_id=None if analysis_purpose == "production" else "generic-http-v3",
                    selection_origin="production" if analysis_purpose == "production" else "test")
         if schema_snapshot is None:

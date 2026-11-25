@@ -143,6 +143,10 @@ class Analysis(Base):
     parser_snapshot_json: Mapped[dict | None] = mapped_column(JSON)
     signature_explanation_version_id: Mapped[str | None] = mapped_column(ForeignKey("signature_explanation_versions.id", ondelete="RESTRICT"))
     signature_explanation_snapshot_ciphertext: Mapped[str | None] = mapped_column(Text)
+    # Approved Production configuration at admission, not a full execution
+    # snapshot match assertion. Older analyses remain unrecorded.
+    production_configuration_id: Mapped[str | None] = mapped_column(
+        ForeignKey("production_promotions.id", ondelete="RESTRICT"), index=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)

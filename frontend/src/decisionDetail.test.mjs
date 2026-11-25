@@ -47,6 +47,16 @@ test("missing timing and omission metadata are not inferred as zero or complete 
   assert.match(html, /미측정/); assert.match(html, /입력 생략<\/dt><dd>미기록/);
   assert.doesNotMatch(html, /입력 생략<\/dt><dd>없음/);
 });
+test("the verdict hero has one integrated title and compact timing, with technical context folded", () => {
+  const detail = { ...fixture(), event_name: "합성 요청 검토", company_name: "예시 회사", signature: "합성 시그니처", total_elapsed_ms: 12500, queue_wait_ms: 2000, processing_duration_ms: 10500 };
+  const before = JSON.stringify(detail), html = render(DecisionHero, { detail });
+  assert.equal((html.match(/<h1>/g) || []).length, 1);
+  assert.doesNotMatch(html, /decision-page-heading|decision-hero-main/);
+  assert.match(html, /decision-hero-kicker/); assert.match(html, /예시 회사/);
+  assert.match(html, /decision-hero-timing/); assert.match(html, /12.50초/);
+  assert.match(html, /<details class="decision-hero-observations">/);
+  assert.equal(JSON.stringify(detail), before);
+});
 test("pending and failed results never masquerade as final decisions", () => {
   for (const status of ["failed", "pending", "processing"]) {
     const detail = { ...fixture(), status };
@@ -66,6 +76,13 @@ test("reference evidence is folded, attack and benign evidence stay visible and 
   assert.match(html, /공격 요청 근거/); assert.match(html, /정상 요청 근거/);
   assert.match(html, /<details class="decision-context-evidence">/);
   assert.match(html, /&lt;script&gt;/); assert.doesNotMatch(html, /<script/);
+});
+test("evidence interpretation precedes its excerpt and role provenance stays available in a disclosure", () => {
+  const detail = fixture(), row = detail.result.analyst_assessment.evidence[0];
+  row.origins = [{ role: "primary", index: 0 }];
+  const html = render(EvidenceCards, { detail, onViewInput() {} });
+  assert.ok(html.indexOf(row.interpretation_ko) < html.indexOf("$(id)"));
+  assert.doesNotMatch(html, /<small>payload.body<\/small>/);
 });
 test("malformed historical excerpts do not crash React or become fabricated evidence", () => {
   const result = { evidence: [{ field: "payload", excerpt: { unexpected: true } }, { field: null, excerpt: "x" }, { field: "payload", excerpt: "kept", interpretation_ko: "original" }] };
@@ -138,13 +155,16 @@ test("context separates collector score from final decision and reference label"
   assert.match(html, /참고 판정/); assert.doesNotMatch(html, /saved-model/);
   assert.equal((html.match(/%/g) || []).length, 1);
 });
-test("execution starts with summary, not a full debugger; legacy JSON can start expanded", () => {
+test("execution directly connects the stage navigator and records; legacy JSON selects the API result", () => {
   const detail = fixture(), runs = [{ id: "hidden-run", steps: [{ id: "step", step_type: "llm_primary", status: "completed", duration_ms: 250, output: "private-output" }] }];
   const html = render(ExecutionView, { detail, runs });
-  assert.match(html, /전체 단계 보기/); assert.match(html, /saved-model/);
-  assert.doesNotMatch(html, /private-output|inspection-agent-grid|hidden-run/);
-  assert.match(html, /<details><summary>결과 JSON/);
-  assert.match(render(ExecutionView, { detail, runs, initialJson: true }), /<details open=""><summary>결과 JSON/);
+  assert.match(html, /inspection-agent-grid execution-workspace/); assert.match(html, /saved-model/);
+  assert.match(html, /private-output/);
+  assert.match(html, /execution-final-result/);
+  assert.doesNotMatch(html, /decision-trace|decision-json|전체 단계 보기/);
+  const final = render(ExecutionView, { detail, runs, initialJson: true });
+  assert.match(final, /execution-final-detail/); assert.match(final, /구분 조건을 확인해야 합니다/);
+  assert.doesNotMatch(final, /private-output/);
 });
 
 test("execution separates current asynchronous evidence status from the immutable original trace", () => {
@@ -158,7 +178,21 @@ test("execution separates current asynchronous evidence status from the immutabl
   assert.match(html, /근거 정리는 분석 종료 후 별도로 처리합니다/);
   assert.match(html, /건너뜀/);
   assert.equal(JSON.stringify(runs), before);
-  assert.doesNotMatch(html, /inspection-agent-grid/);
+  assert.match(html, /execution-configuration/);
+  assert.match(html, /inspection-agent-grid/);
+});
+test("final JSON is independently selectable and no missing execution history is fabricated", () => {
+  const detail = fixture(), html = render(ExecutionView, { detail, runs: [], executionSelection: { stepId: "result", view: "input" }, onExecutionSelectionChange() {} });
+  assert.match(html, /execution-final-detail/);
+  assert.match(html, /기록된 단계가 없습니다/);
+  assert.match(html, /구분 조건을 확인해야 합니다/);
+  assert.doesNotMatch(html, /실행 선택|name="run_id"|단계 자료/);
+});
+
+test("per-analysis feedback is a real filtered history action, never an invented registration form or count", () => {
+  const html = render(DecisionContext, { detail: fixture(), onFeedback() {} });
+  assert.match(html, /이 분석의 피드백/); assert.match(html, /API로 등록된 의견/);
+  assert.doesNotMatch(html, /피드백 남기기|이력 0건|피드백 등록/);
 });
 
 for (const verdict of ["true_positive", "false_positive", "inconclusive"]) for (const action of ["D", "A"]) test(`WAF ${action} and ${verdict}: observation is not a verdict prerequisite`, () => {

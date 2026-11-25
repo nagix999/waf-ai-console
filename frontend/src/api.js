@@ -31,6 +31,10 @@ export async function request(path, options = {}) {
 
 export const api = {
   analysisEvidenceMeta,
+  feedback: (query = {}, options = {}) => request(`/api/v1/admin/feedback?${new URLSearchParams(query)}`, { ...options, cache: "no-store" }),
+  feedbackSummary: (query = {}, options = {}) => request(`/api/v1/admin/feedback/summary?${new URLSearchParams(query)}`, { ...options, cache: "no-store" }),
+  feedbackVersions: (query = {}, options = {}) => request(`/api/v1/admin/feedback/versions?${new URLSearchParams(query)}`, { ...options, cache: "no-store" }),
+  feedbackDetail: (id, options = {}) => request(`/api/v1/admin/feedback/${encodeURIComponent(id)}`, { ...options, cache: "no-store" }),
   signatureExplanations: (query = {}, options = {}) => request(`/api/v1/admin/signature-explanations?${new URLSearchParams(query)}`, { ...options, cache: "no-store" }),
   signatureExplanation: (id, options = {}) => request(`/api/v1/admin/signature-explanations/${encodeURIComponent(id)}`, { ...options, cache: "no-store" }),
   createSignatureExplanation: payload => request("/api/v1/admin/signature-explanations", { method: "POST", body: JSON.stringify(payload), cache: "no-store" }),

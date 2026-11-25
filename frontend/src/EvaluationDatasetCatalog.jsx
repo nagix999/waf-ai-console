@@ -3,6 +3,7 @@ import { api } from "./api.js";
 import DataTable from "./DataTable.jsx";
 import Pagination from "./Pagination.jsx";
 import HelpTooltip from "./HelpTooltip.jsx";
+import { SettingsPageActions } from "./SettingsWorkspace.jsx";
 import { useWords } from "./LifecycleViews.jsx";
 import { draftCount, productionDatasetRevision } from "./evaluationDatasets.js";
 import "./evaluationDatasets.css";
@@ -34,8 +35,9 @@ export default function EvaluationDatasetCatalog({ state, onChange, onSelect, on
     { id: "changes", header: w("변경", "Changes"), className: "dataset-change-count", render: row => row.working_change_count ?? "—" },
   ];
   return <section className="panel evaluation-dataset-catalog" aria-busy={!data && !error}>
-    <div className="dataset-catalog-toolbar"><label>{w("평가 데이터셋 검색", "Find evaluation datasets")}<input maxLength={120} value={state.query} disabled={disabled} placeholder={w("이름으로 검색", "Search by name")} onChange={event => onChange({ ...state, query: event.target.value, offset: 0 })} /></label><button type="button" className="primary" disabled={disabled} onClick={onCreate}>+ {w("평가 데이터셋 만들기", "Create Evaluation Dataset")}</button></div>
-    <p className="v5-context">{w("요청 입력과 기대 판정을 함께 관리하는 문항 모음입니다. 초안을 편집한 뒤 공식 버전으로 평가 기준을 고정합니다.", "Manage request inputs and expected verdicts. Edit the draft, then publish a version to freeze the evaluation criteria.")}</p>
+    <SettingsPageActions><button type="button" className="primary" disabled={disabled} onClick={onCreate}>+ {w("평가 데이터셋 만들기", "Create Evaluation Dataset")}</button></SettingsPageActions>
+    <div className="panel-head"><div><h2>{w("데이터셋 목록", "Dataset list")}</h2><p>{w("공식 버전은 보존하고 수정은 초안에서 진행합니다.", "Published Versions are preserved. Make changes in the Draft.")}</p></div>{data && <span className="count-label">{data.total} {w("개", "datasets")}</span>}</div>
+    <div className="dataset-catalog-toolbar"><label>{w("평가 데이터셋 검색", "Find evaluation datasets")}<input maxLength={120} value={state.query} disabled={disabled} placeholder={w("이름으로 검색", "Search by name")} onChange={event => onChange({ ...state, query: event.target.value, offset: 0 })} /></label></div>
     {error ? <p className="error" role="alert">{w("평가 데이터셋 목록을 불러오지 못했습니다.", "Could not load evaluation datasets.")} <button type="button" className="text-button" onClick={() => setReload(value => value + 1)}>{w("다시 조회", "Retry")}</button></p> : !data ? <p role="status">{w("목록을 불러오는 중…", "Loading datasets…")}</p> : <>
       <DataTable label={w("평가 데이터셋 목록", "Evaluation Dataset list")} className="evaluation-dataset-table" data={data.items} columns={columns} onRowClick={disabled ? undefined : row => onSelect(row.id)} rowClassName={row => productionDatasetRevision(row.id, groundTruth) !== null ? "dataset-current-evaluation" : ""} empty={state.query ? w("검색 결과가 없습니다.", "No matching datasets.") : w("평가 데이터셋을 만들어 문항을 추가하세요. 테스트 문항을 복사해 시작할 수도 있습니다.", "Create a dataset and add cases, or copy cases from a Test.")} />
       <Pagination total={data.total} limit={state.limit} offset={state.offset} onOffsetChange={offset => onChange({ ...state, offset })} disabled={disabled} unit={w("개", "datasets")} label={w("평가 데이터셋 페이지", "Evaluation Dataset pages")} />

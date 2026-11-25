@@ -118,10 +118,10 @@ const markup = state => renderToStaticMarkup(createElement(ServiceApiKeysView, {
 
 test("service key UI displays only DB-issued keys and one-time secrets with escaped text and no admin scope", () => {
   const html = markup({ ...emptyServiceKeysState(), catalog: catalog([item({ name: '<script>SYNTHETIC</script>' }), item({ id: "revoked", revoked_at: "2026-09-07T01:00:00Z" })]) });
-  assert.match(html, /<h2>서비스 API 키<\/h2>/); assert.match(html, /최근 인증/); assert.doesNotMatch(html, /서비스 API 키 설명|최근 키 사용 설명/); assert.match(html, /연동 시스템/); assert.match(html, /분석 접수·조회/); assert.doesNotMatch(html, /WAF_BOOTSTRAP_API_KEY|기존 서비스 키|환경 키|service-key-bootstrap/); assert.doesNotMatch(html, /synthetic-key-id|wafsvc_syntheticpublicid|service-key-form/); assert.match(html, /관리" aria-expanded="false"/);
+  assert.match(html, /<h2>발급된 키<\/h2>/); assert.match(html, /최근 인증/); assert.doesNotMatch(html, /서비스 API 키 설명|최근 키 사용 설명/); assert.match(html, /연동 시스템/); assert.match(html, /분석 접수·조회/); assert.doesNotMatch(html, /WAF_BOOTSTRAP_API_KEY|기존 서비스 키|환경 키|service-key-bootstrap/); assert.doesNotMatch(html, /synthetic-key-id|wafsvc_syntheticpublicid|service-key-form/); assert.match(html, /관리" aria-expanded="false"/);
   const source = readFileSync(new URL("./ServiceApiKeys.jsx", import.meta.url), "utf8");
-  assert.match(html, /LLM 제공자 인증 키와는 별개/);
-  assert.match(source, /<HelpTooltip label="연동 시스템"/); assert.doesNotMatch(source, /<HelpTooltip label="서비스 키 권한"/);
+  assert.match(html, /LLM 제공자 인증 키와 별개/);
+  assert.match(source, /<HelpTooltip label=\{w\("연동 시스템", "Source system"\)\}/); assert.doesNotMatch(source, /<HelpTooltip label="서비스 키 권한"/);
   assert.match(source, /같은 용도와 연동 시스템을 사용하는 키들은 동일한 데이터 범위를 공유/); assert.match(source, /선택한 연동 시스템만 접근 · 관리자 권한 제외/);
   assert.match(source, /최대 60초 간격으로 갱신되며 분석 완료 시각과는 다릅니다/);
   assert.match(html, /&lt;script&gt;SYNTHETIC&lt;\/script&gt;/); assert.doesNotMatch(html, /<script>|발급된 API Key 원문|value="admin"/);

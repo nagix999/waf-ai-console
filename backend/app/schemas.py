@@ -41,7 +41,8 @@ class AnalysisInput(BaseModel):
     @classmethod
     def reject_server_fields(cls, value: Any) -> Any:
         if isinstance(value, dict) and isinstance(value.get("extra_fields"), dict) and {
-            "signature_explanation", "signature_explanation_version_id", "signature_explanation_snapshot_ciphertext"
+            "signature_explanation", "signature_explanation_version_id", "signature_explanation_snapshot_ciphertext",
+            "production_configuration_id",
         }.intersection(value["extra_fields"]):
             raise ValueError("server_control_fields_not_allowed")
         if isinstance(value, dict) and isinstance(value.get("extra_fields"), dict) and {

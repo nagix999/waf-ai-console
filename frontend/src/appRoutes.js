@@ -1,4 +1,6 @@
-// Only screen names, tab enums and server-generated UUIDs belong in URLs.
+import { feedbackUrlState, initialFeedbackState, validFeedbackDate } from "./feedbackView.js";
+
+// Only screen names, safe date/enum filters and server-generated UUIDs belong in URLs.
 // Search terms, form drafts, API responses and secrets stay out of this module.
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const settingsTabs = new Set(["models", "agents", "instructions", "concurrency", "schema", "parsers", "signature-explanations", "egress", "keys"]);
@@ -18,6 +20,33 @@ const canonical = {
 };
 
 export function readAppHash(hash) {
+  const [path, query] = typeof hash === "string" ? hash.split("?") : [hash];
+  const route = readRoutePath(path);
+  if (!route || query === undefined) return route;
+  const params = new URLSearchParams(query);
+  if (route.page === "feedback") {
+    const defaults = initialFeedbackState();
+    const state = feedbackUrlState({ ...defaults,
+      start: validFeedbackDate(params.get("start")) ? params.get("start") : defaults.start,
+      end: validFeedbackDate(params.get("end")) ? params.get("end") : defaults.end,
+      purpose: params.get("purpose"), version: params.get("version"), category: params.get("category"),
+      analysis: params.get("analysis"), selectedId: params.get("selected"),
+      limit: Number(params.get("limit") || 20), offset: Number(params.get("offset") || 0),
+    });
+    return { ...route, feedbackState: { ...state, query: "" } };
+  }
+  if (route.page !== "detail") return null;
+  const runId = params.get("run"), stepId = params.get("step"), view = params.get("view");
+  const executionSelection = {
+    runId: uuid.test(runId || "") ? runId.toLowerCase() : null,
+    stepId: stepId === "result" ? "result" : uuid.test(stepId || "") ? stepId.toLowerCase() : null,
+    view: ["output", "input", "metadata"].includes(view) ? view : "output",
+  };
+  return { ...route, executionSelection };
+}
+
+function readRoutePath(hash) {
+  if (hash === "#operate/feedback") return { page: "feedback" };
   if (hash === "#configure/parsers/new/data") return { page: "settings", tab: "parsers", parserRoute: { view: "new", step: "data" } };
   if (hash === "#configure/parsers/legacy") return { page: "settings", tab: "parsers", parserRoute: { view: "legacy" } };
   const parserSession = typeof hash === "string" && hash.match(/^#configure\/parsers\/sessions\/([^/]+)\/(data|formats|verify)$/);
@@ -70,6 +99,25 @@ export function readAppHash(hash) {
 }
 
 export function writeAppHash(state) {
+  const path = state.page === "feedback" ? "#operate/feedback" : writeRoutePath(state);
+  const params = new URLSearchParams();
+  if (state.page === "feedback" && state.feedbackState) {
+    const safe = feedbackUrlState(state.feedbackState);
+    for (const key of ["start", "end", "purpose", "version", "category", "analysis", "limit", "offset"]) {
+      if (safe[key] !== "" && safe[key] !== null && safe[key] !== undefined) params.set(key, safe[key]);
+    }
+    if (safe.selectedId) params.set("selected", safe.selectedId);
+  }
+  if (state.page === "detail" && state.detailTab === "agent") {
+    const selection = state.executionSelection || {};
+    if (uuid.test(selection.runId || "")) params.set("run", selection.runId.toLowerCase());
+    if (selection.stepId === "result" || uuid.test(selection.stepId || "")) params.set("step", selection.stepId.toLowerCase());
+    if (["input", "metadata"].includes(selection.view)) params.set("view", selection.view);
+  }
+  return params.size ? `${path}?${params}` : path;
+}
+
+function writeRoutePath(state) {
   const legacy = writeLegacyHash(state);
   if (state.page === "settings" && state.settingsTab === "parsers") {
     const route = state.parserRoute;
@@ -118,6 +166,7 @@ function writeLegacyHash(state) {
 export function applyAppRoute(state, route) {
   if (!route) return state;
   const next = { ...state, page: route.page };
+  if (route.page === "feedback") next.feedbackState = route.feedbackState || state.feedbackState || initialFeedbackState();
   if (route.page === "promote") next.promoteRunId = route.promoteRunId;
   if (route.page === "datasets") next.datasetId = route.datasetId;
   if (route.page === "settings") {
@@ -128,6 +177,7 @@ export function applyAppRoute(state, route) {
     next.selectedId = route.id;
     next.detailTab = route.tab;
     next.detailReturnPage = "analyses";
+    next.executionSelection = route.executionSelection || null;
     if (route.purpose === "test" && !route.runId) {
       next.resultsPurpose = "test";
       next.testResults = { ...state.testResults, view: "items", runId: null, caseId: null };

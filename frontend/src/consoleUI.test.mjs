@@ -68,6 +68,8 @@ test("preferences accept only explicit locale/theme values and survive denied st
   assert.equal(readPreference({ getItem: () => "sk" }, "theme", ["light", "sk", "dark"], "light"), "sk");
   assert.equal(readPreference({ getItem: () => "system" }, "theme", ["light", "sk", "dark"], "light"), "light");
   assert.equal(readPreference({ getItem: () => { throw Error(); } }, "locale", ["ko", "en"], "ko"), "ko");
+  assert.equal(readPreference({ getItem: () => "compact" }, "density", ["comfortable", "compact"], "comfortable"), "compact");
+  assert.equal(readPreference({ getItem: () => "unexpected" }, "density", ["comfortable", "compact"], "comfortable"), "comfortable");
 });
 
 test("shell derives avatar from principal, does not claim Production health and omits SOC branding", () => {
@@ -76,6 +78,10 @@ test("shell derives avatar from principal, does not claim Production health and 
   assert.match(html, /운영 상태 미측정/); assert.match(html, /aria-hidden="true">F<\/span>/);
   assert.doesNotMatch(html, /SECURITY OPERATIONS|Production 정상|INTERNAL WORKSPACE/);
   assert.match(html, /화면 언어/); assert.match(html, /테마/);
+  assert.match(html, /SECURITY WORKSPACE/);
+  assert.match(html, /class="console-search-trigger"/);
+  assert.match(html, /aria-label="촘촘한 표" aria-pressed="false"/);
+  assert.doesNotMatch(html, /<form role="search"/); // focus-contained search dialog opens on request
 });
 
 test("runtime loading and failure states never fabricate zero requests or healthy workers", () => {
@@ -104,7 +110,7 @@ test("visible polling pauses in background, resumes without overlap, aborts and 
 test("R5 navigation uses read-only Production roles and keeps Tests separate", () => {
   const { Settings, AnalysisResultsPage } = load("./App.jsx");
   const agent = renderToStaticMarkup(createElement(Settings, { standalone: true, tab: "agents" }));
-  assert.doesNotMatch(agent, /aria-label="설정 항목"|aria-label="Agent 설정 구분"/); assert.match(agent, /운영 Agent 역할/);
+  assert.doesNotMatch(agent, /aria-label="설정 항목"|aria-label="Agent 설정 구분"/); assert.match(agent, /aria-label="운영 역할별 모델"/);
   assert.match(agent, /공식 테스트와 운영 반영 검토/);
   assert.doesNotMatch(agent, /<select|역할 저장/);
   const run = renderToStaticMarkup(createElement(AnalysisResultsPage, { splitNavigation: true, purpose: "test", testState: { view: "runs", runId: null }, setTestState: () => {} }));

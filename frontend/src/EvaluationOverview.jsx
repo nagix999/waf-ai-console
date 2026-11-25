@@ -2,11 +2,12 @@ import { useState } from "react";
 import Dialog from "./Dialog.jsx";
 import { MetricCards } from "./EvaluationMetrics.jsx";
 import { EvaluationSummary } from "./ReferenceLabels.jsx";
+import "./overviewEvaluationDesign.css";
 
 export default function EvaluationOverview({ summary, loading, error, scopeLabel, onMatrixCell, selectedCell, evaluationMode = "reference" }) {
   const [open, setOpen] = useState(false);
   const official = evaluationMode === "ground_truth";
-  return <section className="panel evaluation-overview" aria-label="평가 지표">
+  return <section className="panel evaluation-overview oe-evaluation-overview" aria-label="평가 지표">
     <div className="panel-head"><div><h2>{official ? "공식 평가 지표" : "평가 지표"}</h2><p className="ux-muted">{scopeLabel || "검색 조건"} · {official ? "실행 시 고정한 승인 기대 판정 기준" : "참고 판정 표본 기준"} · 운영 전체 정확도는 아닙니다.</p></div><button className="secondary" type="button" onClick={() => setOpen(true)} disabled={!summary || !!error}>평가 상세</button></div>
     {error ? <p className="error" role="alert">평가 지표를 불러오지 못했습니다.</p> : loading && !summary ? <p className="loading" role="status">지표를 불러오는 중…</p> : <>
       <MetricCards metrics={summary?.metrics} compact />

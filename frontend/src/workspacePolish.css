@@ -1,0 +1,29 @@
+@import "./consoleDesign.css";
+
+/* Shared breathing room, without changing the semantics of tables or forms. */
+.console-shell { --workspace-section-gap: 20px; --workspace-control-gap: 10px; }
+.console-shell :is(.ux-toolbar, .action-row, .panel-head-inline, .inference-toolbar) {
+  gap: var(--workspace-control-gap) 14px;
+}
+.console-shell :is(.ux-toolbar, .action-row) { flex-wrap: wrap; }
+.console-shell .panel > :is(.data-table-wrap, .console-tabulator-wrap) {
+  margin: 16px;
+  width: calc(100% - 32px);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.console-shell .panel-head { flex-wrap: wrap; gap: 12px 18px; }
+.console-shell .panel-head > div { min-width: 0; }
+.console-shell :is(.panel-head h2, .panel-head p) { overflow-wrap: anywhere; }
+.console-shell :is(.data-table, .console-table) .numeric { font-variant-numeric: tabular-nums; }
+.console-shell .test-performance-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.console-shell .test-performance-kpis dd { font-size: 23px; }
+.console-shell .test-performance-kpis > div { gap: 7px; }
+.console-shell :is(.feedback-workspace, .test-analysis-workspace, .inspection-history) button { scroll-margin: 16px; }
+@media (max-width: 1200px) {
+  .console-shell .test-performance-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .console-shell .panel > :is(.data-table-wrap, .console-tabulator-wrap) { margin: 12px; width: calc(100% - 24px); }
+  .console-shell .test-performance-kpis { grid-template-columns: minmax(0, 1fr); }
+}

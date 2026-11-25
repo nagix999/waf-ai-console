@@ -71,6 +71,19 @@ def test_tokens_and_output_retries_do_not_double_count_nested_citation_calls():
     assert report["roles"]["verifier"]["tokens"]["output_tokens"]["recorded"] == 0
 
 
+def test_completed_timing_population_excludes_failures_and_inflight_not_missing_as_zero():
+    complete = record()
+    failed = {**record(), "status": "failed", "completed_at": NOW + timedelta(seconds=90)}
+    pending = {**record(), "status": "pending", "started_at": None, "completed_at": None}
+    missing = {**record(), "created_at": None, "started_at": None, "completed_at": None}
+    report = summarize_performance(iter([complete, failed, pending, missing]))
+    assert report["cases"] == 4 and report["completed_cases"] == 2
+    metric = report["completed_timings"]["decision_elapsed_ms"]
+    assert metric["recorded"] == 1 and metric["unrecorded"] == 1
+    assert metric["mean_ms"] == 3000 and metric["p95_ms"] == 3000
+    assert report["timings"]["decision_elapsed_ms"]["recorded"] == 2
+
+
 @pytest.mark.parametrize("missing", [None, True, -1, 1.5, "30", 2**40])
 def test_missing_or_invalid_tokens_are_unknown_and_never_partial_totals(missing):
     value = attempts((300, 100, 20), (200, 120, missing))
@@ -115,6 +128,8 @@ def test_endpoint_selects_latest_run_step_and_preserves_display_and_missing_data
     monkeypatch.setattr(client.app.state.crypto, "decrypt_text", lambda _: pytest.fail("Never decrypt events/traces"))
     result = summary(client, run)
     assert result["version"] == "test-performance-summary-v1" and result["cases"] == 8
+    assert result["completed_cases"] == result["statuses"]["completed"]
+    assert set(result["completed_timings"]) == set(result["timings"])
     primary = result["roles"]["primary"]
     assert primary["not_observed_cases"] == 6
     assert primary["tokens"]["output_tokens"]["sum"] == 50

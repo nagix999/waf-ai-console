@@ -8,6 +8,7 @@ export default defineConfig({
     name: "report-font-license",
     generateBundle() {
       this.emitFile({ type: "asset", fileName: "assets/OFL-WafReport.txt", source: readFileSync(new URL("../backend/app/assets/fonts/OFL-Nanum.txt", import.meta.url), "utf8") });
+      this.emitFile({ type: "asset", fileName: "assets/LICENSE-Tabulator.txt", source: readFileSync(new URL("./node_modules/tabulator-tables/LICENSE", import.meta.url), "utf8") });
     }
   }],
   server: {

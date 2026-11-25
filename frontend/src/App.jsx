@@ -1,7 +1,7 @@
 import InitialAssessmentFields from "./InitialAssessmentFields.jsx";
 import { emptyInitialAssessment, initialAssessmentError, singleTestAdmission } from "./initialAssessmentInput.js";
 import NavigationAction from "./NavigationAction.jsx";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { api } from "./api.js";
 import { Icon } from "./Icon.jsx";
 import ProductionApi from "./ProductionApi.jsx";
@@ -26,6 +26,7 @@ import { CompactReferenceComparison, EvaluationSummary, LabelAttachment } from "
 import AnalysisSelectionActions, { useAnalysisSelection } from "./AnalysisSelection.jsx";
 import DataTable, { Table, serverSorting, changedSort } from "./DataTable.jsx";
 import GroundTruthWorkspace from "./GroundTruthWorkspace.jsx";
+import { analysisFeedbackState, initialFeedbackState } from "./feedbackView.js";
 import R3Overview from "./R3Overview.jsx";
 import RegistryFilters from "./RegistryFilters.jsx";
 import DatasetAnalysis from "./DatasetAnalysis.jsx";
@@ -37,7 +38,7 @@ import { evaluationOutcomes, isMockAnalysis, labelSources, referenceVerdicts } f
 import { createDetailLoader, emptyDetailState } from "./detailLoader.js";
 import { analystSummary, analystText, finalValue, isTechnicalText } from "./analystView.js";
 import DetailTabs from "./DetailTabs.jsx";
-import { DecisionHero, DecisionContext, EvidenceCards, DecisionConditions, FinalDecisionReason, TechnicalInterpretation, PolicySuggestion, EvidenceWorkspace, ExecutionView } from "./AnalysisDecision.jsx";
+import { DecisionHero, DecisionContext, EvidenceCards, DecisionConditions, FinalDecisionReason, TechnicalInterpretation, PolicySuggestion, EvidenceWorkspace, ExecutionView, TestAnalysisWorkspace } from "./AnalysisDecision.jsx";
 import { isResultV3 } from "./assessmentData.js";
 import { decisionTab } from "./decisionDetail.js";
 import "./inferenceDetail.css";
@@ -52,6 +53,7 @@ import InternalEgressSettings from "./InternalEgressSettings.jsx";
 import ParserManagement from "./ParserManagement.jsx";
 import SignatureExplanations from "./SignatureExplanations.jsx";
 import ServiceApiKeys from "./ServiceApiKeys.jsx";
+import { SettingsPageActions, SettingsSummary } from "./SettingsWorkspace.jsx";
 import FullValidationDialog, { DatasetEvaluation } from "./FullValidationDialog.jsx";
 import ModelCheckDetail from "./ModelCheckDetail.jsx";
 import { modelCheckNames, modelValidationError } from "./modelCheckDiagnostics.js";
@@ -64,6 +66,8 @@ import { ModelAssignmentDialog } from "./ModelAssignments.jsx";
 import { assignmentBlockReason, createAssignmentController, emptyAssignmentState, roleAssigned } from "./modelAssignments.js";
 import { createBrowserHistory } from "./browserHistory.js";
 import { applyAppRoute, isDetailOrigin, readAppHash, writeAppHash } from "./appRoutes.js";
+
+const FeedbackWorkspace = lazy(() => import("./FeedbackWorkspace.jsx"));
 
 const labels = {
   canceled: "중지됨", pending: "대기",
@@ -197,17 +201,19 @@ export function initialTestResultsState() {
 
 // Test-run searches and item filters never become Production analysis filters.
 export function AnalysisResultsPage({ purpose, onScopeChange, state, setState, testState, setTestState, onSelectRun, onOpenRunItem, onOpen, onUnauthorized, onShowTestRuns, onShowAllTestItems, onCaseChange, onPromote, onClone, onGroundTruth, splitNavigation = false, actions }) {
+  const w = useR5Words();
   const setPart = key => update => setTestState(current => ({ ...current, [key]: typeof update === "function" ? update(current[key]) : update }));
   const showRuns = onShowTestRuns || (() => setTestState(current => ({ ...current, view: "runs", runId: null })));
   const showAllTestItems = onShowAllTestItems || (() => setTestState(current => ({ ...current, view: "items", runId: null, items: initialListState("test") })));
   if (purpose !== "test") return <AnalysisList purpose="production" key="production" state={state} setState={setState} onOpen={onOpen} onUnauthorized={onUnauthorized} />;
   if (!testState.runId && testState.view === "items") return <AnalysisList key="test-items" state={testState.items} setState={setPart("items")} onScopeChange={onScopeChange} onShowTestRuns={showRuns} onOpen={onOpen} onUnauthorized={onUnauthorized} />;
   return <div className="page-stack test-results-page">
-    <div className="analysis-list-toolbar">{!splitNavigation && <AnalysisScopeTabs purpose="test" onChange={onScopeChange} />}{!testState.runId && <NavigationAction onClick={showAllTestItems}>테스트 문항 전체 보기</NavigationAction>}{actions && <div className="v5-list-action">{actions}</div>}</div>
+    {!testState.runId && <SettingsPageActions><NavigationAction onClick={showAllTestItems}>{w("테스트 문항 전체 보기", "All Test cases")}</NavigationAction>{actions}</SettingsPageActions>}
+    {!splitNavigation && <div className="analysis-list-toolbar"><AnalysisScopeTabs purpose="test" onChange={onScopeChange} /></div>}
     {testState.runId
       ? <TestRunDetail key={testState.runId} id={testState.runId} caseId={testState.caseId} onCaseChange={onCaseChange} onPromote={onPromote} onClone={onClone} onGroundTruth={onGroundTruth} filters={testState.filters} onFiltersChange={setPart("filters")} onBack={showRuns} onOpen={onOpenRunItem} onUnauthorized={onUnauthorized} />
       : <TestRunHistory state={testState.history} onStateChange={setPart("history")} onSelect={onSelectRun} onViewAnalyses={showAllTestItems} onUnauthorized={onUnauthorized} />}
-    {!testState.runId && <p className="evaluation-footnote">테스트명 없이 저장된 이전 결과는 ‘테스트 문항 전체 보기’에서 확인할 수 있습니다. 기존 데이터를 임의의 테스트 실행으로 묶지 않습니다.</p>}
+    {!testState.runId && <p className="evaluation-footnote">{w("테스트명 없이 저장된 이전 결과는 ‘테스트 문항 전체 보기’에서 확인할 수 있습니다. 기존 데이터를 임의의 테스트 실행으로 묶지 않습니다.", "Open All Test cases to find older results without a named Test. Existing records are not assigned to an inferred Test.")}</p>}
   </div>;
 }
 
@@ -269,9 +275,9 @@ export function AnalysisList({ state, setState, onOpen, onUnauthorized, onScopeC
     input_truncated: { true: "있음", false: "없음" }, waf_action: { D: "Deny · 차단", A: "Allow · 허용" },
   });
   return <div className="page-stack unified-analysis-list">
-    <div className="analysis-list-toolbar">
+    <SettingsPageActions>
     <button type="button" className="secondary" aria-expanded={attachmentOpen} aria-controls="analysis-label-attachment" onClick={() => setAttachmentOpen((open) => !open)}><Icon name="upload" size={16} />참고 판정 연결</button>
-    </div>
+    </SettingsPageActions>
     {onShowTestRuns && <div className="test-item-list-context"><button type="button" className="back" onClick={onShowTestRuns}>← 테스트 목록</button><p className="evaluation-footnote">테스트 문항 검색 · 이름 있는 실행과 실행 묶음이 없는 이전 결과를 함께 조회합니다. 아래 지표는 현재 검색 범위의 최신 참고 판정 기준입니다.</p></div>}
     <div id="analysis-label-attachment" hidden={!attachmentOpen}><LabelAttachment sourceSystem={state.applied.source_system} controlledOpen={attachmentOpen} onOpenChange={setAttachmentOpen} onAttached={() => setLabelRefresh((value) => value + 1)} /></div>
     <form className="panel filter-panel" onSubmit={apply}>
@@ -285,6 +291,7 @@ export function AnalysisList({ state, setState, onOpen, onUnauthorized, onScopeC
         {select("verdict", "AI 판정", ["true_positive", "false_positive", "inconclusive"].map((value) => [value, labels[value]]))}
         {select("severity", "심각도", Object.entries(severityLabels))}
         {select("evaluation_outcome", "기대 판정 비교", Object.entries(evaluationOutcomes))}
+        {purpose === "production" && <SelectFilter label={w("1차 / 심층 비교", "Initial / Deep comparison")} name="initial_comparison" value={state.draft.initial_comparison || ""} onChange={update} options={[["match", w("일치", "Match")], ["different", w("판정 다름", "Different")], ["final_inconclusive", w("심층 판정 보류", "Deep Assessment inconclusive")], ["unavailable", w("1차 판정 없음", "No Initial Assessment")]]} />}
       </div>
       <div className="filter-meta"><span>검색 조건</span><button type="button" className="text-button" aria-expanded={state.advanced} aria-controls="advanced-filters" onClick={() => setState((current) => ({ ...current, advanced: !current.advanced }))}>{state.advanced ? "필터 닫기" : "필터 더 보기"}</button></div>
       {state.advanced && <div className="filter-grid advanced-filters" id="advanced-filters">
@@ -313,11 +320,10 @@ export function AnalysisList({ state, setState, onOpen, onUnauthorized, onScopeC
       {!!activeTags.length && <div className="applied-filter-tags" aria-label="적용된 검색 조건"><span>적용 중</span>{activeTags.map((tag) => <button type="button" className="filter-tag" key={tag.key} title={`${tag.label}: ${tag.value}`} aria-label={`${tag.label}: ${tag.value} 조건 해제`} onClick={() => tag.key === "analysis_purpose" && onScopeChange ? scope("") : setState((current) => removeAppliedFilter(current, tag.key))}><span>{tag.label}: {tag.value}</span><span aria-hidden="true">×</span></button>)}</div>}
     </form>
     {error && <div className="error" role="alert">{error}</div>}
-    {purpose === "production" && <div className="panel initial-comparison-filter"><SelectFilter label={w("1차·심층 판정 비교", "Initial vs Deep Assessment")} name="initial_comparison" value={state.draft.initial_comparison || ""} onChange={event => { const value = event.target.value; setState(current => ({ ...current, offset: 0, draft: { ...current.draft, initial_comparison: value }, applied: { ...current.applied, initial_comparison: value } })); }} options={[["match", w("일치", "Match")], ["different", w("판정 다름", "Different")], ["final_inconclusive", w("심층 판정 보류", "Deep Assessment inconclusive")], ["unavailable", w("1차 판정 없음", "No Initial Assessment")]]} /></div>}
-    <EvaluationOverview summary={data.evaluation_summary} loading={loading} error={error} />
     <AnalysisSelectionActions ids={selection.ids} onClear={selection.clear} onSaved={() => setLabelRefresh(value => value + 1)} />
     <AnalysisTable items={data.items} total={data.total} loading={loading} onOpen={onOpen} purpose={state.applied.analysis_purpose} selection={selection} sorting={serverSorting(query.sort_by, query.sort_order)} onSortingChange={update => setState(current => ({ ...current, ...changedSort(update, serverSorting(query.sort_by, query.sort_order)) }))} />
     <Pagination label="분석 결과 페이지" total={data.total} limit={state.limit} offset={state.offset} disabled={loading} onOffsetChange={offset => setState(current => ({ ...current, offset }))} onLimitChange={limit => setState(current => ({ ...current, limit, offset: 0 }))} />
+    <details className="panel analysis-list-evaluation"><summary>{w("참고 판정 평가", "Reference verdict evaluation")}<span>{w("현재 검색 범위", "Current search scope")} / {data.evaluation_summary?.evaluable ?? "—"}{w("건 비교", " comparable cases")}</span></summary><EvaluationOverview summary={data.evaluation_summary} loading={loading} error={error} /></details>
   </div>;
 }
 
@@ -335,14 +341,15 @@ export function TestAnalysisPage({ onViewTests, onOpen, selectedRunId, onSelectR
   if (runId) return <TestRunDetail key={runId} id={runId} onBack={() => selectRun(null)} onOpen={onOpen} />;
   if (cloneRunId && !template) return <section className="panel"><p role={templateError ? "alert" : "status"}>{templateError || w("설정을 불러오는 중…", "Loading configuration…")}</p><button className="back" onClick={onViewTests}>{w("테스트로 돌아가기", "Back to Tests")}</button></section>;
   return <div className="page-stack test-workspace">
-    <button type="button" className="back" onClick={onViewTests}>← {w("테스트", "Tests")}</button>
-    <section className="panel"><h2 className="r5-step"><span>1</span>{w("테스트 목적", "Test purpose")}</h2><div className="r5-purpose-grid">{[["official_evaluation", w("공식 테스트", "Official Test"), w("공식 버전의 전체 문항으로 평가합니다. 완료 후 운영 반영을 검토할 수 있습니다.", "Evaluates every case in a Published Version. Enables Production Review after completion.")], ["development", w("개발 테스트", "Development Test"), w("단건·파일·평가 데이터셋으로 확인합니다. 운영 반영 근거로 사용하지 않습니다.", "Explore a single event, file or dataset. Not eligible for Production.")]].map(([value, label, note]) => <label key={value}><input type="radio" name="test-purpose" value={value} checked={purpose === value} disabled={submitting} onChange={() => setPurpose(value)} /><strong>{label}</strong><small>{note}</small></label>)}</div></section>
-    <CandidateConfiguration agentMode={agentMode} busy={submitting} onChange={setCandidate} initialConfiguration={template?.candidate_configuration} />
+    <SettingsPageActions><button type="button" className="secondary" onClick={onViewTests}>← {w("테스트", "Tests")}</button></SettingsPageActions>
+    <div className="test-creation-grid"><div className="test-creation-input">
+    <section className="panel test-creation-purpose"><div className="panel-head"><h2>{w("테스트 목적", "Test purpose")}</h2></div><div className="r5-purpose-grid">{[["official_evaluation", w("공식 테스트", "Official Test"), w("공식 버전의 전체 문항으로 평가합니다. 완료 후 운영 반영을 검토할 수 있습니다.", "Evaluates every case in a Published Version. Enables Production Review after completion.")], ["development", w("개발 테스트", "Development Test"), w("단건, 파일 또는 데이터셋으로 확인합니다. 운영 반영 근거로 사용하지 않습니다.", "Explore a single event, file or dataset. Not eligible for Production.")]].map(([value, label, note]) => <label key={value}><input type="radio" name="test-purpose" value={value} checked={purpose === value} disabled={submitting} onChange={() => setPurpose(value)} /><strong>{label}</strong><small>{note}</small></label>)}</div></section>
     {template && !template.resource_validity.valid && <p className="notice">{w("원래 설정에 사용할 수 없는 항목이 있습니다. 대체하지 않았으므로 선택을 확인하세요.", "Some source resources are unavailable. They were not replaced; review each selection.")}</p>}
-    <section className="panel"><h2 className="r5-step"><span>3</span>{w("테스트 데이터", "Test data")}</h2>
+    <section className="test-creation-data" aria-label={w("테스트 문항", "Test cases")}>
       <div hidden={purpose !== "development"}><DetailTabs label={w("입력 방식", "Input source")} items={[["direct", w("단건 분석", "Single Analysis")], ["file", w("배치 파일 분석", "Batch File Analysis")], ["dataset", w("평가 데이터셋", "Dataset")]]} value={inputMode} onChange={value => { if (!submitting) setInputMode(value); }}>{key => key === "direct" ? <SingleTest onCreated={run => selectRun(run.id)} {...submissionProps} /> : key === "file" ? <UploadPage onViewTests={onViewTests} onOpen={onOpen} onCreated={run => selectRun(run.id)} {...submissionProps} /> : purpose === "development" && <DatasetAnalysis purpose={purpose} sourceTemplate={template} onCreated={run => selectRun(run.id)} agentMode={agentMode} external={candidate.external} {...submissionProps} />}</DetailTabs></div>
       {purpose === "official_evaluation" && <DatasetAnalysis purpose={purpose} sourceTemplate={template} onCreated={run => selectRun(run.id)} agentMode={agentMode} external={candidate.external} {...submissionProps} />}
     </section>
+    </div><CandidateConfiguration compact agentMode={agentMode} busy={submitting} onChange={setCandidate} initialConfiguration={template?.candidate_configuration} /></div>
   </div>;
 }
 
@@ -447,7 +454,7 @@ function SingleTest({ onCreated, disabledReason, candidateConfiguration, onBusy 
   );
 }
 
-export function Detail({ id, onBack, onOpen, backLabel = "분석 결과", tab: controlledTab, onTabChange, onResolved }) {
+export function Detail({ id, onBack, onOpen, onFeedback, backLabel = "분석 결과", tab: controlledTab, onTabChange, onResolved, executionSelection, onExecutionSelectionChange }) {
   const { t } = useConsolePreferences();
   const w = useR5Words();
   const [view, setView] = useState(() => emptyDetailState(id));
@@ -461,7 +468,8 @@ export function Detail({ id, onBack, onOpen, backLabel = "분석 결과", tab: c
   const [rawAttempt, setRawAttempt] = useState(0);
   const [localTab, setLocalTab] = useState("result");
   const requestedTab = controlledTab ?? localTab;
-  const tab = decisionTab(requestedTab);
+  const isTest = detail?.analysis_purpose === "test";
+  const tab = isTest && requestedTab === "raw" ? "result" : decisionTab(requestedTab);
   const setTab = onTabChange || setLocalTab;
   const [reportMode, setReportMode] = useState("preview");
   const [technicalOpen, setTechnicalOpen] = useState(false);
@@ -469,7 +477,7 @@ export function Detail({ id, onBack, onOpen, backLabel = "분석 결과", tab: c
   const [tabFocusRequest, setTabFocusRequest] = useState(0);
   const [reportAppendix, setReportAppendix] = useState(false);
   const jumpTab = value => { setTab(value); setTabFocusRequest(count => count + 1); };
-  const openInput = item => { setInputTarget(item ? { number: item.number, field: item.field, excerpt: item.excerpt, interpretation_ko: item.interpretation_ko, evidence_id: item.evidence_id } : null); jumpTab("raw"); };
+  const openInput = item => { setInputTarget(item || null); if (!isTest) jumpTab("raw"); };
   useEffect(() => {
     const current = createDetailLoader({ id, api, onChange: setView });
     loader.current = current;
@@ -480,13 +488,13 @@ export function Detail({ id, onBack, onOpen, backLabel = "분석 결과", tab: c
   useEffect(() => { loader.current?.setAgentVisible(tab === "agent"); }, [id, tab]);
   useEffect(() => { loader.current?.setEvidenceVisible(["result", "raw", "report", "agent"].includes(tab)); }, [id, tab]);
   useEffect(() => {
-    if (tab !== "raw" || raw) return;
+    if (!(tab === "raw" || isTest && tab === "result") || raw) return;
     let active = true;
     const controller = new AbortController();
     setRawError("");
     api.rawEvent(id, { signal: controller.signal }).then(value => { if (active) setRawRecord({ id, event: value }); }).catch(() => { if (active) setRawError("unavailable"); });
     return () => { active = false; controller.abort(); };
-  }, [id, raw, tab, rawAttempt]);
+  }, [id, raw, tab, rawAttempt, isTest]);
   const navigation = <div className="panel-head-inline inference-toolbar">
     <button className="back" onClick={onBack}>← {backLabel}</button>
     <div className="ux-toolbar">
@@ -496,17 +504,21 @@ export function Detail({ id, onBack, onOpen, backLabel = "분석 결과", tab: c
     </div>
   </div>;
   if (!detail || view.id !== id) return <div className="page-stack">{navigation}{error ? <div className="error" role="alert">{error}</div> : <div className="loading">{t("loading")}</div>}</div>;
-  const tabItems = [["result", w("판정", "Decision")], ["raw", w("근거·입력", "Evidence & input")], ["agent", w("실행", "Execution")], ["report", w("보고서", "Report")]];
+  const tabItems = isTest
+    ? [["result", w("분석 결과", "Analysis result")], ["agent", w("실행", "Execution")], ["report", w("보고서", "Report")]]
+    : [["result", w("판정", "Decision")], ["raw", w("근거·입력", "Evidence & input")], ["agent", w("실행", "Execution")], ["report", w("보고서", "Report")]];
   return <div className="page-stack inference-detail">
     {navigation}
     {error && <div className="error" role="alert">{error}</div>}
-    <DecisionHero detail={detail} />
+    {isTest && tab === "agent" && <h1 className="sr-only">{detail.event_name || w("분석 상세", "Analysis detail")} / {w("실행", "Execution")}</h1>}
+    {!(isTest && ["result", "agent"].includes(tab)) && <DecisionHero detail={detail} />}
     <DetailTabs label={t("detail")} items={tabItems} value={tab} onChange={setTab} focusRequest={tabFocusRequest}>{key => {
+      if (key === "result" && isTest) return tab === "result" && <TestAnalysisWorkspace detail={detail} event={raw} target={inputTarget} onSelect={openInput} error={rawError} onRetry={() => setRawAttempt(value => value + 1)} active={tab === "result"} relations={evidenceRelations} relationsError={displayError || relationsError} relationsLoading={displayLoading || relationsLoading} displayPollingStopped={displayPollingStopped} onRetryRelations={() => loader.current?.refreshRelations()} history={labelHistory} historyError={labelHistoryError} onSaved={() => loader.current?.refresh()} onExecution={() => jumpTab("agent")} onFeedback={onFeedback ? () => onFeedback(detail) : undefined} />;
       if (key === "result") return tab === "result" && <div className="decision-layout">
         {detail.status === "completed" && detail.result ? <ResultView detail={detail} relations={evidenceRelations} relationsError={displayError || relationsError} relationsLoading={displayLoading || relationsLoading} displayPollingStopped={displayPollingStopped} onRetryRelations={() => loader.current?.refreshRelations()} onViewInput={openInput} includePolicy={false} onExecution={() => jumpTab("agent")} /> : <section className="panel decision-awaiting"><h2>{detail.status === "canceled" ? w("테스트 중지", "Test stopped") : detail.status === "completed" ? w("결과 본문 미기록", "Result body not recorded") : detail.status === "failed" ? w("실행 확인", "Check execution") : w("분석 진행", "Analysis progress")}</h2><p>{detail.status === "canceled" ? w("중지된 문항에는 최종 판정이 없습니다. 입력과 중지 전 실행 기록은 확인할 수 있습니다.", "Stopped cases have no final verdict. Input and execution records remain available.") : detail.status === "completed" ? w("처리는 완료되었지만 저장된 결과 본문이 없어 근거를 표시할 수 없습니다. 실행 기록을 확인해 주세요.", "Processing completed, but the result body is unavailable. Check the execution record.") : detail.status === "failed" ? w("실패한 단계는 실행 탭에서 확인할 수 있습니다. 재실행해도 기존 실패 이력은 보존됩니다.", "Check the Execution tab for the failed step. Retrying preserves the original failure history.") : w("분석이 완료되면 판정 근거를 표시합니다.", "Evidence will appear when the analysis finishes.")}</p><NavigationAction onClick={() => jumpTab("agent")}>{w("실행 상세", "Execution details")}</NavigationAction></section>}
-        <DecisionContext detail={detail} history={labelHistory} historyError={labelHistoryError} onSaved={() => loader.current?.refresh()} onExecution={() => jumpTab("agent")} />
+        <DecisionContext detail={detail} history={labelHistory} historyError={labelHistoryError} onSaved={() => loader.current?.refresh()} onExecution={() => jumpTab("agent")} onFeedback={onFeedback ? () => onFeedback(detail) : undefined} />
       </div>;
-      if (key === "agent") return <ExecutionView key={id} detail={detail} runs={runs} runsError={runsError} runsLoading={runsLoading} onRetry={() => loader.current?.refreshAgent()} onMetadata={() => setTechnicalOpen(true)} initialJson={requestedTab === "json"} active={tab === "agent"} displayLoading={displayLoading} displayError={displayError} displayPollingStopped={displayPollingStopped} onRetryDisplay={() => loader.current?.refreshRelations()} />;
+      if (key === "agent") return <ExecutionView key={id} detail={detail} runs={runs} runsError={runsError} runsLoading={runsLoading} onRetry={() => loader.current?.refreshAgent()} onMetadata={() => setTechnicalOpen(true)} initialJson={requestedTab === "json"} active={tab === "agent"} displayLoading={displayLoading} displayError={displayError} displayPollingStopped={displayPollingStopped} onRetryDisplay={() => loader.current?.refreshRelations()} executionSelection={executionSelection} onExecutionSelectionChange={onExecutionSelectionChange} />;
       if (key === "raw") return (tab === "raw" || raw) && <EvidenceWorkspace key={id} event={raw} detail={detail} relations={evidenceRelations} target={inputTarget} onSelect={setInputTarget} error={rawError} onRetry={() => setRawAttempt(value => value + 1)} active={tab === "raw"} />;
       return tab === "report" && <AnalysisReport detail={detail} decoding={raw?.decoding ?? null} mode={reportMode} onModeChange={setReportMode} includeAppendix={reportAppendix} onAppendixChange={setReportAppendix} />;
     }}</DetailTabs>
@@ -560,6 +572,8 @@ export function Settings({ onProductionChange, onViewDataset, tab: controlledTab
 export function ModelSettings({ onProductionChange, onInternalEgress, onViewDataset, onConfigureAgents }) {
   const w = useR5Words();
   const [formOpen, setFormOpen] = useState(false);
+  const profileHeading = useRef(null);
+  useEffect(() => { if (formOpen) profileHeading.current?.focus({ preventScroll: true }); }, [formOpen]);
   const [managedId, setManagedId] = useState(null);
   const [profiles, setProfiles] = useState([]);
   const [profilesLoading, setProfilesLoading] = useState(true); const [profilesError, setProfilesError] = useState(""); const profileRead = useRef(0);
@@ -695,38 +709,43 @@ export function ModelSettings({ onProductionChange, onInternalEgress, onViewData
   const openAssignment = (profile, action) => assignmentController.current?.open(profile, action, profiles);
 
   return (
-    <div className="page-stack">
+    <div className="page-stack model-settings-workspace settings-workspace">
       <FullValidationDialog state={fullValidation} controller={fullValidationController.current} />
       <QuickValidationDialog key={`${quickValidation.profile?.id}-${quickValidation.profile?.profile_fingerprint}`} profile={quickValidation.profile} open={quickValidation.open} onClose={() => setQuickValidation(value => ({ ...value, open: false }))} onSubmitted={() => { setQuickValidation(value => ({ ...value, open: false })); setMessage("빠른 테스트를 접수했습니다. 모델 지정은 변경하지 않았습니다."); void loadProfiles(); }} />
       <ModelAssignmentDialog state={assignment} controller={assignmentController.current} />
-      <div className="workspace-context"><p className="ux-muted">{w("여기서 모델 연결을 검증합니다. 운영 배정은 공식 테스트와 운영 반영 검토를 거칩니다.", "Validate model connections here. Production assignments require an Official Test and Production Review.")}</p><NavigationAction href="#connect/vllm-targets">{w("vLLM 연결", "vLLM Targets")}</NavigationAction><NavigationAction disabled={Boolean(busy)} onClick={onConfigureAgents}>{w("Agent 역할", "Agent Roles")}</NavigationAction></div>
+      <SettingsPageActions>{formOpen ? <button type="button" className="secondary" disabled={Boolean(busy)} onClick={() => setFormOpen(false)}>← {w("프로필 목록", "Profile list")}</button> : <button type="button" className="primary" disabled={Boolean(busy)} onClick={() => { if (editingProfile) resetForm(); setFormOpen(true); }}>{w("모델 추가", "Add model")}</button>}</SettingsPageActions>
       {message && <p className="notice" role="status">{message}</p>}
+      {!formOpen && <SettingsSummary label={w("LLM 프로필 현황", "LLM profile summary")} items={[
+        { label: w("등록된 프로필", "Registered profiles"), value: profilesLoading || profilesError ? null : profiles.length, note: "vLLM / OpenAI" },
+        { label: w("검증 완료", "Validated"), value: profilesLoading || profilesError ? null : profiles.filter(profile => profile.can_assign === true).length, note: w("현재 설정의 전체 검증 통과", "Full validation for the current configuration"), tone: "teal" },
+        { label: w("확인 필요", "Needs attention"), value: profilesLoading || profilesError ? null : profiles.filter(profile => profile.can_assign !== true).length, note: w("검증 전, 변경 후 또는 비활성", "Unvalidated, changed or disabled"), tone: "amber" },
+      ]} />}
+      {!formOpen && <>
       <section className="panel profile-section">
-        <div className="panel-head"><div><h2>모델 목록</h2><p className="ux-muted">현재 설정으로 전체 검증을 통과해야 운영·테스트에 지정할 수 있습니다.</p></div><div className="ux-toolbar"><button type="button" className="primary" disabled={Boolean(busy)} onClick={() => { if (editingProfile) resetForm(); setFormOpen(true); }}>모델 추가</button><button type="button" className="secondary" disabled={Boolean(busy)} onClick={loadProfiles}>새로고침</button></div></div>
+        <div className="panel-head"><div><h2>{w("모델 연결", "Model connections")}</h2><p className="ux-muted">{w("프로필을 변경하면 전체 검증을 다시 진행합니다.", "Profile changes require full validation again.")}</p></div><div className="ux-toolbar"><NavigationAction disabled={Boolean(busy)} onClick={onConfigureAgents}>{w("Agent 역할", "Agent Roles")}</NavigationAction><button type="button" className="secondary" disabled={Boolean(busy)} onClick={loadProfiles}>{w("새로고침", "Refresh")}</button></div></div>
         {profilesError && <p className="error" role="alert">{profilesError} 최신 상태를 확인하기 전에는 지정할 수 없습니다.</p>}
         <RegistryFilters search={registrySearch} onSearch={setRegistrySearch} placeholder="프로필명 · 모델명" summary={profilesLoading ? "조회 중…" : `${filteredProfiles.length} / ${profiles.length}개 프로필`} filters={[
           {label:"공급자 필터", value:registryProvider, onChange:setRegistryProvider, options:[["", "모든 공급자"], ["vllm", "vLLM"], ["openai", "OpenAI"]]},
           {label:"최근 검증 필터", value:registryValidation, onChange:setRegistryValidation, options:[["", "모든 상태"], ["passed", "통과"], ["failed", "실패"], ["running", "진행 중"], ["unverified", "기록 없음"]]},
         ]} />
         <DataTable label="LLM 프로필" columns={[
-            { id: "name", header: "프로필", width: "17%", render: row => row.cells[0] },
-            { id: "model", header: "공급자 / 모델", width: "22%", render: row => row.cells[1] },
-            { id: "context", header: "컨텍스트", width: 88, className: "profile-context", render: row => <span title="프로필에 설정한 입력·출력 합산 토큰 한도">{Number.isSafeInteger(row.context) ? row.context.toLocaleString() : "—"}</span> },
-            { id: "roles", header: "사용 상태", width: "17%", render: row => row.cells[3] },
-            { id: "check", header: "최근 검증", width: "18%", render: row => row.cells[2] },
-            { id: "actions", header: "검증 / 관리", width: 228, render: row => row.cells[4] }
+            { id: "name", header: w("프로필 / 모델", "Profile / model"), minWidth: 220, render: row => <>{row.cells[0]}<small className="profile-model-name">{row.model}</small></> },
+            { id: "provider", header: w("공급자", "Provider"), width: 100, minWidth: 90, render: row => <span className={`provider-badge provider-${row.provider}`}>{row.providerLabel}</span> },
+            { id: "check", header: w("최근 검증", "Latest validation"), minWidth: 155, render: row => row.cells[2] },
+            { id: "roles", header: w("사용 상태", "Usage"), minWidth: 160, render: row => row.cells[3] },
+            { id: "actions", header: w("검증 / 관리", "Validate / manage"), width: 170, minWidth: 160, render: row => row.cells[4] }
           ]} data={filteredProfiles.map(profile => {
                 const latest = tests[profile.id]?.[0];
                 const active = ["pending", "running"].includes(latest?.status) || ["waiting", "running"].includes(latest?.dataset_evaluation?.status);
                 const internalTargetIssue = providerOf(profile) === "vllm" ? vllmTargetError(profile.base_url, internalTargets) : "";
                 const assignmentIssue = assignmentBlockReason(profile, { loading: profilesLoading, error: profilesError, targetError: internalTargetIssue, active });
                 const validationBlocked = Boolean(busy) || active || profile.status === "disabled" || Boolean(internalTargetIssue) || (providerOf(profile) === "openai" && !profile.external_data_approved);
-                return { id: profile.id, context: profile.context_window, cells: [
+                return { id: profile.id, context: profile.context_window, model: profile.model_name, provider: providerOf(profile), providerLabel: providerLabel(profile), cells: [
                   <><strong>{profile.name}</strong>{internalTargetIssue && <small className="error">연결 허용 확인 필요</small>}{providerOf(profile) === "openai" && !profile.external_data_approved && <small className="error">외부 전송 미승인</small>}</>,
                   <><span>{profile.model_name}</span><span className={`provider-badge provider-${providerOf(profile)}`}>{providerLabel(profile)}</span></>,
                   <>{latest ? <><Status value={latest.status} /><small>{latest.mode} · {latest.completed_at ? new Date(latest.completed_at).toLocaleString("ko-KR") : "진행 중"}</small></> : <span>-</span>}</>,
                   <><div className="profile-role-badges">{profile.status === "production" && <span className="status status-production">Production Primary</span>}{profile.is_test && <span className="status purpose-test">Test Primary</span>}{profile.agent_roles?.map(role => <span className="status" key={role}>{role.startsWith("test") ? "Test" : "Production"} {role.endsWith(".evidence_editor") ? "근거 정리" : "Verifier"}</span>)}</div>{profile.status !== "production" && <Status value={profile.status} />}</>,
-                  <><div className="profile-row-actions"><button type="button" className="secondary small" disabled={validationBlocked} onClick={() => runTest(profile, "quick")}>빠른 테스트</button><button type="button" className="secondary small" disabled={validationBlocked} onClick={() => runTest(profile, "full")}>전체 검증</button><MoreActions label={`${profile.name} 관리`}><button type="button" onClick={() => setManagedId(profile.id)}>검증 결과·연결정보</button><button type="button" disabled={Boolean(busy) || roleAssigned(profile) || Boolean(profilesError)} onClick={() => edit(profile)}>편집</button></MoreActions></div><Dialog open={managedId === profile.id} title={`${profile.name} · 모델 관리`} onClose={() => { if (!busy) setManagedId(null); }}><section className="detail-summary"><div><span>연결 주소</span><strong>{profile.base_url}</strong></div><div><span>입력 한도 / 최대 출력</span><strong>{profile.context_window.toLocaleString()} / {profile.max_output_tokens} 토큰</strong></div><div><span>제한 시간 / 검증 동시 요청</span><strong>{profile.timeout_seconds}초 / {profile.test_concurrency}건</strong></div><div><span>API Key</span><strong>{profile.has_api_key ? "저장됨" : "없음"}</strong></div></section><div className="profile-actions">
+                  <><div className="profile-row-actions"><button type="button" className="secondary small" disabled={validationBlocked} onClick={() => runTest(profile, "full")}>{w("전체 검증", "Full validation")}</button><MoreActions label={`${profile.name} ${w("관리", "actions")}`}><button type="button" disabled={validationBlocked} onClick={() => runTest(profile, "quick")}>{w("빠른 테스트", "Quick test")}</button><button type="button" onClick={() => setManagedId(profile.id)}>{w("검증 결과와 연결정보", "Validation and connection")}</button><button type="button" disabled={Boolean(busy) || roleAssigned(profile) || Boolean(profilesError)} onClick={() => edit(profile)}>{w("편집", "Edit")}</button></MoreActions></div><Dialog open={managedId === profile.id} title={`${profile.name} · 모델 관리`} onClose={() => { if (!busy) setManagedId(null); }}><section className="detail-summary"><div><span>연결 주소</span><strong>{profile.base_url}</strong></div><div><span>입력 한도 / 최대 출력</span><strong>{profile.context_window.toLocaleString()} / {profile.max_output_tokens} 토큰</strong></div><div><span>제한 시간 / 검증 동시 요청</span><strong>{profile.timeout_seconds}초 / {profile.test_concurrency}건</strong></div><div><span>API Key</span><strong>{profile.has_api_key ? "저장됨" : "없음"}</strong></div></section><div className="profile-actions">
                     <button className="secondary small" disabled={Boolean(busy) || roleAssigned(profile) || Boolean(profilesError)} title={roleAssigned(profile) ? "Agent 배정 중에는 수정할 수 없습니다." : undefined} onClick={() => edit(profile)}>편집</button>
                     <button className="secondary small" disabled={Boolean(busy)} onClick={onConfigureAgents}>Agent 모델 배정</button>
                     {profile.status === "disabled"
@@ -736,12 +755,12 @@ export function ModelSettings({ onProductionChange, onInternalEgress, onViewData
                 ] };
           })} empty={profilesLoading ? "모델을 불러오는 중…" : profilesError ? "모델 목록을 확인할 수 없습니다." : profiles.length ? "검색 조건에 맞는 모델이 없습니다." : "등록된 모델이 없습니다."} />
       </section>
-
-      <Dialog open={formOpen} title={editingId ? "모델 수정" : "모델 추가"} onClose={() => { if (!busy) setFormOpen(false); }}>
+      <div className="model-registry-note"><span>{w("운영 모델 변경은 공식 테스트와 운영 반영 검토를 거칩니다.", "Production model changes require an Official Test and Production Review.")}</span><NavigationAction href="#connect/vllm-targets">{w("vLLM 연결 관리", "Manage vLLM targets")}</NavigationAction></div>
+      </>}
+      {formOpen && <div className="model-profile-editor">
       <form className="panel form-panel profile-form" onSubmit={save}>
-        <div className="panel-head"><p className="ux-muted">{w("등록·수정만으로 모델을 호출하지 않습니다. 검증과 운영 반영은 별도 작업입니다.", "Saving a profile does not call the model. Validation and applying to Production are separate actions.")}</p>{editingId && <button type="button" className="secondary small" disabled={Boolean(busy)} onClick={resetForm}>취소</button>}</div>
+        <div className="panel-head"><div><h2 ref={profileHeading} tabIndex={-1}>{editingId ? w("모델 수정", "Edit model") : w("모델 추가", "Add model")}</h2><p className="ux-muted">{w("등록과 수정만으로 모델을 호출하지 않습니다.", "Saving does not call the model.")}</p></div></div>
         {editingAssigned && <p className="error" role="alert">편집 중인 프로필이 Production 또는 Test로 지정되었습니다. 지정 중에는 수정할 수 없습니다.</p>}
-        {message && <p className="notice" role="status">{message}</p>}
         <fieldset className="profile-fields" disabled={Boolean(busy) || editingAssigned}>
         <div className="form-grid">
           <label>LLM 공급자<select value={form.provider} onChange={changeProvider}><option value="vllm">vLLM</option><option value="openai">OpenAI · 외부 API</option></select></label>
@@ -766,9 +785,10 @@ export function ModelSettings({ onProductionChange, onInternalEgress, onViewData
         {openai && <div className="external-approval"><strong>외부 전송 및 비용 승인</strong><label className="checkbox-row"><input type="checkbox" checked={form.external_data_approved} onChange={update("external_data_approved")} required /><span>{EXTERNAL_DATA_APPROVAL}</span></label><p>빠른 테스트·전체 검증도 예시 입력을 OpenAI에 전송하며 비용이 발생할 수 있습니다. 전체 검증 통과는 판정 품질을 보증하지 않습니다.</p></div>}
         <p className="form-note">API Key는 서버에 암호화해 저장하며 이 화면에서 다시 조회하지 않습니다. 같은 공급자의 편집에서만 빈 입력은 기존 키 유지로 처리합니다.</p>
         </fieldset>
-        <div className="action-row"><button type="submit" className="primary" disabled={Boolean(busy) || Boolean(targetError) || editingAssigned || Boolean(profilesError)}>{busy === "save" ? "저장 중…" : editingId ? "수정 저장" : "모델 등록"}</button></div>
+        <div className="action-row"><button type="button" className="secondary" disabled={Boolean(busy)} onClick={() => setFormOpen(false)}>{w("취소", "Cancel")}</button><button type="submit" className="primary" disabled={Boolean(busy) || Boolean(targetError) || editingAssigned || Boolean(profilesError)}>{busy === "save" ? w("저장 중…", "Saving…") : editingId ? w("수정 저장", "Save changes") : w("모델 등록", "Register model")}</button></div>
       </form>
-      </Dialog>
+      <aside className="model-profile-context"><section className="panel"><h2>{w("연결과 검증", "Connection and validation")}</h2><p>{w("vLLM은 허용 목록의 내부 IP와 포트로만 연결합니다. OpenAI는 공식 HTTPS 주소와 외부 전송 승인이 필요합니다.", "vLLM requires an allowed internal IP and port. OpenAI requires its official HTTPS endpoint and external transfer approval.")}</p><NavigationAction onClick={onInternalEgress}>{w("vLLM 연결", "vLLM Targets")}</NavigationAction></section><section className="panel"><h2>{w("저장 후 진행", "After saving")}</h2><ol><li>{w("프로필 전체 검증", "Run full profile validation")}</li><li>{w("기본 테스트 설정에서 선택", "Select in Test Defaults")}</li><li>{w("공식 테스트와 운영 반영 검토", "Official Test and Production Review")}</li></ol><p>{w("저장만으로 운영 모델은 바뀌지 않습니다.", "Saving does not change the Production model.")}</p></section></aside>
+      </div>}
     </div>
   );
 }
@@ -797,6 +817,7 @@ function initialNavigationSnapshot() {
     page: "dashboard", listState: initialListState(), selectedId: null,
     resultsPurpose: "", testResults: initialTestResultsState(),
     detailReturnPage: "analyses", settingsTab: "models", detailTab: "result", days: 7, serviceApiKeyId: "",
+    feedbackState: initialFeedbackState(), executionSelection: null,
   };
 }
 
@@ -854,7 +875,7 @@ function ConsoleApp() {
   if (!principal) return <Login onLogin={checkSession} />;
 
   function move(update) { navigation.navigate(update); window.scrollTo(0, 0); }
-  function openDetail(id) { move(current => ({ ...current, selectedId: id, detailReturnPage: current.page === "dashboard" ? "dashboard" : "analyses", detailTab: "result", page: "detail" })); }
+  function openDetail(id) { move(current => ({ ...current, selectedId: id, executionSelection: null, detailReturnPage: current.page === "dashboard" ? "dashboard" : "analyses", detailTab: "result", page: "detail" })); }
   function testList(current) { return { ...current, resultsPurpose: "test", testResults: { ...current.testResults, view: "runs", runId: null }, page: "analyses" }; }
   function viewTests() { move(testList); }
   function backToTests() { navigation.backTo(current => current.page === "analyses" && current.resultsPurpose === "test" && current.testResults.view === "runs" && !current.testResults.runId, testList); }
@@ -863,13 +884,13 @@ function ConsoleApp() {
     if (!id) { backToTests(); return; }
     move(current => ({ ...current, resultsPurpose: "test", testResults: { ...current.testResults, view: "runs", runId: id, caseId: null, filters: current.testResults.runId === id ? current.testResults.filters : initialTestRunFilters() }, page: "analyses" }));
   }
-  function openRunItem(id) { move(current => ({ ...current, selectedId: id, detailReturnPage: "testRun", detailTab: "result", page: "detail" })); }
+  function openRunItem(id) { move(current => ({ ...current, selectedId: id, executionSelection: null, detailReturnPage: "testRun", detailTab: "result", page: "detail" })); }
   function viewDataset(source, runId) {
     if (runId) { openTestRun(runId); return; }
     const items = datasetListState(source);
     if (items) move(current => ({ ...current, resultsPurpose: "test", testResults: { ...current.testResults, view: "items", runId: null, items }, page: "analyses" }));
   }
-  function openTest(id) { move(current => ({ ...current, selectedId: id, detailReturnPage: "test", detailTab: "result", page: "detail" })); }
+  function openTest(id) { move(current => ({ ...current, selectedId: id, executionSelection: null, detailReturnPage: "test", detailTab: "result", page: "detail" })); }
   function filterProduction(filters) { move(current => ({ ...current, resultsPurpose: "production", listState: dashboardListState(filters), page: "analyses" })); }
   function changeResultsScope(purpose) {
     if (purpose === resultsPurpose) return;
@@ -886,11 +907,11 @@ function ConsoleApp() {
     onKeyChange: value => navigation.remember(current => ({ ...current, serviceApiKeyId: value })),
     updatedAt, onUnauthorized, onNavigate: navigate };
   return <ConsoleShell screen={screen} principal={principal} healthError={Boolean(summaryError)} onNavigate={navigate} onSearch={search} logoutState={logoutState} onLogout={() => logoutController.submit()}>
-    {globalSearch && <GlobalSearchResults key={`${globalSearch.field}:${globalSearch.query}`} search={globalSearch} onClose={() => setGlobalSearch(null)} onOpen={row => move(current => ({ ...current, page: "detail", selectedId: row.id, detailTab: "result", resultsPurpose: row.analysis_purpose === "test" ? "test" : "production", detailReturnPage: row.analysis_purpose === "test" && row.test_run_id ? "testRun" : "analyses", testResults: { ...current.testResults, runId: row.test_run_id || null, view: row.test_run_id ? "runs" : "items" } }))} />}
+    {globalSearch && <GlobalSearchResults key={`${globalSearch.field}:${globalSearch.query}`} search={globalSearch} onClose={() => setGlobalSearch(null)} onOpen={row => move(current => ({ ...current, page: "detail", selectedId: row.id, detailTab: "result", executionSelection: null, resultsPurpose: row.analysis_purpose === "test" ? "test" : "production", detailReturnPage: row.analysis_purpose === "test" && row.test_run_id ? "testRun" : "analyses", testResults: { ...current.testResults, runId: row.test_run_id || null, view: row.test_run_id ? "runs" : "items" } }))} />}
     {logoutState.error && <div className="error" role="alert">{logoutState.error}</div>}
     {mode === "stub" && <div className="runtime-banner"><Icon name="test" size={18} /><div><strong>{t("stubTitle")}</strong><span>{t("stubNote")}</span></div><span className="runtime-tag">STUB</span></div>}
     {summaryError && !["dashboard", "quality"].includes(page) && <div className="error" role="alert">{t("readError")}</div>}
-    {page === "dashboard" && <R3Overview onNavigate={navigate} onOpenRun={openTestRun} onPromotion={id => move(current => ({ ...current, page: "promote", promoteRunId: id, promotionOrigin: "dashboard" }))} onGroundTruth={(id, state) => move(current => ({ ...current, page: "datasets", datasetId: id, groundTruthState: state }))} onFailures={purpose => { if (purpose === "test") { move(current => ({ ...current, page: "analyses", resultsPurpose: "test", testResults: { ...current.testResults, view: "runs", runId: null, caseId: null, history: { ...current.testResults.history, query: { ...current.testResults.history.query, has_failures: true, offset: 0 } } } })); } else filterProduction({ status: "failed" }); }} />}
+    {page === "dashboard" && <R3Overview onNavigate={navigate} onOpenAnalysis={openDetail} onNewTest={() => navigate("run")} onFilterProduction={filterProduction} onOpenRun={openTestRun} onPromotion={id => move(current => ({ ...current, page: "promote", promoteRunId: id, promotionOrigin: "dashboard" }))} onGroundTruth={(id, state) => move(current => ({ ...current, page: "datasets", datasetId: id, groundTruthState: state }))} onFailures={purpose => { if (purpose === "test") { move(current => ({ ...current, page: "analyses", resultsPurpose: "test", testResults: { ...current.testResults, view: "runs", runId: null, caseId: null, history: { ...current.testResults.history, query: { ...current.testResults.history.query, has_failures: true, offset: 0 } } } })); } else filterProduction({ status: "failed" }); }} />}
     {page === "quality" && <ProductionEvaluation onOpenRun={openTestRun} referenceProps={runtimeProps} />}
     {["runtime", "diagnostics"].includes(page) && <RuntimeWorkspace onOpen={openDetail} />}
     {["deployment", "changes"].includes(page) && <Activity deploymentOnly={page === "deployment"} />}
@@ -898,8 +919,9 @@ function ConsoleApp() {
     {page === "analyses" && <><AnalysisResultsPage actions={resultsPurpose === "test" && testResults.view === "runs" && !testResults.runId ? <><TestDefaults agentMode={mode} /><button className="primary" onClick={() => navigate("run")}>+ {t("run")}</button></> : null} onClone={id => move(current => ({ ...current, page: "test", cloneRunId: id }))} onGroundTruth={(id, caseId) => move(current => ({ ...current, page: "datasets", datasetId: id, groundTruthCaseId: caseId, groundTruthState: undefined }))} onCaseChange={caseId => caseId ? navigation.navigate(current => ({ ...current, testResults: { ...current.testResults, caseId } })) : navigation.backTo(current => current.page === "analyses" && current.testResults.runId === testResults.runId && !current.testResults.caseId, current => ({ ...current, testResults: { ...current.testResults, caseId: null } }))} onPromote={id => move(current => ({ ...current, page: "promote", promoteRunId: id, promotionOrigin: "test" }))} splitNavigation purpose={resultsPurpose} onScopeChange={changeResultsScope} state={listState} setState={setListState} testState={testResults} setTestState={setTestResults} onSelectRun={openTestRun} onOpenRunItem={openRunItem} onOpen={openDetail} onUnauthorized={onUnauthorized} onShowTestRuns={backToTests} onShowAllTestItems={showAllTestItems} /></>}
     {page === "test" && <TestAnalysisPage key={screen.cloneRunId || "new"} cloneRunId={screen.cloneRunId} onViewTests={viewTests} onOpen={openTest} selectedRunId={null} onSelectRun={openTestRun} agentMode={mode} onConfigureModels={() => navigate("agents")} />}
     {page === "apiDocs" && <ProductionApi />}
+    {page === "feedback" && <Suspense fallback={<p role="status">{t("loading")}</p>}><FeedbackWorkspace state={screen.feedbackState} onStateChange={value => navigation.navigate(current => ({ ...current, feedbackState: typeof value === "function" ? value(current.feedbackState) : value }))} onUnauthorized={onUnauthorized} onOpen={(id, purpose, runId) => move(current => ({ ...current, page: "detail", selectedId: id, detailTab: "result", executionSelection: null, detailReturnPage: "feedback", resultsPurpose: purpose === "test" ? "test" : "production", testResults: { ...current.testResults, runId: runId || null, view: runId ? "runs" : "items" } }))} /></Suspense>}
     {page === "datasets" && <GroundTruthWorkspace initialCaseId={screen.groundTruthCaseId} id={screen.datasetId} initialState={screen.groundTruthState} listState={screen.datasetListState} onListStateChange={value => navigation.remember(current => ({ ...current, datasetListState: value }))} onSelect={id => id ? move(current => ({ ...current, page: "datasets", datasetId: id, groundTruthCaseId: undefined, groundTruthState: undefined })) : navigation.backTo(current => current.page === "datasets" && !current.datasetId, current => ({ ...current, page: "datasets", datasetId: null, groundTruthCaseId: undefined, groundTruthState: undefined }))} />}
     {page === "settings" && <Settings standalone onProductionChange={setProductionName} onViewDataset={viewDataset} tab={settingsTab} onTabChange={tab => move(current => ({ ...current, settingsTab: tab }))} parserRoute={screen.parserRoute} onParserRoute={parserRoute => move(current => ({ ...current, parserRoute }))} />}
-    {page === "detail" && <Detail onResolved={resolveDetail} key={selectedId} id={selectedId} onBack={backFromDetail} onOpen={id => move(current => ({ ...current, selectedId: id, detailTab: "result" }))} tab={detailTab} onTabChange={tab => navigation.navigate(current => ({ ...current, detailTab: tab }))} backLabel={t(detailReturnPage === "testRun" ? "runs" : detailReturnPage === "test" ? "run" : detailReturnPage === "dashboard" ? "status" : "history")} />}
+    {page === "detail" && <Detail onResolved={resolveDetail} key={selectedId} id={selectedId} onBack={backFromDetail} onOpen={id => move(current => ({ ...current, selectedId: id, detailTab: "result", executionSelection: null }))} onFeedback={detail => move(current => ({ ...current, page: "feedback", feedbackState: analysisFeedbackState(detail) }))} tab={detailTab} onTabChange={tab => navigation.navigate(current => ({ ...current, detailTab: tab }))} executionSelection={screen.executionSelection} onExecutionSelectionChange={executionSelection => navigation.navigate(current => ({ ...current, executionSelection }))} backLabel={t(detailReturnPage === "feedback" ? "feedback" : detailReturnPage === "testRun" || detailReturnPage === "analyses" && resultsPurpose === "test" ? "runs" : detailReturnPage === "test" ? "run" : detailReturnPage === "dashboard" ? "status" : "history")} />}
   </ConsoleShell>;
 }

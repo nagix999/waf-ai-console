@@ -215,12 +215,15 @@ class _TokenMetric:
 
 
 def summarize_performance(records):
+    completed_records = []
     tokens = {role: {name: _TokenMetric() for name in (
         "input_tokens", "output_tokens", "first_attempt_output_tokens")} for role in latency.ROLES.values()}
     retries = {role: {"cases_with_output_retries": 0, "cases_with_citation_repairs": 0,
         "cases_with_decision_reviews": 0} for role in latency.ROLES.values()}
     def observe():
         for record in records:
+            if record.get("status") == "completed":
+                completed_records.append(record)
             seen = set()
             for step in record.get("steps", ()):
                 phase = step.get("step_type")
@@ -243,6 +246,9 @@ def summarize_performance(records):
                     metric.add(values[name])
             yield record
     report = latency.summarize_execution_latency(observe())
+    completed_report = latency.summarize_execution_latency(completed_records)
+    report["completed_cases"] = len(completed_records)
+    report["completed_timings"] = completed_report["timings"]
     for role, metrics in tokens.items():
         report["roles"][role]["tokens"] = {name: metric.present() for name, metric in metrics.items()}
         report["roles"][role]["accounting"].update(retries[role])

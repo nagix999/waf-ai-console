@@ -1,0 +1,116 @@
+/* Test-only comparison workspace. The two panes own their scroll positions. */
+.test-analysis-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.04fr) minmax(0, 1fr);
+  gap: 18px;
+  height: calc(100dvh - var(--test-workspace-top, 240px) - 22px);
+  min-height: 320px;
+  min-width: 0;
+}
+.test-analysis-pane {
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-2);
+}
+.test-analysis-pane:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.test-pane-heading {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  min-height: 49px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.test-pane-heading h2 { display: flex; align-items: center; gap: 7px; font-size: 12px; }
+.test-pane-heading h2 svg { color: var(--accent-text); }
+.test-pane-heading .small { font-size: 10px; }
+.test-pane-heading .badge { font-size: 9px; }
+.test-pane-content { padding: 16px; gap: 16px; }
+.test-pane-content > * { min-width: 0; }
+.test-pane-content .detail-hero { margin: 0; padding: 19px 20px; border: 1px solid var(--line); }
+.test-pane-content .detail-hero h1 { font-size: 21px; }
+.test-pane-content .detail-hero .hero-summary { font-size: 12px; line-height: 1.9; }
+.test-pane-content .hero-kicker { margin-bottom: 11px; }
+.test-pane-content .hero-duration { font-size: 10px; }
+.test-pane-content .panel-header { padding: 14px 16px; gap: 10px; }
+.test-pane-content .panel-header h2 { font-size: 12px; }
+.test-pane-content .panel-header .small { font-size: 10px; }
+.test-pane-content .panel-body { padding: 16px; }
+.test-pane-content .technical-interpretation > summary { padding: 15px 16px; }
+.test-results-pane [data-test-evidence] { cursor: pointer; }
+.test-results-pane .evidence-card.test-evidence-selected { outline: 2px solid var(--accent); outline-offset: 6px; border-radius: 4px; }
+.test-results-pane .test-evidence-selected .evidence-number { background: var(--accent); border-color: var(--accent); color: #fff; }
+.test-results-pane .evidence-source-button[aria-pressed="true"] { color: var(--accent-text); background: var(--accent-soft); }
+.test-decision-extras { display: grid; gap: 16px; }
+.test-decision-extras .row { gap: 8px; }
+.test-decision-extras .button { font-size: 10px; padding: 6px 9px; min-height: 31px; }
+.test-decision-extras p { margin-top: 10px; font-size: 10px; }
+.test-fields.table-shell { padding: 0 10px 10px; }
+.test-fields .tabulator { font-size: 11px; }
+.test-fields .tabulator .tabulator-header { font-size: 10px; }
+.test-fields .tabulator .tabulator-row { min-height: 32px; }
+.test-fields .tabulator .tabulator-row .tabulator-cell { padding: 6px 10px; line-height: 1.7; }
+.test-field-label { display: inline; font-size: 10px; font-weight: 550; color: var(--ink-strong); }
+.test-field-key { display: inline; margin-left: 6px; font-size: 9px; color: var(--muted); white-space: normal; overflow-wrap: anywhere; }
+.test-field-value { display: block; font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.test-fields .tabulator .test-input-field-selected .tabulator-cell { background: var(--accent-soft); box-shadow: inset 0 -2px var(--accent); }
+.test-source-status { padding: 10px 16px; margin: 0; font-size: 10px; line-height: 1.8; color: var(--accent-text); background: var(--accent-soft); border-bottom: 1px solid var(--line); }
+.test-payload-panel .raw-payload {
+  margin: 0;
+  padding: 17px;
+  border: 0;
+  border-radius: 0 0 12px 12px;
+  min-height: 220px;
+  max-height: none;
+  overflow: visible;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  line-height: 2;
+  background: var(--code);
+  color: var(--code-text);
+}
+.test-input-notice { display: flex; align-items: flex-start; gap: 7px; padding: 0 2px; font-size: 10px; line-height: 1.8; }
+.test-input-notice svg { flex-shrink: 0; margin-top: 2px; }
+.test-input-pane .decoding-pair { grid-template-columns: 1fr; }
+.main-shell:has(.test-analysis-workspace) .app-footer { display: none; }
+#main-content:has(.test-analysis-workspace) { min-height: 0; padding-bottom: 20px; }
+#main-content:has(.test-analysis-workspace) .detail-actions { margin-bottom: 9px; }
+#main-content:has(.test-analysis-workspace) > .detail-tabs { margin-bottom: 16px; }
+@media (max-width: 1100px) and (min-width: 761px) {
+  .test-analysis-workspace { gap: 12px; }
+  .test-pane-content { padding: 12px; }
+  .test-pane-heading { padding: 11px 12px; }
+  .test-pane-heading > .small { display: none; }
+  .test-pane-content .detail-hero { padding: 16px; }
+  .test-pane-content .detail-hero h1 { font-size: 18px; }
+  .test-pane-content .hero-duration { margin-left: 0; }
+}
+@media (max-width: 760px) {
+  .test-analysis-workspace { grid-template-columns: minmax(0, 1fr); height: auto; gap: 18px; }
+  .test-analysis-pane { height: min(74dvh, 720px); min-height: 400px; }
+  .test-pane-content { padding: 12px; }
+  .test-pane-content .detail-hero { padding: 17px; }
+  .test-pane-content .detail-hero h1 { font-size: 19px; }
+  .test-pane-heading { padding: 12px; }
+  .test-pane-heading .small { font-size: 9px; }
+}
+@media print {
+  .test-analysis-workspace { display: block; height: auto; }
+  .test-analysis-pane { height: auto; overflow: visible; margin-bottom: 20px; }
+  .test-pane-heading { position: static; }
+}

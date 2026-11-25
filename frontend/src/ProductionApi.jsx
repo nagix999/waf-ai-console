@@ -7,6 +7,7 @@ import { apiDocumentDownloadError, fetchApiDocumentPdf, saveApiDocumentPdf } fro
 import { Icon } from "./Icon.jsx";
 import Dialog from "./Dialog.jsx";
 import "./productionApi.css";
+import { SettingsSectionHeader } from "./SettingsWorkspace.jsx";
 
 // Server definitions are rendered as React text, never as executable HTML.
 function Inline({ text }) {
@@ -79,7 +80,7 @@ export default function ProductionApi() {
   const [downloadError, setDownloadError] = useState("");
   const downloadRequest = useRef(null);
   const content = useRef(null); const focusRequested = useRef(false);
-  const [selectedId, setSelectedId] = useState("intro");
+  const [selectedId, setSelectedId] = useState("");
   const [technical, setTechnical] = useState(false);
   const document = useMemo(() => parseApiDocument(reference?.markdown || ""), [reference]);
   const sections = useMemo(() => filterApiSections(document.sections, query), [document, query]);
@@ -123,22 +124,19 @@ export default function ProductionApi() {
     }
   }
 
-  return <div className="page-stack api-document-page">
-    <section className="panel api-doc-hero">
-      <div className="api-doc-heading"><span className="api-doc-icon"><Icon name="apiDocs" size={27} /></span><div><h2>운영 API 정의서</h2><p>항목을 선택해 요청·응답과 예시를 확인하세요.</p></div></div>
-      <div className="api-doc-actions"><button type="button" className="primary" disabled={!reference || loading || downloading} onClick={download}><Icon name="file" size={15} />{downloading ? "PDF 작성 중…" : "PDF 다운로드"}</button><a className="secondary" href="/docs" target="_blank" rel="noopener noreferrer">Swagger 열기<Icon name="arrow" size={15} /></a><a className="secondary" href="/openapi.json" target="_blank" rel="noopener noreferrer">OpenAPI JSON</a><button type="button" className="secondary" disabled={loading || downloading} onClick={() => setAttempt(value => value + 1)}>최신 정의서 새로고침</button></div>
-      <div className="api-doc-meta"><span><strong>기본 경로</strong><code>/api/v1</code></span><span><strong>인증</strong><code>X-API-Key</code></span><span><strong>형식</strong>JSON · UTF-8</span></div>
-    </section>
+  return <div className="page-stack api-document-page settings-workspace">
+    <SettingsSectionHeader title="운영 API 정의서" actions={<><button type="button" className="primary" disabled={!reference || loading || downloading} onClick={download}><Icon name="file" size={15} />{downloading ? "PDF 작성 중…" : "PDF 다운로드"}</button><a className="secondary" href="/docs" target="_blank" rel="noopener noreferrer">Swagger 열기<Icon name="arrow" size={15} /></a><a className="secondary" href="/openapi.json" target="_blank" rel="noopener noreferrer">OpenAPI JSON</a><button type="button" className="secondary" disabled={loading || downloading} onClick={() => setAttempt(value => value + 1)}>최신 정의서 새로고침</button></>}>
+      <div className="api-doc-meta"><span><strong>기본 경로</strong><code>/api/v1</code></span><span><strong>인증</strong><code>X-API-Key</code></span><span><strong>형식</strong>JSON · UTF-8</span>{reference && <span>입력 스키마 v{reference.input_schema.version_number}<NavigationAction href="#configure/input-schema">스키마 보기</NavigationAction><button type="button" className="text-button" onClick={() => setTechnical(true)}>기술정보</button></span>}</div>
+    </SettingsSectionHeader>
     {loading && <p className="loading" role="status">현재 운영 스키마로 정의서를 불러오는 중…</p>}
     {error && <div className="error" role="alert">현재 입력 스키마를 확인하지 못했습니다. 과거 정의서를 현재 기준으로 표시하지 않습니다. 새로고침해 다시 확인하세요.</div>}
     {downloadError && <p className="error" role="alert">{downloadError}</p>}
-    {reference && <div className="api-source-note">입력 스키마 v{reference.input_schema.version_number}<NavigationAction href="#configure/input-schema">스키마 보기</NavigationAction><button type="button" className="text-button" onClick={() => setTechnical(true)}>기술정보</button></div>}
-    <div className="api-doc-notice"><Icon name="shield" size={18} /><p>Swagger의 <strong>Try it out</strong>은 실제 API를 호출합니다. 로그인 중에는 API Key보다 관리자 권한이 우선하므로 호출할 API를 확인하세요.</p></div>
+    <p className="settings-inline-notice api-swagger-notice">Swagger의 <strong>Try it out</strong>은 실제 API를 호출합니다. 로그인 중에는 API Key보다 관리자 권한이 우선하므로 호출할 API를 확인하세요.</p>
     {reference && <div className="api-doc-layout">
       <div className="api-doc-index panel">
         <label htmlFor="api-doc-search">정의서 검색</label><div className="api-doc-search"><Icon name="search" size={16} /><input id="api-doc-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="필드, 경로, 오류 코드" type="search" maxLength={200} /></div>
         <span className="api-index-count" aria-live="polite">{sections.length} / {document.sections.length}개 항목</span>
-        <div className="api-doc-toc" role="navigation" aria-label="API 정의서 목차">{!query.trim() && <button type="button" aria-current={showIntro ? "page" : undefined} onClick={() => selectSection("intro")}>정의서 안내</button>}{sections.map((section) => <button type="button" key={section.id} aria-current={!showIntro && selected?.id === section.id ? "page" : undefined} onClick={() => selectSection(section.id)}>{section.title}</button>)}</div>
+        <div className="api-doc-toc" role="navigation" aria-label="API 정의서 목차">{!query.trim() && <button type="button" aria-current={showIntro ? "page" : undefined} onClick={() => selectSection("intro")}><span aria-hidden="true">—</span>정의서 안내</button>}{sections.map((section) => <button type="button" key={section.id} aria-current={!showIntro && selected?.id === section.id ? "page" : undefined} onClick={() => selectSection(section.id)}><span aria-hidden="true">{String(document.sections.indexOf(section) + 1).padStart(2, "0")}</span>{section.title}</button>)}</div>
       </div>
       <div className="api-doc-content" ref={content}>
         <ApiDocumentBody document={document} sections={sections} selectedId={selectedId} query={query} inputSchema={reference.input_schema} />

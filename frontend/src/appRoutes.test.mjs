@@ -75,3 +75,35 @@ test("Test detail Back matches the originating execution or whole-item list only
   assert.equal(isDetailOrigin(item, { ...item, page: "analyses", testResults: { runId: null, view: "runs" } }), false);
   assert.equal(isDetailOrigin({ ...detail, detailReturnPage: "dashboard" }, { page: "dashboard" }), true);
 });
+
+test("feedback filters round trip without leaking free-text metadata", () => {
+  const state = { ...initial(), page: "feedback", feedbackState: { start: "2026-11-01", end: "2026-11-25", purpose: "production", version: id, category: "evidence_mismatch", analysis: id, query: "PRIVATE_SEARCH", limit: 50, offset: 100, selectedId: id } };
+  const hash = writeAppHash(state);
+  assert.ok(hash.startsWith("#operate/feedback?"));
+  assert.ok(!hash.includes("PRIVATE_SEARCH"));
+  const restored = applyAppRoute(initial(), readAppHash(hash));
+  assert.deepEqual(restored.feedbackState, { ...state.feedbackState, query: "" });
+  assert.equal(isDetailOrigin({ ...initial(), detailReturnPage: "feedback" }, restored), true);
+});
+
+test("execution selection is safe, shareable and scoped to the detail", () => {
+  const state = { ...initial(), page: "detail", selectedId: id, detailTab: "agent", executionSelection: { runId: id, stepId: id, view: "input", payload: "PRIVATE_PAYLOAD" } };
+  const hash = writeAppHash(state);
+  assert.ok(!hash.includes("PRIVATE_PAYLOAD"));
+  const restored = applyAppRoute(initial(), readAppHash(hash));
+  assert.deepEqual(restored.executionSelection, { runId: id, stepId: id, view: "input" });
+  const unsafe = readAppHash(`#operate/inference/${id}/agent-trace?run=secret&step=../admin&view=secret`);
+  assert.deepEqual(unsafe.executionSelection, { runId: null, stepId: null, view: "output" });
+  assert.equal(applyAppRoute(state, readAppHash(`#operate/inference/${id}/agent-trace`)).executionSelection, null);
+  assert.ok(!writeAppHash({ ...state, detailTab: "report" }).includes("?"));
+});
+
+test("final JSON is a UI-only execution selection, not an arbitrary API step", () => {
+  const state = { ...initial(), page: "detail", selectedId: id, detailTab: "agent", executionSelection: { runId: id, stepId: "result", view: "output" } };
+  const hash = writeAppHash(state);
+  assert.match(hash, /step=result/);
+  assert.deepEqual(applyAppRoute(initial(), readAppHash(hash)).executionSelection, state.executionSelection);
+  for (const step of ["final", "result/../admin", "result-json", "metadata", "__proto__"]) {
+    assert.equal(readAppHash(`#operate/inference/${id}/agent-trace?step=${encodeURIComponent(step)}`).executionSelection.stepId, null);
+  }
+});

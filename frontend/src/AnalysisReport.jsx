@@ -3,6 +3,7 @@ import { useId, useMemo, useRef, useState } from "react";
 import { buildAnalysisReport, decodeReportText } from "./analysisReport.js";
 import { parseApiDocument } from "./apiDocument.js";
 import { Icon } from "./Icon.jsx";
+import { useR5Words } from "./R5Evaluation.jsx";
 import "./analysisReport.css";
 
 // Only the fixed template supplies Markdown structure. Dynamic values are
@@ -46,13 +47,15 @@ function ReportBlocks({ blocks, section }) {
 }
 
 export function ReportDocument({ report, reportId = "pdf-report", sections, jumpTo }) {
-  return <article className="panel report-paper" aria-label="분석 보고서">
-    <header className="report-cover"><span className="eyebrow">WAF AI · 분석 보고서</span><h2>{decodeReportText(report.title)}</h2><ReportBlocks blocks={report.intro} section="보고서 안내" /></header>
-    {report.sections.map((section, index) => <section className="report-section" ref={sections ? node => { sections.current[index] = node; } : undefined} tabIndex={-1} key={section.id} aria-labelledby={reportId + "-section-" + index}><div className="report-section-heading"><span aria-hidden="true">{String(index + 1).padStart(2, "0")}</span><h3 id={reportId + "-section-" + index}>{decodeReportText(section.title)}</h3></div><ReportBlocks blocks={section.blocks} section={section.title} />{jumpTo && <button type="button" className="text-button report-back-top" onClick={() => jumpTo("top")}>목차로</button>}</section>)}
+  const w = useR5Words();
+  return <article className="panel report-paper" aria-label={w("분석 보고서", "Analysis report")}>
+    <header className="report-cover"><div className="report-brand"><strong>WAF AI CONSOLE</strong><span>ANALYSIS REPORT</span></div><span className="eyebrow">{w("요청 보안 분석", "Request security analysis")}</span><h2>{decodeReportText(report.title)}</h2><ReportBlocks blocks={report.intro} section={w("보고서 안내", "Report notes")} /></header>
+    {report.sections.map((section, index) => <section className="report-section" ref={sections ? node => { sections.current[index] = node; } : undefined} tabIndex={-1} key={section.id} aria-labelledby={reportId + "-section-" + index}><div className="report-section-heading"><span aria-hidden="true">{String(index + 1).padStart(2, "0")}</span><h3 id={reportId + "-section-" + index}>{decodeReportText(section.title)}</h3></div><ReportBlocks blocks={section.blocks} section={section.title} />{jumpTo && <button type="button" className="text-button report-back-top" onClick={() => jumpTo("top")}>{w("목차로", "Back to contents")}</button>}</section>)}
   </article>;
 }
 
 export default function AnalysisReport({ detail, decoding = null, mode, onModeChange, includeAppendix: controlledAppendix, onAppendixChange }) {
+  const w = useR5Words();
   const [localAppendix, setLocalAppendix] = useState(false);
   const includeAppendix = controlledAppendix ?? localAppendix;
   const setIncludeAppendix = onAppendixChange ?? setLocalAppendix;
@@ -62,18 +65,18 @@ export default function AnalysisReport({ detail, decoding = null, mode, onModeCh
   const markdown = useMemo(() => buildAnalysisReport(detail, { decoding, includeAppendix }), [detail, decoding, includeAppendix]);
   const report = useMemo(() => parseApiDocument(markdown), [markdown]);
   function jumpTo(index) { const target = index === "top" ? top.current : sections.current[Number(index)]; target?.scrollIntoView({ behavior: "auto", block: "start" }); target?.focus({ preventScroll: true }); }
-  return <section className="analysis-report" aria-label="보고서 보기 설정" ref={top} tabIndex={-1}>
+  return <section className="analysis-report" aria-label={w("보고서 보기 설정", "Report view settings")} ref={top} tabIndex={-1}>
     <div className="panel report-toolbar">
-      <div className="report-toolbar-title"><span className="report-icon"><Icon name="file" size={22} /></span><h2>분석 보고서</h2></div>
-      <div className="report-mode" role="group" aria-label="보고서 표시 방식">
-        <button type="button" aria-pressed={mode === "preview"} aria-controls={reportId + "-content"} onClick={() => onModeChange("preview")}><Icon name="file" size={15} />보고서 보기</button>
-        <button type="button" aria-pressed={mode === "source"} aria-controls={reportId + "-content"} onClick={() => onModeChange("source")}><span aria-hidden="true">MD</span>Markdown 원본</button>
+      <div className="report-toolbar-title"><span className="report-icon"><Icon name="file" size={22} /></span><h2>{w("분석 보고서", "Analysis report")}</h2></div>
+      <div className="report-mode" role="group" aria-label={w("보고서 표시 방식", "Report presentation")}>
+        <button type="button" aria-pressed={mode === "preview"} aria-controls={reportId + "-content"} onClick={() => onModeChange("preview")}><Icon name="file" size={15} />{w("보고서 보기", "Report preview")}</button>
+        <button type="button" aria-pressed={mode === "source"} aria-controls={reportId + "-content"} onClick={() => onModeChange("source")}><span aria-hidden="true">MD</span>{w("Markdown 원본", "Markdown source")}</button>
       </div>
-      <div className="report-appendix-option"><label><input type="checkbox" checked={includeAppendix} onChange={(event) => setIncludeAppendix(event.target.checked)} />평가·실행 부록 포함</label><small className="ux-muted">화면·Markdown·PDF에 동일하게 적용 · Excel은 기본 항목으로 출력</small></div>
+      <div className="report-appendix-option"><label><input type="checkbox" checked={includeAppendix} onChange={(event) => setIncludeAppendix(event.target.checked)} />{w("평가·실행 부록 포함", "Include evaluation and execution appendix")}</label><small className="ux-muted">{w("화면·Markdown·PDF에 동일하게 적용 · Excel은 기본 항목으로 출력", "Applies to the screen, Markdown and PDF. Excel retains its standard fields.")}</small></div>
     </div>
-    <div className="report-reading-tools"><span className="report-scope-note">근거 발췌 포함</span>{mode !== "source" && <label className="report-jump">목차<select aria-label="보고서 목차" value="" onChange={(event) => { if (event.target.value) jumpTo(event.target.value); }}><option value="">항목으로 이동</option>{report.sections.map((section, index) => <option key={section.id} value={String(index)}>{decodeReportText(section.title)}</option>)}</select></label>}</div>
+    <div className="report-reading-tools"><span className="report-scope-note">{w("근거 발췌 포함", "Includes evidence excerpts")}</span>{mode !== "source" && <label className="report-jump">{w("목차", "Contents")}<select aria-label={w("보고서 목차", "Report contents")} value="" onChange={(event) => { if (event.target.value) jumpTo(event.target.value); }}><option value="">{w("항목으로 이동", "Jump to section")}</option>{report.sections.map((section, index) => <option key={section.id} value={String(index)}>{decodeReportText(section.title)}</option>)}</select></label>}</div>
     <div id={reportId + "-content"}>
-      {mode === "source" ? <div className="panel report-source"><div className="report-source-head"><span>Markdown 원본</span><small>읽기 전용 · 보고서 보기와 동일한 내용</small></div><pre tabIndex={0} aria-label="보고서 Markdown 원본"><code>{markdown}</code></pre></div> : <ReportDocument report={report} reportId={reportId} sections={sections} jumpTo={jumpTo} />}
+      {mode === "source" ? <div className="panel report-source"><div className="report-source-head"><span>{w("Markdown 원본", "Markdown source")}</span><small>{w("읽기 전용 · 보고서 보기와 동일한 내용", "Read-only. The same content as the preview.")}</small></div><pre tabIndex={0} aria-label={w("보고서 Markdown 원본", "Report Markdown source")}><code>{markdown}</code></pre></div> : <ReportDocument report={report} reportId={reportId} sections={sections} jumpTo={jumpTo} />}
     </div>
   </section>;
 }

@@ -1,0 +1,71 @@
+/* The stage navigator and its record panel share one workspace, not nested cards. */
+.inspection-agent-grid.execution-workspace { display: grid; grid-template-columns: 292px minmax(0, 1fr); height: var(--workspace-height, 560px); min-height: 320px; gap: 20px; margin: 0; }
+.inference-detail .inspection-agent-grid.execution-workspace { grid-template-columns: 292px minmax(0, 1fr); }
+.execution-workspace .execution-navigation, .execution-workspace .execution-detail { position: relative; min-width: 0; min-height: 0; height: 100%; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; border: 1px solid var(--line); border-radius: 13px; background: var(--panel); }
+.inspection-agent-grid.execution-workspace .execution-detail { padding: 0; }
+.execution-workspace .execution-navigation { display: flex; flex-direction: column; gap: 6px; padding: 12px; }
+.execution-navigation-heading { padding: 5px 7px 11px; border-bottom: 1px solid var(--line); }
+.execution-navigation .execution-navigation-heading h3 { margin: 0; padding: 0; border: 0; font-size: 13px; }
+.execution-navigation-heading p { color: var(--muted); font-size: 10px; line-height: 1.8; margin: 5px 0 0; }
+.execution-navigation > button[data-execution-step] { display: grid; grid-template-columns: 24px minmax(0, 1fr) 13px; align-items: start; flex: 0 0 auto; border: 1px solid transparent; box-shadow: none; padding: 12px 9px; gap: 10px; min-height: 70px; text-align: left; background: transparent; color: var(--text); }
+.execution-navigation > :is(header, .inspection-run-toolbar, .execution-configuration) { flex-shrink: 0; }
+.execution-navigation > button[data-execution-step]::before { display: none; }
+.execution-navigation > button[data-execution-step] > span { min-width: 0; }
+.execution-navigation > button[data-execution-step] > svg { color: var(--muted); margin-top: 5px; }
+.execution-navigation > button strong { display: block; overflow-wrap: anywhere; font-size: 12px; line-height: 1.7; }
+.execution-navigation > button small { display: block; font-size: 10px; line-height: 1.8; color: var(--muted); overflow-wrap: anywhere; }
+.execution-navigation > button:hover { border-color: var(--line); background: var(--raised); }
+.execution-navigation > button[aria-current="step"] { border-color: color-mix(in srgb, var(--accent) 25%, var(--line)); background: var(--accent-soft); }
+.execution-navigation > button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.execution-step-footer { display: flex !important; justify-content: space-between; gap: 10px; font-variant-numeric: tabular-nums; }
+.execution-navigation > .execution-final-result { margin-top: 8px; padding-top: 14px; border-top-color: var(--line); }
+.execution-final-result > svg:first-child { color: var(--accent); }
+.execution-no-steps { font-size: 11px; line-height: 1.8; padding: 8px; }
+.execution-detail-heading { padding: 20px; border-bottom: 1px solid var(--line); }
+.execution-detail-heading h3 { font-size: 17px; margin: 5px 0 0; }
+.execution-detail-heading > p:not(.step-timing) { margin: 8px 0 0; color: var(--muted); font-size: 11px; line-height: 1.8; }
+.execution-eyebrow { color: var(--accent); font-size: 9px; font-weight: 650; letter-spacing: .06em; }
+.execution-detail-heading .step-timing { margin-bottom: 0; font-size: 12px; }
+.execution-detail-heading .step-timing small { width: auto; }
+.execution-detail-heading .inspection-step-metrics { margin-top: 14px; }
+.execution-record-body { padding: 18px 20px 20px; }
+.execution-record-body .detail-tabs { gap: 8px; }
+.execution-record-body .detail-tabs button { border: 1px solid var(--line); border-radius: 7px; padding: 8px 13px; font-size: 11px; background: var(--raised); }
+.execution-record-body .detail-tabs button[aria-selected="true"] { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.execution-record-note { font-size: 10px; line-height: 1.8; }
+.execution-record-body .inspector-content { max-height: none; }
+.execution-navigation .inspection-run-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 7px 10px; padding: 8px 7px 12px; margin: 0 0 3px; border-bottom: 1px solid var(--line); font-size: 10px; }
+.execution-navigation .inspection-run-toolbar > label { display: grid; gap: 6px; width: 100%; font-size: 10px; color: var(--muted); }
+.execution-navigation .inspection-run-toolbar select { min-width: 0; width: 100%; max-width: none; min-height: 32px; padding: 5px 7px; font-size: 10px; }
+.execution-navigation .inspection-run-toolbar > button { min-height: 24px; padding: 3px 0; font-size: 10px; }
+.execution-navigation .inspection-run-toolbar > button::before { display: none; }
+.execution-configuration { margin-top: 12px; padding: 14px 7px 4px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+.execution-configuration > summary { cursor: pointer; font-weight: 650; }
+.execution-configuration .inference-overview { margin-top: 12px; }
+.execution-configuration .inference-execution, .execution-configuration .decision-display-execution { padding: 0; border: 0; box-shadow: none; background: transparent; }
+.execution-configuration .inference-execution h2, .execution-configuration .decision-display-execution h2 { font-size: 11px; }
+.execution-configuration .inference-execution .panel-head-inline { gap: 6px; flex-wrap: wrap; }
+.execution-configuration .inference-execution .text-button { font-size: 10px; padding: 4px 0; }
+.execution-configuration .inference-execution .inference-facts { display: grid; grid-template-columns: minmax(0, 1fr); gap: 9px; margin-top: 10px; }
+.execution-configuration .inference-facts > div { padding: 0; }
+.execution-configuration .inference-facts dt { font-size: 10px; }
+.execution-configuration .inference-facts dd { margin: 3px 0 0; font-size: 11px; }
+.execution-configuration .inference-record-note, .execution-configuration .decision-display-execution > p { font-size: 10px; line-height: 1.8; }
+.execution-configuration .decision-display-execution { margin-top: 14px; }
+.test-execution-overview > dl { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 0; }
+.test-execution-overview > dl > div { min-width: 0; padding: 18px 20px; border: 1px solid var(--line); border-radius: 13px; background: var(--panel); }
+.test-execution-overview dt { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 11px; }
+.test-execution-overview dt svg { color: var(--accent); }
+.test-execution-overview .execution-timing-1 dt svg { color: var(--warn); }
+.test-execution-overview .execution-timing-2 dt svg { color: var(--ok); }
+.test-execution-overview dd { margin: 9px 0 5px; font-size: 27px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.test-execution-overview small { color: var(--muted); font-size: 10px; line-height: 1.7; }
+.test-execution-overview > p { margin: 10px 0 0; font-size: 10px; line-height: 1.8; }
+.execution-step-observations { margin-top: 14px; font-size: 11px; }
+.execution-step-observations > summary { color: var(--muted); font-size: 11px; cursor: pointer; }
+.decision-execution .decision-audit-note { display: flex; align-items: flex-start; gap: 7px; margin: -5px 0 -3px; font-size: 10px; line-height: 1.8; }
+.decision-audit-note svg { flex-shrink: 0; margin-top: 2px; }
+@media (max-width: 1100px) { .inference-detail .inspection-agent-grid.execution-workspace, .inspection-agent-grid.execution-workspace { grid-template-columns: 250px minmax(0, 1fr); gap: 16px; } }
+@media (max-width: 760px) { .inference-detail .inspection-agent-grid.execution-workspace, .inspection-agent-grid.execution-workspace { grid-template-columns: minmax(0, 1fr); height: auto; } .execution-workspace .execution-navigation { height: auto; max-height: 320px; } .execution-workspace .execution-detail { height: auto; min-height: 320px; max-height: 75dvh; } .execution-detail-heading, .execution-record-body { padding: 16px; } }
+@media (max-width: 600px) { .test-execution-overview > dl { gap: 8px; } .test-execution-overview > dl > div { padding: 12px 10px; } .test-execution-overview dt { font-size: 10px; } .test-execution-overview dt svg { display: none; } .test-execution-overview dd { font-size: 17px; } .test-execution-overview small { font-size: 9px; } }
+@media print { .inspection-agent-grid.execution-workspace { display: block; height: auto; } .execution-workspace .execution-navigation, .execution-workspace .execution-detail { height: auto; overflow: visible; } }

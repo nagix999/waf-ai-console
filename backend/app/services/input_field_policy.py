@@ -2,6 +2,7 @@
 
 SERVER_CONTROL_FIELDS = frozenset({
     "signature_explanation", "signature_explanation_version_id", "signature_explanation_snapshot_ciphertext",
+    "production_configuration_id",
     "parser_version_id", "parser_snapshot_json",
     "initial_verdict", "initial_probability", "initial_model_version", "initial_assessment", "test_purpose",
     "source_system", "analysis_purpose", "ingest_channel", "analysis_scope", "purpose",

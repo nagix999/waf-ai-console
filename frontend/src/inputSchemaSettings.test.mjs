@@ -163,11 +163,14 @@ test("settings offers schema management without displacing existing model, promp
   for (const label of ["LLM 프로필", "Agent 설정", "입력 스키마"]) assert.ok(html.includes(label));
   assert.match(html, /Internal Egress|내부 연결 허용/); assert.match(html, /서비스 API Key|서비스 API 키|API 키/);
   const schema = render(components.default);
-  assert.match(schema, /<h2>입력 스키마<\/h2>/); assert.match(schema, /적용 이력/); assert.doesNotMatch(schema, /입력 스키마 설명|<textarea|버전 ID|필드 정의 지문/);
+  assert.match(schema, /<h2>입력 필드<\/h2>/); assert.match(schema, /적용 이력/); assert.doesNotMatch(schema, /입력 스키마 설명|버전 ID|필드 정의 지문/);
+  assert.match(schema, /<textarea[^>]+placeholder=/); assert.match(schema, /샘플 검증/); assert.doesNotMatch(schema, /schema-version-list/);
   const source = readFileSync(new URL("./InputSchemaSettings.jsx", import.meta.url), "utf8");
-  assert.match(source, /LLM 입력에는 추가하지 않습니다/); assert.match(source, /공식 테스트 → 운영 반영 검토 → 운영에 반영/); assert.match(source, /닫기 · 초안 유지/);
+  assert.match(source, /LLM 입력에는 추가하지 않습니다/); assert.match(source, /공식 테스트 → 운영 반영 검토 → 운영에 반영/); assert.match(source, /편집 내용 유지 · 닫기/);
   assert.doesNotMatch(source, /controller\.current\?\.activate\(/);
-  for (const label of ["null 허용", "샘플 검증", "스키마 편집 범위", "필드 정의 한도"]) assert.ok(source.includes(`<HelpTooltip label="${label}"`), label);
+  for (const label of ["null 허용", "필드 정의 한도"]) assert.ok(source.includes(`<HelpTooltip label="${label}"`), label);
+  assert.match(source, /기본 11개 필드의 이름·타입·최소 필수 조건은 보호/); assert.match(source, /LLM 호출·분석 접수·샘플 저장은 하지 않습니다/);
+  assert.match(source, /disabled=\{blocked \|\| !selected \|\| Boolean\(draft\) \|\| !sample.trim\(\)\}/);
   assert.doesNotMatch(source, /<HelpTooltip label="(?:입력 스키마|필드 변경 비교)"/);
   assert.match(source, /공개 API 문서와 실행 이력/); assert.match(source, /비밀값·실제 로그·개인정보를 넣지/);
 });
