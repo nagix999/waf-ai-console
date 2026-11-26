@@ -69,8 +69,8 @@ def snapshot_from_run(run, crypto, *, include_parser=None):
     if display:
         snapshot["evidence_editor"] = editor_metadata(display)
     explanations = read_explanations(crypto, run,
-        allow_legacy=prompt.fixed_rules_version not in {"waf-system-v2.23", "waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32"})
-    if prompt.fixed_rules_version in {"waf-system-v2.23", "waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32"}:
+        allow_legacy=prompt.fixed_rules_version not in {"waf-system-v2.23", "waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32", "waf-system-v2.34"})
+    if prompt.fixed_rules_version in {"waf-system-v2.23", "waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32", "waf-system-v2.34"}:
         snapshot["schema_version"] = 4
         snapshot["signature_explanations"] = explanation_metadata(explanations)
     elif explanations["version_id"] is not None:
@@ -111,11 +111,11 @@ def verify_configuration(run, crypto, analysis=None):
             if queued_parser != run_parser:
                 raise ValueError()
             run_explanations = read_explanations(crypto, run,
-                allow_legacy=run_prompt.fixed_rules_version not in {"waf-system-v2.23", "waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32"})
+                allow_legacy=run_prompt.fixed_rules_version not in {"waf-system-v2.23", "waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32", "waf-system-v2.34"})
             queued_explanations = read_explanations(crypto, analysis,
-                allow_legacy=run_prompt.fixed_rules_version not in {"waf-system-v2.23", "waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32"})
+                allow_legacy=run_prompt.fixed_rules_version not in {"waf-system-v2.23", "waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32", "waf-system-v2.34"})
             expected_explanations = event_snapshot(run_explanations, analysis.waf_vendor, analysis.signature)
-            if run_prompt.fixed_rules_version in {"waf-system-v2.23", "waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32"}:
+            if run_prompt.fixed_rules_version in {"waf-system-v2.23", "waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32", "waf-system-v2.34"}:
                 if queued_explanations != expected_explanations:
                     raise ValueError()
             elif queued_explanations["version_id"] is not None:

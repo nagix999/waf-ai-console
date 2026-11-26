@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from app import worker_v232 as worker
+from app.agent import legacy_prompts_v232
 from app.agent.contracts_v232 import SecurityAnalysisOutputV232
 from app.agent.executor import AgentCallResult
 from app.models import AgentRun, Analysis, ConcurrencyConfiguration, VLLMProfile
@@ -181,7 +182,7 @@ def test_complete_candidate_keeps_independence_history_and_final_policy(
         db.add(VLLMProfile(name="synthetic-v232", base_url="http://10.0.0.10:8000/v1",
             model_name="synthetic-model", status="production"))
         row = db.get(Analysis, response.json()["id"])
-        prompt = _build_snapshot(get_active_policy(db, crypto), crypto)
+        prompt = _build_snapshot(get_active_policy(db, crypto), crypto, rules=legacy_prompts_v232)
         assert prompt.fixed_rules_version == "waf-system-v2.32"
         row.prompt_version, row.prompt_policy_version_id = prompt.prompt_version, prompt.policy_version_id
         row.prompt_snapshot_ciphertext = crypto.encrypt_text(prompt.model_dump_json())

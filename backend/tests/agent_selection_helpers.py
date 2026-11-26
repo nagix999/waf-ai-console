@@ -16,6 +16,7 @@ from app.agent.contracts_v229 import SecurityAnalysisOutputV229
 from app.agent.contracts_v230 import SecurityAnalysisOutputV230
 from app.agent.contracts_v231 import SecurityAnalysisOutputV231
 from app.agent.contracts_v232 import SecurityAnalysisOutputV232
+from app.agent.contracts_v234 import SecurityAnalysisOutputV234
 
 
 def model_output(output, kwargs, *, evidence_supports="context"):
@@ -24,7 +25,7 @@ def model_output(output, kwargs, *, evidence_supports="context"):
     if output is None:
         return None
     contract = kwargs.get("output_model")
-    if contract not in (EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput, SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SecurityAnalysisOutputV224, SecurityAnalysisOutputV227, SecurityAnalysisOutputV228, SecurityAnalysisOutputV229, SecurityAnalysisOutputV230, SecurityAnalysisOutputV231, SecurityAnalysisOutputV232):
+    if contract not in (EvidenceSelectionOutput, EvidenceSelectionCorrectionOutput, EvidenceAssessmentOutput, SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SecurityAnalysisOutputV224, SecurityAnalysisOutputV227, SecurityAnalysisOutputV228, SecurityAnalysisOutputV229, SecurityAnalysisOutputV230, SecurityAnalysisOutputV231, SecurityAnalysisOutputV232, SecurityAnalysisOutputV234):
         return output
     document = json.loads(kwargs["user_input"])
     event = document["event"]
@@ -52,12 +53,12 @@ def model_output(output, kwargs, *, evidence_supports="context"):
         value["corrections"] = [{"index": item.index, "source_id": choose(item)} for item in output.corrections]
     else:
         value["evidence"] = [{"source_id": choose(item), "interpretation_ko": item.interpretation_ko} for item in output.evidence]
-        if contract in (EvidenceAssessmentOutput, SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SecurityAnalysisOutputV224, SecurityAnalysisOutputV227, SecurityAnalysisOutputV228, SecurityAnalysisOutputV229, SecurityAnalysisOutputV230, SecurityAnalysisOutputV231, SecurityAnalysisOutputV232):
+        if contract in (EvidenceAssessmentOutput, SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SecurityAnalysisOutputV224, SecurityAnalysisOutputV227, SecurityAnalysisOutputV228, SecurityAnalysisOutputV229, SecurityAnalysisOutputV230, SecurityAnalysisOutputV231, SecurityAnalysisOutputV232, SecurityAnalysisOutputV234):
             for item in value["evidence"]:
                 # Explicit test input, never inferred from the model verdict.
                 item["supports"] = evidence_supports
             value["decision_issue"] = None
-        if contract in (SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SecurityAnalysisOutputV224, SecurityAnalysisOutputV227, SecurityAnalysisOutputV228, SecurityAnalysisOutputV229, SecurityAnalysisOutputV230, SecurityAnalysisOutputV231, SecurityAnalysisOutputV232):
+        if contract in (SemanticAssessmentOutput, SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SecurityAnalysisOutputV224, SecurityAnalysisOutputV227, SecurityAnalysisOutputV228, SecurityAnalysisOutputV229, SecurityAnalysisOutputV230, SecurityAnalysisOutputV231, SecurityAnalysisOutputV232, SecurityAnalysisOutputV234):
             # Explicit synthetic contract adapter, not production backfill.
             relation = value["signature_assessment"]["relation"]
             value["signature_assessment"] = {
@@ -69,7 +70,7 @@ def model_output(output, kwargs, *, evidence_supports="context"):
             value["analyst_checks"] = [{**check, "purpose": check.get("purpose") or (
                 "decision_condition" if value["verdict"] == "inconclusive" else "impact_followup")} for check in value["analyst_checks"]]
             value["recommended_checks"] = []
-        if contract in (SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SecurityAnalysisOutputV224, SecurityAnalysisOutputV227, SecurityAnalysisOutputV228, SecurityAnalysisOutputV229, SecurityAnalysisOutputV230, SecurityAnalysisOutputV231, SecurityAnalysisOutputV232):
+        if contract in (SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SecurityAnalysisOutputV224, SecurityAnalysisOutputV227, SecurityAnalysisOutputV228, SecurityAnalysisOutputV229, SecurityAnalysisOutputV230, SecurityAnalysisOutputV231, SecurityAnalysisOutputV232, SecurityAnalysisOutputV234):
             # The synthetic wire response is explicitly constructed for v3;
             # production never derives a direction from the final verdict.
             for retired in ("recommended_checks", "analyst_checks", "conflicting_evidence", "tuning_recommendation"):
@@ -77,11 +78,11 @@ def model_output(output, kwargs, *, evidence_supports="context"):
             value["interpretation_conflict"] = False
             if value["summary_ko"].strip().startswith(("정탐입니다", "오탐입니다", "판정을 보류", "현재 분석에서는 정탐", "현재 분석에서는 오탐")):
                 value["summary_ko"] = "요청에 포함된 값과 실제 사용 문맥을 비교했습니다."
-        if contract in (SecurityAnalysisOutputV220, SecurityAnalysisOutputV224, SecurityAnalysisOutputV227, SecurityAnalysisOutputV228, SecurityAnalysisOutputV229, SecurityAnalysisOutputV230, SecurityAnalysisOutputV231, SecurityAnalysisOutputV232):
+        if contract in (SecurityAnalysisOutputV220, SecurityAnalysisOutputV224, SecurityAnalysisOutputV227, SecurityAnalysisOutputV228, SecurityAnalysisOutputV229, SecurityAnalysisOutputV230, SecurityAnalysisOutputV231, SecurityAnalysisOutputV232, SecurityAnalysisOutputV234):
             value["evidence_relations"] = []
-        if contract in (SecurityAnalysisOutputV224, SecurityAnalysisOutputV227, SecurityAnalysisOutputV228, SecurityAnalysisOutputV229, SecurityAnalysisOutputV230, SecurityAnalysisOutputV231, SecurityAnalysisOutputV232):
+        if contract in (SecurityAnalysisOutputV224, SecurityAnalysisOutputV227, SecurityAnalysisOutputV228, SecurityAnalysisOutputV229, SecurityAnalysisOutputV230, SecurityAnalysisOutputV231, SecurityAnalysisOutputV232, SecurityAnalysisOutputV234):
             value["capture_assessment"] = {"status": "unknown", "reason_ko": "합성 테스트용 고정 관찰입니다."}
-    if contract in (SecurityAnalysisOutputV227, SecurityAnalysisOutputV228, SecurityAnalysisOutputV229, SecurityAnalysisOutputV230, SecurityAnalysisOutputV231, SecurityAnalysisOutputV232):
+    if contract in (SecurityAnalysisOutputV227, SecurityAnalysisOutputV228, SecurityAnalysisOutputV229, SecurityAnalysisOutputV230, SecurityAnalysisOutputV231, SecurityAnalysisOutputV232, SecurityAnalysisOutputV234):
         value.pop("input_truncated")
         value.pop("evidence_relations")
         for key in ("version", "explanation_ko"):

@@ -10,7 +10,7 @@ import pytest
 from app import worker_v231, worker_v232
 from app.agent import evidence_pipeline_v231, evidence_pipeline_v232
 from app.agent import input_builder_v231, input_builder_v232, execution_policy_v231, execution_policy_v232
-from app.agent import legacy_prompts_v231, prompts
+from app.agent import legacy_prompts_v231, legacy_prompts_v232 as prompts
 from app.agent.policy import VerifierPolicyContext
 from app.models import Analysis, ProductionPromotion, TestRun as NamedRun, VLLMProfile
 from app.services import worker_runtime_v232, prompt_snapshots
@@ -30,6 +30,13 @@ from test_execution_policy_v221 import output
 pytestmark = pytest.mark.usefixtures("registered_vllm_target")
 PRODUCTION = "/api/v1/admin/production-configurations"
 FROZEN_V231 = "f897189ddc2ff13eb465be81ad4bde092833c76c4a20e08564303a79dcca48cc"
+
+
+@pytest.fixture(autouse=True)
+def legacy_v232_admissions(monkeypatch):
+    """Keep historical admissions pinned, never rewrite the v2.32 engine."""
+    import app.agent
+    monkeypatch.setattr(app.agent, "prompts", prompts)
 
 
 def without_editor(configuration):

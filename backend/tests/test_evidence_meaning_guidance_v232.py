@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from app.agent import evidence_display as old_editor, evidence_display_v2 as editor
-from app.agent import legacy_prompts_v231 as previous, prompts
+from app.agent import legacy_prompts_v231 as previous, legacy_prompts_v232 as prompts
 from app.agent.contracts_v231 import SecurityAnalysisOutputV231
 from app.agent.contracts_v232 import SecurityAnalysisOutputV232
 from app.services.evidence_display_plan import build_display_plan

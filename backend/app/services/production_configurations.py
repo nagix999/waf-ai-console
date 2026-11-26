@@ -41,7 +41,7 @@ def live_snapshot(db, crypto, settings, *, roles=None, prompt_id=None, schema_id
             "verifier_confidence_threshold": settings.verifier_confidence_threshold})
     queued_prompt = pin_analysis_prompt(db, crypto, temporary, version_id=prompt_id, production=production)
     selected_explanations = explanation_state(db).active_version_id if production else signature_explanation_id
-    if queued_prompt.fixed_rules_version in {"waf-system-v2.23", "waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32"}:
+    if queued_prompt.fixed_rules_version in {"waf-system-v2.23", "waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32", "waf-system-v2.34"}:
         pin_explanations(db, crypto, temporary, version_id=selected_explanations,
                          selection_origin="production" if production else "candidate")
     elif selected_explanations is not None:

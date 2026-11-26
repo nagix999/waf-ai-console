@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from agent_selection_helpers import model_output
 
-from app import worker, worker_v221, worker_v222, worker_v223, worker_v224, worker_v232
+from app import worker, worker_v221, worker_v222, worker_v223, worker_v224, worker_v232, worker_v234
 from app.agent import legacy_prompts_v220, legacy_prompts_v221_reasoning, prompts
 from app.agent.contracts import WAFAnalysisOutput
 from app.agent.executor import AgentCallResult
@@ -12,7 +12,7 @@ from app.agent.prompts import DEFAULT_POLICY_TEXT, FIXED_INSTRUCTIONS, build_rol
 from app.models import Analysis, PromptPolicyVersion, VLLMProfile
 from app.services.http_parser import parse_http_payload
 from app.services.prompt_snapshots import PromptSnapshotError, load_analysis_prompt
-from app.services.worker_runtime_v232 import process_moduagent
+from app.services.worker_runtime_v234 import process_moduagent
 
 pytestmark = pytest.mark.usefixtures("registered_vllm_target")
 
@@ -76,7 +76,7 @@ def fake_output():
 
 
 @pytest.mark.parametrize("rules", [legacy_prompts_v220, legacy_prompts_v221_reasoning, None],
-    ids=["pinned-v220", "pinned-v221", "current-v232"])
+    ids=["pinned-v220", "pinned-v221", "current-v234"])
 def test_worker_and_verifier_use_queued_snapshot_after_activation_and_code_change(client, event_payload, monkeypatch, rules):
     if rules is not None:
         # Recreate admission under the frozen revision, not a current snapshot
@@ -108,6 +108,7 @@ def test_worker_and_verifier_use_queued_snapshot_after_activation_and_code_chang
     monkeypatch.setattr(worker_v223, "execute_structured_agent", execute)
     monkeypatch.setattr(worker_v224, "execute_structured_agent", execute)
     monkeypatch.setattr(worker_v232, "execute_structured_agent", execute)
+    monkeypatch.setattr(worker_v234, "execute_structured_agent", execute)
     with client.app.state.session_factory() as db:
         row = worker.claim_next(db, "worker-one", 60)
         cipher_before = row.prompt_snapshot_ciphertext
@@ -148,6 +149,7 @@ def test_snapshot_corruption_fails_before_model_call(client, event_payload, monk
     monkeypatch.setattr(worker_v223, "execute_structured_agent", execute)
     monkeypatch.setattr(worker_v224, "execute_structured_agent", execute)
     monkeypatch.setattr(worker_v232, "execute_structured_agent", execute)
+    monkeypatch.setattr(worker_v234, "execute_structured_agent", execute)
     with client.app.state.session_factory() as db:
         row = db.get(Analysis, created["id"])
         if corruption == "changed_role":
@@ -206,6 +208,7 @@ def test_small_context_fails_before_llm_and_preserves_pinned_policy(client, even
     monkeypatch.setattr(worker_v223, "execute_structured_agent", execute)
     monkeypatch.setattr(worker_v224, "execute_structured_agent", execute)
     monkeypatch.setattr(worker_v232, "execute_structured_agent", execute)
+    monkeypatch.setattr(worker_v234, "execute_structured_agent", execute)
     with client.app.state.session_factory() as db:
         db.add(VLLMProfile(name="small-synthetic", base_url="http://10.0.0.10:8000/v1", model_name="synthetic-model", context_window=8192, max_output_tokens=3072, status="production"))
         db.commit()

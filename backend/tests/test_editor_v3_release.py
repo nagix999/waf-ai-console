@@ -10,7 +10,7 @@ import pytest
 from sqlalchemy import select
 
 from app import worker_entrypoint_v232, worker_entrypoint_v233
-from app.agent import evidence_pipeline_v232, prompts
+from app.agent import evidence_pipeline_v232, legacy_prompts_v232 as prompts
 from app.models import AgentConfiguration, Analysis, EvidenceDisplayJob, ProductionPromotion
 from app.models import TestRun as NamedRun, VLLMProfile
 from app.services import evidence_display_jobs as jobs1, evidence_display_jobs_v2 as jobs2
@@ -25,6 +25,13 @@ from test_candidate_configurations import candidate, direct
 
 
 pytestmark = pytest.mark.usefixtures("registered_vllm_target")
+
+@pytest.fixture(autouse=True)
+def frozen_editor_release_admissions(monkeypatch):
+    """Replay this editor-only release under its original judgment rules."""
+    monkeypatch.setattr("app.agent.prompts", prompts)
+
+
 FROZEN_V232 = "11c5bd23b63ae871ed743295accfeb7b7f63a4aaa8c4eef9c7cec0a0b22e6c3f"
 FROZEN_EDITOR_V2 = "874ff813b97d62a7a0a27f87031fe897158e0705284e7b0992f0dd32b52878b1"
 

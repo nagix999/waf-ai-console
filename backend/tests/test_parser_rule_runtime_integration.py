@@ -15,7 +15,7 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy import select
 
-from app import worker_v232
+from app import worker_v234
 from app.agent import evidence_pipeline_v222
 from app.models import AgentRun, AgentStep, Analysis, ParserJob, ParserWorkbench, ParserWorkbenchJob, VLLMProfile, utcnow
 from app.services import parser_job_dispatch
@@ -25,7 +25,7 @@ from app.services.parser_rule_versions import create_rule_bundle_version, read_r
 from app.services.parser_versions import BASELINE_ID, activate_parser_version, ensure_parser_state, pin_parser
 from app.services.parser_workbench import _parse_candidate
 from app.services.prompt_snapshots import load_analysis_prompt
-from app.services.worker_runtime_v232 import process_moduagent
+from app.services.worker_runtime_v234 import process_moduagent
 from test_candidate_configurations import candidate
 from test_compact_prompt_preservation import ENGINE_SHA256 as OLD_ENGINE_HASHES
 from test_parser_lifecycle import review_record
@@ -53,7 +53,7 @@ def enqueue(client, event_payload, service_headers, *, raw):
                           model_name="synthetic-only-model", status="production"))
         row = db.get(Analysis, response.json()["id"])
         prompt = load_analysis_prompt(row, client.app.state.crypto)
-        assert prompt.fixed_rules_version == "waf-system-v2.32"
+        assert prompt.fixed_rules_version == "waf-system-v2.34"
         assert prompt.evidence_pipeline["source_catalog_version"] == "evidence-selection-v5"
         db.commit()
     return response.json()["id"], event
@@ -67,8 +67,8 @@ def _parse_stage(client, row, monkeypatch):
     async def forbidden(**_kwargs):
         pytest.fail("Provider execution is outside this synthetic parser integration test")
 
-    monkeypatch.setattr(worker_v232, "_decode_payload_step", stop)
-    monkeypatch.setattr(worker_v232, "execute_structured_agent", forbidden)
+    monkeypatch.setattr(worker_v234, "_decode_payload_step", stop)
+    monkeypatch.setattr(worker_v234, "execute_structured_agent", forbidden)
     with pytest.raises(StopAfterParser, match="^synthetic-stop-after-parser$"):
         process_moduagent(row[0], client.app.state.crypto, row[1], "", .75)
 
@@ -80,7 +80,7 @@ def test_actual_moduagent_worker_reads_pinned_encrypted_bundle_not_new_active_pa
     raw = PRIVATE_MARKER + "\n" + REQUEST + "\nEND-SYNTHETIC"
     analysis_id, _ = enqueue(client, {**event_payload, "waf_vendor": "Fixture-A"}, service_headers, raw=raw)
     crypto, observed = client.app.state.crypto, []
-    actual_apply = worker_v232.apply_parser_snapshot
+    actual_apply = worker_v234.apply_parser_snapshot
 
     def observe(source, snapshot, **kwargs):
         assert hasattr(snapshot, "document")
@@ -88,7 +88,7 @@ def test_actual_moduagent_worker_reads_pinned_encrypted_bundle_not_new_active_pa
         observed.append((source, snapshot["version_id"], kwargs["waf_vendor"]))
         return actual_apply(source, snapshot, **kwargs)
 
-    monkeypatch.setattr(worker_v232, "apply_parser_snapshot", observe)
+    monkeypatch.setattr(worker_v234, "apply_parser_snapshot", observe)
     with client.app.state.session_factory() as db:
         row = db.get(Analysis, analysis_id)
         row.parser_version_id = row.parser_snapshot_json = None
@@ -128,8 +128,8 @@ def test_corrupt_encrypted_bundle_is_blocked_before_actual_parser_or_model(
     def forbidden(*_args, **_kwargs):
         pytest.fail("Corrupt parser provenance reached the parser/model")
 
-    monkeypatch.setattr(worker_v232, "apply_parser_snapshot", forbidden)
-    monkeypatch.setattr(worker_v232, "execute_structured_agent", forbidden)
+    monkeypatch.setattr(worker_v234, "apply_parser_snapshot", forbidden)
+    monkeypatch.setattr(worker_v234, "execute_structured_agent", forbidden)
     with client.app.state.session_factory() as db:
         row = db.get(Analysis, analysis_id)
         row.parser_version_id = row.parser_snapshot_json = None
