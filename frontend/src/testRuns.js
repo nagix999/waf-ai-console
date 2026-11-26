@@ -6,6 +6,44 @@ export const runStatuses = { pending: "대기", processing: "진행 중", comple
 export const caseStatuses = { ...runStatuses, canceled: "중지됨" };
 runStatuses.stopped = "중지됨";
 
+const displayRunStatuses = {
+  pending: ["대기", "Pending"], processing: ["진행 중", "In progress"],
+  completed: ["처리 완료", "Completed"], failed: ["실행 실패", "Execution failed"],
+  stopped: ["중지됨", "Stopped"], accepting: ["접수 중", "Accepting requests"],
+  evaluating: ["평가 집계 중", "Finalizing evaluation"],
+  passed: ["검증 통과", "Passed"], unknown: ["미확인", "Unknown"],
+};
+const validRunCount = value => Number.isSafeInteger(value) && value >= 0;
+const runHasCount = (run, key) => validRunCount(run?.[key]) && run[key] > 0;
+
+// Display the test's processing lifecycle separately from individual failures.
+// The server status, frozen evaluations and qualification checks stay unchanged.
+export function testRunDisplayState(run) {
+  const display = status => ({ status, labelKo: displayRunStatuses[status][0], labelEn: displayRunStatuses[status][1] });
+  const original = Object.hasOwn(displayRunStatuses, run?.status) ? run.status : "unknown";
+  if (run?.stopped_at || run?.status === "stopped" || run?.status === "canceled") return display("stopped");
+  // A profile-validation result is not a TestRunSummary batch rollup.
+  if (run?.status === "passed") return display("passed");
+  if (run?.accepting_items === true) return display("accepting");
+  if (runHasCount(run, "processing")) return display("processing");
+  if (runHasCount(run, "pending")) return display("pending");
+  if (["pending", "processing"].includes(original)) return display(original);
+  if (run?.official_evaluation_pending === true) return display("evaluating");
+
+  const counts = ["total", "accepted", "completed", "failed", "rejected", "duplicates", "canceled", "pending", "processing"];
+  const terminal = run?.accepting_items === false && counts.every(key => validRunCount(run[key]))
+    && run.pending === 0 && run.processing === 0 && run.total > 0
+    && run.accepted === run.completed + run.failed + run.canceled
+    && run.total === run.accepted + run.rejected + run.duplicates;
+  if (terminal && ["completed", "failed"].includes(original)) {
+    if (run.canceled > 0) return display("stopped");
+    // Raw VLLM validation records lack this batch counter contract, so their
+    // failed/passed qualification result cannot be converted here.
+    return display("completed");
+  }
+  return display(original);
+}
+
 export function newTestRequestKey() {
   return globalThis.crypto?.randomUUID?.() || `test-${Date.now()}-${Math.random().toString(16).slice(2)}-${Math.random().toString(16).slice(2)}`;
 }

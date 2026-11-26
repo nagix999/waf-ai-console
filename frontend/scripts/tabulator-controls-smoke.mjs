@@ -12,7 +12,7 @@ const bundle = await build({ stdin: { resolveDir: fileURLToPath(new URL("../src"
 import {StrictMode,useMemo,useState} from 'react';import {createRoot} from 'react-dom/client';
 import DataTable from './DataTable.jsx';import {ConsolePreferencesProvider} from './consolePreferences.jsx';
 import './styles.css';import './console.css';
-const rows=[{name:'Zulu',value:17},{id:'same',name:'Alpha',value:3},{id:'same',name:'<img src=x onerror="window.injected=true">',value:9}];
+const rows=[{id:'zulu',name:'Zulu',value:17},{id:'same',name:'Alpha',value:3},{id:'same',name:'<img src=x onerror="window.injected=true">',value:9}];
 window.tableState={sorts:[],opened:[]};
 function Fixture(){const [sorting,setSorting]=useState([]),[selected,setSelected]=useState([]),[empty,setEmpty]=useState(false),[disabled,setDisabled]=useState(false),[failed,setFailed]=useState(false),[revision,setRevision]=useState(0),[editing,setEditing]=useState(false);
 const data=useMemo(()=>empty?[]:rows.map(row=>({...row,revision})),[empty,revision]);window.tableState.refresh=()=>setRevision(v=>v+1);window.tableState.empty=()=>setEmpty(true);window.tableState.show=()=>setEmpty(false);window.tableState.edit=value=>setEditing(value);
@@ -21,7 +21,7 @@ return <ConsolePreferencesProvider><button onClick={()=>setEmpty(v=>!v)}>Toggle 
 headerGroups={[{label:'Selection',span:1},{label:<span>Case details</span>,span:2},{label:'Actions',span:1}]} columns={[
 {id:'select',width:44,className:'selection-cell',header:<input type="checkbox" aria-label="Select page" checked={selected.length===3} disabled={disabled} onChange={event=>setSelected(event.target.checked?[0,1,2]:[])}/>,render:(row,index)=><input type="checkbox" aria-label={'Select '+index} checked={selected.includes(index)} disabled={disabled} onChange={event=>setSelected(event.target.checked?[...selected,index]:selected.filter(i=>i!==index))}/>},
 {id:'name',header:'Name',sortable:true,render:row=><strong>{row.name}</strong>},
-{id:'value',header:<span>Count</span>,className:'numeric',width:100,sortable:true},
+{id:'value',header:<span>Count</span>,className:'numeric',width:100,sortable:true,render:row=>row.value+row.revision},
 {id:'action',header:<span className="sr-only">Actions</span>,width:140,render:row=>editing?<input aria-label={'Edit '+row.name} defaultValue={row.name}/>:<button type="button" onClick={()=>window.tableState.opened.push('button:'+row.name)}>Open {row.name==='Alpha'?'Alpha':'case'}</button>}
 ]}/></ConsolePreferencesProvider>}
 createRoot(document.getElementById('root')).render(<StrictMode><Fixture/></StrictMode>);` }, bundle: true, write: false,
@@ -67,18 +67,20 @@ try {
   assert.deepEqual(await page.evaluate(() => window.tableState.opened), ["Alpha", "button:Alpha"], "button click is not duplicated by row activation");
   await rows.nth(1).focus();
   await page.evaluate(() => { window.oldFocusedRow = document.activeElement; window.beforeRowRefreshScroll = scrollY; window.tableState.refresh(); });
-  await page.waitForFunction(() => !oldFocusedRow.isConnected);
+  await rows.nth(1).locator('[tabulator-field="value"]').getByText("4", { exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => oldFocusedRow.isConnected && document.activeElement === oldFocusedRow), true, "same-key data refresh preserves the row DOM");
   await page.waitForFunction(() => document.activeElement?.classList.contains("tabulator-row") && document.activeElement.textContent.includes("Alpha"));
   assert.equal(await rows.nth(1).evaluate(node => document.activeElement === node), true, "the same keyboard-navigable row retains focus after polling");
   assert.equal(await page.evaluate(() => scrollY === beforeRowRefreshScroll), true, "row focus restoration does not scroll");
   await page.evaluate(() => { window.tableState.refresh(); document.querySelector("button").focus(); });
   await page.waitForTimeout(100);
   assert.equal(await page.getByRole("button", { name: "Toggle empty", exact: true }).evaluate(node => document.activeElement === node), true, "row refresh never takes focus from another control");
-  // Polling replaces row data/portals, but does not abandon a keyboard user
-  // when that exact row and control remain in the refreshed page.
+  // Same-key polling updates data without replacing the row, cell portal or
+  // its focused control. A different data scope still uses replacement.
   await rows.nth(1).getByRole("button", { name: "Open Alpha", exact: true }).focus();
   await page.evaluate(() => { window.oldFocusedControl = document.activeElement; window.tableState.refresh(); });
-  await page.waitForFunction(() => !oldFocusedControl.isConnected);
+  await rows.nth(1).locator('[tabulator-field="value"]').getByText("6", { exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => oldFocusedControl.isConnected && document.activeElement === oldFocusedControl), true, "same-key polling keeps the existing cell control");
   await page.waitForFunction(() => document.activeElement?.textContent === "Open Alpha");
   assert.equal(await rows.nth(1).getByRole("button", { name: "Open Alpha", exact: true }).evaluate(node => document.activeElement === node), true, "same duplicate-id occurrence and cell retain focus");
   await page.evaluate(() => { window.tableState.refresh(); document.querySelector("button").focus(); });

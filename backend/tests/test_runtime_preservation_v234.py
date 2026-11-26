@@ -10,7 +10,8 @@ import pytest
 from app import worker_v232, worker_v234
 from app.agent import evidence_pipeline_v232, evidence_pipeline_v234
 from app.agent import input_builder_v232, input_builder_v234, execution_policy_v232, execution_policy_v234
-from app.agent import legacy_prompts_v232, prompts
+from app.agent import legacy_prompts_v232
+from app.agent import legacy_prompts_v234 as prompts
 from app.agent.policy import VerifierPolicyContext
 from app.models import Analysis, InternalEgressTarget, ProductionPromotion, TestRun as NamedRun, VLLMProfile
 from app.services import worker_runtime_v234
@@ -30,6 +31,11 @@ from test_execution_policy_v221 import output
 pytestmark = pytest.mark.usefixtures("registered_vllm_target")
 PRODUCTION = "/api/v1/admin/production-configurations"
 FROZEN_V232 = "11c5bd23b63ae871ed743295accfeb7b7f63a4aaa8c4eef9c7cec0a0b22e6c3f"
+
+
+@pytest.fixture(autouse=True)
+def frozen_v234_defaults(monkeypatch):
+    monkeypatch.setattr("app.agent.prompts", prompts)
 
 
 def without_editor(configuration):

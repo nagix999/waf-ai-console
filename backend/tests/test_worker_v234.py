@@ -9,6 +9,7 @@ import pytest
 
 from app import worker_v234 as worker
 from app.agent.contracts_v234 import SecurityAnalysisOutputV234
+from app.agent import legacy_prompts_v234
 from app.agent.executor import AgentCallResult
 from app.models import AgentRun, Analysis, ConcurrencyConfiguration, VLLMProfile
 from app.services.prompt_policies import get_active_policy
@@ -18,6 +19,12 @@ from test_flat_evidence_v228 import wire
 
 
 
+
+
+@pytest.fixture(autouse=True)
+def frozen_v234_defaults(monkeypatch):
+    """Keep this historical worker under its unchanged admission contract."""
+    monkeypatch.setattr("app.agent.prompts", legacy_prompts_v234)
 
 
 def result(*, succeeded=True):

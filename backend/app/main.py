@@ -167,6 +167,8 @@ def create_app(settings: Settings | None = None, create_schema: bool = False) ->
                 or request.url.path.startswith("/api/v1/test-sessions") or request.url.path.endswith("/evaluation-labels")
                 or request.url.path.startswith("/api/v1/admin/parsers")
                 or request.url.path.startswith("/api/v1/admin/signature-explanations")
+                or (request.url.path.startswith("/api/v1/analyses/")
+                    and request.url.path.endswith("/agent-runs"))
                 or request.url.path.startswith("/api/v1/admin/parser-workbench")):
             response.headers["Cache-Control"] = "no-store"
         return response

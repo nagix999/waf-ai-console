@@ -156,6 +156,36 @@ test("named run rows and case names are escaped and rejected rows do not display
   assert.match(unmeasured, /Acc — · F1 — · Cov —/); assert.doesNotMatch(unmeasured, /확정 판정 0건|0.0%/);
 });
 
+test("finished test rows distinguish completion from case failures without changing the saved status", () => {
+  const run = { id: "run", name: "완료된 테스트", kind: "upload", status: "failed", accepting_items: false,
+    total: 500, accepted: 498, completed: 478, failed: 20, rejected: 2, duplicates: 0, canceled: 0, pending: 0, processing: 0 };
+  const before = JSON.stringify(run);
+  const html = render(TestRunRows, { items: [run], onSelect() {} });
+  assert.match(html, /status-completed[^>]*>처리 완료/);
+  assert.match(html, /analysis-row-completed/);
+  assert.match(html, /실패 20/); assert.match(html, /접수 거부 2/);
+  assert.doesNotMatch(html, /실행 실패|analysis-row-failed/);
+  assert.equal(JSON.stringify(run), before);
+  const english = render(TestRunRows, { items: [run], onSelect() {}, words: (_ko, en) => en });
+  assert.match(english, /status-completed[^>]*>Completed/);
+  const item = render(TestRunItemRows, { items: [{ id: "case", row_number: 1, ingest_status: "accepted", status: "failed" }], onOpen() {} });
+  assert.match(item, /실행 실패/); assert.match(item, /analysis-row-failed/);
+});
+
+test("open ingestion, pending evaluation and stopped test rows never look completed", () => {
+  const base = { id: "run", name: "상태 확인", status: "completed", total: 1, accepted: 1,
+    completed: 1, failed: 0, rejected: 0, duplicates: 0, canceled: 0, pending: 0, processing: 0, accepting_items: false };
+  for (const [patch, label, background] of [
+    [{ accepting_items: true }, "접수 중", "processing"],
+    [{ official_evaluation_pending: true }, "평가 집계 중", "processing"],
+    [{ stopped_at: "2026-11-26T00:00:00Z" }, "중지됨", "canceled"],
+  ]) {
+    const html = render(TestRunRows, { items: [{ ...base, ...patch }], onSelect() {} });
+    assert.ok(html.includes(label)); assert.ok(html.includes(`analysis-row-${background}`));
+    assert.doesNotMatch(html, /status-completed[^>]*>처리 완료/);
+  }
+});
+
 test("expanded test metrics preserve all columns, grouped headers and unavailable server values", () => {
   const metrics = ["accuracy", "precision", "recall", "f1", "coverage", "abstention_rate", "false_positive_rate", "false_negative_rate"];
   const run = { id: "run", name: "지표 확인", status: "completed", evaluation_summary: summaryFixture() };

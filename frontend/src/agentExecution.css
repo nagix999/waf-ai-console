@@ -34,6 +34,25 @@
 .execution-record-body .detail-tabs button[aria-selected="true"] { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
 .execution-record-note { font-size: 10px; line-height: 1.8; }
 .execution-record-body .inspector-content { max-height: none; }
+.execution-validation-history { margin: 16px 0 22px; padding: 16px; border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line)); border-radius: 10px; background: var(--panel); }
+.execution-validation-history h4 { margin: 0; color: var(--text); font-size: 13px; }
+.execution-validation-history .execution-validation-note { margin: 8px 0 12px; color: var(--muted); font-size: 11px; line-height: 1.8; }
+.execution-validation-attempt { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 10px; }
+.execution-validation-attempt > summary { cursor: pointer; padding: 5px 0; color: var(--text); font-size: 12px; line-height: 1.8; }
+.execution-validation-attempt > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+.execution-validation-attempt > summary > span { color: var(--muted); margin: 0 5px; }
+.execution-validation-attempt > summary > small { display: inline-block; margin-left: 12px; color: var(--muted); font-size: 10px; }
+.execution-validation-issues { list-style: none; margin: 10px 0; padding: 0; color: var(--muted); font-size: 10px; line-height: 1.8; overflow-wrap: anywhere; }
+.execution-rejected-evidence { list-style: none; display: grid; gap: 10px; margin: 12px 0; padding: 0; }
+.execution-rejected-evidence > li { min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--raised); }
+.execution-rejected-evidence-head { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 14px; font-size: 11px; }
+.execution-rejected-evidence-head > span { color: var(--muted); }
+.execution-rejected-support { border-radius: 5px; padding: 2px 7px; background: var(--panel); }
+.execution-rejected-support.support-attack_request { color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, var(--panel)); }
+.execution-rejected-support.support-normal_request { color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, var(--panel)); }
+.execution-validation-history .execution-rejected-interpretation { margin: 9px 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); font-size: 12px; line-height: 1.8; }
+.execution-validation-history .execution-rejected-links { margin: 0; color: var(--muted); overflow-wrap: anywhere; font-size: 10px; line-height: 1.8; }
+.execution-validation-history .execution-validation-limited { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 9px 0 0; color: var(--warn); overflow-wrap: anywhere; font-size: 10px; line-height: 1.8; }
 .execution-navigation .inspection-run-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 7px 10px; padding: 8px 7px 12px; margin: 0 0 3px; border-bottom: 1px solid var(--line); font-size: 10px; }
 .execution-navigation .inspection-run-toolbar > label { display: grid; gap: 6px; width: 100%; font-size: 10px; color: var(--muted); }
 .execution-navigation .inspection-run-toolbar select { min-width: 0; width: 100%; max-width: none; min-height: 32px; padding: 5px 7px; font-size: 10px; }

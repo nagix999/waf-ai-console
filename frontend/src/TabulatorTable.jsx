@@ -39,14 +39,63 @@ export function tablePageRows(data, getRowId = defaultRowId) {
   });
 }
 
+// Only the supplied server page determines row order. A polling update for
+// exactly that page can keep its row/cell hosts instead of replacing the DOM.
+export function sameTablePageOrder(keys, rows, previousRows = []) {
+  return Array.isArray(keys) && keys.length === rows.length && keys.every((key, index) => key === rows[index].__consoleRowKey &&
+    // An index identifies a position, not a new object's business identity.
+    // Unkeyed summaries may reuse hosts only while the actual row is retained.
+    (!key.startsWith("index:") || rows[index].__consoleRow === previousRows[index]?.__consoleRow));
+}
+
+function replacementView(mount, element) {
+  if (!mount?.built || !element) return null;
+  const scrollers = [element.parentElement, element.querySelector(".tabulator-tableholder")].filter(Boolean);
+  return {
+    element, minHeight: element.style.minHeight, interaction: mount.interaction,
+    height: element.getBoundingClientRect().height,
+    scrollers: scrollers.map(node => ({ node, top: node.scrollTop, left: node.scrollLeft })),
+    details: new Map([...mount.regions.values()].filter(region => region.kind === "cell" && !region.rowKey?.startsWith("index:")).map(region =>
+      [region.key, [...region.element.querySelectorAll("details")].map(node => node.open)])),
+  };
+}
+
+function restoreReplacementView(mount, regions) {
+  const saved = mount.pendingView;
+  if (!saved || regions.some(region => region.kind === "cell" && mount.regions.get(region.key)?.element !== region.element)) return;
+  // React may schedule the replacement portal commit after an analyst moves
+  // a scrollbar or another control. Do not undo that newer interaction.
+  if (saved.interaction !== mount.interaction) {
+    saved.element.style.minHeight = saved.minHeight;
+    mount.pendingView = null;
+    return;
+  }
+  for (const [key, open] of saved.details) {
+    const region = mount.regions.get(key);
+    if (region?.element.isConnected) [...region.element.querySelectorAll("details")].forEach((node, index) => {
+      if (index < open.length) node.open = open[index];
+    });
+  }
+  mount.table.getRows().forEach(row => row.normalizeHeight());
+  saved.element.style.minHeight = saved.minHeight;
+  for (const { node, top, left } of saved.scrollers) {
+    if (node.isConnected) { node.scrollTop = top; node.scrollLeft = left; }
+  }
+  mount.pendingView = null;
+}
+
 function rowFocusSnapshot(mount) {
   const active = document.activeElement;
   if (active?.classList.contains("tabulator-row") && active.tabIndex >= 0) {
     const row = mount.table.getRows().find(row => row.getElement() === active);
-    if (row) return { kind: "row", key: row.getData().__consoleRowKey, original: active };
+    if (row) {
+      const key = row.getData().__consoleRowKey;
+      return key.startsWith("index:") ? null : { kind: "row", key, original: active };
+    }
   }
   for (const region of mount.regions.values()) {
     if (region.kind !== "cell" || !region.element.contains(active)) continue;
+    if (region.rowKey?.startsWith("index:")) return null;
     const index = [...region.element.querySelectorAll(focusable)].indexOf(active);
     if (index < 0) return null;
     const selection = typeof active.selectionStart === "number" ? { start: active.selectionStart, end: active.selectionEnd, direction: active.selectionDirection } : null;
@@ -91,7 +140,10 @@ export default function TabulatorTable({ data = [], columns = [], getRowId = def
   const element = useRef(null), instance = useRef(null), latest = useRef(null);
   const [regions, setRegions] = useState([]);
   const [renderFailed, setRenderFailed] = useState(false);
-  latest.current = { data, columns, getRowId, rowClassName, onRowClick, empty, sorting, onSortingChange, headerGroups };
+  const pageRows = tablePageRows(data, getRowId);
+  const replacing = instance.current?.built && !sameTablePageOrder(instance.current.rowKeys, pageRows, instance.current.pageRows);
+  const previousView = replacing ? instance.current.pendingView || replacementView(instance.current, element.current) : null;
+  latest.current = { data, pageRows, previousView, columns, getRowId, rowClassName, onRowClick, empty, sorting, onSortingChange, headerGroups };
   const structure = JSON.stringify({
     columns: columns.map(column => [column.id, column.width, column.minWidth, column.className, Boolean(column.sortable && onSortingChange)]),
     groups: headerGroups?.map(group => group.span),
@@ -99,7 +151,10 @@ export default function TabulatorTable({ data = [], columns = [], getRowId = def
 
   useEffect(() => {
     if (!element.current || renderFailed) return;
-    const mount = { alive: true, built: false, queued: false, structure, regions: new Map(), table: null, classes: new WeakMap() };
+    const mount = { alive: true, built: false, queued: false, structure, regions: new Map(), table: null, classes: new WeakMap(), interaction: 0 };
+    const intent = () => { mount.interaction += 1; };
+    const intentEvents = ["wheel", "touchmove", "pointerdown", "keydown"];
+    for (const event of intentEvents) document.addEventListener(event, intent, { capture: true, passive: true });
     const placeholder = document.createElement("div");
     placeholder.className = "console-tabulator-empty";
     mount.regions.set("empty", { key: "empty", kind: "empty", element: placeholder });
@@ -136,11 +191,26 @@ export default function TabulatorTable({ data = [], columns = [], getRowId = def
     }
     function populate() {
       if (!mount.built || !mount.alive) return;
+      const rows = latest.current.pageRows;
+      if (sameTablePageOrder(mount.rowKeys, rows, mount.pageRows)) {
+        // Envelope fields are deliberately not Tabulator column fields.
+        // Updating them refreshes row callbacks/classes without rerunning cell
+        // formatters; React fills the existing portals with the latest values.
+        const updated = rows.length ? mount.table.updateData(rows) : Promise.resolve();
+        mount.pageRows = rows;
+        updated.then(() => { if (mount.alive) { updateSort(); publish(); } }).catch(() => { if (mount.alive) setRenderFailed(true); });
+        return;
+      }
+      mount.pendingView = latest.current.previousView;
       mount.pendingFocus = rowFocusSnapshot(mount);
       for (const [key, region] of mount.regions) if (region.kind === "cell") mount.regions.delete(key);
-      mount.table.replaceData(tablePageRows(latest.current.data, latest.current.getRowId)).then(() => {
+      mount.table.replaceData(rows).then(() => {
         if (mount.alive) { updateSort(); publish(); }
       }).catch(() => { if (mount.alive) setRenderFailed(true); });
+      // Local array replacement creates the vendor rows synchronously; its
+      // returned promise only notifies completion. No remote loader is used.
+      mount.rowKeys = rows.map(row => row.__consoleRowKey);
+      mount.pageRows = rows;
     }
     function titleHost(key, region) {
       const host = document.createElement("div");
@@ -158,7 +228,7 @@ export default function TabulatorTable({ data = [], columns = [], getRowId = def
         const host = document.createElement("div");
         host.className = "console-tabulator-cell-content";
         const key = `cell:${item.__consoleRowKey}:${column.id}`;
-        mount.regions.set(key, { key, kind: "cell", element: host, index: item.__consoleRowIndex, field: column.id });
+        mount.regions.set(key, { key, kind: "cell", element: host, index: item.__consoleRowIndex, rowKey: item.__consoleRowKey, field: column.id });
         publish();
         return host;
       },
@@ -188,6 +258,7 @@ export default function TabulatorTable({ data = [], columns = [], getRowId = def
     });
     return () => {
       mount.alive = false;
+      for (const event of intentEvents) document.removeEventListener(event, intent, true);
       mount.regions.clear();
       instance.current = null;
       table.destroy();
@@ -207,6 +278,7 @@ export default function TabulatorTable({ data = [], columns = [], getRowId = def
     // Tabulator measures the empty portal hosts during construction. Reflow
     // after React fills rich headers, but only when their real heights change:
     // an unconditional redraw would create a renderComplete feedback loop.
+    restoreReplacementView(mount, regions);
     mount.table.getRows().forEach(row => row.normalizeHeight());
     restoreRowFocus(mount, regions);
     const heights = regions.filter(region => region.kind === "header" || region.kind === "group").map(region => `${region.key}:${region.element.scrollHeight}`).join("|");
@@ -214,7 +286,7 @@ export default function TabulatorTable({ data = [], columns = [], getRowId = def
       mount.headerHeights = heights;
       mount.table.redraw();
     }
-  }, [structure, regions, columns]);
+  }, [structure, regions, columns, data]);
 
   function keyDown(event) {
     if (event.target.closest(interactive)) return;
@@ -234,7 +306,7 @@ export default function TabulatorTable({ data = [], columns = [], getRowId = def
   if (typeof document === "undefined" || renderFailed) return <NativeDataTable data={data} columns={columns} getRowId={getRowId} rowClassName={rowClassName} onRowClick={onRowClick} sorting={sorting} onSortingChange={onSortingChange} headerGroups={headerGroups} label={label} className={className} empty={empty} />;
   return <div className={`table-wrap data-table-wrap console-tabulator-wrap ${className}`} role="region" aria-label={label} aria-describedby={onRowClick ? helpId : undefined} tabIndex={0} onKeyDown={keyDown}>
     {onRowClick && <p id={helpId} className="sr-only">{locale === "en" ? "Use the up and down arrows to move between rows. Press Enter or Space to open details. Buttons are also available in each row." : "위아래 화살표로 행을 이동하고 Enter 또는 Space로 상세를 엽니다. 각 행의 상세 버튼도 사용할 수 있습니다."}</p>}
-    <div ref={element} className={`console-tabulator data-table ${className}`} aria-label={label} />
+    <div ref={element} className={`console-tabulator data-table ${className}`} aria-label={label} style={previousView?.height > 0 ? { minHeight: previousView.height } : undefined} />
     {regions.map(region => {
       if (region.kind === "empty") return createPortal(empty, region.element, region.key);
       if (region.kind === "group") return createPortal(headerGroups?.[region.index]?.label || null, region.element, region.key);
@@ -245,8 +317,10 @@ export default function TabulatorTable({ data = [], columns = [], getRowId = def
         const content = column.sortable && onSortingChange ? <button type="button" className="table-sort" onClick={() => onSortingChange(nextServerSorting(sorting, column.id))}>{column.header}<span aria-hidden="true">{sorted ? sorted.desc ? "↓" : "↑" : "↕"}</span></button> : column.header;
         return createPortal(content, region.element, region.key);
       }
-      const row = data[region.index];
-      return row ? createPortal(column.render ? column.render(row, region.index) : String(row[column.id] ?? "—"), region.element, region.key) : null;
+      const row = pageRows[region.index];
+      // A new server page may commit before its replacement hosts are ready.
+      // Never render another row's data into a previous row's keyed portal.
+      return row?.__consoleRowKey === region.rowKey ? createPortal(column.render ? column.render(row.__consoleRow, region.index) : String(row.__consoleRow[column.id] ?? "—"), region.element, region.key) : null;
     })}
   </div>;
 }

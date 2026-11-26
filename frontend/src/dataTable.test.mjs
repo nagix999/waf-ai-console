@@ -34,7 +34,7 @@ test("grouped headers and React checkbox headers stay semantic during server ren
 const browserCode = buildSync({ entryPoints: [fileURLToPath(new URL("./TabulatorTable.jsx", import.meta.url))], bundle: true,
   write: false, platform: "node", format: "cjs", packages: "external", jsx: "automatic", loader: { ".css": "empty" }, logLevel: "silent" }).outputFiles[0].text;
 const browserModule = { exports: {} }; runInNewContext(browserCode, { module: browserModule, exports: browserModule.exports, require: createRequire(import.meta.url), process });
-const { nextServerSorting, tablePageRows, tableColumnMinWidth } = browserModule.exports;
+const { nextServerSorting, tablePageRows, tableColumnMinWidth, sameTablePageOrder } = browserModule.exports;
 
 test("table columns retain readable minimum widths instead of squeezing mobile summaries", () => {
   assert.equal(tableColumnMinWidth({ id: "select", width: 44 }), 44);
@@ -60,6 +60,38 @@ test("Tabulator uses private collision-safe keys without modifying public row ob
   assert.equal(Object.keys(input[0]).join(","), "name");
   assert.equal(Object.keys(input[1]).join(","), "id,name");
   assert.equal(tablePageRows(input, row => row.name)[0].__consoleRowKey, "id:no id:0");
+});
+
+test("polling preserves row hosts only for the same supplied page keys and order", () => {
+  const before = tablePageRows([{ id: "a", status: "pending" }, { id: "b", status: "pending" }]);
+  const keys = before.map(row => row.__consoleRowKey);
+  const update = tablePageRows([{ id: "a", status: "completed" }, { id: "b", status: "failed" }]);
+  assert.equal(sameTablePageOrder(keys, update), true);
+  assert.equal(sameTablePageOrder(keys, [...update].reverse()), false);
+  assert.equal(sameTablePageOrder(keys, update.slice(1)), false);
+  assert.equal(sameTablePageOrder(keys, tablePageRows([{ id: "a" }, { id: "other" }])), false);
+  assert.equal(sameTablePageOrder(undefined, update), false);
+  assert.equal(sameTablePageOrder(null, []), false);
+  assert.equal(sameTablePageOrder([], []), true);
+  assert.equal(update[0].__consoleRow.status, "completed");
+  assert.equal(before[0].__consoleRow.status, "pending");
+});
+
+test("same-page refresh identity retains duplicate occurrences and custom row ids", () => {
+  const before = tablePageRows([{ id: "same" }, { id: "same" }]);
+  assert.equal(sameTablePageOrder(before.map(row => row.__consoleRowKey), tablePageRows([{ id: "same", value: 1 }, { id: "same", value: 2 }])), true);
+  const custom = tablePageRows([{ signature: "one" }, { signature: "two" }], row => row.signature);
+  assert.equal(sameTablePageOrder(custom.map(row => row.__consoleRowKey), tablePageRows([{ signature: "two" }, { signature: "one" }], row => row.signature)), false);
+});
+
+test("unkeyed rows never transfer cell-local state to a new row at the same index", () => {
+  const original = { summary: "first row" };
+  const before = tablePageRows([original]);
+  const keys = before.map(row => row.__consoleRowKey);
+  assert.equal(sameTablePageOrder(keys, tablePageRows([original]), before), true);
+  assert.equal(sameTablePageOrder(keys, tablePageRows([{ summary: "different row" }]), before), false);
+  assert.equal(sameTablePageOrder(keys, tablePageRows([{ ...original }]), before), false);
+  assert.equal(sameTablePageOrder(keys, tablePageRows([original])), false);
 });
 
 test("fixed-order tables expose no misleading sort control and escape hostile data", () => {

@@ -5,7 +5,7 @@ import { analysisRowState, formatDate, formatDuration } from "./analysisView.js"
 import { CompactReferenceComparison } from "./ReferenceLabels.jsx";
 import { evaluationOutcomes, referenceVerdicts } from "./labelEvaluation.js";
 import { metricText, matrixCells } from "./evaluationMetrics.js";
-import { runKinds, runStatuses, caseStatuses, testRunQuery, testScopeSelection } from "./testRuns.js";
+import { runKinds, caseStatuses, testRunDisplayState, testRunQuery, testScopeSelection } from "./testRuns.js";
 import { MetricHelp } from "./EvaluationMetrics.jsx";
 import TestRunComparison from "./TestRunComparison.jsx";
 import { initialTestComparisonState } from "./testComparison.js";
@@ -107,9 +107,16 @@ export function watchTestRunRead({ read, onUpdate, isRunning, errorMessage, onUn
   return () => { active = false; clearTimer(timer); controller.abort(); doc?.removeEventListener("visibilitychange", visibility); };
 }
 
-const emptyRead = () => ({ key: null, data: null, error: "", loading: true });
-
 const testMetric = value => Number.isFinite(value) ? metricText(value) : "—";
+function testRunVisualStatus(run) {
+  const { status } = testRunDisplayState(run);
+  return ["accepting", "evaluating"].includes(status) ? "processing" : status;
+}
+function TestRunStatus({ run, words: w }) {
+  const { labelKo, labelEn } = testRunDisplayState(run);
+  return <span className={`status status-${testRunVisualStatus(run)}`}>{w(labelKo, labelEn)}</span>;
+}
+
 export function TestRunRows({ items, onSelect, sorting, onSortingChange, expanded = false, production, onStopped, onUnauthorized, words: w = ko => ko }) {
   const metadata = run => `${purposeText(run.test_purpose, w)} · ` + (run.ground_truth ? `${run.ground_truth.dataset_name} · r${run.ground_truth.dataset_revision} · ${run.ground_truth.sample_count ?? run.ground_truth.approved_count} ${w("문항", "cases")}` : w("참고 판정 비교", "Reference Verdict comparison"));
   const identity = run => { const changes = configurationChanges(run.configuration_snapshot, production?.snapshot); const names = { primary: w("주 분석 모델", "Primary"), verifier: w("검증 모델", "Verifier"), evidence_editor: w("근거 정리 모델", "Evidence Editor"), prompt: w("분석 지침", "Analysis Instructions"), input_schema: w("입력 스키마", "Input Schema"), parser: w("파서", "Parser"), signature_explanations: w("시그니처 설명", "Signature explanations") }; return changes?.length ? changes.map(key => names[key]).join(" · ") + w(" 변경", " changed") : changes ? w("현재 운영 설정과 동일", "Same as current Production") : run.profile_metadata?.model_name || "—"; };
@@ -118,8 +125,8 @@ export function TestRunRows({ items, onSelect, sorting, onSortingChange, expande
     { id: "name", header: w("테스트", "Test"), width: expanded ? 250 : "28%", sortable: true, render: run => <div className="oe-test-table-name"><button type="button" className="text-button" onClick={() => onSelect(run.id)}>{run.name}</button><small>{purposeText(run.test_purpose, w)}{run.ground_truth ? ` · ${run.ground_truth.dataset_name} · r${run.ground_truth.dataset_revision}` : ""}</small><details className="oe-test-table-context"><summary>{w("비교 기준", "Comparison basis")}</summary><small>{metadata(run)}</small><small>{context(run)}</small></details></div> },
     ...(!expanded ? [{ id: "configuration", header: w("구성", "Configuration"), width: "20%", render: run => <>{run.execution_mode === "stub" ? w("모의 실행", "Stub") : identity(run)}<small>{run.prompt_version || "—"}</small></> }] : []),
     { id: "status", header: w("상태", "Status"), width: expanded ? 130 : "15%", render: run => <>
-      <span className={`status status-${run.status}`}>{w(runStatuses[run.status] || "미확인", run.status === "stopped" ? "Stopped" : run.status)}</span>
-      <small>{run.completed ?? "—"} / {run.total ?? "—"} · {w("실패", "failed")} {run.failed ?? "—"}{run.canceled > 0 && <> · {w("중지", "stopped")} {run.canceled}</>}</small>
+      <TestRunStatus run={run} words={w} />
+      <small>{w("성공", "Succeeded")} {run.completed ?? "—"} / {run.total ?? "—"} · {w("실패", "failed")} {run.failed ?? "—"}{run.rejected > 0 && <> · {w("접수 거부", "rejected")} {run.rejected}</>}{run.canceled > 0 && <> · {w("중지", "stopped")} {run.canceled}</>}</small>
       {isTestStopped(run) && <small>{w("완료 문항의 참고 지표", "Completed cases only")}</small>}
     </> },
     ...(expanded ? ["accuracy", "precision", "recall", "f1", "coverage", "abstention_rate", "false_positive_rate", "false_negative_rate"].map(key => ({ id: key, header: <>{key === "f1" ? "F1" : key[0].toUpperCase() + key.slice(1)}<MetricHelp metric={key} label={key} /></>, className: "numeric", render: run => testMetric(run.evaluation_summary?.metrics?.[key]) }))
@@ -127,7 +134,7 @@ export function TestRunRows({ items, onSelect, sorting, onSortingChange, expande
     { id: "duration", header: w("소요 시간", "Duration"), width: expanded ? 100 : "10%", className: "numeric", render: run => formatDuration(run.total_elapsed_ms, "—") },
     ...(onStopped ? [{ id: "actions", header: w("작업", "Actions"), width: 72, render: run => <StopTestRun menu run={run} onStopped={onStopped} onUnauthorized={onUnauthorized} /> }] : []),
   ];
-  return <DataTable className={expanded ? "test-run-table-expanded" : "test-run-table"} label={w("테스트 목록", "Tests")} data={items} columns={columns} headerGroups={expanded ? [{ label: "", span: 2 }, { label: w("정확도", "Quality"), span: 4 }, { label: w("판정 범위", "Decision coverage"), span: 2 }, { label: w("오류 방향", "Error direction"), span: 2 }, { label: "", span: onStopped ? 2 : 1 }] : undefined} sorting={sorting} onSortingChange={onSortingChange} rowClassName={run => analysisRowState(run.status).className} />;
+  return <DataTable className={expanded ? "test-run-table-expanded" : "test-run-table"} label={w("테스트 목록", "Tests")} data={items} columns={columns} headerGroups={expanded ? [{ label: "", span: 2 }, { label: w("정확도", "Quality"), span: 4 }, { label: w("판정 범위", "Decision coverage"), span: 2 }, { label: w("오류 방향", "Error direction"), span: 2 }, { label: "", span: onStopped ? 2 : 1 }] : undefined} sorting={sorting} onSortingChange={onSortingChange} rowClassName={run => analysisRowState(testRunVisualStatus(run)).className} />;
 }
 
 export function TestRunScope({ data, filters, onChange }) {
@@ -151,13 +158,14 @@ export function TestRunHistory({ refresh = 0, onSelect, state, onStateChange, on
   const setView = state == null ? setLocalState : onStateChange;
   const change = action => setView?.(current => testRunHistoryChange(current, action));
   const { queryText, query } = view;
-  const [read, setRead] = useState(emptyRead); const [reload, setReload] = useState(0);
+  const [read, setRead] = useState(emptyScopedRead); const [reload, setReload] = useState(0);
   const unauthorized = useRef(onUnauthorized); unauthorized.current = onUnauthorized;
-  const requestKey = JSON.stringify([query, refresh, reload]);
-  const { data, error, loading } = read.key === requestKey ? read : emptyRead();
+  const scopeKey = JSON.stringify(query);
+  const requestKey = JSON.stringify([scopeKey, refresh, reload]);
+  const { data, error, loading } = scopedRead(read, scopeKey);
   useEffect(() => {
-    setRead({ ...emptyRead(), key: requestKey });
-    return watchTestRunRead({ read: async options => { const result = await api.testRuns({ ...query, reference_basis: "latest" }, options); if (!Array.isArray(result?.items)) throw new Error("invalid_test_runs"); return result; }, onUpdate: patch => setRead(current => ({ ...current, ...patch, key: requestKey })), isRunning: result => result.items.some(testRunActive), errorMessage: "테스트 목록을 조회하지 못했습니다. 다시 조회하세요.", onUnauthorized: () => unauthorized.current?.() });
+    setRead(previous => beginScopedRead(previous, scopeKey, requestKey));
+    return watchTestRunRead({ read: async options => { const result = await api.testRuns({ ...query, reference_basis: "latest" }, options); if (!Array.isArray(result?.items)) throw new Error("invalid_test_runs"); return result; }, onUpdate: patch => setRead(current => updateScopedRead(current, scopeKey, requestKey, patch)), isRunning: result => result.items.some(testRunActive), errorMessage: "테스트 목록을 조회하지 못했습니다. 다시 조회하세요.", onUnauthorized: () => unauthorized.current?.() });
   }, [requestKey]);
   return <section className="panel test-run-history oe-test-history oe-test-history-v2" aria-busy={loading}><div className="panel-head"><div><h2>{title || w("테스트 목록", "Tests")}</h2>{data && <span className="oe-count"><strong>{data.total.toLocaleString()}</strong>{w("개 테스트", "tests")}</span>}<small>{description || w("실행 당시 설정과 평가 기준으로 결과를 비교합니다.", "Compare results using the settings and evaluation basis captured at execution.")}</small></div><button type="button" className="secondary" disabled={loading} onClick={() => setReload(v => v + 1)}>{w("새로고침", "Refresh")}</button></div>
     <div className="oe-history-controls">
@@ -165,7 +173,8 @@ export function TestRunHistory({ refresh = 0, onSelect, state, onStateChange, on
     <label className="checkbox-row"><input type="checkbox" checked={Boolean(query.has_failures)} onChange={e => setView(current => ({ ...current, query: { ...current.query, has_failures: e.target.checked, offset: 0 } }))} />{w("실패·접수 거부가 있는 테스트", "Tests with failed or rejected cases")}</label>
     </div>
     {query.q && <p className="test-run-applied">적용된 테스트명: <strong>{query.q}</strong> <button type="button" className="text-button" onClick={() => change({ type: "clear" })}>검색 초기화</button></p>}
-    {error && <p className="error" role="alert">{error}</p>}{!data && !error && <p role="status">{w("테스트 목록을 불러오는 중…", "Loading Tests…")}</p>}
+    {error && <p className="error" role="alert">{data ? w("목록을 갱신하지 못해 이전 값을 표시합니다. 다시 조회해 주세요.", "Refresh failed; showing the previous list. Try again.") : error}</p>}{!data && !error && <p role="status">{w("테스트 목록을 불러오는 중…", "Loading Tests…")}</p>}
+    {data && loading && <span className="sr-only" role="status">{w("최신 목록을 확인하는 중…", "Refreshing tests…")}</span>}
     {data && <>{data.items.length ? <TestRunRows onStopped={() => setReload(value => value + 1)} onUnauthorized={onUnauthorized} production={production} words={w} expanded={Boolean(view.metricsExpanded)} items={data.items} onSelect={onSelect} sorting={serverSorting(query.sort_by || "created_at", query.sort_order || "desc")} onSortingChange={update => setView?.(current => ({ ...current, query: { ...current.query, ...changedSort(update, serverSorting(query.sort_by || "created_at", query.sort_order || "desc")) } }))} /> : <TestRunHistoryEmpty query={query} onClear={() => change({ type: "clear" })} onViewAnalyses={onViewAnalyses} />}<Pagination label="테스트 목록 페이지" total={data.total} limit={query.limit} offset={query.offset} disabled={loading} unit="개" onOffsetChange={value => change({ type: "offset", value })} /></>}
   </section>;
 }
@@ -223,8 +232,8 @@ export function TestRunDetail({ id, onBack, onOpen, filters: controlledFilters, 
   const moreActions = data && <ConsolePopover label={w("테스트 작업", "Test actions")} trigger={w("더 보기", "More")}>{close => <><button onClick={() => { close(); setComparisonOpen(true); }}>{w("다른 테스트와 비교", "Compare tests")}</button><button onClick={() => { close(); setMetadataOpen(true); }}>{w("실행 정보", "Execution records")}</button><button onClick={() => { close(); setScopeOpen(true); }}>{w("난이도와 유형 필터", "Difficulty and category")}</button><button onClick={() => { close(); setBasisOpen(true); }}>{w("평가 기준과 기록", "Evaluation basis and history")}</button><button disabled={!canCopyTest(data)} onClick={() => { close(); setImportIds(null); setImportOpen(true); }}>{w("테스트 문항을 평가 데이터셋에 복사", "Copy Test Cases to Evaluation Dataset")}</button></>}</ConsolePopover>;
   return <div className="page-stack test-run-detail oe-test-detail-v2" aria-busy={loading}>{saveNotice && <p className="notice" role="status">{saveNotice}</p>}<div className="panel-head-inline oe-test-backline"><button type="button" className="back" onClick={onBack}>← {backLabel === "테스트 목록" ? w("테스트", "Tests") : backLabel}</button><button type="button" className="text-button" disabled={loading} onClick={() => setReload(v => v + 1)}>{w("새로고침", "Refresh")}</button></div>{error && <p className="error" role="alert">{error}</p>}{!data && !error && <p role="status">{w("실행 정보를 불러오는 중…", "Loading Test…")}</p>}{data && <>
     <header className="oe-test-detail-heading"><div><h1>{data.name}</h1><p>{w("실행 당시의 설정과 문항을 기준으로 결과를 확인합니다.", "Review results using the configuration and cases recorded for this Test.")}</p></div><div className="oe-test-heading-actions">{onClone && <button type="button" className="secondary" onClick={() => onClone(id)}>{w("이 설정으로 다시 테스트", "Run Again as New Test")}</button>}{onPromote && !isTestStopped(data) && ["completed", "failed"].includes(data.status) && data.test_purpose === "official_evaluation" && data.ground_truth?.published && data.configuration_snapshot && <NavigationAction onClick={() => onPromote(id)}>{w("운영 반영 검토", "Production Review")}</NavigationAction>}{!isTestStopped(data) && data.failed > 0 && <RetryTestFailures key={id} run={data} onSubmitted={retrySubmitted} />}<StopTestRun run={data} onStopped={() => { selection.clear(); setReload(value => value + 1); }} onUnauthorized={onUnauthorized} />{moreActions}<TestExport id={id} filters={filters} onUnauthorized={onUnauthorized} /></div></header>
-    <div className="oe-test-context-strip"><span className="oe-test-purpose">{purposeText(data.test_purpose, w)}</span><span className={`status status-${data.status}`}>{isTestStopped(data) ? w("중지됨", "Stopped") : w(runStatuses[data.status] || "미확인", data.status)}</span><span>{data.evaluation_mode === "ground_truth" ? `${data.ground_truth?.published ? w("공식 버전", "Published Version") : w("이전 평가 기록", "Legacy evaluation")} · ${data.ground_truth?.dataset_name || "Evaluation Dataset"} · r${data.ground_truth?.dataset_revision}` : w("참고 판정 비교", "Reference Verdict comparison")}</span><time dateTime={data.created_at}>{formatDate(data.created_at)}</time></div>
-    <dl className="oe-test-inline-totals"><div><dt>{w("처리 완료", "Completed")}</dt><dd>{data.completed} / {data.total}</dd></div><div className={data.failed > 0 ? "oe-run-failures" : ""}><dt>{w("실행 실패", "Execution failures")}</dt><dd>{data.failed}</dd></div><div><dt>{w("접수 거부", "Rejected")}</dt><dd>{data.rejected}</dd></div><div><dt>{w("경과 시간", "Elapsed")}</dt><dd>{formatDuration(data.total_elapsed_ms, "—")}</dd></div></dl>
+    <div className="oe-test-context-strip"><span className="oe-test-purpose">{purposeText(data.test_purpose, w)}</span><TestRunStatus run={data} words={w} /><span>{data.evaluation_mode === "ground_truth" ? `${data.ground_truth?.published ? w("공식 버전", "Published Version") : w("이전 평가 기록", "Legacy evaluation")} · ${data.ground_truth?.dataset_name || "Evaluation Dataset"} · r${data.ground_truth?.dataset_revision}` : w("참고 판정 비교", "Reference Verdict comparison")}</span><time dateTime={data.created_at}>{formatDate(data.created_at)}</time></div>
+    <dl className="oe-test-inline-totals"><div><dt>{w("성공", "Succeeded")}</dt><dd>{data.completed} / {data.total}</dd></div><div className={data.failed > 0 ? "oe-run-failures" : ""}><dt>{w("실행 실패", "Execution failures")}</dt><dd>{data.failed}</dd></div><div><dt>{w("접수 거부", "Rejected")}</dt><dd>{data.rejected}</dd></div><div><dt>{w("경과 시간", "Elapsed")}</dt><dd>{formatDuration(data.total_elapsed_ms, "—")}</dd></div></dl>
     {data.execution_mode === "stub" && <p className="notice">{w("모의 실행은 모델 평가에서 제외됩니다.", "Stub runs are excluded from model evaluation.")}</p>}
     <details className="oe-run-configuration"><summary>{w("실행에 사용한 설정", "Configuration used for this Test")}</summary><dl><div><dt>{w("주 분석 모델", "Primary")}</dt><dd>{data.profile_metadata?.model_name || "—"}</dd></div><div><dt>{w("검증 모델", "Verifier")}</dt><dd>{data.profile_metadata?.verifier_profile?.model_name || "—"}</dd></div><div><dt>{w("분석 지침", "Analysis Instructions")}</dt><dd>{data.prompt_version || "—"}</dd></div><div><dt>{w("입력 스키마", "Input Schema")}</dt><dd>{data.input_schema_metadata?.version_number ? `v${data.input_schema_metadata.version_number}` : w("실행 시 고정", "Pinned at admission")}</dd></div></dl><button type="button" className="text-button oe-config-records" onClick={() => setMetadataOpen(true)}>{w("실행 정보 전체 보기", "View full execution records")}</button></details>
     <TestStoppedNotice run={data} />
