@@ -187,6 +187,17 @@ def legacy_v235_admissions(monkeypatch, request):
     monkeypatch.setattr(app.agent, "prompts", legacy_prompts_v235)
 
 
+@pytest.fixture(autouse=True)
+def legacy_v236_admissions(monkeypatch, request):
+    """Replay flat interpretation semantics under its original frozen input."""
+    if not any("legacy_v236_admissions" in marker.args
+               for marker in request.node.iter_markers("usefixtures")):
+        return
+    import app.agent
+    from app.agent import legacy_prompts_v236
+    monkeypatch.setattr(app.agent, "prompts", legacy_prompts_v236)
+
+
 @pytest.fixture
 def settings() -> Settings:
     return Settings(

@@ -16,14 +16,19 @@ const fixture = () => ({ output_validation_history: [{
   ], truncated: false, omitted_evidence_count: 0,
 }] });
 
-function load() {
-  const bundle = buildSync({ entryPoints: [fileURLToPath(new URL("./AgentHistory.jsx", import.meta.url))], bundle: true, write: false, platform: "node", format: "cjs", packages: "external", jsx: "automatic", loader: { ".css": "empty", ".md": "text" }, logLevel: "silent" });
+function load(locale = "ko") {
+  const bundle = buildSync({ stdin: { contents: 'export { default, OutputValidationHistory } from "./AgentHistory.jsx"; export { ConsolePreferencesProvider } from "./consolePreferences.jsx";', resolveDir: fileURLToPath(new URL("./", import.meta.url)), loader: "jsx" }, bundle: true, write: false, platform: "node", format: "cjs", packages: "external", jsx: "automatic", loader: { ".css": "empty", ".md": "text" }, logLevel: "silent" });
   const module = { exports: {} };
-  runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require: createRequire(import.meta.url), process, URL, Date });
+  runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require: createRequire(import.meta.url), process, URL, Date, window: { localStorage: { getItem: key => key === "waf-console-locale" ? locale : null } } });
   return module.exports;
 }
 const { OutputValidationHistory, default: AgentHistory } = load();
 const render = (component, props) => renderToStaticMarkup(createElement(component, props));
+const renderLocale = (locale, output) => {
+  const components = load(locale);
+  return renderToStaticMarkup(createElement(components.ConsolePreferencesProvider, null,
+    createElement(components.OutputValidationHistory, { output })));
+};
 
 test("failed-output evidence keeps exact IDs and same-source opposite interpretations without renumbering or repair", () => {
   const original = fixture(), stored = JSON.stringify(original);
@@ -39,6 +44,67 @@ test("rejected-output links are labeled as required evidence, not general refere
   assert.match(html, /이 해석에 필요한 근거: <code>e2<\/code>/);
   assert.match(html, /이 해석에 필요한 근거: <code>없음<\/code>/);
   assert.doesNotMatch(html, /함께 참조한 근거/);
+});
+
+test("v2 contribution references use their declared direction and never borrow legacy dependencies", () => {
+  const output = fixture(), entry = output.output_validation_history[0];
+  entry.version = "rejected-evidence-v2";
+  entry.evidence[0].contributes_to_evidence_ids = ["e2"];
+  entry.evidence[0].related_evidence_ids = ["legacy-only-link"];
+  entry.evidence[0].unexpected_secret = "NOT-IN-DIAGNOSTIC";
+  entry.evidence[1].contributes_to_evidence_ids = [];
+  const [item] = outputValidationHistory(output);
+  assert.equal(item.version, "rejected-evidence-v2");
+  assert.equal(item.evidence[0].relatedIds, null);
+  assert.deepEqual(item.evidence[0].contributesToIds, ["e2"]);
+  assert.deepEqual(item.evidence[1].contributesToIds, []);
+  const html = render(OutputValidationHistory, { output });
+  assert.match(html, /이 원문이 뒷받침하는 해석: <code>e2<\/code>/);
+  assert.match(html, /이 원문이 뒷받침하는 해석: <code>없음<\/code>/);
+  assert.doesNotMatch(html, /이 해석에 필요한 근거|legacy-only-link|NOT-IN-DIAGNOSTIC|unexpected_secret/);
+});
+
+test("v1 and v2 diagnostic labels preserve their meanings in Korean and English", () => {
+  for (const locale of ["ko", "en"]) {
+    const legacy = fixture(); legacy.output_validation_history[0].version = "rejected-evidence-v1";
+    const modern = fixture(), entry = modern.output_validation_history[0]; entry.version = "rejected-evidence-v2";
+    for (const value of entry.evidence) { value.contributes_to_evidence_ids = value.related_evidence_ids; delete value.related_evidence_ids; }
+    const oldHtml = renderLocale(locale, legacy), newHtml = renderLocale(locale, modern);
+    assert.match(oldHtml, locale === "en" ? /Evidence needed for this interpretation/ : /이 해석에 필요한 근거/);
+    assert.match(newHtml, locale === "en" ? /Interpretations supported by this source/ : /이 원문이 뒷받침하는 해석/);
+    assert.match(newHtml, locale === "en" ? /Diagnostic records, not a final verdict or validated evidence/ : /최종 판정이나 검증된 근거가 아닙니다/);
+    assert.doesNotMatch(newHtml, locale === "en" ? /Evidence needed for this interpretation/ : /이 해석에 필요한 근거/);
+  }
+});
+
+test("v2 missing or malformed contribution references remain explicit and bounded", () => {
+  const output = fixture(), entry = output.output_validation_history[0]; entry.version = "rejected-evidence-v2";
+  entry.evidence[0].contributes_to_evidence_ids = [{ nested: "NOT-IN-DIAGNOSTIC" }, "e2", null];
+  entry.evidence[0].omitted_fields = ["contributes_to_evidence_ids", "unexpected_secret", { nested: true }];
+  entry.evidence[1].contributes_to_evidence_ids = { nested: "NOT-IN-DIAGNOSTIC" };
+  const [item] = outputValidationHistory(output);
+  assert.deepEqual(item.evidence[0].contributesToIds, ["e2"]);
+  assert.equal(item.evidence[0].linksOmitted, true);
+  assert.deepEqual(item.evidence[0].omittedFields, ["contributes_to_evidence_ids"]);
+  assert.equal(item.evidence[1].contributesToIds, null);
+  assert.equal(item.limited, true);
+  const html = render(OutputValidationHistory, { output });
+  assert.match(html, /이 원문이 뒷받침하는 해석: <code>미기록<\/code>/);
+  assert.doesNotMatch(html, /NOT-IN-DIAGNOSTIC|unexpected_secret|\[object Object\]/);
+  const oversized = fixture().output_validation_history[0]; oversized.version = "rejected-evidence-v2";
+  oversized.evidence[0].contributes_to_evidence_ids = Array(20).fill("e2");
+  assert.equal(outputValidationHistory({ output_validation_history: [oversized] })[0].evidence[0].contributesToIds.length, 10);
+});
+
+test("unknown diagnostic versions are not assigned historical link semantics", () => {
+  for (const version of ["rejected-evidence-v999", null, {}, []]) {
+    const output = fixture(); output.output_validation_history[0].version = version;
+    assert.deepEqual(outputValidationHistory(output), []);
+    assert.equal(render(OutputValidationHistory, { output }), "");
+  }
+  const output = fixture(); output.output_validation_history[0].evidence[0].contributes_to_evidence_ids = ["not-a-v1-link"];
+  assert.deepEqual(outputValidationHistory(output)[0].evidence[0].relatedIds, ["e2"]);
+  assert.doesNotMatch(render(OutputValidationHistory, { output }), /not-a-v1-link/);
 });
 
 test("old and malformed records never invent evidence or read diagnostic-like values from metadata", () => {

@@ -183,7 +183,7 @@ class EditorMetadata(StrictContract):
 
 class ParserMetadata(StrictContract):
     version_id: str = Field(min_length=1, max_length=36)
-    engine_version: Literal["generic-http-v3", "http-capture-v1", "vendor-http-v2"]
+    engine_version: Literal["generic-http-v3", "http-capture-v1", "http-capture-v2", "vendor-http-v2"]
     content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     options: ParserOptions | RuleSnapshotOptions | None = None
 

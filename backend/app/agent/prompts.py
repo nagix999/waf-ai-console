@@ -1,11 +1,11 @@
 """Separate observations from directional interpretations and required links."""
-from .legacy_prompts_v235 import DEFAULT_POLICY_NAME, policy_reserved_tokens
-from .legacy_prompts_v235 import DEFAULT_POLICY_TEXT
-from .legacy_prompts_v235 import SEMANTIC_RULES_VERSIONS as PREVIOUS_SEMANTIC_RULES
-from .legacy_prompts_v235 import V3_RULES_VERSIONS as PREVIOUS_V3_RULES
+from .legacy_prompts_v236 import DEFAULT_POLICY_NAME, policy_reserved_tokens
+from .legacy_prompts_v236 import DEFAULT_POLICY_TEXT
+from .legacy_prompts_v236 import SEMANTIC_RULES_VERSIONS as PREVIOUS_SEMANTIC_RULES
+from .legacy_prompts_v236 import V3_RULES_VERSIONS as PREVIOUS_V3_RULES
 
-PROMPT_VERSION = "waf-judgment-v2.36"
-FIXED_RULES_VERSION = "waf-system-v2.36"
+PROMPT_VERSION = "waf-judgment-v2.37"
+FIXED_RULES_VERSION = "waf-system-v2.37"
 V3_RULES_VERSIONS = PREVIOUS_V3_RULES | {FIXED_RULES_VERSION}
 SEMANTIC_RULES_VERSIONS = PREVIOUS_SEMANTIC_RULES | {FIXED_RULES_VERSION}
 
@@ -23,13 +23,14 @@ FIXED_INSTRUCTIONS = """
 - 서버가 확인한 수집 경계는 요청 문자가 아니며 구간을 접합해 새 구문을 만들지 않는다. 그 외 원문은 임의로 제거/변환하지 않는다. 이스케이프 개행은 실제 HTTP 경계가 아니다.
 
 해석과 근거:
-- evidence는 관련 근거까지 최대 5개인 단일 목록이다. 고유 evidence_id(e1~e5), source_id(c번호), interpretation_ko, supports, related_evidence_ids를 쓴다. source_id의 field와 원문을 대조한다. 공격/정상 해석은 실제 요청 후보에, 시그니처/등록 설명은 context에만 연결하며 allowed_supports를 지킨다. 단어가 비슷하다는 이유로 출처를 고르거나 원문을 생성/합성하지 않는다.
-- interpretation_ko에는 관측한 동작/값의 역할과 공격/정상 해석을 뒷받침하는 이유를 연결한다. 표준 기능이나 업무 데이터라는 설명과 분류가 맞는지 확인한다. 사실만 있으면 방향을 붙이지 않고 필요한 보조 관측만 context로 남긴다. 분류를 정당화하려고 의도를 만들거나 파일 내용/서버 처리를 확인했다고 쓰지 않는다.
+- evidence는 통합 해석과 필요한 원문 기여를 합쳐 최대 5개의 단일 목록이다. 고유 evidence_id(e1~e5), source_id(c번호), interpretation_ko, supports, contributes_to_evidence_ids를 쓴다. source_id의 field와 원문 및 allowed_supports를 대조하며 원문을 합성하지 않는다.
+- 통합 해석은 contributes_to_evidence_ids=[]다. 관측한 대상과 동작 및 값의 역할을 조합해 보안 의미를 한 번 설명하고 그 이유에 맞춰 공격/정상/참고로 분류한다. 단순 존재나 형식 소개로 방향을 만들지 않으며, 표준 기능/업무 데이터라는 설명과 분류가 맞는지 확인한다. 미관찰 의도나 서버 처리를 만들지 않는다.
+- 별도 원문이 필요할 때만 원문 기여를 작성한다. interpretation_ko에는 해당 값이나 위치가 해석에 제공하는 정보만 쓰고, supports=context 및 기여 대상 해석 번호를 명시한다. 기여 대상은 이번 목록에서 contributes_to_evidence_ids=[]인 해석만 가능하며, 기여끼리 연결하거나 자기/없는 번호를 쓰지 않는다. 같은 중립 기여를 여러 해석이 함께 사용할 수 있다.
+- 독립적으로 의미 있는 공격/정상 해석은 별도 해석으로 보존한다. 이를 기여 항목에 끼우거나 context로 낮추지 않는다. 같은 원문도 다른 동작/조건과 타당한 반대 해석이면 보존하고, 같은 논점을 관측/의도/영향으로 반복하거나 근거 개수를 채우지 않는다. 보류 및 필요한 참고 해석에도 []를 허용하며 방향을 강요하지 않는다.
 - attack_request는 동작과 문맥이 공격 시도, 악성 탐색 또는 정책 위반을 뒷받침할 때다. 표준 동작도 실제 정책 준수와는 별개다. 정책 위반은 확인된 정책과 요청의 불일치로 설명하며 시그니처명으로 허용 목록을 추정하지 않는다. 공격에도 쓸 수 있다는 가능성만으로 분류하지 않는다.
-- normal_request는 값과 문맥이 구체적인 정상 사용이나 데이터 의미를 뒷받침할 때다. 정상적으로도 쓸 수 있다는 가능성, 표준/읽기 전용 기능, 정상 HTTP 형식, 헤더/쿠키의 존재, 특정 공격 구문 부재, 시그니처 불일치나 성공 증거 부재만으로 분류하지 않는다. 모든 요청에 업무 규격/권한 증명을 요구하지 않는다.
-- context는 해석에 필요한 중립 기여나 탐지 비교다. 별도 기여 없는 사실은 제외한다. supports는 실제 기여이며 최종 판정/확신 수준이 아니다. 보류나 연결 관계만으로 타당한 공격/정상 근거를 context로 바꾸지 않는다.
-- 결합 보안 의미는 대표 항목에 한 번 설명한다. related_evidence_ids는 이 해석에 필요한 근거만 연결한다. 같은 주제/발췌, 중복 설명이나 반대 의견을 묶지 않는다. 중립 원문 기여는 필요한 경우만 별도 context로 두고 같은 논점을 관측/의도/영향으로 나누지 않는다. 독립적으로 의미 있는 다른 동작/조건과 반대 해석은 보존하며 불필요한 연결은 []다. 없는 번호나 자기 연결은 금지한다.
-- 핵심만 남기고 개수를 채우지 않는다. 한 해석의 필수 연결을 따라가도 공격/정상 기여를 섞지 않는다. 독립적인 반대 해석은 같은 context를 참조할 수 있고 필요한 상호 연결도 허용한다. 연결은 입증 자체가 아니다. 분류와 설명이 맞지 않으면 원문으로 해석과 supports, 연결 및 판정을 함께 재검토하고 잘못된 방향을 철회한다. 단순 분류 뒤집기나 필수 원문/반대 근거 삭제로 검증을 우회하지 않는다.
+- normal_request는 구체적인 정상 쓰임이나 데이터 의미가 뒷받침될 때다. 정상 사용 가능성, 표준/읽기 전용 기능, HTTP 형식, 헤더/쿠키 존재, 공격 구문 부재, 시그니처 불일치나 성공 증거 부재만으로 분류하지 않는다. 모든 요청에 업무 규격/권한 증명을 요구하지 않는다.
+- context는 필요한 중립 기여나 보조 해석/탐지 비교다. 시그니처와 등록 설명은 context로만 인용하며 실제 요청의 공격/정상 근거를 대신하지 않는다. 불필요한 사실은 제외한다. supports는 실제 기여이며 최종 판정/확신 수준이 아니다. 보류라고 타당한 공격/정상 해석을 낮추지 않는다.
+- 핵심 설명과 필수 원문 및 중요한 반대 해석을 보존한다. 기여 연결은 입증 자체가 아니다. 설명과 분류가 맞지 않으면 해석과 supports, 기여 대상 및 판정을 함께 재검토한다. 기존 분류를 정당화하려고 이유를 만들거나 분류 뒤집기/기여 삭제로 검증을 우회하지 않는다.
 
 판정:
 - true_positive: 관측과 결합 의미가 공격 동작, 악성 탐색, 비인가 접근 시도나 명확한 정책 위반을 뒷받침한다. 전체 공격 코드, 취약 제품 사용 또는 침해 성공 확인은 필수가 아니다.

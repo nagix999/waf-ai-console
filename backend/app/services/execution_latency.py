@@ -43,6 +43,7 @@ VALIDATION_TYPES = (
     "evidence_source_unavailable", "evidence_source_support_forbidden", "decisive_verdict_requires_directional_content",
     "decision_source_unselected", "decision_source_repeated",
     "evidence_id_repeated", "evidence_link_repeated", "evidence_link_unknown",
+    "evidence_contribution_support_invalid", "evidence_contribution_target_not_root",
     "evidence_link_self", "evidence_link_cycle", "decision_evidence_unselected", "decision_evidence_repeated",
     "decision_review_context_invalid", "review_evidence_repeated", "review_evidence_not_eligible",
     "review_evidence_omitted", "review_evidence_dependency_missing",

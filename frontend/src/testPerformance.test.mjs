@@ -21,6 +21,23 @@ test("flat evidence link errors have fixed KR and EN labels", () => {
     assert.ok(!performanceIssueLabel(code).includes(code));
   }
 });
+test("source contribution errors retain fixed localized labels instead of raw model values", () => {
+  assert.equal(performanceIssueLabel("evidence_contribution_support_invalid"), "참고 원문의 분류 오류");
+  assert.equal(performanceIssueLabel("evidence_contribution_target_not_root"), "참고 원문 연결 대상 오류");
+  assert.equal(performanceIssueLabel("evidence_contribution_support_invalid", (ko, en) => en), "Invalid source-contribution classification");
+  assert.equal(performanceIssueLabel("evidence_contribution_target_not_root", (ko, en) => en), "Invalid source-contribution target");
+  const source = fixture();
+  source.roles.primary.output_failures.validation_issues = [
+    { field: "evidence", type: "evidence_contribution_support_invalid", attempts: 2 },
+    { field: "evidence", type: "evidence_contribution_target_not_root", attempts: 3 },
+  ];
+  const result = performanceSummary(source);
+  assert.deepEqual(result.roles.primary.output_failures.validation_issues.map(item => item.type),
+    ["evidence_contribution_support_invalid", "evidence_contribution_target_not_root"]);
+  const html = render(source);
+  assert.match(html, /참고 원문의 분류 오류|참고 원문 연결 대상 오류/);
+  assert.doesNotMatch(html, /evidence_contribution_support_invalid|evidence_contribution_target_not_root/);
+});
 test("decision review errors and retained evidence use only fixed KR and EN labels", () => {
   for (const code of ["decision_review_context_invalid", "review_evidence_repeated", "review_evidence_not_eligible", "review_evidence_omitted", "review_evidence_dependency_missing"]) {
     assert.notEqual(performanceIssueLabel(code), "기타 출력 검증 오류");

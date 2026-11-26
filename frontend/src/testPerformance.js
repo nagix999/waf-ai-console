@@ -72,6 +72,8 @@ const issueNames = {
   evidence_link_unknown: ["관련 근거 연결 실패", "Evidence link unavailable"],
   evidence_link_self: ["근거 자기 연결", "Self-referencing evidence"],
   evidence_link_cycle: ["근거 순환 연결", "Circular evidence links"],
+  evidence_contribution_support_invalid: ["참고 원문의 분류 오류", "Invalid source-contribution classification"],
+  evidence_contribution_target_not_root: ["참고 원문 연결 대상 오류", "Invalid source-contribution target"],
   decision_evidence_unselected: ["확정 조건의 근거 연결 실패", "Decision-condition evidence unavailable"],
   decision_evidence_repeated: ["확정 조건의 근거 중복", "Repeated decision-condition evidence"],
   decision_review_context_invalid: ["근거 재검토 기준 확인 실패", "Evidence review context unavailable"],

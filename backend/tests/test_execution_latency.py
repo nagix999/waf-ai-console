@@ -239,6 +239,7 @@ def test_output_failures_separate_recovered_attempts_from_final_stage_failure():
 
 
 @pytest.mark.parametrize("code", ["evidence_id_repeated", "evidence_link_repeated", "evidence_link_unknown",
+    "evidence_contribution_support_invalid", "evidence_contribution_target_not_root",
     "evidence_link_self", "evidence_link_cycle", "decision_evidence_unselected", "decision_evidence_repeated"])
 def test_flat_link_errors_are_counted_without_reading_model_output(code):
     attempt = {"error_code": "output_validation_failed", "validation_issues": [{"field": "evidence", "type": code}]}
