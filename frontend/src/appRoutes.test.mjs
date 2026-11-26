@@ -7,7 +7,7 @@ const id = "10000000-0000-4000-8000-000000000001";
 const initial = () => ({ page: "dashboard", resultsPurpose: "", listState: initialListState(), testResults: { view: "runs", runId: null, filters: {} }, settingsTab: "models", detailTab: "result" });
 
 test("canonical workspace routes round trip", () => {
-  for (const hash of ["#overview", "#connect/production-api", "#evaluate/tests/new", "#operate/inference", "#evaluate/tests", `#promotion/${id}`, `#evaluate/tests/${id}/case/${id}`, "#operate/runtime", "#operate/activity",
+  for (const hash of ["#overview", "#connect/production-api", "#evaluate/tests/new", "#operate/inference", "#evaluate/tests", `#promotion/${id}`, "#operate/runtime", "#operate/activity",
     ...["llm-profiles", "agent-roles", "instructions", "input-schema"].map(tab => `#configure/${tab}`),
     ...["api-keys", "vllm-targets"].map(tab => `#connect/${tab}`),
     ...["result", "agent-trace", "input", "result-json", "report"].map(tab => `#evaluate/tests/${id}/case/${id}/${tab}`),
@@ -16,6 +16,17 @@ test("canonical workspace routes round trip", () => {
     assert.ok(route, hash);
     assert.equal(writeAppHash(applyAppRoute(initial(), route)), hash);
   }
+});
+
+test("former case Drawer links open full details and return to their Test, not a Drawer", () => {
+  const caseId = "20000000-0000-4000-8000-000000000002";
+  const route = readAppHash(`#evaluate/tests/${id}/case/${caseId}`);
+  assert.deepEqual(route, { page: "detail", purpose: "test", runId: id, id: caseId, tab: "result" });
+  const state = applyAppRoute(initial(), route);
+  assert.equal(state.detailReturnPage, "testRun");
+  assert.equal(state.testResults.caseId, null);
+  assert.equal(writeAppHash(state), `#evaluate/tests/${id}/case/${caseId}/result`);
+  assert.equal(writeAppHash({ ...state, page: "analyses", testResults: { ...state.testResults, caseId } }), `#evaluate/tests/${id}`);
 });
 
 test("legacy promotion selects no candidate; dataset list and detail have distinct URLs", () => {

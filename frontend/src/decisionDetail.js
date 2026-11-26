@@ -88,4 +88,4 @@ export function decisionConditions(detail, options) {
 }
 
 // Preserve old deep links, including the former standalone JSON tab.
-export const decisionTab = value => value === "json" ? "agent" : ["result", "raw", "agent", "report"].includes(value) ? value : "result";
+export const decisionTab = value => value === "json" ? "agent" : ["result", "agent", "report"].includes(value) ? value : "result";

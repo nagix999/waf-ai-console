@@ -112,6 +112,7 @@ class _Metric:
                 "min_ms": values[0] if values else None,
                 "p50_ms": median(values) if values else None,
                 "p95_ms": values[ceil(.95 * len(values)) - 1] if values else None,
+                "p99_ms": values[ceil(.99 * len(values)) - 1] if values else None,
                 "max_ms": values[-1] if values else None}
 
 

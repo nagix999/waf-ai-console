@@ -53,7 +53,7 @@ const pages=[
   ["deployment","#runtime/deployment",".deployment-workspace"],
   ["api-document","#connect/production-api",".api-document-page"], ["api-keys","#connect/api-keys",".service-api-keys"],
   ["vllm-targets","#connect/vllm-targets",".internal-egress-settings"],
-  ...[["result","decision-hero"],["input","decision-evidence-workspace"],["agent-trace","decision-execution"],["report","analysis-report"]].map(([tab,selector])=>["production-"+tab,`#operate/inference/${prod}/${tab}`,"."+selector]),
+  ...[["result","analysis-workspace"],["input","analysis-workspace"],["agent-trace","decision-execution"],["report","analysis-report"]].map(([tab,selector])=>["production-"+tab,`#operate/inference/${prod}/${tab}`,"."+selector]),
   ["test-analysis",`#evaluate/tests/${run}/case/${testCase}/result`,".test-analysis-workspace"],
   ["test-execution",`#evaluate/tests/${run}/case/${testCase}/agent-trace`,".decision-execution"],
 ];

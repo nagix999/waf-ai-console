@@ -13,6 +13,7 @@ const archive = join(homedir(), ".cache/uv/archive-v0");
 const driver = process.env.PLAYWRIGHT_MODULE || readdirSync(archive).map(name => join(archive, name, "playwright/driver/package/index.mjs")).find(existsSync);
 const { chromium } = await import(pathToFileURL(driver).href);
 const prod = "11111111-1111-4111-8111-111111111111", testId = "22222222-2222-4222-8222-222222222222";
+const testRun = "00000008-1111-4111-8111-111111111111", testCase = "00000041-1111-4111-8111-111111111111";
 const runId = "33333333-3333-4333-8333-333333333333", firstStep = "44444444-4444-4444-8444-444444444444", secondStep = "55555555-5555-4555-8555-555555555555";
 const fixture = r5BrowserFixture().replace("export const api=", `
 import { rememberEvidenceMeta, analysisEvidenceMeta } from './analysisEvidenceMeta.js';
@@ -28,7 +29,7 @@ const result={schema_version:'waf-analysis-v3',verdict:'inconclusive',confidence
 const savedDetail={id:'${testId}',event_id:'synthetic-workspace',event_name:'합성 요청 분석',company_name:'Synthetic company',src_ip:'192.0.2.10',dest_ip:'198.51.100.20',src_port:40100,dest_port:443,waf_vendor:'Synthetic WAF',waf_action:'D',signature:'synthetic signature',status:'completed',analysis_purpose:'test',test_run_id:null,created_at:date,started_at:date,completed_at:date,total_elapsed_ms:12500,queue_wait_ms:2000,processing_duration_ms:10500,result,model_profile:'Saved Primary profile',prompt_version:'saved-policy-v1',evaluation:{outcome:'unlabeled'}};
 state.workspaceRaw=syntheticRaw;
 Object.assign(methods,{
- analysis:async value=>{const detail=structuredClone({...savedDetail,id:value,analysis_purpose:value==='${prod}'?'production':'test'});rememberEvidenceMeta(detail,{view:'core-v2',status:'completed'});return detail},
+ analysis:async value=>{const detail=structuredClone({...savedDetail,id:value,analysis_purpose:value==='${prod}'?'production':'test',test_run_id:value==='${testCase}'?'${testRun}':null});rememberEvidenceMeta(detail,{view:'core-v2',status:'completed'});return detail},
  rawEvent:async value=>({analysis_id:value,event_id:'synthetic-workspace',payload:syntheticRaw,extra_fields:{note:'synthetic signature',nested:{score:0,enabled:false}},decoding:{version:'synthetic-decoder',items:[]}}),
  agentRuns:async()=>[{id:'${runId}',status:'completed',started_at:date,duration_ms:10500,steps:[
  {id:'${firstStep}',step_type:'llm_primary',name:'llm_primary',status:'completed',started_at:date,duration_ms:6000,input:'SAVED_PRIMARY_INPUT',output:'SAVED_PRIMARY_OUTPUT',metadata:{model_profile:'Saved Primary profile',provider:'vllm',usage:{input_tokens:120,output_tokens:40},output_validation_retry:{attempt_count:1}},tool_calls:[]},
@@ -147,19 +148,36 @@ try {
   }
   await page.setViewportSize({ width: 1440, height: 960 });
   const rawBefore = await reads("rawEvent"); await go(`#operate/inference/${prod}/result`);
-  await page.locator(".decision-layout").waitFor();
-  assert.equal(await tabs().getByRole("tab").count(), 4); assert.equal(await reads("rawEvent"), rawBefore);
-  await tab("Evidence & input"); await page.locator(".raw-event-view").waitFor(); assert.equal(await reads("rawEvent"), rawBefore + 1);
+  await page.locator(".production-analysis-workspace .test-raw-payload").waitFor();
+  assert.deepEqual(await tabs().getByRole("tab").allTextContents(), ["Analysis result", "Execution", "Report"]);
+  assert.equal(await reads("rawEvent"), rawBefore + 1, "Production fetches the same audited source as Test");
+  await page.locator(".production-analysis-workspace .decision-core-evidence").first().focus(); await page.keyboard.press("Enter");
+  await page.locator('.production-analysis-workspace .test-raw-payload [data-source-highlight="true"]').waitFor();
+  assert.equal(await page.locator('.production-analysis-workspace .test-raw-payload [data-source-highlight="true"]').textContent(), "repeated-canary");
+  await snap("production-result-en-dark-1440");
   await tab("Report"); await page.locator(".analysis-report").waitFor();
   assert.equal(await reads("rawEvent"), rawBefore + 1);
-  await page.goBack(); await page.locator(".raw-event-view").waitFor();
-  await page.goBack(); await page.locator(".decision-layout").waitFor();
+  await page.goBack(); await page.locator(".production-analysis-workspace").waitFor();
   await page.goBack(); await page.getByText("SAVED_PRIMARY_OUTPUT", { exact: true }).waitFor();
   assert.match(page.url(), new RegExp(testId));
+  await go(`#operate/inference/${prod}/input`);
+  await page.locator(".production-analysis-workspace .test-raw-payload").waitFor();
+  assert.equal(await tabs().getByRole("tab", { name: "Analysis result", exact: true }).getAttribute("aria-selected"), "true", "legacy input URLs use the merged view");
+  await go(`#evaluate/tests/${testRun}`);
+  await page.locator(".test-run-cases .tabulator-row").first().waitFor();
+  await page.locator(".test-run-cases .tabulator-row").first().getByRole("button", { name: "예시 요청 1", exact: true }).click();
+  await page.locator(".test-case-analysis-workspace .test-raw-payload").waitFor();
+  assert.match(page.url(), new RegExp(`/case/${testCase}/result$`));
+  assert.equal(await page.locator(".r3-case-drawer").count(), 0, "case clicks go straight to the full detail, never a Drawer");
+  await page.goBack(); await page.locator(".test-run-cases .tabulator-row").first().waitFor();
+  assert.match(page.url(), new RegExp(`/tests/${testRun}$`));
+  await go(`#evaluate/tests/${testRun}/case/${testCase}`);
+  await page.locator(".test-case-analysis-workspace .test-raw-payload").waitFor();
+  assert.match(page.url(), new RegExp(`/case/${testCase}/result$`), "former Drawer links canonicalize to full details");
   const storage = await page.evaluate(() => JSON.stringify({ url: location.href, history: history.state, local: { ...localStorage }, session: { ...sessionStorage } }));
   assert.doesNotMatch(storage, /repeated-canary|unmasked|SAVED_PRIMARY|SAVED_VERIFIER/);
   assert.deepEqual(errors, []); assert.deepEqual(traffic, []); assert.deepEqual(await page.evaluate(() => fixture.unknown), []);
   if (existsSync(join(output, "failure.png"))) unlinkSync(join(output, "failure.png"));
-  console.log(JSON.stringify({ result: "passed", screenshots: output, screenshotCount: screenshots.length, checks: ["test three tabs", "exact CRLF and Unicode", "verified repeated occurrence", "field-only and decoded safety", "independent scroll", "keyboard source and steps", "execution URL and browser Back", "Production four tabs and audit fetch", "1440/390 SK Light Dark Korean English"], actualApiCalls: 0, llmCalls: 0 }));
+  console.log(JSON.stringify({ result: "passed", screenshots: output, screenshotCount: screenshots.length, checks: ["shared Test and Production three tabs", "exact CRLF and Unicode", "verified repeated occurrence", "field-only and decoded safety", "independent scroll", "keyboard source and steps", "execution URL and browser Back", "Production source highlights and audited fetch", "direct Test case navigation and former Drawer URLs", "1440/390 SK Light Dark Korean English"], actualApiCalls: 0, llmCalls: 0 }));
 } catch (error) { if (page) await page.screenshot({ path: join(output, "failure.png"), fullPage: true }); throw error; }
 finally { await browser.close(); }

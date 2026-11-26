@@ -6,6 +6,7 @@ import { api } from "./api.js";
 import { Icon } from "./Icon.jsx";
 import ProductionApi from "./ProductionApi.jsx";
 import AnalysisReport from "./AnalysisReport.jsx";
+import ProductionPerformanceSummary from "./ProductionPerformanceSummary.jsx";
 import Pagination from "./Pagination.jsx";
 import HelpTooltip from "./HelpTooltip.jsx";
 import SummaryPreview from "./SummaryPreview.jsx";
@@ -38,7 +39,7 @@ import { evaluationOutcomes, isMockAnalysis, labelSources, referenceVerdicts } f
 import { createDetailLoader, emptyDetailState } from "./detailLoader.js";
 import { analystSummary, analystText, finalValue, isTechnicalText } from "./analystView.js";
 import DetailTabs from "./DetailTabs.jsx";
-import { DecisionHero, DecisionContext, EvidenceCards, DecisionConditions, FinalDecisionReason, TechnicalInterpretation, PolicySuggestion, EvidenceWorkspace, ExecutionView, TestAnalysisWorkspace } from "./AnalysisDecision.jsx";
+import { DecisionHero, EvidenceCards, DecisionConditions, FinalDecisionReason, TechnicalInterpretation, PolicySuggestion, ExecutionView, AnalysisWorkspace } from "./AnalysisDecision.jsx";
 import { isResultV3 } from "./assessmentData.js";
 import { decisionTab } from "./decisionDetail.js";
 import "./inferenceDetail.css";
@@ -200,7 +201,7 @@ export function initialTestResultsState() {
 }
 
 // Test-run searches and item filters never become Production analysis filters.
-export function AnalysisResultsPage({ purpose, onScopeChange, state, setState, testState, setTestState, onSelectRun, onOpenRunItem, onOpen, onUnauthorized, onShowTestRuns, onShowAllTestItems, onCaseChange, onPromote, onClone, onGroundTruth, splitNavigation = false, actions }) {
+export function AnalysisResultsPage({ purpose, onScopeChange, state, setState, testState, setTestState, onSelectRun, onOpenRunItem, onOpen, onUnauthorized, onShowTestRuns, onShowAllTestItems, onPromote, onClone, onGroundTruth, splitNavigation = false, actions }) {
   const w = useR5Words();
   const setPart = key => update => setTestState(current => ({ ...current, [key]: typeof update === "function" ? update(current[key]) : update }));
   const showRuns = onShowTestRuns || (() => setTestState(current => ({ ...current, view: "runs", runId: null })));
@@ -211,7 +212,7 @@ export function AnalysisResultsPage({ purpose, onScopeChange, state, setState, t
     {!testState.runId && <SettingsPageActions><NavigationAction onClick={showAllTestItems}>{w("테스트 문항 전체 보기", "All Test cases")}</NavigationAction>{actions}</SettingsPageActions>}
     {!splitNavigation && <div className="analysis-list-toolbar"><AnalysisScopeTabs purpose="test" onChange={onScopeChange} /></div>}
     {testState.runId
-      ? <TestRunDetail key={testState.runId} id={testState.runId} caseId={testState.caseId} onCaseChange={onCaseChange} onPromote={onPromote} onClone={onClone} onGroundTruth={onGroundTruth} filters={testState.filters} onFiltersChange={setPart("filters")} onBack={showRuns} onOpen={onOpenRunItem} onUnauthorized={onUnauthorized} />
+      ? <TestRunDetail key={testState.runId} id={testState.runId} onPromote={onPromote} onClone={onClone} onGroundTruth={onGroundTruth} filters={testState.filters} onFiltersChange={setPart("filters")} onBack={showRuns} onOpen={onOpenRunItem} onUnauthorized={onUnauthorized} />
       : <TestRunHistory state={testState.history} onStateChange={setPart("history")} onSelect={onSelectRun} onViewAnalyses={showAllTestItems} onUnauthorized={onUnauthorized} />}
     {!testState.runId && <p className="evaluation-footnote">{w("테스트명 없이 저장된 이전 결과는 ‘테스트 문항 전체 보기’에서 확인할 수 있습니다. 기존 데이터를 임의의 테스트 실행으로 묶지 않습니다.", "Open All Test cases to find older results without a named Test. Existing records are not assigned to an inferred Test.")}</p>}
   </div>;
@@ -323,6 +324,7 @@ export function AnalysisList({ state, setState, onOpen, onUnauthorized, onScopeC
     <AnalysisSelectionActions ids={selection.ids} onClear={selection.clear} onSaved={() => setLabelRefresh(value => value + 1)} />
     <AnalysisTable items={data.items} total={data.total} loading={loading} onOpen={onOpen} purpose={state.applied.analysis_purpose} selection={selection} sorting={serverSorting(query.sort_by, query.sort_order)} onSortingChange={update => setState(current => ({ ...current, ...changedSort(update, serverSorting(query.sort_by, query.sort_order)) }))} />
     <Pagination label="분석 결과 페이지" total={data.total} limit={state.limit} offset={state.offset} disabled={loading} onOffsetChange={offset => setState(current => ({ ...current, offset }))} onLimitChange={limit => setState(current => ({ ...current, limit, offset: 0 }))} />
+    {purpose === "production" && <ProductionPerformanceSummary filters={query} refresh={labelRefresh} onUnauthorized={onUnauthorized} />}
     <details className="panel analysis-list-evaluation"><summary>{w("참고 판정 평가", "Reference verdict evaluation")}<span>{w("현재 검색 범위", "Current search scope")} / {data.evaluation_summary?.evaluable ?? "—"}{w("건 비교", " comparable cases")}</span></summary><EvaluationOverview summary={data.evaluation_summary} loading={loading} error={error} /></details>
   </div>;
 }
@@ -468,8 +470,7 @@ export function Detail({ id, onBack, onOpen, onFeedback, backLabel = "분석 결
   const [rawAttempt, setRawAttempt] = useState(0);
   const [localTab, setLocalTab] = useState("result");
   const requestedTab = controlledTab ?? localTab;
-  const isTest = detail?.analysis_purpose === "test";
-  const tab = isTest && requestedTab === "raw" ? "result" : decisionTab(requestedTab);
+  const tab = decisionTab(requestedTab);
   const setTab = onTabChange || setLocalTab;
   const [reportMode, setReportMode] = useState("preview");
   const [technicalOpen, setTechnicalOpen] = useState(false);
@@ -477,7 +478,7 @@ export function Detail({ id, onBack, onOpen, onFeedback, backLabel = "분석 결
   const [tabFocusRequest, setTabFocusRequest] = useState(0);
   const [reportAppendix, setReportAppendix] = useState(false);
   const jumpTab = value => { setTab(value); setTabFocusRequest(count => count + 1); };
-  const openInput = item => { setInputTarget(item || null); if (!isTest) jumpTab("raw"); };
+  const openInput = item => { setInputTarget(item || null); if (tab !== "result") jumpTab("result"); };
   useEffect(() => {
     const current = createDetailLoader({ id, api, onChange: setView });
     loader.current = current;
@@ -488,13 +489,13 @@ export function Detail({ id, onBack, onOpen, onFeedback, backLabel = "분석 결
   useEffect(() => { loader.current?.setAgentVisible(tab === "agent"); }, [id, tab]);
   useEffect(() => { loader.current?.setEvidenceVisible(["result", "raw", "report", "agent"].includes(tab)); }, [id, tab]);
   useEffect(() => {
-    if (!(tab === "raw" || isTest && tab === "result") || raw) return;
+    if (tab !== "result" || raw) return;
     let active = true;
     const controller = new AbortController();
     setRawError("");
     api.rawEvent(id, { signal: controller.signal }).then(value => { if (active) setRawRecord({ id, event: value }); }).catch(() => { if (active) setRawError("unavailable"); });
     return () => { active = false; controller.abort(); };
-  }, [id, raw, tab, rawAttempt, isTest]);
+  }, [id, raw, tab, rawAttempt]);
   const navigation = <div className="panel-head-inline inference-toolbar">
     <button className="back" onClick={onBack}>← {backLabel}</button>
     <div className="ux-toolbar">
@@ -504,22 +505,15 @@ export function Detail({ id, onBack, onOpen, onFeedback, backLabel = "분석 결
     </div>
   </div>;
   if (!detail || view.id !== id) return <div className="page-stack">{navigation}{error ? <div className="error" role="alert">{error}</div> : <div className="loading">{t("loading")}</div>}</div>;
-  const tabItems = isTest
-    ? [["result", w("분석 결과", "Analysis result")], ["agent", w("실행", "Execution")], ["report", w("보고서", "Report")]]
-    : [["result", w("판정", "Decision")], ["raw", w("근거·입력", "Evidence & input")], ["agent", w("실행", "Execution")], ["report", w("보고서", "Report")]];
+  const tabItems = [["result", w("분석 결과", "Analysis result")], ["agent", w("실행", "Execution")], ["report", w("보고서", "Report")]];
   return <div className="page-stack inference-detail">
     {navigation}
     {error && <div className="error" role="alert">{error}</div>}
-    {isTest && tab === "agent" && <h1 className="sr-only">{detail.event_name || w("분석 상세", "Analysis detail")} / {w("실행", "Execution")}</h1>}
-    {!(isTest && ["result", "agent"].includes(tab)) && <DecisionHero detail={detail} />}
+    {tab === "agent" && <h1 className="sr-only">{detail.event_name || w("분석 상세", "Analysis detail")} / {w("실행", "Execution")}</h1>}
+    {tab === "report" && <DecisionHero detail={detail} />}
     <DetailTabs label={t("detail")} items={tabItems} value={tab} onChange={setTab} focusRequest={tabFocusRequest}>{key => {
-      if (key === "result" && isTest) return tab === "result" && <TestAnalysisWorkspace detail={detail} event={raw} target={inputTarget} onSelect={openInput} error={rawError} onRetry={() => setRawAttempt(value => value + 1)} active={tab === "result"} relations={evidenceRelations} relationsError={displayError || relationsError} relationsLoading={displayLoading || relationsLoading} displayPollingStopped={displayPollingStopped} onRetryRelations={() => loader.current?.refreshRelations()} history={labelHistory} historyError={labelHistoryError} onSaved={() => loader.current?.refresh()} onExecution={() => jumpTab("agent")} onFeedback={onFeedback ? () => onFeedback(detail) : undefined} />;
-      if (key === "result") return tab === "result" && <div className="decision-layout">
-        {detail.status === "completed" && detail.result ? <ResultView detail={detail} relations={evidenceRelations} relationsError={displayError || relationsError} relationsLoading={displayLoading || relationsLoading} displayPollingStopped={displayPollingStopped} onRetryRelations={() => loader.current?.refreshRelations()} onViewInput={openInput} includePolicy={false} onExecution={() => jumpTab("agent")} /> : <section className="panel decision-awaiting"><h2>{detail.status === "canceled" ? w("테스트 중지", "Test stopped") : detail.status === "completed" ? w("결과 본문 미기록", "Result body not recorded") : detail.status === "failed" ? w("실행 확인", "Check execution") : w("분석 진행", "Analysis progress")}</h2><p>{detail.status === "canceled" ? w("중지된 문항에는 최종 판정이 없습니다. 입력과 중지 전 실행 기록은 확인할 수 있습니다.", "Stopped cases have no final verdict. Input and execution records remain available.") : detail.status === "completed" ? w("처리는 완료되었지만 저장된 결과 본문이 없어 근거를 표시할 수 없습니다. 실행 기록을 확인해 주세요.", "Processing completed, but the result body is unavailable. Check the execution record.") : detail.status === "failed" ? w("실패한 단계는 실행 탭에서 확인할 수 있습니다. 재실행해도 기존 실패 이력은 보존됩니다.", "Check the Execution tab for the failed step. Retrying preserves the original failure history.") : w("분석이 완료되면 판정 근거를 표시합니다.", "Evidence will appear when the analysis finishes.")}</p><NavigationAction onClick={() => jumpTab("agent")}>{w("실행 상세", "Execution details")}</NavigationAction></section>}
-        <DecisionContext detail={detail} history={labelHistory} historyError={labelHistoryError} onSaved={() => loader.current?.refresh()} onExecution={() => jumpTab("agent")} onFeedback={onFeedback ? () => onFeedback(detail) : undefined} />
-      </div>;
+      if (key === "result") return tab === "result" && <AnalysisWorkspace detail={detail} event={raw} target={inputTarget} onSelect={openInput} error={rawError} onRetry={() => setRawAttempt(value => value + 1)} active={tab === "result"} relations={evidenceRelations} relationsError={displayError || relationsError} relationsLoading={displayLoading || relationsLoading} displayPollingStopped={displayPollingStopped} onRetryRelations={() => loader.current?.refreshRelations()} history={labelHistory} historyError={labelHistoryError} onSaved={() => loader.current?.refresh()} onExecution={() => jumpTab("agent")} onFeedback={onFeedback ? () => onFeedback(detail) : undefined} />;
       if (key === "agent") return <ExecutionView key={id} detail={detail} runs={runs} runsError={runsError} runsLoading={runsLoading} onRetry={() => loader.current?.refreshAgent()} onMetadata={() => setTechnicalOpen(true)} initialJson={requestedTab === "json"} active={tab === "agent"} displayLoading={displayLoading} displayError={displayError} displayPollingStopped={displayPollingStopped} onRetryDisplay={() => loader.current?.refreshRelations()} executionSelection={executionSelection} onExecutionSelectionChange={onExecutionSelectionChange} />;
-      if (key === "raw") return (tab === "raw" || raw) && <EvidenceWorkspace key={id} event={raw} detail={detail} relations={evidenceRelations} target={inputTarget} onSelect={setInputTarget} error={rawError} onRetry={() => setRawAttempt(value => value + 1)} active={tab === "raw"} />;
       return tab === "report" && <AnalysisReport detail={detail} decoding={raw?.decoding ?? null} mode={reportMode} onModeChange={setReportMode} includeAppendix={reportAppendix} onAppendixChange={setReportAppendix} />;
     }}</DetailTabs>
     <Dialog open={technicalOpen} title={t("detail.metadata")} className="inspection-dialog" onClose={() => setTechnicalOpen(false)}>{technicalOpen && <div className="analyst-disclosure-body">
@@ -916,7 +910,14 @@ function ConsoleApp() {
     {["runtime", "diagnostics"].includes(page) && <RuntimeWorkspace onOpen={openDetail} />}
     {["deployment", "changes"].includes(page) && <Activity deploymentOnly={page === "deployment"} />}
     {page === "promote" && <Promotion onOpenTest={() => openTestRun(screen.promoteRunId)} fromHome={screen.promotionOrigin === "dashboard"} initialRunId={screen.promoteRunId} onNavigate={navigate} onBack={() => screen.promotionOrigin === "dashboard" ? navigate("status") : openTestRun(screen.promoteRunId)} />}
-    {page === "analyses" && <><AnalysisResultsPage actions={resultsPurpose === "test" && testResults.view === "runs" && !testResults.runId ? <><TestDefaults agentMode={mode} /><button className="primary" onClick={() => navigate("run")}>+ {t("run")}</button></> : null} onClone={id => move(current => ({ ...current, page: "test", cloneRunId: id }))} onGroundTruth={(id, caseId) => move(current => ({ ...current, page: "datasets", datasetId: id, groundTruthCaseId: caseId, groundTruthState: undefined }))} onCaseChange={caseId => caseId ? navigation.navigate(current => ({ ...current, testResults: { ...current.testResults, caseId } })) : navigation.backTo(current => current.page === "analyses" && current.testResults.runId === testResults.runId && !current.testResults.caseId, current => ({ ...current, testResults: { ...current.testResults, caseId: null } }))} onPromote={id => move(current => ({ ...current, page: "promote", promoteRunId: id, promotionOrigin: "test" }))} splitNavigation purpose={resultsPurpose} onScopeChange={changeResultsScope} state={listState} setState={setListState} testState={testResults} setTestState={setTestResults} onSelectRun={openTestRun} onOpenRunItem={openRunItem} onOpen={openDetail} onUnauthorized={onUnauthorized} onShowTestRuns={backToTests} onShowAllTestItems={showAllTestItems} /></>}
+    {page === "analyses" && <AnalysisResultsPage
+      actions={resultsPurpose === "test" && testResults.view === "runs" && !testResults.runId ? <><TestDefaults agentMode={mode} /><button className="primary" onClick={() => navigate("run")}>+ {t("run")}</button></> : null}
+      onClone={id => move(current => ({ ...current, page: "test", cloneRunId: id }))}
+      onGroundTruth={(id, caseId) => move(current => ({ ...current, page: "datasets", datasetId: id, groundTruthCaseId: caseId, groundTruthState: undefined }))}
+      onPromote={id => move(current => ({ ...current, page: "promote", promoteRunId: id, promotionOrigin: "test" }))}
+      splitNavigation purpose={resultsPurpose} onScopeChange={changeResultsScope} state={listState} setState={setListState}
+      testState={testResults} setTestState={setTestResults} onSelectRun={openTestRun} onOpenRunItem={openRunItem}
+      onOpen={openDetail} onUnauthorized={onUnauthorized} onShowTestRuns={backToTests} onShowAllTestItems={showAllTestItems} />}
     {page === "test" && <TestAnalysisPage key={screen.cloneRunId || "new"} cloneRunId={screen.cloneRunId} onViewTests={viewTests} onOpen={openTest} selectedRunId={null} onSelectRun={openTestRun} agentMode={mode} onConfigureModels={() => navigate("agents")} />}
     {page === "apiDocs" && <ProductionApi />}
     {page === "feedback" && <Suspense fallback={<p role="status">{t("loading")}</p>}><FeedbackWorkspace state={screen.feedbackState} onStateChange={value => navigation.navigate(current => ({ ...current, feedbackState: typeof value === "function" ? value(current.feedbackState) : value }))} onUnauthorized={onUnauthorized} onOpen={(id, purpose, runId) => move(current => ({ ...current, page: "detail", selectedId: id, detailTab: "result", executionSelection: null, detailReturnPage: "feedback", resultsPurpose: purpose === "test" ? "test" : "production", testResults: { ...current.testResults, runId: runId || null, view: runId ? "runs" : "items" } }))} /></Suspense>}

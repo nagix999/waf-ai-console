@@ -269,6 +269,22 @@ def list_analyses(
     )
 
 
+@router.post("/analyses/performance-summary")
+def analysis_performance_summary(
+    filters: AnalysisFilters,
+    request: Request,
+    response: Response,
+    db: DbSession,
+    _principal: Annotated[Principal, Depends(require_scope("admin"))],
+):
+    if request.query_params:
+        raise HTTPException(422, "unsupported_query_parameter")
+    from ..services.analysis_performance_summary import filtered_performance_summary
+    begin_analysis_read_snapshot(db)
+    response.headers["Cache-Control"] = "no-store"
+    return filtered_performance_summary(db, filters)
+
+
 @router.get("/analyses/by-event", response_model=CoreAnalysisDetail)
 def get_analysis_by_event(
     request: Request,

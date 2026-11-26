@@ -202,7 +202,7 @@ def test_percentiles_are_from_individual_observations_not_sum_of_phase_percentil
     report = summarize_execution_latency(iter(rows))
     metric = report["phases"]["llm_primary"]["duration"]
     assert metric == {"recorded": 20, "unrecorded": 0, "reported_sum_ms": 21000,
-                      "min_ms": 100, "p50_ms": 1050.0, "p95_ms": 1900, "max_ms": 2000}
+                      "min_ms": 100, "p50_ms": 1050.0, "p95_ms": 1900, "p99_ms": 2000, "max_ms": 2000}
 
 
 def test_naive_sqlite_and_offset_timestamps_are_equivalent_and_negative_gaps_unknown():

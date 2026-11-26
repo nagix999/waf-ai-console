@@ -255,6 +255,43 @@ test("test and case navigation uses immutable IDs even when names repeat and leg
   navigation.props.onClick(); assert.equal(legacy, 1);
 });
 
+test("case actions preserve single-case copying and dataset navigation without intercepting full analysis", () => {
+  const item = { id: "item-id", analysis_id: "analysis-id", case_name: "문항명", row_number: 1,
+    ground_truth_source: { dataset_id: "dataset-id", stable_case_id: "stable-case-id" } };
+  const rejected = { id: "rejected-item", ingest_status: "rejected", row_number: 2 };
+  const opened = [], imported = [], datasets = []; let table;
+  function CaptureRows() {
+    table = TestRunItemRows({ items: [item, rejected], onOpen: id => opened.push(id),
+      onImport: id => imported.push(id), onGroundTruth: (...ids) => datasets.push(ids) });
+    return null;
+  }
+  render(CaptureRows);
+  const caseCell = table.props.columns.find(column => column.id === "case_name").render(item);
+  descendants(caseCell).find(node => node.type === "button").props.onClick();
+  assert.deepEqual(opened, ["analysis-id"]);
+  const actionColumn = table.props.columns.find(column => column.id === "actions");
+  let closed = 0;
+  const actions = descendants(actionColumn.render(item).props.children(() => closed++));
+  actions.find(node => node.type === "button" && node.props.children === "평가 데이터셋에서 열기").props.onClick();
+  actions.find(node => node.type === "button" && node.props.children === "이 문항을 평가 데이터셋에 복사").props.onClick();
+  assert.equal(closed, 2);
+  assert.deepEqual(datasets, [["dataset-id", "stable-case-id"]]);
+  assert.deepEqual(imported, ["item-id"]);
+  assert.deepEqual(opened, ["analysis-id"], "auxiliary actions must not open analysis or a drawer");
+  assert.equal(actionColumn.render(rejected), "—");
+});
+
+test("case table keeps auxiliary actions hidden when no case has an available operation", () => {
+  let table;
+  function CaptureRows() {
+    table = TestRunItemRows({ items: [{ id: "item-id", analysis_id: "analysis-id", row_number: 1 }],
+      onOpen() {}, onGroundTruth() {} });
+    return null;
+  }
+  render(CaptureRows);
+  assert.equal(table.props.columns.some(column => column.id === "actions"), false);
+});
+
 const deferredRead = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 const flushRead = async () => { await Promise.resolve(); await Promise.resolve(); };
 
@@ -279,10 +316,13 @@ test("run readers poll active reads at 5s and stop terminal reads without overla
 });
 
 test("read errors expose no server text, back off server errors and stop on authorization failure", async () => {
-  for (const status of [401, 403, 500]) {
+  for (const status of [401, 403, 404, 500]) {
     const updates = []; let unauthorized = 0, calls = 0, timers = 0;
     const cancel = watchTestRunRead({ read: async () => { calls++; throw Object.assign(new Error("PRIVATE_RESPONSE"), { status }); }, onUpdate: state => updates.push(state), onUnauthorized: () => unauthorized++, isRunning: () => true, errorMessage: "조회하지 못했습니다.", setTimer: () => { timers++; } });
-    await flushRead(); assert.equal(calls, 1); assert.equal(timers, status === 500 ? 1 : 0); assert.equal(unauthorized, status === 401 ? 1 : 0); assert.equal(updates.length, 1); assert.doesNotMatch(updates[0].error, /PRIVATE_RESPONSE/); assert.equal(updates[0].loading, false); cancel();
+    await flushRead(); assert.equal(calls, 1); assert.equal(timers, status === 500 ? 1 : 0); assert.equal(unauthorized, status === 401 ? 1 : 0); assert.equal(updates.length, 1); assert.doesNotMatch(updates[0].error, /PRIVATE_RESPONSE/); assert.equal(updates[0].loading, false);
+    assert.equal(Object.hasOwn(updates[0], "data"), status !== 500);
+    if (status !== 500) assert.equal(updates[0].data, null);
+    cancel();
   }
 });
 

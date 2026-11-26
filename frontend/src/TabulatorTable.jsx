@@ -7,6 +7,7 @@ import "./tabulatorTable.css";
 
 const defaultRowId = row => row.id;
 const interactive = "button,a,input,select,textarea,[role=button]";
+const focusable = `${interactive},[tabindex]:not([tabindex="-1"])`;
 const noSorting = [];
 
 export function nextServerSorting(sorting, id) {
@@ -36,6 +37,49 @@ export function tablePageRows(data, getRowId = defaultRowId) {
     seen.set(id, occurrence + 1);
     return { __consoleRow: row, __consoleRowIndex: index, __consoleRowKey: `${id}:${occurrence}` };
   });
+}
+
+function rowFocusSnapshot(mount) {
+  const active = document.activeElement;
+  if (active?.classList.contains("tabulator-row") && active.tabIndex >= 0) {
+    const row = mount.table.getRows().find(row => row.getElement() === active);
+    if (row) return { kind: "row", key: row.getData().__consoleRowKey, original: active };
+  }
+  for (const region of mount.regions.values()) {
+    if (region.kind !== "cell" || !region.element.contains(active)) continue;
+    const index = [...region.element.querySelectorAll(focusable)].indexOf(active);
+    if (index < 0) return null;
+    const selection = typeof active.selectionStart === "number" ? { start: active.selectionStart, end: active.selectionEnd, direction: active.selectionDirection } : null;
+    return { key: region.key, index, tag: active.tagName, type: active.getAttribute("type"), role: active.getAttribute("role"), original: active, selection };
+  }
+  return null;
+}
+
+function restoreRowFocus(mount, regions) {
+  const saved = mount.pendingFocus;
+  if (!saved) return;
+  // Never take focus back after the analyst has moved to another control.
+  const active = document.activeElement;
+  if (active !== document.body && active !== saved.original) { mount.pendingFocus = null; return; }
+  // A data effect can replace hosts before React commits their new portals.
+  // Only defer for that old-host state, not for a row absent in the new page.
+  if (regions.some(region => region.kind === "cell" && mount.regions.get(region.key)?.element !== region.element)) return;
+  if (saved.kind === "row") {
+    const target = mount.table.getRows().find(row => row.getData().__consoleRowKey === saved.key)?.getElement();
+    mount.pendingFocus = null;
+    if (target?.isConnected && target.tabIndex >= 0 && target.getAttribute("aria-disabled") !== "true") target.focus({ preventScroll: true });
+    return;
+  }
+  const region = mount.regions.get(saved.key);
+  const target = region?.element.isConnected ? region.element.querySelectorAll(focusable)[saved.index] : null;
+  mount.pendingFocus = null;
+  if (!target) return;
+  if (target.tagName !== saved.tag || target.getAttribute("type") !== saved.type || target.getAttribute("role") !== saved.role || target.disabled || target.getAttribute("aria-disabled") === "true") return;
+  target.focus({ preventScroll: true });
+  if (saved.selection && typeof target.setSelectionRange === "function") {
+    try { target.setSelectionRange(saved.selection.start, saved.selection.end, saved.selection.direction); }
+    catch { /* Some input types/browsers do not expose a writable selection. */ }
+  }
 }
 
 // The API owns filtering, ordering and pagination. Tabulator only renders the
@@ -92,6 +136,7 @@ export default function TabulatorTable({ data = [], columns = [], getRowId = def
     }
     function populate() {
       if (!mount.built || !mount.alive) return;
+      mount.pendingFocus = rowFocusSnapshot(mount);
       for (const [key, region] of mount.regions) if (region.kind === "cell") mount.regions.delete(key);
       mount.table.replaceData(tablePageRows(latest.current.data, latest.current.getRowId)).then(() => {
         if (mount.alive) { updateSort(); publish(); }
@@ -163,6 +208,7 @@ export default function TabulatorTable({ data = [], columns = [], getRowId = def
     // after React fills rich headers, but only when their real heights change:
     // an unconditional redraw would create a renderComplete feedback loop.
     mount.table.getRows().forEach(row => row.normalizeHeight());
+    restoreRowFocus(mount, regions);
     const heights = regions.filter(region => region.kind === "header" || region.kind === "group").map(region => `${region.key}:${region.element.scrollHeight}`).join("|");
     if (mount.headerHeights !== heights) {
       mount.headerHeights = heights;

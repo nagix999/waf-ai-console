@@ -28,9 +28,10 @@ const fixture = () => ({ id: "private-id", event_id: "private-event-id", status:
   analyst_guidance: { checks: [{ source_ko: "처리 규격", check_ko: "셸 실행 여부", why_ko: "실행 문맥 확인" }], limitations: ["주의 내용"] },
 }, evaluation: { outcome: "unlabeled" } });
 
-test("legacy URLs resolve to four tabs, JSON opens within execution", () => {
+test("both purposes share three tabs; legacy input opens the result and JSON opens execution", () => {
   assert.equal(decisionTab("json"), "agent");
-  for (const key of ["result", "raw", "agent", "report"]) assert.equal(decisionTab(key), key);
+  assert.equal(decisionTab("raw"), "result");
+  for (const key of ["result", "agent", "report"]) assert.equal(decisionTab(key), key);
   assert.equal(decisionTab("bad"), "result");
 });
 test("hero shows one summary without configuration, identifiers or calibrated probability claims", () => {

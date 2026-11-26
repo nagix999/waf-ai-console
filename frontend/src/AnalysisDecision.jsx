@@ -303,7 +303,7 @@ export function EvidenceWorkspace({ detail, event, target, onSelect, error, onRe
   </section>;
 }
 
-export function TestAnalysisWorkspace({ detail, event, target, onSelect, error, onRetry, active = true, relations,
+export function AnalysisWorkspace({ detail, event, target, onSelect, error, onRetry, active = true, relations,
   relationsError, relationsLoading, displayPollingStopped, onRetryRelations, history, historyError, onSaved, onExecution, onFeedback, children }) {
   const w = useR5Words(), workspace = useRef(null), selectedField = useRef(null);
   const [allFields, setAllFields] = useState(false);
@@ -317,7 +317,7 @@ export function TestAnalysisWorkspace({ detail, event, target, onSelect, error, 
   useEffect(() => { if (location?.found && location.section === "fields") revealInPane(selectedField.current); }, [target, location, allFields]);
   const select = item => onSelect?.(item ? { ...item } : null);
   const completed = detail.status === "completed" && detail.result;
-  return <div ref={workspace} className="test-analysis-workspace">
+  return <div ref={workspace} className={`analysis-workspace test-analysis-workspace ${detail.analysis_purpose === "production" ? "production-analysis-workspace" : "test-case-analysis-workspace"}`}>
     <section className="test-analysis-pane test-results-pane" aria-label={w("판정과 근거", "Decision and evidence")} tabIndex={0}>
       <header className="test-pane-heading"><h2><Icon name="shield" size={16} />{w("판정과 근거", "Decision and evidence")}</h2><span>{w("근거를 눌러 원문 확인", "Select evidence to view its source")}</span></header>
       <div className="test-pane-content"><DecisionHero detail={detail} />
@@ -343,16 +343,18 @@ export function TestAnalysisWorkspace({ detail, event, target, onSelect, error, 
   </div>;
 }
 
+// Keep the former internal export for callers while both purposes share one view.
+export const TestAnalysisWorkspace = AnalysisWorkspace;
+
 export function ExecutionView({ detail, runs, runsError, runsLoading, onRetry, onMetadata, initialJson = false, active, displayLoading, displayError, displayPollingStopped, onRetryDisplay, executionSelection, onExecutionSelectionChange }) {
   const { t } = useConsolePreferences(), w = useR5Words();
-  const test = detail.analysis_purpose === "test";
   const configuration = <><InferenceSummary detail={detail} runs={runs} onMetadata={onMetadata} compact title={w("사용한 설정", "Recorded settings")} /><EvidenceDisplaySummary detail={detail} loading={displayLoading} error={displayError} stopped={displayPollingStopped} onRetry={onRetryDisplay} /></>;
-  return <div className={`decision-execution${test ? " test-execution" : ""}`}>
+  return <div className="decision-execution test-execution">
     <section className="test-execution-overview" aria-label={w("실행 시간", "Execution timing")}><dl>{[
       [w("접수부터 판정까지", "Admission to decision"), detail.total_elapsed_ms, w("초기 대기 포함", "Includes initial queue wait"), "clock"], [w("초기 대기", "Initial queue wait"), detail.queue_wait_ms, w("접수부터 첫 분석 시작", "Admission to first start"), "clock"], [w("분석 처리", "Analysis processing"), detail.processing_duration_ms, w("첫 시작부터 종료", "First start to finish"), "analyses"],
     ].map(([label, value, note, icon], index) => <div key={label} className={`execution-timing-${index}`}><dt>{label}<Icon name={icon} size={16} /></dt><dd>{formatDuration(value, w("미측정", "Not measured"))}</dd><small>{note}</small></div>)}</dl><p className="muted">{w("분석 처리는 초기 대기를 제외하며 내부 대기, 재시도와 복구를 포함합니다. 병렬 단계의 합이나 HTTP 요청부터 응답까지의 시간은 아닙니다.", "Processing excludes the initial queue wait and includes internal waits, retries and recovery. It is neither a sum of parallel stages nor HTTP request-to-response time.")}</p></section>
     <p className="muted decision-audit-note"><Icon name="shield" size={13} />{t("detail.audit")}</p>
     {runsError && <div className="panel error" role="alert"><p>{t("detail.agentError")}</p><button type="button" className="secondary" disabled={runsLoading} onClick={onRetry}>{t("retry")}</button></div>}
-    {runs === null ? !runsError && <p role="status">{t("loading")}</p> : <AgentHistory runs={runs || []} active={active} selection={executionSelection} onSelectionChange={onExecutionSelectionChange} compact={test} finalResult={detail.result ?? null} configuration={configuration} initialJson={initialJson} />}
+    {runs === null ? !runsError && <p role="status">{t("loading")}</p> : <AgentHistory runs={runs || []} active={active} selection={executionSelection} onSelectionChange={onExecutionSelectionChange} compact finalResult={detail.result ?? null} configuration={configuration} initialJson={initialJson} />}
   </div>;
 }

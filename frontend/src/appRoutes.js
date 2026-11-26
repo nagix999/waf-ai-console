@@ -61,7 +61,7 @@ function readRoutePath(hash) {
   const fullCase = typeof hash === "string" && hash.match(/^#evaluate\/tests\/([^/]+)\/case\/([^/]+)\/(result|agent-trace|input|result-json|report)$/);
   if (fullCase && uuid.test(fullCase[1]) && uuid.test(fullCase[2])) return { page: "detail", runId: fullCase[1].toLowerCase(), id: fullCase[2].toLowerCase(), tab: { result: "result", "agent-trace": "agent", input: "raw", "result-json": "json", report: "report" }[fullCase[3]] };
   const caseRoute = typeof hash === "string" && hash.match(/^#evaluate\/tests\/([^/]+)\/case\/([^/]+)$/);
-  if (caseRoute && uuid.test(caseRoute[1]) && uuid.test(caseRoute[2])) return { page: "analyses", purpose: "test", view: "runs", runId: caseRoute[1].toLowerCase(), caseId: caseRoute[2].toLowerCase() };
+  if (caseRoute && uuid.test(caseRoute[1]) && uuid.test(caseRoute[2])) return { page: "detail", purpose: "test", runId: caseRoute[1].toLowerCase(), id: caseRoute[2].toLowerCase(), tab: "result" };
   if (hash === "#operate/runtime") return { page: "runtime" };
   if (hash === "#settings/concurrency" || hash === "#runtime/diagnostics") return { page: "runtime" };
   if (canonical[hash]) hash = canonical[hash];
@@ -128,7 +128,6 @@ function writeRoutePath(state) {
   }
   if (state.page === "promote") return uuid.test(state.promoteRunId || "") ? `#promotion/${state.promoteRunId}` : "#evaluate/tests";
   if (state.page === "datasets") return uuid.test(state.datasetId || "") ? `#evaluate/ground-truth/${state.datasetId.toLowerCase()}` : "#evaluate/ground-truth";
-  if (state.page === "analyses" && state.resultsPurpose === "test" && state.testResults?.view === "runs" && uuid.test(state.testResults?.runId || "") && uuid.test(state.testResults?.caseId || "")) return `#evaluate/tests/${state.testResults.runId}/case/${state.testResults.caseId}`;
   if (state.page === "analyses" && state.resultsPurpose === "test" && state.testResults?.view === "runs" && uuid.test(state.testResults?.runId || "") && ["metrics", "statistics"].includes(state.testResults?.filters?.view)) return `#evaluate/tests/${state.testResults.runId}/${state.testResults.filters.view}`;
   if (["runtime", "diagnostics"].includes(state.page) || state.page === "settings" && state.settingsTab === "concurrency") return "#operate/runtime";
   if (state.page === "detail" && uuid.test(state.selectedId || "")) {
@@ -185,7 +184,7 @@ export function applyAppRoute(state, route) {
     if (route.runId) {
       next.resultsPurpose = "test";
       next.detailReturnPage = "testRun";
-      next.testResults = { ...state.testResults, view: "runs", runId: route.runId, caseId: route.id };
+      next.testResults = { ...state.testResults, view: "runs", runId: route.runId, caseId: null };
     }
   }
   if (route.page === "analyses") {

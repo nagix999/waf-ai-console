@@ -3,6 +3,7 @@ import { modelAssignmentPayload } from "./modelAssignments.js";
 import { affectsHome, invalidateHome } from "./readInvalidation.js";
 import { analysisEvidenceMeta, responseEvidenceMeta } from "./analysisEvidenceMeta.js";
 import { testPerformanceScope } from "./testPerformance.js";
+import { analysisPerformanceScope } from "./analysisPerformance.js";
 
 export async function request(path, options = {}) {
   const response = await fetch(path, {
@@ -97,6 +98,7 @@ export const api = {
   me: () => request("/api/v1/auth/me"),
   dashboard: (days = 7, options = {}, serviceApiKeyId = "") => request(`/api/v1/dashboard/summary?${new URLSearchParams({ days, ...(serviceApiKeyId ? { service_api_key_id: serviceApiKeyId } : {}) })}`, { ...options, cache: "no-store" }),
   analyses: (query = {}, options = {}) => request(`/api/v1/analyses?${new URLSearchParams(query)}`, options),
+  analysisPerformance: (filters = {}, options = {}) => request("/api/v1/analyses/performance-summary", { ...options, method: "POST", body: JSON.stringify(analysisPerformanceScope(filters)), cache: "no-store" }),
   analysis: (id, options = {}) => request(`/api/v1/analyses/${id}`, options),
   retryEligibility: (id, options = {}) => request(`/api/v1/analyses/${encodeURIComponent(id)}/retry-eligibility`, { ...options, cache: "no-store" }),
   retryAnalysis: (id, payload) => request(`/api/v1/analyses/${encodeURIComponent(id)}/retry`, { method: "POST", body: JSON.stringify(payload), cache: "no-store" }),

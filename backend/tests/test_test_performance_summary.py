@@ -80,7 +80,7 @@ def test_completed_timing_population_excludes_failures_and_inflight_not_missing_
     assert report["cases"] == 4 and report["completed_cases"] == 2
     metric = report["completed_timings"]["decision_elapsed_ms"]
     assert metric["recorded"] == 1 and metric["unrecorded"] == 1
-    assert metric["mean_ms"] == 3000 and metric["p95_ms"] == 3000
+    assert metric["mean_ms"] == 3000 and metric["p50_ms"] == metric["p95_ms"] == metric["p99_ms"] == 3000
     assert report["timings"]["decision_elapsed_ms"]["recorded"] == 2
 
 

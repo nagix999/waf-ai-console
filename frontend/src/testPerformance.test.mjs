@@ -7,7 +7,7 @@ import { buildSync } from "esbuild";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { api } from "./api.js";
-import { durationText, performanceCount, performanceFieldLabel, performanceIsRunning, performanceIssueLabel, performanceMetric, performanceSummary, retryFraction, testPerformanceScope, topPerformanceIssues } from "./testPerformance.js";
+import { completedTimingSummary, durationText, performanceCount, performanceFieldLabel, performanceIsRunning, performanceIssueLabel, performanceMetric, performanceSummary, retryFraction, testPerformanceScope, topPerformanceIssues } from "./testPerformance.js";
 
 const id = "11111111-1111-4111-8111-111111111111";
 test("flat evidence link errors have fixed KR and EN labels", () => {
@@ -26,7 +26,7 @@ test("decision review errors and retained evidence use only fixed KR and EN labe
   assert.equal(performanceFieldLabel("retained_evidence_ids"), "재검토 근거");
   assert.equal(performanceFieldLabel("retained_evidence_ids", (ko, en) => en), "Review evidence");
 });
-const duration = (mean = 12300, recorded = 10) => ({ recorded, unrecorded: 0, reported_sum_ms: mean * recorded, min_ms: mean / 2, p50_ms: mean, p95_ms: mean * 2, max_ms: mean * 3, mean_ms: mean });
+const duration = (mean = 12300, recorded = 10) => ({ recorded, unrecorded: 0, reported_sum_ms: mean * recorded, min_ms: mean / 2, p50_ms: mean, p95_ms: mean * 2, p99_ms: mean * 2.5, max_ms: mean * 3, mean_ms: mean });
 const tokens = mean => ({ recorded: 10, unrecorded: 0, sum: mean * 10, mean, p50: mean, p95: mean * 2, max: mean * 3 });
 const role = () => ({ accounting: { recorded_cases: 10, unrecorded_cases: 0, reported_output_attempts: 13, reported_output_retries: 3, reported_citation_repairs: 1, cases_with_output_retries: 2, cases_with_citation_repairs: 1 },
   first_attempt_ms: duration(), output_retry_ms: duration(2000), citation_repair_ms: duration(1000), slot_wait_ms: duration(400), invocation_ms: duration(15300),
@@ -55,6 +55,25 @@ test("completed-only timing cards retain their own denominators and distinguish 
   assert.ok(html.includes("실패, 중지와 처리 중인 문항은 제외"));
   assert.ok(html.includes("초기 큐 대기만 제외"));
   assert.ok(!html.includes("31.0초"));
+});
+
+test("all four timing cards show server P50, P95 and P99 without deriving absent percentiles", () => {
+  const source = fixture(); source.completed_cases = 12; source.completed_timings = source.timings;
+  source.completed_timings.analysis_processing_ms = { ...duration(1000, 7), p50_ms: 800, p95_ms: 1700, p99_ms: 2300, unrecorded: 5 };
+  const data = performanceSummary(source), html = render(source);
+  assert.equal(data.completed_timings.analysis_processing_ms.p50_ms, 800);
+  assert.equal(data.completed_timings.analysis_processing_ms.p99_ms, 2300);
+  for (const key of ["P50", "P95", "P99"]) assert.equal((html.match(new RegExp(`>${key}<`, "g")) || []).length, 4);
+  for (const phrase of ["0.8초", "1.7초", "2.3초", "기록 7 / 미기록 5", "P50은 중앙값"]) assert.ok(html.includes(phrase), phrase);
+  delete source.completed_timings.analysis_processing_ms.p99_ms;
+  assert.equal(performanceSummary(source).completed_timings.analysis_processing_ms.p99_ms, null);
+  const processingCard = render(source).split('data-timing="analysis_processing_ms"')[1].split('data-timing="result_ready_elapsed_ms"')[0];
+  assert.match(processingCard, />P99<\/span><strong>—<\/strong>/);
+  for (const value of [false, "2300", -1, Infinity, NaN]) assert.equal(performanceMetric({ p99_ms: value }).p99_ms, null);
+  assert.equal(performanceMetric({ p99_ms: 0 }).p99_ms, 0);
+  assert.equal(completedTimingSummary({ completed_timings: [] }).completed_timings, null);
+  const english = render(source, { words: (ko, en) => en });
+  assert.match(english, /P50 is the median/); assert.doesNotMatch(english, /[가-힣]/);
 });
 
 test("output limit, validation and timeout attempts are distinct from affected case counts", () => {

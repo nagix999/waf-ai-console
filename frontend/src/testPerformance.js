@@ -1,6 +1,7 @@
 const version = "test-performance-summary-v1";
 const scopeFields = ["evaluation_id", "reference_basis", "difficulty", "test_category", "difficulty_missing", "test_category_missing", "case_filter"];
-const durationFields = ["reported_sum_ms", "min_ms", "p50_ms", "p95_ms", "max_ms", "mean_ms"];
+const durationFields = ["reported_sum_ms", "min_ms", "p50_ms", "p95_ms", "p99_ms", "max_ms", "mean_ms"];
+export const timingKeys = ["decision_elapsed_ms", "analysis_queue_ms", "analysis_processing_ms", "result_ready_elapsed_ms"];
 const accountingFields = ["recorded_cases", "unrecorded_cases", "reported_output_attempts", "reported_output_retries", "reported_citation_repairs", "reported_decision_reviews", "cases_with_output_retries", "cases_with_citation_repairs", "cases_with_decision_reviews"];
 const roleFields = ["first_attempt_ms", "output_retry_ms", "citation_repair_ms", "decision_review_ms", "slot_wait_ms", "invocation_ms"];
 const roleKeys = ["primary", "verifier", "legacy_evidence_editor"];
@@ -24,6 +25,17 @@ export function performanceMetric(raw) {
   const source = mapping(raw);
   return { recorded: performanceCount(source.recorded), unrecorded: performanceCount(source.unrecorded),
     ...Object.fromEntries(durationFields.map(key => [key, number(source[key])])) };
+}
+
+// Test and Runtime use the same server-computed, completed-only measurements.
+// Do not fall back to a Runtime latency_summary, which includes failed work.
+export function completedTimingSummary(raw) {
+  const source = mapping(raw), timings = source.completed_timings;
+  return {
+    completed_cases: performanceCount(source.completed_cases),
+    completed_timings: timings && typeof timings === "object" && !Array.isArray(timings)
+      ? Object.fromEntries(timingKeys.map(key => [key, performanceMetric(timings[key])])) : null,
+  };
 }
 
 const tokenMetric = raw => {
@@ -94,9 +106,8 @@ export function performanceSummary(raw) {
   if (mapping(raw).version !== version) return null;
   const source = mapping(raw), display = mapping(source.display);
   return { version, cases: performanceCount(source.cases), statuses: counts(source.statuses),
-    completed_cases: performanceCount(source.completed_cases),
-    completed_timings: source.completed_timings && typeof source.completed_timings === "object" ? Object.fromEntries(["decision_elapsed_ms", "analysis_queue_ms", "analysis_processing_ms", "result_ready_elapsed_ms"].map(key => [key, performanceMetric(source.completed_timings[key])])) : null,
-    timings: Object.fromEntries(["decision_elapsed_ms", "analysis_queue_ms", "analysis_processing_ms", "result_ready_elapsed_ms"].map(key => [key, performanceMetric(mapping(source.timings)[key])])),
+    ...completedTimingSummary(source),
+    timings: Object.fromEntries(timingKeys.map(key => [key, performanceMetric(mapping(source.timings)[key])])),
     phases: Object.fromEntries(["llm_primary", "llm_verifier", "llm_evidence_editor"].map(key => { const phase = mapping(mapping(source.phases)[key]); return [key, { entered_cases: performanceCount(phase.entered_cases), not_observed_cases: performanceCount(phase.not_observed_cases), states: counts(phase.states), duration: performanceMetric(phase.duration) }]; })),
     roles: Object.fromEntries(roleKeys.map(key => [key, roleSummary(mapping(source.roles)[key])])),
     display: { no_job_cases: performanceCount(display.no_job_cases), states: counts(display.states),

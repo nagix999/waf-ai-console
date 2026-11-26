@@ -25,7 +25,6 @@ import DetailTabs from "./DetailTabs.jsx";
 import TextInspector from "./TextInspector.jsx";
 import { afterTestRetry } from "./testRetry.js";
 import { useWords, MetricStrip } from "./LifecycleViews.jsx";
-import CaseDrawer from "./CaseDrawer.jsx";
 import R5Evaluation, { purposeText } from "./R5Evaluation.jsx";
 import TestGroundTruthImport from "./TestGroundTruthImport.jsx";
 import { canCopyTest } from "./evaluationDatasets.js";
@@ -36,6 +35,7 @@ import TestStatistics from "./TestStatistics.jsx";
 import TestExport from "./TestExport.jsx";
 import { clearGroupSelection, groupCases, initialStatistics, selectedGroups, statisticFields } from "./testStatistics.js";
 import { formatCaseFilter } from "./testCaseFilters.js";
+import { beginScopedRead, emptyScopedRead, scopedRead, updateScopedRead } from "./scopedRead.js";
 
 function SelectedStatisticsGroup({ filters, official = false }) {
   const w = useWords(), groups = selectedGroups(filters);
@@ -92,7 +92,8 @@ export function watchTestRunRead({ read, onUpdate, isRunning, errorMessage, onUn
       if (!doc?.hidden && running) timer = setTimer(load, 5000);
     } catch (error) {
       if (!active) return;
-      onUpdate({ error: error?.status === 401 ? "로그인 세션이 만료되었습니다. 다시 로그인하세요." : errorMessage, loading: false });
+      onUpdate({ error: error?.status === 401 ? "로그인 세션이 만료되었습니다. 다시 로그인하세요." : errorMessage, loading: false,
+        ...([401, 403, 404].includes(error?.status) ? { data: null } : {}) });
       if (error?.status === 401) onUnauthorized?.();
       if ([401, 403, 404].includes(error?.status)) active = false;
       else if (!doc?.hidden) timer = setTimer(load, Math.min(25000 * 2 ** Math.min(++failures, 3), 120000));
@@ -176,7 +177,7 @@ export function TestRunItemError({ item }) {
   return <><button type="button" className="text-button" onClick={() => setOpen(true)}>오류 정보</button><Dialog open={open} title="문항 오류 정보" onClose={() => setOpen(false)}>{explanation && <p>{explanation}</p>}<dl className="label-metadata"><dt>문항</dt><dd>{item.case_name || item.event_id || `${item.row_number}행`}</dd><dt>이벤트 식별자</dt><dd>{item.event_id || "미기록"}</dd><dt>오류 코드</dt><dd><code>{item.error_code}</code></dd></dl><p>접수 거부·실행 실패는 정답 불일치와 구분하며 품질 지표에 오답으로 포함하지 않습니다.</p></Dialog></>;
 }
 
-export function TestRunItemRows({ items, onOpen, selection, sorting, onSortingChange }) {
+export function TestRunItemRows({ items, onOpen, selection, sorting, onSortingChange, onImport, onGroundTruth }) {
   const w = useWords();
   const columns = [
     ...(selection ? [{ id: "select", header: selection.header, width: 44, className: "selection-cell", render: item => item.analysis_id && selection.cell(item.analysis_id, item.case_name || `${item.row_number}행`) }] : []),
@@ -184,14 +185,19 @@ export function TestRunItemRows({ items, onOpen, selection, sorting, onSortingCh
     { id: "summary", header: w("심층 판정 / 요약", "Deep Assessment / summary"), render: item => <><strong>{item.status === "completed" ? referenceVerdicts[item.verdict] || "판정 정보 없음" : "—"}</strong><SummaryPreview text={item.summary_ko} /></> },
     { id: "reference", header: w("참고 판정 비교", "Reference Verdict comparison"), width: "20%", render: item => item.ingest_status === "rejected" ? "접수 거부 · 평가 제외" : <CompactReferenceComparison evaluation={item.evaluation} /> },
     { id: "status", header: w("처리 상태", "Execution status"), sortable: true, width: "14%", render: item => <>{item.ingest_status === "rejected" ? "접수 거부" : w(caseStatuses[item.status] || "상태 미확인", item.status === "canceled" ? "Stopped" : item.status || "Unknown")}{item.retry_count > 0 && <small>재실행 {item.retry_count}회</small>}{item.error_code && item.error_code !== "test_run_stopped" && <TestRunItemError item={item} />}</> },
+    ...(items.some(item => item.analysis_id && (onImport || item.ground_truth_source && onGroundTruth)) ? [{
+      id: "actions", header: w("작업", "Actions"), width: 88,
+      render: item => item.analysis_id && (onImport || item.ground_truth_source && onGroundTruth) ? <ConsolePopover label={w("문항 작업", "Case actions")} trigger={w("더 보기", "More")}>{close => <>
+        {item.ground_truth_source && onGroundTruth && <button type="button" onClick={() => { close(); onGroundTruth(item.ground_truth_source.dataset_id, item.ground_truth_source.stable_case_id); }}>{w("평가 데이터셋에서 열기", "Open in Evaluation Dataset")}</button>}
+        {onImport && <button type="button" onClick={() => { close(); onImport(item.id); }}>{w("이 문항을 평가 데이터셋에 복사", "Copy This Case to Evaluation Dataset")}</button>}
+      </>}</ConsolePopover> : "—",
+    }] : []),
   ];
   return <DataTable label="문항별 분석 결과" data={items} columns={columns} sorting={sorting} onSortingChange={onSortingChange} rowClassName={item => analysisRowState(item.status).className} />;
 }
 
-export function TestRunDetail({ id, onBack, onOpen, filters: controlledFilters, onFiltersChange, backLabel = "테스트 목록", onUnauthorized, caseId, onCaseChange, onPromote, onClone, onGroundTruth }) {
-  const w = useWords(); const [localCase, setLocalCase] = useState(null), [importOpen, setImportOpen] = useState(false), [importIds, setImportIds] = useState(null);
-  const selectedCase = onCaseChange ? caseId : localCase;
-  const selectCase = onCaseChange || setLocalCase;
+export function TestRunDetail({ id, onBack, onOpen, filters: controlledFilters, onFiltersChange, backLabel = "테스트 목록", onUnauthorized, onPromote, onClone, onGroundTruth }) {
+  const w = useWords(); const [importOpen, setImportOpen] = useState(false), [importIds, setImportIds] = useState(null);
   const [metadataOpen, setMetadataOpen] = useState(false), [scopeOpen, setScopeOpen] = useState(false), [basisOpen, setBasisOpen] = useState(false);
   const [saveNotice, setSaveNotice] = useState("");
   const [localFilters, setLocalFilters] = useState(initialTestRunFilters);
@@ -200,14 +206,15 @@ export function TestRunDetail({ id, onBack, onOpen, filters: controlledFilters, 
   const comparisonOpen = Boolean(filters.comparison?.open);
   const setComparisonOpen = value => setFilters?.(current => ({ ...current, comparison: { ...(current.comparison || initialTestComparisonState()), open: value } }));
   const change = action => setFilters?.(current => testRunFilterChange(current, action));
-  const [read, setRead] = useState(emptyRead); const [reload, setReload] = useState(0);
+  const [read, setRead] = useState(emptyScopedRead); const [reload, setReload] = useState(0);
   const unauthorized = useRef(onUnauthorized); unauthorized.current = onUnauthorized;
   const query = useMemo(() => testRunQuery(filters), [filters]);
-  const requestKey = JSON.stringify([id, query, reload]);
-  const { data, error, loading } = read.key === requestKey ? read : emptyRead();
+  const scopeKey = JSON.stringify([id, query]);
+  const requestKey = JSON.stringify([scopeKey, reload]);
+  const { data, error, loading } = scopedRead(read, scopeKey);
   useEffect(() => {
-    setRead({ ...emptyRead(), key: requestKey });
-    return watchTestRunRead({ read: async options => { const result = await api.testRun(id, query, options); if (result?.id !== id || !Array.isArray(result.items)) throw new Error("invalid_test_run"); return result; }, onUpdate: patch => setRead(current => ({ ...current, ...patch, key: requestKey })), isRunning: testRunActive, errorMessage: "테스트 실행 정보를 조회하지 못했습니다. 다시 조회하세요.", onUnauthorized: () => unauthorized.current?.() });
+    setRead(previous => beginScopedRead(previous, scopeKey, requestKey));
+    return watchTestRunRead({ read: async options => { const result = await api.testRun(id, query, options); if (result?.id !== id || !Array.isArray(result.items)) throw new Error("invalid_test_run"); return result; }, onUpdate: patch => setRead(current => updateScopedRead(current, scopeKey, requestKey, patch)), isRunning: testRunActive, errorMessage: "테스트 실행 정보를 조회하지 못했습니다. 다시 조회하세요.", onUnauthorized: () => unauthorized.current?.() });
   }, [requestKey]);
   const selection = useAnalysisSelection(data?.items || [], JSON.stringify([id, query]));
   const scopeChange = event => { const { name, value } = event.target; change({ type: "scope", name, value }); };
@@ -224,13 +231,12 @@ export function TestRunDetail({ id, onBack, onOpen, filters: controlledFilters, 
     <Dialog open={metadataOpen} title="테스트 실행 정보" onClose={() => setMetadataOpen(false)}><p className="reference-inline-note">모델·지침은 실행 당시 설정을 유지합니다. 화면의 점수는 선택한 참고 판정 기준이며, 접수 당시 기대 판정과 저장한 평가는 별도로 보존합니다.</p><dl className="label-metadata"><dt>모델</dt><dd>{data.profile_metadata?.model_name || "미기록"}</dd><dt>지침</dt><dd>{data.prompt_version || "미기록"}</dd><dt>연동 시스템 · 기대 판정 연결용</dt><dd><code>{data.source_system}</code></dd><dt>테스트 ID</dt><dd><code>{data.id}</code></dd></dl>{data.configuration_snapshot ? <TextInspector label="실행 당시 구성" value={data.configuration_snapshot} /> : <p className="ux-muted">이 실행에는 구성 전체를 기록한 정보가 없습니다. 현재 설정으로 대신 표시하지 않습니다.</p>}</Dialog>
     {data.accepting_items && <p className="v5-context">{w("문항 접수가 진행 중입니다. API 접수를 닫으면 모델 처리 중에도 평가 데이터셋으로 복사할 수 있습니다.", "Case ingestion is still open. Close API ingestion to copy cases while model processing continues.")}</p>}
     {importOpen && <TestGroundTruthImport itemIds={importIds} open runId={id} onClose={() => setImportOpen(false)} onOpenDataset={onGroundTruth} />}
-    <CaseDrawer onImport={data.items.some(item => item.analysis_id === selectedCase) && canCopyTest(data) ? () => { setImportIds([data.items.find(item => item.analysis_id === selectedCase).id]); selectCase(null); setImportOpen(true); } : undefined} id={selectedCase} onClose={() => selectCase(null)} onOpen={onOpen} groundTruthSource={data.items.find(item => item.analysis_id === selectedCase)?.ground_truth_source} onGroundTruth={onGroundTruth} />
     <Dialog open={basisOpen} onClose={() => setBasisOpen(false)} title={w("평가 기준·기록", "Evaluation basis and history")}><TestReevaluation run={data} value={filters.evaluation_id} onChange={value => setFilters?.(current => ({ ...current, evaluation_id: value, offset: 0 }))} /></Dialog>
     <Dialog open={scopeOpen} onClose={() => setScopeOpen(false)} title={w("평가 범위", "Evaluation scope")}><TestRunScope data={data} filters={filters} onChange={scopeChange} /></Dialog>{(filters.difficulty || filters.test_category || filters.difficulty_missing || filters.test_category_missing) && <p className="v5-context">{w("적용된 평가 범위", "Applied scope")}: {filters.difficulty || (filters.difficulty_missing ? w("난이도 미분류", "Unclassified difficulty") : w("전체 난이도", "All difficulties"))} · {filters.test_category || (filters.test_category_missing ? w("유형 미분류", "Unclassified category") : w("전체 유형", "All categories"))} <button className="text-button" onClick={() => setScopeOpen(true)}>{w("변경", "Edit")}</button></p>}
 
     <Dialog className="comparison-dialog" open={comparisonOpen} title={w("테스트 비교", "Compare Tests")} onClose={() => setComparisonOpen(false)}>{comparisonOpen && <TestRunComparison embedded candidateId={id} state={filters.comparison || initialTestComparisonState()} onStateChange={update => setFilters?.(current => ({ ...current, comparison: typeof update === "function" ? update(current.comparison || initialTestComparisonState()) : update }))} onOpen={onOpen} onUnauthorized={onUnauthorized} />}</Dialog>
     <DetailTabs label={w("테스트 결과 상세", "Test result details")} items={[["items", w("문항별 결과", "Case Results")], ["metrics", w("평가 상세", "Evaluation Details")], ["statistics", w("통계 요약", "Statistics Summary")]]} value={filters.view || "items"} onChange={view => setFilters?.(current => ({ ...current, view }))}>{key => key === "metrics" ? <R5Evaluation official={data.evaluation_mode === "ground_truth"} summary={data.evaluation_summary} scopeLabel={w("선택한 테스트·난이도·유형", "Selected Test, difficulty and category")} onMatrixCell={cell => { setFilters?.(current => ({ ...testRunFilterChange(current, { type: "cell", value: cell }), view: "items" })); }} selectedCell={filters.cell} /> : key === "statistics" ? filters.view === "statistics" && <TestStatistics run={data} filters={filters} refresh={reload} state={filters.statistics} onChange={update => setFilters?.(current => ({ ...current, statistics: typeof update === "function" ? update(current.statistics || initialStatistics()) : update }))} onGroup={(field, value) => setFilters?.(current => groupCases(current, field, value))} onUnauthorized={onUnauthorized} /> : <>
     <AnalysisSelectionActions allowDataset={canCopyTest(data)} onAddDataset={() => { setImportIds(data.items.filter(item => selection.ids.includes(item.analysis_id)).map(item => item.id)); setImportOpen(true); }} allowReferences={data.evaluation_mode !== "ground_truth"} ids={selection.ids} onClear={selection.clear} onSaved={result => { if (result?.kind === "reference") { setSaveNotice(result.message); setFilters?.(current => ({ ...current, evaluation_id: "latest", status: "", evaluation_outcome: "", cell: "", offset: 0 })); } setReload(value => value + 1); }} />
-    <section className="panel test-run-cases"><div className="panel-head"><div><h2>{w("문항별 결과", "Case Results")}</h2><small>{w("문항 필터는 평가 범위를 바꾸지 않습니다. 통계에서는 집계 전 필터를 별도로 적용합니다.", "Case filters do not change evaluation scope. Statistics have a separate pre-group filter.")}</small></div></div><SelectedStatisticsGroup filters={filters} official={data.evaluation_mode === "ground_truth"} /><div className="filter-grid"><label>{w("처리 상태", "Execution status")}<select name="status" value={filters.status} onChange={rowChange}><option value="">{w("전체", "All")}</option>{Object.entries(caseStatuses).map(([value, label]) => <option key={value} value={value}>{w(label, value === "canceled" ? "Stopped" : value)}</option>)}</select></label><label>{w("참고 판정 비교", "Reference Verdict comparison")}<select name="evaluation_outcome" value={filters.evaluation_outcome} onChange={rowChange}><option value="">{w("전체", "All")}</option>{Object.entries(evaluationOutcomes).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>{(filters.status || filters.evaluation_outcome || filters.cell || selectedGroups(filters).length || filters.case_filter) && <button type="button" className="text-button" onClick={() => change({ type: "clear_rows" })}>{w("문항 필터 초기화", "Clear case filters")}</button>}{filters.cell && <p className="notice">선택한 셀: {matrixCells.find(([key]) => key === filters.cell)?.[1]} <button type="button" className="text-button" onClick={() => change({ type: "clear_cell" })}>{w("선택 해제", "Clear selection")}</button></p>}{data.items.length ? <TestRunItemRows items={data.items} onOpen={selectCase} selection={selection} sorting={serverSorting(filters.sort_by || "row_number", filters.sort_order || "asc")} onSortingChange={update => setFilters?.(current => ({ ...current, ...changedSort(update, serverSorting(filters.sort_by || "row_number", filters.sort_order || "asc")) }))} /> : <div className="test-run-empty"><p>{data.total_items > 0 && filters.offset ? "이 페이지에 표시할 문항이 없습니다." : "조건에 맞는 문항이 없습니다."}</p>{filters.offset > 0 && <button type="button" className="secondary small" onClick={() => change({ type: "first_page" })}>첫 페이지로</button>}{!filters.status && !filters.evaluation_outcome && !filters.cell && <p className="muted">선택한 난이도·테스트 유형을 확인해 보세요.</p>}</div>}<Pagination label="테스트 문항 페이지" total={data.total_items} limit={filters.limit} offset={filters.offset} disabled={loading} onOffsetChange={value => change({ type: "offset", value })} onLimitChange={value => change({ type: "limit", value })} /></section></>}</DetailTabs>
+    <section className="panel test-run-cases"><div className="panel-head"><div><h2>{w("문항별 결과", "Case Results")}</h2><small>{w("문항 필터는 평가 범위를 바꾸지 않습니다. 통계에서는 집계 전 필터를 별도로 적용합니다.", "Case filters do not change evaluation scope. Statistics have a separate pre-group filter.")}</small></div></div><SelectedStatisticsGroup filters={filters} official={data.evaluation_mode === "ground_truth"} /><div className="filter-grid"><label>{w("처리 상태", "Execution status")}<select name="status" value={filters.status} onChange={rowChange}><option value="">{w("전체", "All")}</option>{Object.entries(caseStatuses).map(([value, label]) => <option key={value} value={value}>{w(label, value === "canceled" ? "Stopped" : value)}</option>)}</select></label><label>{w("참고 판정 비교", "Reference Verdict comparison")}<select name="evaluation_outcome" value={filters.evaluation_outcome} onChange={rowChange}><option value="">{w("전체", "All")}</option>{Object.entries(evaluationOutcomes).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label></div>{(filters.status || filters.evaluation_outcome || filters.cell || selectedGroups(filters).length || filters.case_filter) && <button type="button" className="text-button" onClick={() => change({ type: "clear_rows" })}>{w("문항 필터 초기화", "Clear case filters")}</button>}{filters.cell && <p className="notice">선택한 셀: {matrixCells.find(([key]) => key === filters.cell)?.[1]} <button type="button" className="text-button" onClick={() => change({ type: "clear_cell" })}>{w("선택 해제", "Clear selection")}</button></p>}{data.items.length ? <TestRunItemRows items={data.items} onOpen={onOpen} onGroundTruth={onGroundTruth} onImport={canCopyTest(data) ? itemId => { setImportIds([itemId]); setImportOpen(true); } : undefined} selection={selection} sorting={serverSorting(filters.sort_by || "row_number", filters.sort_order || "asc")} onSortingChange={update => setFilters?.(current => ({ ...current, ...changedSort(update, serverSorting(filters.sort_by || "row_number", filters.sort_order || "asc")) }))} /> : <div className="test-run-empty"><p>{data.total_items > 0 && filters.offset ? "이 페이지에 표시할 문항이 없습니다." : "조건에 맞는 문항이 없습니다."}</p>{filters.offset > 0 && <button type="button" className="secondary small" onClick={() => change({ type: "first_page" })}>첫 페이지로</button>}{!filters.status && !filters.evaluation_outcome && !filters.cell && <p className="muted">선택한 난이도·테스트 유형을 확인해 보세요.</p>}</div>}<Pagination label="테스트 문항 페이지" total={data.total_items} limit={filters.limit} offset={filters.offset} disabled={loading} onOffsetChange={value => change({ type: "offset", value })} onLimitChange={value => change({ type: "limit", value })} /></section></>}</DetailTabs>
   </>}</div>;
 }

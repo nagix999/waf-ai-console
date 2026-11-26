@@ -4,11 +4,13 @@ import DataTable, { changedSort, serverSorting } from "./DataTable.jsx";
 import Pagination from "./Pagination.jsx";
 import { useWords } from "./LifecycleViews.jsx";
 import { watchTestRunRead } from "./TestRuns.jsx";
+import { testRunActive } from "./readInvalidation.js";
 import { addGrouping, changeGrouping, initialStatistics, percent, statisticFields, statisticsFields, statisticsQuery } from "./testStatistics.js";
 import "./testStatistics.css";
 import TestCaseFilter from "./TestCaseFilter.jsx";
 import TestExecutionSummary from "./TestExecutionSummary.jsx";
 import TestPerformanceSummary from "./TestPerformanceSummary.jsx";
+import { beginScopedRead, emptyScopedRead, scopedRead, updateScopedRead } from "./scopedRead.js";
 import "./overviewEvaluationDesign.css";
 
 const verdicts = [["true_positive", "정탐", "True positive"], ["false_positive", "오탐", "False positive"], ["inconclusive", "보류", "Inconclusive"]];
@@ -23,20 +25,21 @@ export function VerdictDistribution({ row, words: w }) {
 export default function TestStatistics({ run, filters, state: controlled, onChange, onGroup, onUnauthorized, refresh }) {
   const w = useWords(); const [local, setLocal] = useState(initialStatistics), [reload, setReload] = useState(0);
   const state = controlled || local, setState = onChange || setLocal;
-  const empty = () => ({ key: null, data: null, error: "", loading: true });
-  const [read, setRead] = useState(empty);
+  const [read, setRead] = useState(emptyScopedRead);
   const unauthorized = useRef(onUnauthorized); unauthorized.current = onUnauthorized;
   const query = useMemo(() => statisticsQuery(filters, state), [filters, state]);
-  const key = JSON.stringify([run.id, query, refresh, run.completed, run.failed, run.pending, run.processing, run.canceled, reload]);
-  const { data, error, loading } = read.key === key ? read : empty();
+  const scopeKey = JSON.stringify([run.id, query]);
+  const runActive = testRunActive(run);
+  const key = JSON.stringify([scopeKey, refresh, runActive, reload]);
+  const { data, error, loading } = scopedRead(read, scopeKey);
   useEffect(() => {
-    setRead({ ...empty(), key });
+    setRead(previous => beginScopedRead(previous, scopeKey, key));
     return watchTestRunRead({ read: async options => {
       const result = await api.testStatistics(run.id, query, options);
       if (result?.test_run_id !== run.id || !Array.isArray(result.items) || !result.summary) throw Error("invalid_statistics");
       return result;
-    }, onUpdate: patch => setRead(current => ({ ...current, ...patch, key })),
-    isRunning: result => result.summary.pending + result.summary.processing > 0,
+    }, onUpdate: patch => setRead(current => updateScopedRead(current, scopeKey, key, patch)),
+    isRunning: result => runActive || result.summary.pending + result.summary.processing > 0,
     errorMessage: w("통계 정보를 조회하지 못했습니다. 다시 조회해 주세요.", "Unable to load statistics. Try again."),
     onUnauthorized: () => unauthorized.current?.() });
   }, [key]);
@@ -78,7 +81,7 @@ export default function TestStatistics({ run, filters, state: controlled, onChan
       </div>
       <label className="test-stat-search">{w("항목 검색", "Search groups")}<input maxLength={500} value={state.draft} onChange={event => change({ draft: event.target.value })} placeholder={w("선택한 필드 값으로 검색", "Search selected field values")} /></label><button type="submit" className="secondary" disabled={loading}>{w("검색", "Search")}</button>
     </form>
-    {error && <p className="error" role="alert">{error}</p>}
+    {error && <p className="error" role="alert">{data ? w("통계를 갱신하지 못해 이전 값을 표시합니다. 다시 조회해 주세요.", "Refresh failed; showing the previous statistics. Try again.") : error}</p>}
     {!data && !error && <p role="status">{w("통계를 불러오는 중…", "Loading statistics…")}</p>}
     {data && <>
       <p className="oe-stat-results-head">{data.total_groups.toLocaleString()} {w("개 그룹", "groups")}</p>

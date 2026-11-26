@@ -5,6 +5,7 @@ from sqlalchemy import func, select, text
 from ..models import Analysis, ChangeEvent, ServiceApiKey, WorkerHeartbeat, utcnow
 from .analysis import AnalysisIngestError
 from .production_configurations import current_configuration
+from .performance_timings import completed_timing_summary
 
 
 def heartbeat(session_factory, worker_id, kind):
@@ -62,11 +63,16 @@ def status_document(db, crypto, settings, window, purpose="all", service_api_key
         Analysis.analysis_purpose, Analysis.created_at, Analysis.completed_at).where(*condition)
         .order_by(Analysis.created_at.desc()).limit(20)).mappings().all()
     failures = db.execute(select(Analysis.error_code, func.count()).where(*condition, Analysis.status == "failed").group_by(Analysis.error_code)).all()
+    cases = select(Analysis.id.label("analysis_id"), Analysis.status,
+        Analysis.created_at, Analysis.started_at, Analysis.completed_at).where(*condition).cte(
+            "runtime_performance_cases").prefix_with("MATERIALIZED", dialect="sqlite")
+    performance = completed_timing_summary(db, cases)
     return {"window": window, "purpose": purpose, "service_api_key_id": service_api_key_id, "updated_at": now, "production_configuration": current_configuration(db, crypto, settings),
         "health": health, "queue": {k: queue.get(k, 0) for k in ("pending", "processing")},
         "outcome_summary": {k: counts.get(k, 0) for k in ("completed", "failed", "pending", "processing", "canceled")},
         "request_volume_series": buckets, "request_count": len(rows), "retry_count": retries,
         "retry_basis": "queue_claim_attempts", "failure_types": [{"code": c, "count": n} for c, n in failures],
+        "completed_cases": performance["completed_cases"], "completed_timings": performance["completed_timings"],
         "latency_summary": {**{f"p{p}": latencies[max(0, ceil(len(latencies) * p / 100) - 1)] if latencies else None for p in (50, 95, 99)},
             "sample_count": len(latencies), "basis": "enqueue_to_terminal_ms"}, "recent_analyses": [dict(r) for r in recent]}
 
