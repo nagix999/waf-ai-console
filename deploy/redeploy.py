@@ -18,7 +18,7 @@ from deploy.automation.common import (DeployError, Runner, compose_model, compos
                                      secure_dir, private_write)
 
 BACKENDS = ("api", "worker", "model-tester")
-WORKER_COMMAND = ("python", "-m", "app.worker_entrypoint_v235")
+WORKER_COMMAND = ("python", "-m", "app.worker_entrypoint_v236")
 DB_URL = "sqlite+pysqlite:////data/waf.db"
 
 

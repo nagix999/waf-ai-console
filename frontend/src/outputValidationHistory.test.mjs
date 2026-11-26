@@ -34,6 +34,13 @@ test("failed-output evidence keeps exact IDs and same-source opposite interpreta
   assert.equal(JSON.stringify(original), stored);
 });
 
+test("rejected-output links are labeled as required evidence, not general references", () => {
+  const html = render(OutputValidationHistory, { output: fixture() });
+  assert.match(html, /이 해석에 필요한 근거: <code>e2<\/code>/);
+  assert.match(html, /이 해석에 필요한 근거: <code>없음<\/code>/);
+  assert.doesNotMatch(html, /함께 참조한 근거/);
+});
+
 test("old and malformed records never invent evidence or read diagnostic-like values from metadata", () => {
   for (const value of [undefined, null, [], "", "not JSON", "{", {}, { evidence: fixture().output_validation_history[0].evidence }, { metadata: fixture() }, { output_validation_history: null }, { output_validation_history: [null, 42, []] }]) {
     assert.deepEqual(outputValidationHistory(value), []);

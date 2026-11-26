@@ -11,7 +11,7 @@ from app.agent import evidence_pipeline_v234 as previous_pipeline
 from app.agent import evidence_pipeline_v235 as pipeline
 from app.agent import execution_policy_v234, execution_policy_v235
 from app.agent import input_builder_v234, input_builder_v235
-from app.agent import legacy_prompts_v234, prompts
+from app.agent import legacy_prompts_v234, legacy_prompts_v235 as prompts
 from app.agent.policy import VerifierPolicyContext
 from app.services import worker_runtime_v235 as runtime
 from app.services.http_parser import parse_http_payload
@@ -20,6 +20,8 @@ from app.services.prompt_snapshots import (
     PromptSnapshotError, _baseline_rules, _build_snapshot, load_analysis_prompt,
 )
 from test_execution_policy_v221 import output
+
+pytestmark = pytest.mark.usefixtures("legacy_v235_admissions")
 
 
 FROZEN_V234 = "17308bad35c3f06841d7fb2185c8b62e3a174b65a9c05425a38a0106783f34ca"

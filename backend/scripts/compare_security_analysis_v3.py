@@ -137,7 +137,8 @@ def wire_model_for_revision(revision):
               "waf-system-v2.31": SecurityAnalysisOutputV231,
               "waf-system-v2.32": SecurityAnalysisOutputV232,
               "waf-system-v2.34": SecurityAnalysisOutputV234,
-              "waf-system-v2.35": SecurityAnalysisOutputV234}
+              "waf-system-v2.35": SecurityAnalysisOutputV234,
+              "waf-system-v2.36": SecurityAnalysisOutputV234}
     try:
         return models[revision.FIXED_RULES_VERSION]
     except KeyError:
@@ -322,6 +323,7 @@ def pipeline_hashes():
              root / "backend/app/worker_entrypoint_v233.py",
              root / "backend/app/worker_v234.py", root / "backend/app/worker_entrypoint_v234.py",
              root / "backend/app/worker_v235.py", root / "backend/app/worker_entrypoint_v235.py",
+             root / "backend/app/worker_v236.py", root / "backend/app/worker_entrypoint_v236.py",
              root / "backend/app/signature_explanation_schemas.py"]
     paths.extend((root / "backend/app/agent").glob("*.py"))
     paths.extend(root / "backend/app/services" / (name + ".py") for name in (
@@ -349,7 +351,9 @@ def pipeline_hashes():
         "worker_runtime_v234", "worker_concurrency_v234", "model_validation_worker_v234", "worker_coordinator_v234",
         "evidence_display_worker_v234",
         "worker_runtime_v235", "worker_concurrency_v235", "model_validation_worker_v235", "worker_coordinator_v235",
-        "evidence_display_worker_v235"))
+        "evidence_display_worker_v235",
+        "worker_runtime_v236", "worker_concurrency_v236", "model_validation_worker_v236", "worker_coordinator_v236",
+        "evidence_display_worker_v236"))
     hashes = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(set(paths))}
     digest = hashlib.sha256(json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     return digest, hashes
@@ -515,7 +519,7 @@ def run(args):
             "rules_hashes": {revision.FIXED_RULES_VERSION: hashlib.sha256(revision.FIXED_INSTRUCTIONS.encode()).hexdigest()
                              for revision in revisions},
             "wire_schema_hashes": {revision.FIXED_RULES_VERSION: hashlib.sha256(json.dumps(
-                (compact_strict_schema(model.model_json_schema()) if revision.FIXED_RULES_VERSION in {"waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32", "waf-system-v2.34", "waf-system-v2.35"}
+                (compact_strict_schema(model.model_json_schema()) if revision.FIXED_RULES_VERSION in {"waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32", "waf-system-v2.34", "waf-system-v2.35", "waf-system-v2.36"}
                  else strict_json_schema(model.model_json_schema()) if values["provider"] == "openai" else model.model_json_schema()),
                 ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
                 for revision, model in ((revision, wire_model_for_revision(revision))
@@ -570,7 +574,7 @@ def run(args):
                     started, previous_wait = time.monotonic(), authority.wait_ms
                     try:
                         authority()
-                        from app.services.worker_runtime_v235 import process_moduagent
+                        from app.services.worker_runtime_v236 import process_moduagent
                         process_moduagent(db, crypto, row, "", settings.verifier_confidence_threshold, request_check=authority)
                     except Exception as exc:
                         db.rollback()

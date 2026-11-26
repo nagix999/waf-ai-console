@@ -58,7 +58,7 @@ const issueNames = {
   evidence_text_required: ["근거 설명 누락", "Missing evidence explanation"],
   evidence_source_repeated: ["근거 원문 중복", "Repeated source"],
   evidence_expansion_limit: ["근거 수 초과", "Too many evidence items"],
-  evidence_support_conflict: ["근거 분류 충돌", "Conflicting evidence direction"],
+  evidence_support_conflict: ["연결된 근거의 분류 불일치", "Classification mismatch in linked evidence"],
   evidence_source_unavailable: ["근거 원문 연결 실패", "Source unavailable"],
   evidence_source_support_forbidden: ["허용되지 않은 근거 분류", "Unsupported evidence direction"],
   decisive_verdict_requires_directional_content: ["판정을 뒷받침할 근거 부족", "Verdict lacks supporting evidence"],

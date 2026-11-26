@@ -1,12 +1,12 @@
 export const BASELINE_PARSER_ID = "generic-http-v3";
-export const PARSER_ENGINES = ["generic-http-v3", "http-capture-v1"];
+export const PARSER_ENGINES = ["generic-http-v3", "http-capture-v1", "http-capture-v2"];
 export const defaultParserOptions = () => ({ line_endings: "actual", request_line_whitespace: "strict", skip_leading_blank_lines: false });
 
 export function parserDraft(version) {
   if (version?.engine_version === "vendor-http-v2") throw new Error("parser_new_workbench_required");
   const options = { ...defaultParserOptions(), ...(version?.options || {}) };
   if (options.profiles) options.profiles = options.profiles.map(profile => ({ ...profile }));
-  return { name: "", description: "", engine_version: "http-capture-v1", options, parent_id: version?.id || BASELINE_PARSER_ID };
+  return { name: "", description: "", engine_version: version?.engine_version === "http-capture-v2" ? "http-capture-v2" : "http-capture-v1", options, parent_id: version?.id || BASELINE_PARSER_ID };
 }
 const formatOptionsValid = options => options != null && typeof options === "object" && !Array.isArray(options)
     && ["actual", "escaped_crlf", "escaped_lf"].includes(options.line_endings)
@@ -18,8 +18,9 @@ export function safeParserOptions(options) {
   if (!Array.isArray(options.profiles) || options.profiles.length > 20) return false;
   const seen = new Set();
   for (const profile of options.profiles) {
-    if (!formatOptionsValid(profile) || Object.keys(profile).some(key => !["name", "waf_vendor", "line_endings", "request_line_whitespace", "skip_leading_blank_lines"].includes(key)) || typeof profile.name !== "string" || !profile.name.trim() || profile.name.length > 120 || typeof profile.waf_vendor !== "string" || !profile.waf_vendor.trim() || profile.waf_vendor.length > 120) return false;
-    const key = `${profile.waf_vendor.trim().toLowerCase()}\u0000${profile.line_endings}`;
+    if (!formatOptionsValid(profile) || Object.keys(profile).some(key => !["name", "waf_vendor", "line_endings", "request_line_whitespace", "skip_leading_blank_lines", "field_separator"].includes(key)) || ![undefined, "none", "slash_at_slash"].includes(profile.field_separator) || typeof profile.name !== "string" || !profile.name.trim() || profile.name.length > 120 || typeof profile.waf_vendor !== "string" || !profile.waf_vendor.trim() || profile.waf_vendor.length > 120) return false;
+    if (profile.field_separator === "slash_at_slash" && (profile.line_endings !== "actual" || profile.request_line_whitespace !== "strict" || profile.skip_leading_blank_lines)) return false;
+    const key = `${profile.waf_vendor.trim().toLowerCase()}\u0000${profile.line_endings}\u0000${profile.field_separator || "none"}`;
     if (seen.has(key)) return false; seen.add(key);
   }
   return true;
@@ -29,7 +30,9 @@ export function parserDraftPayload(draft) {
   const options = { ...draft.options };
   if (options.profiles?.length) options.profiles = options.profiles.map(profile => ({ ...profile, name: profile.name.trim(), waf_vendor: profile.waf_vendor.trim() }));
   else delete options.profiles;
-  return { name: draft.name.trim(), description: draft.description?.trim() || "", engine_version: draft.engine_version,
+  const usesSeparator = options.profiles?.some(profile => profile.field_separator === "slash_at_slash");
+  if (usesSeparator && draft.engine_version === BASELINE_PARSER_ID) throw new Error("invalid_parser_version");
+  return { name: draft.name.trim(), description: draft.description?.trim() || "", engine_version: usesSeparator ? "http-capture-v2" : draft.engine_version,
     options: draft.engine_version === BASELINE_PARSER_ID ? defaultParserOptions() : options, parent_id: draft.parent_id || BASELINE_PARSER_ID };
 }
 export function parserSourcePayload({ source, testRunId, analysisIds, maxCases }, kind = "comparison") {

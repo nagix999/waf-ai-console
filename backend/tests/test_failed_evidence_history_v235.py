@@ -14,6 +14,8 @@ from app.services.prompt_snapshots import _build_snapshot
 from app.services.worker_runtime_v235 import process_moduagent
 from test_flat_evidence_v228 import wire
 
+pytestmark = pytest.mark.usefixtures("legacy_v235_admissions")
+
 
 def rejected_record(text):
     snapshot = rejected_evidence_snapshot({"evidence": [

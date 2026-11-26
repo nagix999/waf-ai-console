@@ -9,7 +9,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from ..models import ParserConfiguration, ParserVersion
-from .parser_engine import (CAPTURE_ENGINE, DEFAULT_OPTIONS, LEGACY_ENGINE,
+from .parser_engine import (CAPTURE_ENGINE, CAPTURE_ENGINE_V2, DEFAULT_OPTIONS, LEGACY_ENGINE,
                             parse_capture_payload, validate_options)
 from .prompt_policies import _sqlite_write_transaction
 
@@ -36,8 +36,11 @@ def engine_artifact_hash(engine):
         return rule_engine_artifact_hash()
     # Only fixed bundled files; never a path supplied by a user or model.
     files = [Path(__file__).with_name("http_parser.py")]
-    if engine == CAPTURE_ENGINE:
+    if engine in {CAPTURE_ENGINE, CAPTURE_ENGINE_V2}:
         files.append(Path(__file__).with_name("parser_engine_v1.py"))
+    if engine == CAPTURE_ENGINE_V2:
+        files.extend([Path(__file__).with_name("parser_engine_v2.py"),
+            Path(__file__).parents[1] / "agent" / "capture_separator_v1.py"])
     return hashlib.sha256(b"\0".join(path.read_bytes() for path in files)).hexdigest()
 
 

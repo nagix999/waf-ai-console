@@ -72,6 +72,21 @@ test("only terminal parser jobs stop polling", () => {
   for (const status of ["pending", "running", "processing", undefined]) assert.equal(parserJobFinished({ status }), false);
   for (const status of ["completed", "failed", "canceled"]) assert.equal(parserJobFinished({ status }), true);
 });
+test("capture boundary exclusion requires an explicit vendor profile and selects a new engine", () => {
+  const profile = { name: "Confirmed format", waf_vendor: "Synthetic Vendor", ...defaultParserOptions(), field_separator: "slash_at_slash" };
+  const draft = parserDraft({ id: "old" }); draft.name = "Confirmed boundaries"; draft.options.profiles = [profile];
+  const payload = parserDraftPayload(draft);
+  assert.equal(payload.engine_version, "http-capture-v2");
+  assert.equal(payload.options.profiles[0].field_separator, "slash_at_slash");
+  assert.equal(parserDraft({ engine_version: "http-capture-v2", options: payload.options }).engine_version, "http-capture-v2");
+  assert.equal(safeParserOptions({ ...defaultParserOptions(), field_separator: "slash_at_slash" }), false);
+  for (const change of [{ field_separator: "regex" }, { line_endings: "escaped_crlf" }, { request_line_whitespace: "flexible" }, { skip_leading_blank_lines: true }]) {
+    assert.equal(safeParserOptions({ ...defaultParserOptions(), profiles: [{ ...profile, ...change }] }), false);
+  }
+  const Facts = load("./LegacyParserManagement.jsx", "ParserVersionFacts");
+  const html = renderToStaticMarkup(createElement(Facts, { version: { engine_version: "http-capture-v2", options: payload.options } }));
+  assert.match(html, /확인된 \/@\/ 수집 구분자/);
+});
 test("limited recent catalogs retain the independently returned current Production parser", () => {
   const recent = { id: "new" }, active = { id: "old-active" };
   assert.deepEqual(parserCatalogVersions({ items: [recent], active_version: active }), [recent, active]);

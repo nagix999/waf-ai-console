@@ -20,6 +20,14 @@ class ParserCaptureProfile(ParserSuggestionOptions):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     name: str = Field(min_length=1, max_length=120)
     waf_vendor: str = Field(min_length=1, max_length=120)
+    field_separator: Literal["none", "slash_at_slash"] = "none"
+
+    @model_serializer(mode="wrap")
+    def omit_unconfigured_separator(self, handler):
+        result = handler(self)
+        if self.field_separator == "none":
+            result.pop("field_separator", None)
+        return result
 
     @field_validator("name", "waf_vendor", mode="before")
     @classmethod
@@ -36,7 +44,7 @@ class ParserOptions(ParserSuggestionOptions):
     def unique_vendor_format(self):
         seen = set()
         for profile in self.profiles or []:
-            key = (profile.waf_vendor.casefold(), profile.line_endings)
+            key = (profile.waf_vendor.casefold(), profile.line_endings, profile.field_separator)
             if key in seen:
                 raise ValueError("duplicate_parser_vendor_format")
             seen.add(key)
@@ -54,9 +62,16 @@ class ParserVersionCreate(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(default="", max_length=2000)
-    engine_version: Literal["generic-http-v3", "http-capture-v1"] = "http-capture-v1"
+    engine_version: Literal["generic-http-v3", "http-capture-v1", "http-capture-v2"] = "http-capture-v1"
     options: ParserOptions = Field(default_factory=ParserOptions)
     parent_id: str | None = Field(default=None, min_length=1, max_length=36)
+
+    @model_validator(mode="after")
+    def separator_requires_explicit_capture_engine(self):
+        if self.engine_version != "http-capture-v2" and any(
+                profile.field_separator != "none" for profile in self.options.profiles or []):
+            raise ValueError("parser_separator_engine_required")
+        return self
 
 
 class ParserSelection(BaseModel):

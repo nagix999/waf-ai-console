@@ -46,7 +46,7 @@ def list_versions(request: Request, db: DbSession, principal: Admin):
         total = db.scalar(select(func.count()).select_from(ParserVersion)) or 0
         result = {"items": [version_summary(row) for row in rows], "active_version_id": state.active_version_id,
             "active_version": version_summary(active), "total": total, "recent_limit": 200, "limited": total > len(rows),
-            "revision": state.revision, "engines": ["generic-http-v3", "http-capture-v1"],
+            "revision": state.revision, "engines": ["generic-http-v3", "http-capture-v1", "http-capture-v2"],
             "option_schema": ParserOptions.model_json_schema(),
             "limits": {"comparison_cases": 100, "suggestion_cases": 20, "source_bytes": 65536, "total_source_bytes": 524288},
             "activation_requires_production_review": True}

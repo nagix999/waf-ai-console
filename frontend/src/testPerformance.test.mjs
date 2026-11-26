@@ -10,6 +10,10 @@ import { api } from "./api.js";
 import { completedTimingSummary, durationText, performanceCount, performanceFieldLabel, performanceIsRunning, performanceIssueLabel, performanceMetric, performanceSummary, retryFraction, testPerformanceScope, topPerformanceIssues } from "./testPerformance.js";
 
 const id = "11111111-1111-4111-8111-111111111111";
+test("support conflict describes linked classifications rather than semantic disagreement", () => {
+  assert.equal(performanceIssueLabel("evidence_support_conflict"), "연결된 근거의 분류 불일치");
+  assert.equal(performanceIssueLabel("evidence_support_conflict", (ko, en) => en), "Classification mismatch in linked evidence");
+});
 test("flat evidence link errors have fixed KR and EN labels", () => {
   for (const code of ["evidence_id_repeated", "evidence_link_repeated", "evidence_link_unknown", "evidence_link_self", "evidence_link_cycle", "decision_evidence_unselected", "decision_evidence_repeated"]) {
     assert.notEqual(performanceIssueLabel(code), "기타 출력 검증 오류");
@@ -214,12 +218,12 @@ test("fixed validation labels and normalization never reflect arbitrary error te
 
 test("compact tables preserve role denominators, first versus all-attempt tokens and accessible labels", () => {
   const html = render(fixture());
-  for (const phrase of ["접수 → 결과 준비", "초기 대기 포함", "첫 시작 → 판정 완료", "HTTP 요청부터 응답까지의 시간은 별도로 측정하지 않았습니다", "첫 출력량", "전체 출력량", "출력 재시도 문항", "20.0%", "근거 정리", "평균 대기", "출력 문제와 교정", "근거 분류 충돌", "겹치는 단계 시간은 더하지 않습니다", "미기록은 0이 아니며"]) assert.ok(html.includes(phrase), phrase);
+  for (const phrase of ["접수 → 결과 준비", "초기 대기 포함", "첫 시작 → 판정 완료", "HTTP 요청부터 응답까지의 시간은 별도로 측정하지 않았습니다", "첫 출력량", "전체 출력량", "출력 재시도 문항", "20.0%", "근거 정리", "평균 대기", "출력 문제와 교정", "연결된 근거의 분류 불일치", "겹치는 단계 시간은 더하지 않습니다", "미기록은 0이 아니며"]) assert.ok(html.includes(phrase), phrase);
   assert.match(html, />600</); assert.match(html, />850</); assert.match(html, /2 \/ 10/);
   assert.match(html, /role="region" aria-label="단계별 처리 시간과 출력량" tabindex="0"/);
   assert.match(html, /scope="col"/); assert.doesNotMatch(html, /PRIVATE_|evidence_support_conflict|llm_primary/);
   const english = render(fixture(), { words: (ko, en) => en });
-  for (const phrase of ["Admission → result ready", "Initial queue", "First output tokens", "All output tokens", "Stage recovered", "Conflicting evidence direction"]) assert.ok(english.includes(phrase), phrase);
+  for (const phrase of ["Admission → result ready", "Initial queue", "First output tokens", "All output tokens", "Stage recovered", "Classification mismatch in linked evidence"]) assert.ok(english.includes(phrase), phrase);
   assert.doesNotMatch(english, /[가-힣]/);
 });
 
