@@ -31,7 +31,7 @@ def test_read_index_migration_preserves_data_and_is_reversible(tmp_path, monkeyp
     command.upgrade(config, "head")
     command.upgrade(config, "head")
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0033_feedback_provenance"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0034_analysis_concurrency_512"
         assert any(index["name"] == "ix_analyses_created_id" and index["column_names"] == ["created_at", "id"] for index in inspect(connection).get_indexes("analyses"))
         plan = connection.execute(text("EXPLAIN QUERY PLAN SELECT id,status FROM analyses WHERE created_at >= '2020-01-01' ORDER BY created_at DESC,id DESC LIMIT 20")).all()
         assert any("ix_analyses_created_id" in row[3] for row in plan)
@@ -43,6 +43,7 @@ def test_read_index_migration_preserves_data_and_is_reversible(tmp_path, monkeyp
         with pytest.raises(RuntimeError, match="production_provenance_downgrade_requires_pre_upgrade_backup"):
             command.downgrade(config, "0024_r5_contract")
         with engine.begin() as connection:
+            # 0034 completed its downgrade; 0033 still protects old history.
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0033_feedback_provenance"
             assert connection.execute(text("SELECT * FROM analyses")).all() == before
             run_isolated_migration(connection, "0025_analysis_read_index", "downgrade")

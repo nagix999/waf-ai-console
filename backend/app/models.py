@@ -435,7 +435,7 @@ class AgentConfiguration(Base):
 class ConcurrencyConfiguration(Base):
     __tablename__ = "concurrency_configuration"
     __table_args__ = (CheckConstraint("id = 1", name="ck_concurrency_singleton"),
-                     CheckConstraint("production >= 1 AND production <= 32 AND test >= 1 AND test <= 32", name="ck_concurrency_range"))
+                     CheckConstraint("production >= 1 AND production <= 512 AND test >= 1 AND test <= 512", name="ck_concurrency_range"))
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     revision: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     production: Mapped[int] = mapped_column(Integer, default=1, nullable=False)

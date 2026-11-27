@@ -77,7 +77,7 @@ def test_fresh_and_existing_upgrade_preserves_reviews_and_ciphertext(tmp_path, m
     command.upgrade(config, "head")
     command.upgrade(config, "head")
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0033_feedback_provenance"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0034_analysis_concurrency_512"
         check_structure(connection)
         if existing:
             assert connection.execute(text(f"SELECT {HISTORICAL_COLUMNS} FROM reviews ORDER BY id")).all() == before_reviews
@@ -90,6 +90,7 @@ def test_fresh_and_existing_upgrade_preserves_reviews_and_ciphertext(tmp_path, m
         with pytest.raises(RuntimeError, match="production_provenance_downgrade_requires_pre_upgrade_backup"):
             command.downgrade(config, "0027_review_feedback")
         with engine.begin() as connection:
+            # 0034 rolls back successfully before the historical 0033 guard.
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0033_feedback_provenance"
             assert connection.execute(text(f"SELECT {HISTORICAL_COLUMNS} FROM reviews ORDER BY id")).all() == before_reviews
             assert connection.execute(text("SELECT * FROM analyses")).all() == before_analysis

@@ -12,7 +12,7 @@ from ..database import get_db
 from ..models import AccessAudit, AgentRun, AgentStep, Analysis, EvidenceDisplayJob, Review
 from ..agent.evidence_relations import EvidenceRelations
 from ..agent.evidence_relations_v238 import EvidenceRelations as EvidenceRelationsV2
-from ..services.evidence_relation_dispatch import empty_relations, validate_saved_relations
+from ..services.evidence_relation_dispatch_v239 import empty_relations, validate_saved_relations
 from ..schemas import (
     AgentRunResponse,
     AgentStepResponse,

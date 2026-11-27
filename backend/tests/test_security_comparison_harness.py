@@ -20,7 +20,7 @@ from app.agent.contracts_v234 import SecurityAnalysisOutputV234
 from app.agent.contracts_v237 import SecurityAnalysisOutputV237
 from app.agent.contracts_v238 import SecurityAnalysisOutputV238
 from app.agent.executor import AgentCallResult
-from app import worker_v221, worker_v222, worker_v223, worker_v224, worker_v225, worker_v226, worker_v227, worker_v232, worker_v234, worker_v235, worker_v236, worker_v237, worker_v238
+from app import worker_v221, worker_v222, worker_v223, worker_v224, worker_v225, worker_v226, worker_v227, worker_v232, worker_v234, worker_v235, worker_v236, worker_v237, worker_v238, worker_v239
 from app.config import Settings
 from app.database import Base, build_engine
 from app.models import VLLMProfile, VLLMTestRun, utcnow
@@ -70,7 +70,7 @@ def test_changed_frozen_contract_refuses_diagnostic_before_runtime(monkeypatch):
 
 def test_manifest_models_match_pinned_worker_contracts():
     assert comparison.wire_model_for_revision(comparison.frozen_diagnostic_revision()) is SecurityAnalysisOutput
-    assert comparison.prompts.FIXED_RULES_VERSION == "waf-system-v2.38"
+    assert comparison.prompts.FIXED_RULES_VERSION == "waf-system-v2.39"
     assert comparison.wire_model_for_revision(comparison.prompts) is SecurityAnalysisOutputV238
     assert comparison.wire_model_for_revision(legacy_prompts_v236) is SecurityAnalysisOutputV234
     assert comparison.wire_model_for_revision(legacy_prompts_v237) is SecurityAnalysisOutputV237
@@ -270,6 +270,7 @@ def test_mocked_comparison_preserves_source_and_aborts_quota(tmp_path, monkeypat
     monkeypatch.setattr(worker_v236, "execute_structured_agent", execute)
     monkeypatch.setattr(worker_v237, "execute_structured_agent", execute)
     monkeypatch.setattr(worker_v238, "execute_structured_agent", execute)
+    monkeypatch.setattr(worker_v239, "execute_structured_agent", execute)
     directory = tmp_path / "safe-results"
     result = comparison.main(["--execute-model-calls", "--profile-name", "Synthetic isolated profile",
                               "--output-dir", str(directory)])
@@ -305,6 +306,8 @@ def test_mocked_comparison_preserves_source_and_aborts_quota(tmp_path, monkeypat
         "backend/app/agent/contracts_v238.py", "backend/app/agent/executor_v238.py",
         "backend/app/agent/evidence_relations_v238.py", "backend/app/worker_v238.py",
         "backend/app/services/worker_runtime_v238.py", "backend/app/worker_entrypoint_v238.py",
+        "backend/app/worker_v239.py", "backend/app/worker_entrypoint_v239.py",
+        "backend/app/services/worker_runtime_v239.py", "backend/app/agent/source_repair_recovery_v239.py",
     ):
         assert path in manifest["pipeline_source_hashes"]
     checkpoints = list(directory.glob("waf-system-*.json"))

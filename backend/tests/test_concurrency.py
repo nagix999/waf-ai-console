@@ -87,7 +87,7 @@ def test_admin_defaults_aliases_atomic_settings_and_audit(client, service_header
         assert db.scalar(select(func.count()).select_from(AgentRun)) == 0
 
 
-@pytest.mark.parametrize("value", [0, 33, True, "3", 1.5, None])
+@pytest.mark.parametrize("value", [0, 513, True, "3", 1.5, None])
 def test_api_rejects_invalid_analysis_limit(client, value):
     login_admin(client)
     before = client.get(URL).json()

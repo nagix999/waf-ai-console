@@ -21,6 +21,9 @@ from test_contracts_v238 import mixed
 from test_source_support_worker_v230 import scenario, profile
 
 
+pytestmark = pytest.mark.usefixtures("legacy_v238_admissions")
+
+
 def case(*, forbidden_leaf=False, independent=False):
     data = scenario()
     value = data["value"]

@@ -210,6 +210,17 @@ def legacy_v237_admissions(monkeypatch, request):
     monkeypatch.setattr(app.agent, "prompts", legacy_prompts_v237)
 
 
+@pytest.fixture(autouse=True)
+def legacy_v238_admissions(monkeypatch, request):
+    """Replay source-checked mixed dependencies without adopting new recovery."""
+    if not any("legacy_v238_admissions" in marker.args
+               for marker in request.node.iter_markers("usefixtures")):
+        return
+    import app.agent
+    from app.agent import legacy_prompts_v238
+    monkeypatch.setattr(app.agent, "prompts", legacy_prompts_v238)
+
+
 @pytest.fixture
 def settings() -> Settings:
     return Settings(

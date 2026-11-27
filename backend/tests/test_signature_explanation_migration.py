@@ -13,7 +13,7 @@ from sqlalchemy.exc import IntegrityError
 from app.config import Settings
 from app.database import build_engine
 
-HEAD = "0033_feedback_provenance"
+HEAD = "0034_analysis_concurrency_512"
 TABLES = ("analyses", "test_runs", "vllm_test_runs", "test_configuration_defaults")
 
 

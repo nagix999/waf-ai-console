@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Analysis, ConcurrencyConfiguration, LLMCallSlot, VLLMProfile, utcnow
 
-MAX_ANALYSES_PER_PURPOSE = 32
+MAX_ANALYSES_PER_PURPOSE = 512
 MAX_SERVER_CALLS = 64
 
 

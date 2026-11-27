@@ -33,7 +33,7 @@ def test_stop_migration_additive_and_reversible_without_history(tmp_path, monkey
     command.upgrade(config, "head")
     command.upgrade(config, "head")
     with engine.connect() as db:
-        assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0033_feedback_provenance"
+        assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0034_analysis_concurrency_512"
         fields = {row["name"]: row for row in inspect(db).get_columns("test_runs")}
         assert fields["stopped_at"]["nullable"] and fields["stopped_by"]["nullable"]
         assert db.execute(text("PRAGMA foreign_key_check")).all() == []
@@ -43,6 +43,7 @@ def test_stop_migration_additive_and_reversible_without_history(tmp_path, monkey
         with pytest.raises(RuntimeError, match="production_provenance_downgrade_requires_pre_upgrade_backup"):
             command.downgrade(config, "0025_analysis_read_index")
         with engine.begin() as db:
+            # The successful 0034 rollback precedes this historical guard.
             assert db.scalar(text("SELECT version_num FROM alembic_version")) == "0033_feedback_provenance"
             assert db.execute(text("SELECT * FROM analyses")).all() == before
             run_isolated_migration(db, "0026_test_run_stop", "downgrade")

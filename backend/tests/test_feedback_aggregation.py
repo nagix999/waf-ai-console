@@ -391,7 +391,7 @@ def test_real_fresh_and_previous_alembic_upgrade(tmp_path, monkeypatch, upgrade_
     command.upgrade(config, "head")
     engine = build_engine(settings.database_url)
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0033_feedback_provenance"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0034_analysis_concurrency_512"
         assert "production_configuration_id" in {column["name"] for column in inspect(connection).get_columns("analyses")}
         assert connection.execute(text("PRAGMA foreign_key_check")).all() == []
         if upgrade_existing:

@@ -5,7 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.agent import legacy_prompts_v236, legacy_prompts_v237, legacy_prompts_v238, prompts
+from app.agent import legacy_prompts_v236, legacy_prompts_v237, legacy_prompts_v238
+from app.agent import legacy_prompts_v238 as prompts
 from app.agent.evidence_pipeline_v237 import pipeline_artifact as archived_pipeline
 from app.agent.evidence_pipeline_v238 import pipeline_artifact, validate_pipeline_snapshot
 from app.models import ProductionPromotion
@@ -17,6 +18,9 @@ from app.services.prompt_snapshots import (
     load_analysis_prompt, pin_analysis_prompt,
 )
 from app.services import worker_runtime_v238 as runtime
+
+
+pytestmark = pytest.mark.usefixtures("legacy_v238_admissions")
 
 
 def test_all_237_archived_files_and_prompt_bytes_remain_exact():

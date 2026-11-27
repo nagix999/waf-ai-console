@@ -69,7 +69,7 @@ def test_actual_fresh_alembic_head_and_repeat_upgrade(tmp_path, monkeypatch):
     command.upgrade(config, "head")
     engine = build_engine(settings.database_url)
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0033_feedback_provenance"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "0034_analysis_concurrency_512"
         assert {"parser_versions", "parser_configuration", "parser_jobs"} <= set(inspect(connection).get_table_names())
         assert connection.execute(text("PRAGMA foreign_key_check")).all() == []
     engine.dispose()

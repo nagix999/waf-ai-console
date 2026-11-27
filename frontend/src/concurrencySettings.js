@@ -1,9 +1,11 @@
 export const emptyConcurrencyState = () => ({ catalog: null, draft: null, loading: true, busy: false, needsRefresh: false, error: "", notice: "" });
+export const MAX_ANALYSIS_CONCURRENCY = 512;
+export const MAX_SERVER_CALLS = 64;
 const integer = (value, maximum) => Number.isInteger(value) && value >= 1 && value <= maximum;
 export function validConcurrencyCatalog(value) {
-  return Boolean(value && /^[a-f0-9]{64}$/.test(value.state_token) && integer(value.production, 32) && integer(value.test, 32)
+  return Boolean(value && /^[a-f0-9]{64}$/.test(value.state_token) && integer(value.production, MAX_ANALYSIS_CONCURRENCY) && integer(value.test, MAX_ANALYSIS_CONCURRENCY)
     && Array.isArray(value.servers) && new Set(value.servers.map(row => row?.server_key)).size === value.servers.length
-    && value.servers.every(row => typeof row.server_key === "string" && row.server_key && integer(row.max_calls, 64)
+    && value.servers.every(row => typeof row.server_key === "string" && row.server_key && integer(row.max_calls, MAX_SERVER_CALLS)
       && Array.isArray(row.profiles) && row.profiles.every(profile => typeof profile.name === "string")));
 }
 export function concurrencyDraft(catalog) {
@@ -12,8 +14,8 @@ export function concurrencyDraft(catalog) {
 }
 export function concurrencyIssue(draft) {
   if (!draft) return "설정을 먼저 조회하세요.";
-  if (!integer(draft.production, 32) || !integer(draft.test, 32)) return "동시 분석 수는 1~32건으로 입력하세요.";
-  if (!draft.servers.every(row => integer(row.max_calls, 64))) return "서버별 동시 호출 수는 1~64건으로 입력하세요.";
+  if (!integer(draft.production, MAX_ANALYSIS_CONCURRENCY) || !integer(draft.test, MAX_ANALYSIS_CONCURRENCY)) return "동시 분석 수는 1~512건으로 입력하세요.";
+  if (!draft.servers.every(row => integer(row.max_calls, MAX_SERVER_CALLS))) return "서버별 동시 호출 수는 1~64건으로 입력하세요.";
   return "";
 }
 export function createConcurrencyController({ api, onChange }) {

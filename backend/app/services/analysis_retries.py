@@ -73,9 +73,9 @@ class ExecutionSnapshot(BaseModel):
 def make_execution_snapshot(analysis, profile, prompt, threshold, verifier_profile=None, evidence_editor=None, *, crypto=None) -> ExecutionSnapshot:
     verifier_profile = verifier_profile or profile
     return ExecutionSnapshot(
-        schema_version=6 if prompt.fixed_rules_version in {"waf-system-v2.23", "waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32", "waf-system-v2.34", "waf-system-v2.35", "waf-system-v2.36", "waf-system-v2.37", "waf-system-v2.38"} else 5 if prompt.evidence_pipeline is not None else 4,
+        schema_version=6 if prompt.fixed_rules_version in {"waf-system-v2.23", "waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32", "waf-system-v2.34", "waf-system-v2.35", "waf-system-v2.36", "waf-system-v2.37", "waf-system-v2.38", "waf-system-v2.39"} else 5 if prompt.evidence_pipeline is not None else 4,
         signature_explanations=(explanation_metadata(read_explanations(crypto, analysis, allow_legacy=False))
-                                if prompt.fixed_rules_version in {"waf-system-v2.23", "waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32", "waf-system-v2.34", "waf-system-v2.35", "waf-system-v2.36", "waf-system-v2.37", "waf-system-v2.38"} else None),
+                                if prompt.fixed_rules_version in {"waf-system-v2.23", "waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32", "waf-system-v2.34", "waf-system-v2.35", "waf-system-v2.36", "waf-system-v2.37", "waf-system-v2.38", "waf-system-v2.39"} else None),
         evidence_pipeline=prompt.evidence_pipeline,
         verifier_profile_id=verifier_profile.id, evidence_editor=evidence_editor,
         verifier_profile_fingerprint=profile_fingerprint(verifier_profile),
@@ -94,7 +94,7 @@ def validate_snapshot_binding(analysis, crypto, snapshot):
         read_schema_snapshot(crypto, analysis)
         parser = parser_metadata(read_parser_snapshot(crypto, analysis))
         explanations = read_explanations(crypto, analysis,
-            allow_legacy=prompt.fixed_rules_version not in {"waf-system-v2.23", "waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32", "waf-system-v2.34", "waf-system-v2.35", "waf-system-v2.36", "waf-system-v2.37", "waf-system-v2.38"})
+            allow_legacy=prompt.fixed_rules_version not in {"waf-system-v2.23", "waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32", "waf-system-v2.34", "waf-system-v2.35", "waf-system-v2.36", "waf-system-v2.37", "waf-system-v2.38", "waf-system-v2.39"})
     except (PromptSnapshotError, InputSchemaError, ValueError):
         raise RetryError("retry_input_or_prompt_snapshot_unavailable") from None
     if (snapshot.instructions_hash != prompt.instructions_hash
@@ -104,7 +104,7 @@ def validate_snapshot_binding(analysis, crypto, snapshot):
         raise RetryError("retry_execution_snapshot_invalid")
     if snapshot.evidence_pipeline != prompt.evidence_pipeline:
         raise RetryError("retry_execution_snapshot_invalid")
-    if prompt.fixed_rules_version in {"waf-system-v2.23", "waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32", "waf-system-v2.34", "waf-system-v2.35", "waf-system-v2.36", "waf-system-v2.37", "waf-system-v2.38"}:
+    if prompt.fixed_rules_version in {"waf-system-v2.23", "waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32", "waf-system-v2.34", "waf-system-v2.35", "waf-system-v2.36", "waf-system-v2.37", "waf-system-v2.38", "waf-system-v2.39"}:
         if snapshot.schema_version != 6 or snapshot.signature_explanations != explanation_metadata(explanations):
             raise RetryError("retry_execution_snapshot_invalid")
     elif snapshot.signature_explanations is not None or explanations["version_id"] is not None:

@@ -8,7 +8,7 @@ import json
 
 from sqlalchemy import desc, func, select
 
-from .evidence_relation_dispatch import empty_relations, validate_saved_relations
+from .evidence_relation_dispatch_v239 import empty_relations, validate_saved_relations
 from ..models import AgentRun, AgentStep
 
 

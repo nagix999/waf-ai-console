@@ -11,6 +11,7 @@ from ..agent.grounding_repair import DIAGNOSTIC_VERSIONS
 from ..models import AccessAudit, AgentConfiguration, AgentRun, AgentStep, Analysis, VLLMProfile, utcnow
 from ..security import Principal, require_scope
 from ..services.agent_configuration import configuration_document, has_input_budget, validate_role_profile
+from ..services.concurrency import MAX_ANALYSES_PER_PURPOSE, MAX_SERVER_CALLS
 from ..services.internal_egress import lock_egress_mutation
 from ..services.vllm_profiles import TargetNotAllowedError
 from .model_profiles import begin_test_read_snapshot, validate_profile_for_request
@@ -40,14 +41,14 @@ class ConfigurationUpdate(BaseModel):
 class ServerConcurrency(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     server_key: str = Field(min_length=1, max_length=255)
-    max_calls: int = Field(ge=1, le=64)
+    max_calls: int = Field(ge=1, le=MAX_SERVER_CALLS)
 
 
 class ConcurrencyUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     expected_state_token: str = Field(pattern=r"^[0-9a-f]{64}$")
-    production: int = Field(ge=1, le=32)
-    test: int = Field(ge=1, le=32)
+    production: int = Field(ge=1, le=MAX_ANALYSES_PER_PURPOSE)
+    test: int = Field(ge=1, le=MAX_ANALYSES_PER_PURPOSE)
     servers: list[ServerConcurrency] = Field(max_length=1000)
 
     @model_validator(mode="after")
