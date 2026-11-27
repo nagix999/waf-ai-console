@@ -7,6 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from scripts import compare_security_analysis_v3 as comparison
+from app.agent import legacy_prompts_v237
 from app.agent.contracts import SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SemanticAssessmentOutput
 from app.agent.contracts_v224 import SecurityAnalysisOutputV224
 from app.agent.contracts_v227 import SecurityAnalysisOutputV227
@@ -68,7 +69,9 @@ def test_changed_frozen_contract_refuses_diagnostic_before_runtime(monkeypatch):
 
 def test_manifest_models_match_pinned_worker_contracts():
     assert comparison.wire_model_for_revision(comparison.frozen_diagnostic_revision()) is SecurityAnalysisOutput
-    assert comparison.wire_model_for_revision(comparison.prompts) is SecurityAnalysisOutputV237
+    assert comparison.prompts.FIXED_RULES_VERSION == "waf-system-v2.36"
+    assert comparison.wire_model_for_revision(comparison.prompts) is SecurityAnalysisOutputV234
+    assert comparison.wire_model_for_revision(legacy_prompts_v237) is SecurityAnalysisOutputV237
     assert comparison.wire_model_for_revision(comparison.legacy_prompts_v232) is SecurityAnalysisOutputV232
     assert comparison.wire_model_for_revision(comparison.legacy_prompts_v227) is SecurityAnalysisOutputV227
     assert comparison.wire_model_for_revision(comparison.legacy_prompts_v228) is SecurityAnalysisOutputV228

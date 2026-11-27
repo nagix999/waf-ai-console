@@ -198,6 +198,17 @@ def legacy_v236_admissions(monkeypatch, request):
     monkeypatch.setattr(app.agent, "prompts", legacy_prompts_v236)
 
 
+@pytest.fixture(autouse=True)
+def legacy_v237_admissions(monkeypatch, request):
+    """Replay explicitly pinned contribution semantics, not the live default."""
+    if not any("legacy_v237_admissions" in marker.args
+               for marker in request.node.iter_markers("usefixtures")):
+        return
+    import app.agent
+    from app.agent import legacy_prompts_v237
+    monkeypatch.setattr(app.agent, "prompts", legacy_prompts_v237)
+
+
 @pytest.fixture
 def settings() -> Settings:
     return Settings(

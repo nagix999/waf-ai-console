@@ -1,4 +1,4 @@
-"""Real ModuAgent with mocked HTTP, synthetic provenance and isolated test DB.
+"""Archived v237 ModuAgent with mocked HTTP and isolated synthetic provenance.
 
 These checks exercise source repair, same-role review, v3 consumers and pinned
 capture preprocessing. They do not measure actual model interpretation quality.
@@ -26,6 +26,9 @@ from test_agent_openai import completion, install_http
 from test_contracts_v237 import wire
 from test_result_contract_v3 import result_fixture
 from test_source_support_worker_v230 import profile
+
+
+pytestmark = pytest.mark.usefixtures("legacy_v237_admissions")
 
 
 EXCLUDED = "SYNTHETIC_REMOVED_ROOT"

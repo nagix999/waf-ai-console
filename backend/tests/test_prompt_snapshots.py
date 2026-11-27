@@ -4,7 +4,7 @@ import pytest
 from agent_selection_helpers import model_output
 
 from app import worker, worker_v221, worker_v222, worker_v223, worker_v224, worker_v232, worker_v234, worker_v235, worker_v236, worker_v237
-from app.agent import legacy_prompts_v220, legacy_prompts_v221_reasoning, prompts
+from app.agent import legacy_prompts_v220, legacy_prompts_v221_reasoning, legacy_prompts_v237, prompts
 from app.agent.contracts import WAFAnalysisOutput
 from app.agent.executor import AgentCallResult
 from app.agent.input_builder import build_agent_input
@@ -75,8 +75,8 @@ def fake_output():
     })
 
 
-@pytest.mark.parametrize("rules", [legacy_prompts_v220, legacy_prompts_v221_reasoning, None],
-    ids=["pinned-v220", "pinned-v221", "current-v237"])
+@pytest.mark.parametrize("rules", [legacy_prompts_v220, legacy_prompts_v221_reasoning, legacy_prompts_v237, None],
+    ids=["pinned-v220", "pinned-v221", "pinned-v237", "current-v236"])
 def test_worker_and_verifier_use_queued_snapshot_after_activation_and_code_change(client, event_payload, monkeypatch, rules):
     if rules is not None:
         # Recreate admission under the frozen revision, not a current snapshot

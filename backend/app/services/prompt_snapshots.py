@@ -157,7 +157,7 @@ def _baseline_rules(expected):
         legacy_prompts_v218, legacy_prompts_v219, legacy_prompts_v220,
         legacy_prompts_v221, legacy_prompts_v221_compact, legacy_prompts_v221_reasoning,
         legacy_prompts_v222, legacy_prompts_v222_capture, legacy_prompts_v223,
-        legacy_prompts_v224, legacy_prompts_v224_semantics, legacy_prompts_v225, legacy_prompts_v226, legacy_prompts_v227, legacy_prompts_v228, legacy_prompts_v229, legacy_prompts_v230, legacy_prompts_v231, legacy_prompts_v232, legacy_prompts_v234, legacy_prompts_v235, legacy_prompts_v236, prompts,
+        legacy_prompts_v224, legacy_prompts_v224_semantics, legacy_prompts_v225, legacy_prompts_v226, legacy_prompts_v227, legacy_prompts_v228, legacy_prompts_v229, legacy_prompts_v230, legacy_prompts_v231, legacy_prompts_v232, legacy_prompts_v234, legacy_prompts_v235, legacy_prompts_v236, legacy_prompts_v237, prompts,
     )
     modules = dict.fromkeys((
         legacy_prompts_v212, legacy_prompts_v213, legacy_prompts_v214,
@@ -165,11 +165,15 @@ def _baseline_rules(expected):
         legacy_prompts_v218, legacy_prompts_v219, legacy_prompts_v220,
         legacy_prompts_v221, legacy_prompts_v221_compact, legacy_prompts_v221_reasoning,
         legacy_prompts_v222, legacy_prompts_v222_capture, legacy_prompts_v223,
-        legacy_prompts_v224, legacy_prompts_v224_semantics, legacy_prompts_v225, legacy_prompts_v226, legacy_prompts_v227, legacy_prompts_v228, legacy_prompts_v229, legacy_prompts_v230, legacy_prompts_v231, legacy_prompts_v232, legacy_prompts_v234, legacy_prompts_v235, legacy_prompts_v236, prompts,
+        legacy_prompts_v224, legacy_prompts_v224_semantics, legacy_prompts_v225, legacy_prompts_v226, legacy_prompts_v227, legacy_prompts_v228, legacy_prompts_v229, legacy_prompts_v230, legacy_prompts_v231, legacy_prompts_v232, legacy_prompts_v234, legacy_prompts_v235, legacy_prompts_v236, legacy_prompts_v237, prompts,
     ))
     matches = [module for module in modules
         if module.FIXED_RULES_VERSION == expected["fixed_rules_version"]
         and _hash(module.FIXED_INSTRUCTIONS) == expected["fixed_rules_hash"]]
+    # A rollback may make the current module an exact alias of an archive.
+    # Prefer its immutable archive, while ambiguous archives still fail closed.
+    if len(matches) > 1 and prompts in matches:
+        matches.remove(prompts)
     if len(matches) != 1:
         raise PromptSnapshotError()
     return matches[0]

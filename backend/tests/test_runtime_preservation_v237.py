@@ -1,4 +1,4 @@
-"""Candidate admission preserves archived bytes and Production approval gates."""
+"""Archived v237 admission preserves frozen bytes and Production approval gates."""
 from copy import deepcopy
 import hashlib
 from pathlib import Path
@@ -12,7 +12,7 @@ from app.agent import evidence_pipeline_v237 as pipeline
 from app.agent import execution_policy_v236, execution_policy_v237
 from app.agent import evidence_source_policy_v236, evidence_source_policy_v237
 from app.agent import input_builder_v236, input_builder_v237
-from app.agent import legacy_prompts_v236, prompts
+from app.agent import legacy_prompts_v236, legacy_prompts_v237 as prompts
 from app.agent.policy import VerifierPolicyContext
 from app.models import Analysis, ProductionPromotion
 from app.services import worker_runtime_v237 as runtime
@@ -25,6 +25,9 @@ from app.services.prompt_snapshots import (
     load_analysis_prompt, pin_analysis_prompt,
 )
 from test_execution_policy_v221 import output
+
+
+pytestmark = pytest.mark.usefixtures("legacy_v237_admissions")
 
 
 FROZEN_V236 = "f96ea22d6a273e24e7a1394e5c29f1019dbcf09b7575092c881577515249ee67"
