@@ -40,7 +40,8 @@ from app.agent.contracts_v231 import SecurityAnalysisOutputV231
 from app.agent.contracts_v232 import SecurityAnalysisOutputV232
 from app.agent.contracts_v234 import SecurityAnalysisOutputV234, EvidenceDecisionReviewOutput
 from app.agent.contracts_v237 import SecurityAnalysisOutputV237, EvidenceDecisionReviewOutputV237
-from app.agent.executor_v237 import SAFE_VALIDATION_TYPES, _output_schema_field_names
+from app.agent.contracts_v238 import SecurityAnalysisOutputV238, EvidenceDecisionReviewOutputV238
+from app.agent.executor_v238 import SAFE_VALIDATION_TYPES, _output_schema_field_names
 from app.agent.output_schema_v226 import compact_strict_schema
 from app.agent.structured_json import REJECTION_CODES as JSON_REJECTION_CODES
 from app.candidate_schemas import CandidateConfiguration
@@ -140,7 +141,8 @@ def wire_model_for_revision(revision):
               "waf-system-v2.34": SecurityAnalysisOutputV234,
               "waf-system-v2.35": SecurityAnalysisOutputV234,
               "waf-system-v2.36": SecurityAnalysisOutputV234,
-              "waf-system-v2.37": SecurityAnalysisOutputV237}
+              "waf-system-v2.37": SecurityAnalysisOutputV237,
+              "waf-system-v2.38": SecurityAnalysisOutputV238}
     try:
         return models[revision.FIXED_RULES_VERSION]
     except KeyError:
@@ -237,7 +239,8 @@ def write_json(path, value):
 def validation_fields():
     return frozenset().union(*(_output_schema_field_names(model) for model in (
         SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SecurityAnalysisOutputV224, SecurityAnalysisOutputV227, SecurityAnalysisOutputV228, SecurityAnalysisOutputV229, SecurityAnalysisOutputV230, SecurityAnalysisOutputV231, SecurityAnalysisOutputV232, SecurityAnalysisOutputV234, SecurityAnalysisOutputV237,
-        SemanticAssessmentOutput, EvidenceSelectionCorrectionOutput, EvidenceDecisionReviewOutput, EvidenceDecisionReviewOutputV237)))
+        SecurityAnalysisOutputV238, SemanticAssessmentOutput, EvidenceSelectionCorrectionOutput,
+        EvidenceDecisionReviewOutput, EvidenceDecisionReviewOutputV237, EvidenceDecisionReviewOutputV238)))
 
 
 def retry_accounting(metadata, depth=0):
@@ -327,6 +330,7 @@ def pipeline_hashes():
              root / "backend/app/worker_v235.py", root / "backend/app/worker_entrypoint_v235.py",
              root / "backend/app/worker_v236.py", root / "backend/app/worker_entrypoint_v236.py",
              root / "backend/app/worker_v237.py", root / "backend/app/worker_entrypoint_v237.py",
+             root / "backend/app/worker_v238.py", root / "backend/app/worker_entrypoint_v238.py",
              root / "backend/app/signature_explanation_schemas.py"]
     paths.extend((root / "backend/app/agent").glob("*.py"))
     paths.extend(root / "backend/app/services" / (name + ".py") for name in (
@@ -358,7 +362,10 @@ def pipeline_hashes():
         "worker_runtime_v236", "worker_concurrency_v236", "model_validation_worker_v236", "worker_coordinator_v236",
         "evidence_display_worker_v236",
         "worker_runtime_v237", "worker_concurrency_v237", "model_validation_worker_v237", "worker_coordinator_v237",
-        "evidence_display_worker_v237"))
+        "evidence_display_worker_v237",
+        "worker_runtime_v238", "worker_concurrency_v238", "model_validation_worker_v238", "worker_coordinator_v238",
+        "evidence_display_worker_v238", "evidence_display_jobs_v4", "evidence_relation_dispatch",
+        "core_evidence_v4", "evidence_display_plan_v3"))
     hashes = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(set(paths))}
     digest = hashlib.sha256(json.dumps(hashes, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     return digest, hashes
@@ -524,7 +531,7 @@ def run(args):
             "rules_hashes": {revision.FIXED_RULES_VERSION: hashlib.sha256(revision.FIXED_INSTRUCTIONS.encode()).hexdigest()
                              for revision in revisions},
             "wire_schema_hashes": {revision.FIXED_RULES_VERSION: hashlib.sha256(json.dumps(
-                (compact_strict_schema(model.model_json_schema()) if revision.FIXED_RULES_VERSION in {"waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32", "waf-system-v2.34", "waf-system-v2.35", "waf-system-v2.36", "waf-system-v2.37"}
+                (compact_strict_schema(model.model_json_schema()) if revision.FIXED_RULES_VERSION in {"waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32", "waf-system-v2.34", "waf-system-v2.35", "waf-system-v2.36", "waf-system-v2.37", "waf-system-v2.38"}
                  else strict_json_schema(model.model_json_schema()) if values["provider"] == "openai" else model.model_json_schema()),
                 ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
                 for revision, model in ((revision, wire_model_for_revision(revision))
@@ -579,7 +586,7 @@ def run(args):
                     started, previous_wait = time.monotonic(), authority.wait_ms
                     try:
                         authority()
-                        from app.services.worker_runtime_v237 import process_moduagent
+                        from app.services.worker_runtime_v238 import process_moduagent
                         process_moduagent(db, crypto, row, "", settings.verifier_confidence_threshold, request_check=authority)
                     except Exception as exc:
                         db.rollback()

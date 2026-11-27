@@ -2,13 +2,17 @@
 // evidence text: every explanation and source comes from a canonical ID.
 import { analystText } from "./analystText.js";
 import { presentationItems } from "./evidencePresentation.js";
+import { validRelationOrigins } from "./evidenceRelationOrigins.js";
 
 const record = value => value !== null && typeof value === "object" && !Array.isArray(value);
 const array = value => Array.isArray(value) ? value : [];
 const directions = ["attack_request", "normal_request", "context"];
 const roles = ["primary", "verifier"];
 const reasons = new Set(["rank_top", "decision_issue", "counter_evidence", "inconclusive_directional", "context_auxiliary", "remaining_evidence", "fallback_original"]);
-const emptyRelations = () => ({ version: "evidence-relations-v1", groups: [] });
+const emptyRelations = (modern = false) => ({ version: modern ? "evidence-relations-v2" : "evidence-relations-v1", groups: [] });
+const modernRelations = value => value?.version === "evidence-relations-v2";
+const modernPlan = value => value?.version === "evidence-display-plan-v3";
+export const isEvidenceDisplayView = value => ["evidence-display-view-v1", "evidence-display-view-v3"].includes(value?.version);
 const stableValue = value => Array.isArray(value) ? value.map(stableValue) : record(value)
   ? Object.fromEntries(Object.keys(value).sort().map(key => [key, stableValue(value[key])])) : value;
 
@@ -56,11 +60,13 @@ function canonicalItems(result) {
   return original.map((item, index) => ({ ...item, number: index + 1, related_numbers: [] }));
 }
 
-function validRelations(result, value) {
-  if (value == null) return emptyRelations();
+function validRelations(result, value, modern = false) {
+  if (value == null) value = emptyRelations(modern);
   const items = canonicalItems(result), byId = new Map((items || []).map(item => [item.evidence_id, item]));
-  if (!items || !record(value) || value.version !== "evidence-relations-v1" || Object.keys(value).sort().join() !== "groups,version"
+  if (!items || !record(value) || !["evidence-relations-v1", "evidence-relations-v2"].includes(value.version)
+    || (modern && !modernRelations(value)) || Object.keys(value).sort().join() !== "groups,version"
     || !Array.isArray(value.groups) || value.groups.length > 10) return null;
+  if (modernRelations(value) && (!validRelationOrigins(items) || !validModernSource(result, items))) return null;
   const seen = new Set(), counts = { primary: 0, verifier: 0 };
   for (const group of value.groups) {
     if (!record(group) || Object.keys(group).sort().join() !== "related_evidence_ids,representative_evidence_id,role"
@@ -69,16 +75,41 @@ function validRelations(result, value) {
     if (new Set(ids).size !== ids.length || seen.has(key) || ++counts[group.role] > 5
       || ids.some(id => !byId.has(id) || !array(byId.get(id).origins).some(origin => origin?.role === group.role))) return null;
     const sides = new Set(ids.map(id => byId.get(id).supports));
-    if (sides.has("attack_request") && sides.has("normal_request")) return null;
+    if (!modernRelations(value) && sides.has("attack_request") && sides.has("normal_request")) return null;
     seen.add(key);
   }
   return value;
+}
+
+function validModernSource(result, items) {
+  const identifiers = new Set(items.map(item => item.evidence_id));
+  const validIssues = (issues, limit) => Array.isArray(issues) && issues.length <= limit && issues.every(issue => record(issue)
+    && Object.keys(issue).sort().join() === "evidence_ids,missing_condition_ko,origins,point_ko"
+    && typeof issue.point_ko === "string" && issue.point_ko.length > 0 && issue.point_ko.length <= 400
+    && (issue.missing_condition_ko === null || typeof issue.missing_condition_ko === "string" && issue.missing_condition_ko.length <= 500)
+    && Array.isArray(issue.evidence_ids) && issue.evidence_ids.length > 0 && issue.evidence_ids.length <= 10
+    && issue.evidence_ids.every(id => typeof id === "string" && identifiers.has(id))
+    && Array.isArray(issue.origins) && issue.origins.length > 0 && issue.origins.length <= 2
+    && issue.origins.every(role => roles.includes(role)));
+  if (!validIssues(result.decision_issues ?? [], 10) || !["true_positive", "false_positive", "inconclusive"].includes(result.verdict)) return false;
+  for (const output of [result.primary, result.verifier?.output]) {
+    if (output != null && (!record(output) || !validIssues(output.decision_issues ?? [], 2))) return false;
+  }
+  const decisionIds = result.policy?.decision_evidence_ids ?? [];
+  return Array.isArray(decisionIds) && decisionIds.length <= 5 && decisionIds.every(id => typeof id === "string" && identifiers.has(id))
+    && items.every(item => item.field.length <= 120 && [...item.excerpt].length <= 300 && [...item.interpretation_ko].length <= 2000
+      && (item.source_spans === undefined || Array.isArray(item.source_spans) && item.source_spans.length <= 10
+        && item.source_spans.every(span => record(span) && Object.keys(span).sort().join() === "end,start"
+          && Number.isInteger(span.start) && Number.isInteger(span.end) && span.start >= 0 && span.end > span.start)));
 }
 
 export function evidenceSourceHash(result, relations = null) {
   const value = { evidence: array(result?.evidence), decision_issues: array(result?.decision_issues),
     policy: { decision_evidence_ids: array(result?.policy?.decision_evidence_ids) },
     verdict: result?.verdict ?? null, relations: relations ?? emptyRelations() };
+  if (modernRelations(relations)) value.role_decision_issues = {
+    primary: array(result?.primary?.decision_issues), verifier: array(result?.verifier?.output?.decision_issues),
+  };
   return sha256Text(JSON.stringify(stableValue(value)));
 }
 
@@ -102,7 +133,7 @@ function finishPlan(result, relations, groups, status, reason) {
     if (!shown) visibility.push(group.supports === "context" ? "context_auxiliary" : "remaining_evidence");
     return { ...group, related_ids: items.map(item => item.evidence_id).filter(id => related.has(id)), default_visible: shown, visibility_reasons: visibility };
   });
-  return { version: "evidence-display-v1", source_hash: evidenceSourceHash(result, relations), status, reason, groups: output,
+  return { version: modernRelations(relations) ? "evidence-display-plan-v3" : "evidence-display-v1", source_hash: evidenceSourceHash(result, relations), status, reason, groups: output,
     metrics: { original_evidence_count: byId.size, group_count: output.length, core_group_count: output.filter(group => group.default_visible).length, merged_count: byId.size - output.length } };
 }
 
@@ -111,6 +142,12 @@ function physicalSource(item) {
   let field = item.field.trim().replace(/^event\./, ""); if (field === "raw_payload") field = "payload";
   const spans = [...new Set(array(item.source_spans).map(span => JSON.stringify([span.start, span.end])))].map(value => JSON.parse(value)).sort((a, b) => a[0] - b[0] || a[1] - b[1]);
   return encoded([field, item.excerpt, spans]);
+}
+
+function locatedSource(item) {
+  return Array.isArray(item.source_spans) && item.source_spans.length > 0
+    && item.source_spans.every(span => record(span) && Number.isInteger(span.start) && Number.isInteger(span.end)
+      && span.start >= 0 && span.end > span.start) ? physicalSource(item) : null;
 }
 
 function constraints(result, relations) {
@@ -123,8 +160,23 @@ function constraints(result, relations) {
     dependencies.set(id, reached);
   }
   const memberships = new Map(items.map(item => [item.evidence_id, array(result?.decision_issues).flatMap((issue, index) => array(issue.evidence_ids).includes(item.evidence_id) ? [index] : [])]));
-  const key = item => encoded([item.supports, memberships.get(item.evidence_id), [...new Set([...dependencies.get(item.evidence_id)].map(id => physicalSource(byId.get(id))))].sort()]);
+  const dependencySources = new Map(items.map(item => [item.evidence_id, [...new Set([...dependencies.get(item.evidence_id)].map(id => {
+    const source = byId.get(id);
+    return modernRelations(relations) ? encoded([locatedSource(source) ?? ["unlocated", id], source.interpretation_ko, source.supports]) : physicalSource(source);
+  }))].sort()]));
+  const key = item => modernRelations(relations)
+    ? encoded([locatedSource(item) ?? ["unlocated", item.evidence_id], item.supports, dependencySources.get(item.evidence_id)])
+    : encoded([item.supports, memberships.get(item.evidence_id), dependencySources.get(item.evidence_id)]);
   return { dependencies, memberships, mergeKey: key };
+}
+
+function compatibleMembers(ids, items, rules, modern) {
+  const sources = ids.map(id => items.find(item => item.evidence_id === id));
+  if (sources.some(item => !item) || new Set(sources.map(item => rules.mergeKey(item))).size !== 1) return false;
+  if (!modern || ids.length < 2) return true;
+  if (sources.some(item => locatedSource(item) === null)) return false;
+  const sourceRoles = new Set(sources.flatMap(item => array(item.origins).map(origin => origin.role)));
+  return sourceRoles.size > 1 || new Set(ids.map(id => encoded(rules.memberships.get(id)))).size === 1;
 }
 
 function singletonPlan(result, relations, reason) {
@@ -133,15 +185,16 @@ function singletonPlan(result, relations, reason) {
 }
 
 export function buildEvidenceDisplayPlan(result, presentation = result?.evidence_presentation, relations = null, { status = "skipped", reason = null } = {}) {
-  const items = canonicalItems(result), linked = validRelations(result, relations);
+  const modern = modernRelations(relations) || modernPlan(presentation);
+  const items = canonicalItems(result), linked = validRelations(result, relations, modern);
   if (!items) return null;
-  if (!linked) return singletonPlan(result, emptyRelations(), "relations_invalid");
-  if (presentation?.version === "evidence-display-v1") return validateEvidenceDisplayPlan(result, presentation, linked)
+  if (!linked) return singletonPlan(result, emptyRelations(modern), "relations_invalid");
+  if (["evidence-display-v1", "evidence-display-plan-v3"].includes(presentation?.version)) return validateEvidenceDisplayPlan(result, presentation, linked)
     ? presentation : singletonPlan(result, linked, "display_plan_invalid");
-  const { mergeKey } = constraints(result, linked);
+  const rules = constraints(result, linked), { mergeKey } = rules;
   let selected = presentationItems({ evidence: result.evidence }, presentation);
   const validLegacy = presentation?.status === "completed" && selected !== result.evidence
-    && selected.every(item => new Set((item._evidence_ids || [item.evidence_id]).map(id => mergeKey(items.find(source => source.evidence_id === id)))).size === 1);
+    && selected.every(item => compatibleMembers(item._evidence_ids || [item.evidence_id], items, rules, modern));
   if (!validLegacy) {
     const exact = new Map();
     for (const item of items) {
@@ -149,7 +202,19 @@ export function buildEvidenceDisplayPlan(result, presentation = result?.evidence
       if (!exact.has(key)) exact.set(key, { ...item, _evidence_ids: [] });
       exact.get(key)._evidence_ids.push(item.evidence_id);
     }
-    selected = [...exact.values()];
+    selected = [...exact.values()].flatMap(item => {
+      if (!modern || compatibleMembers(item._evidence_ids, items, rules, true)) return [item];
+      // Cross-role equivalence does not remove condition boundaries between
+      // explanations contributed only by the same role.
+      const conditions = new Map();
+      for (const id of item._evidence_ids) {
+        const source = items.find(value => value.evidence_id === id), key = encoded(rules.memberships.get(id));
+        if (!conditions.has(key)) conditions.set(key, { ...source, _evidence_ids: [] });
+        conditions.get(key)._evidence_ids.push(id);
+      }
+      return [...conditions.values()];
+    });
+    if (modern) selected.sort((left, right) => left.number - right.number);
   }
   const byId = new Map(items.map(item => [item.evidence_id, item]));
   const groups = selected.map(item => ({ group_id: `g${byId.get(item.evidence_id)?.number}`,
@@ -163,12 +228,13 @@ export function buildEvidenceDisplayPlan(result, presentation = result?.evidence
 
 export function validateEvidenceDisplayPlan(result, plan, relations = null) {
   try {
-    const items = canonicalItems(result), linked = validRelations(result, relations);
+    const modern = modernPlan(plan), items = canonicalItems(result), linked = validRelations(result, relations, modern);
     if (!items || !linked || !record(plan) || Object.keys(plan).sort().join() !== "groups,metrics,reason,source_hash,status,version"
-      || plan.version !== "evidence-display-v1" || !["pending", "completed", "skipped", "fallback"].includes(plan.status)
+      || !["evidence-display-v1", "evidence-display-plan-v3"].includes(plan.version)
+      || modern !== modernRelations(linked) || !["pending", "completed", "skipped", "fallback"].includes(plan.status)
       || plan.source_hash !== evidenceSourceHash(result, linked) || !Array.isArray(plan.groups) || plan.groups.length > 10) return false;
     const byId = new Map(items.map(item => [item.evidence_id, item])), seen = new Set(), groupIds = new Set();
-    const { mergeKey } = constraints(result, linked);
+    const rules = constraints(result, linked);
     for (const group of plan.groups) {
       if (!record(group) || Object.keys(group).sort().join() !== "default_visible,group_id,member_ids,number,related_ids,representative_id,supports,visibility_reasons"
         || !byId.has(group.representative_id) || group.supports !== byId.get(group.representative_id).supports
@@ -179,7 +245,7 @@ export function validateEvidenceDisplayPlan(result, plan, relations = null) {
         || group.related_ids.some(id => !byId.has(id) || group.member_ids.includes(id))
         || typeof group.default_visible !== "boolean" || !Array.isArray(group.visibility_reasons)
         || !group.visibility_reasons.length || group.visibility_reasons.some(reason => !reasons.has(reason))) return false;
-      if (new Set(group.member_ids.map(id => mergeKey(byId.get(id)))).size !== 1) return false;
+      if (!compatibleMembers(group.member_ids, items, rules, modern)) return false;
       if (encoded(group.member_ids) !== encoded(items.map(item => item.evidence_id).filter(id => group.member_ids.includes(id)))) return false;
       if (plan.status === "fallback" && group.member_ids.length !== 1) return false;
       group.member_ids.forEach(id => seen.add(id)); groupIds.add(group.group_id);
@@ -196,7 +262,8 @@ export function validateEvidenceDisplayPlan(result, plan, relations = null) {
 export function evidenceDisplayView(result, view = null, relations = view?.relations ?? null) {
   const sourceItems = canonicalItems(result)?.map(item => ({ ...item, interpretation_ko: analystText(item.interpretation_ko) }));
   if (!sourceItems) return null;
-  const hasView = view?.version === "evidence-display-view-v1";
+  const hasView = isEvidenceDisplayView(view);
+  if (view?.version === "evidence-display-view-v3" && relations == null) relations = emptyRelations(true);
   const presentation = hasView && view.plan ? view.plan : result.evidence_presentation;
   // An unavailable job must never reuse a previously reduced legacy mapping.
   // Keep every original visible even if a damaged response omits its plan.

@@ -349,6 +349,7 @@ X-API-Key: YOUR_SERVICE_API_KEY
 - JSON 필드와 타입은 그대로 유지하고 헤더로 구분한다: `X-Evidence-View: core-v1|core-v2`, `X-Evidence-Status: completed|fallback|skipped|pending`, `X-Evidence-Original-Count`, `X-Evidence-Returned-Count`. `core-v2`는 새 버전의 정리 결과를 검증한 응답이며, 과거 승인이나 저장된 정리 결과를 새 의미로 다시 해석하지 않는다. `fallback`은 고정 코드 규칙으로 선택한 상태이며 전체 근거 반환을 뜻하지 않는다. 조회나 동일 요청 재접수로 근거 정리 모델을 추가 호출하지 않는다. 선택 전 원본에 묶인 `evidence_presentation`이나 관리자 표시 계획을 응답에 다시 적용하지 않는다.
 - 과거 v1/v2로 저장된 결과는 당시 객체를 유지하고 `X-Evidence-*` 핵심 응답 헤더를 붙이지 않는다. v3에서 선택한 뒤 v2로 변환한 호환 응답에는 핵심 응답 헤더가 유지된다.
 - v2.20 후보도 공개 v3 필드는 동일하다. 여러 원문을 연결한 설명은 대표 근거의 `interpretation_ko`에 기록하고 관련 원문도 기존 근거 목록에 보존한다. 관리자 화면용 연결 정보는 별도 암호화 이력으로 관리하며 이 응답에 새 필드를 추가하지 않는다. 관련 원문의 `supports`를 대표 분류로 일괄 변경하지 않으며, 출처 대조가 해석의 정확성을 보장하는 것은 아니다.
+- v2.38 후보는 해석에 필요한 공격/정상 근거를 함께 참조할 수 있다. 분류가 다르다는 사실만으로 오류, 추가 검증이나 보류를 강제하지 않으며 실제 해석 충돌과 역할별 최종 판정 불일치는 별도로 판단한다. 종합 의미와 이유는 대표 근거의 기존 `interpretation_ko`에 포함하고 필수 원문 및 중요한 반대 근거를 보존한다. 연결 허용은 공격/정상 근거를 하나로 병합하거나 분류를 바꾼다는 뜻이 아니다. 내부 관계 기록의 버전만 달라지고 공개 v3 필드와 타입은 동일하다. 과거 실행과 재실행은 당시 계약을 유지한다.
 - v2.21 후보는 시그니처 자체를 공격/정상 근거로 사용하지 않고 비교와 `context`에만 사용한다. `input_truncated=true` 자체로 보류하지 않으며 남은 구체적인 근거로 판정한다. 실제 누락이 판단을 가르거나 필요한 독립 검증이 실패/불일치한 경우의 보류는 유지한다. 입력/출력 API 스키마 변경은 없다.
 - 실제 미확인 조건은 `decision_issues`의 `point_ko/evidence_ids/missing_condition_ko/origins`에 기록한다. 기술적 보류는 `diagnostics`로 설명하며 업무 자료 부족으로 추정하지 않는다.
 - v3에는 `analyst_assessment`, `tuning_recommendation`, `analyst_checks`, `recommended_checks`, `conflicting_evidence`가 없다. 분석 요약은 요청 내용만 담고 최종 보류 사유는 별도로 표시한다.

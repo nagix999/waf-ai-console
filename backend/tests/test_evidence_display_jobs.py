@@ -26,7 +26,7 @@ pytestmark = pytest.mark.usefixtures("registered_vllm_target")
 @pytest.fixture
 def archived_v2_admission(monkeypatch):
     """Replay V2 candidate gates without changing current V3 admissions."""
-    from app.services import evidence_display_jobs_v3 as admission
+    from app.services import evidence_display_jobs_v4 as admission
     monkeypatch.setattr(admission, "capture_display_profile", lambda profile, *, version=jobs.VERSION:
         admission.DisplayEditorSnapshot.model_validate(jobs.capture_display_profile(profile, version=version).model_dump()))
 

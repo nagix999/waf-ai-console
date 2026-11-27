@@ -10,7 +10,9 @@ from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
 from ..models import AccessAudit, AgentRun, AgentStep, Analysis, EvidenceDisplayJob, Review
-from ..agent.evidence_relations import EvidenceRelations, validate_evidence_relations
+from ..agent.evidence_relations import EvidenceRelations
+from ..agent.evidence_relations_v238 import EvidenceRelations as EvidenceRelationsV2
+from ..services.evidence_relation_dispatch import empty_relations, validate_saved_relations
 from ..schemas import (
     AgentRunResponse,
     AgentStepResponse,
@@ -431,7 +433,7 @@ def validate_review_duplicate(existing: Review, analysis_id: str, payload: Revie
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="external_review_id_conflict")
 
 
-@router.get("/analyses/{analysis_id}/evidence-relations", response_model=EvidenceRelations, include_in_schema=False)
+@router.get("/analyses/{analysis_id}/evidence-relations", response_model=EvidenceRelations | EvidenceRelationsV2, include_in_schema=False)
 def get_evidence_relations(
     analysis_id: str,
     request: Request,
@@ -444,8 +446,8 @@ def get_evidence_relations(
     if analysis is None:
         raise HTTPException(404, "analysis_not_found")
     response.headers["Cache-Control"] = "no-store"
-    empty = {"version": "evidence-relations-v1", "groups": []}
     result = analysis.result_json
+    empty = empty_relations(result)
     if analysis.status != "completed" or not isinstance(result, dict) or result.get("schema_version") != "waf-analysis-v3":
         record_access(db, principal, "view_evidence_relations", "analysis", analysis_id)
         return empty
@@ -471,7 +473,7 @@ def get_evidence_relations(
         canonical = validate_new_result(result)
         if saved.get("schema_version") != "waf-analysis-v3" or saved.get("evidence") != canonical["evidence"]:
             raise ValueError("evidence_relations_invalid")
-        return validate_evidence_relations(saved["evidence_relations"], canonical["evidence"])
+        return validate_saved_relations(saved["evidence_relations"], canonical)
     except (ValueError, TypeError, KeyError, UnicodeError):
         raise HTTPException(500, "evidence_relations_unavailable", headers={"Cache-Control": "no-store"}) from None
 

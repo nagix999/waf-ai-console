@@ -6,6 +6,7 @@ step. Release-gate fixtures create their ordinary local official evaluation.
 from copy import deepcopy
 from contextlib import contextmanager
 from datetime import timedelta
+from importlib import import_module
 import hashlib
 import json
 from pathlib import Path
@@ -15,7 +16,7 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy import select
 
-from app import worker_v236
+from app import worker_v238
 from app.agent import evidence_pipeline_v222
 from app.models import AgentRun, AgentStep, Analysis, ParserJob, ParserWorkbench, ParserWorkbenchJob, VLLMProfile, utcnow
 from app.services import parser_job_dispatch
@@ -25,7 +26,7 @@ from app.services.parser_rule_versions import create_rule_bundle_version, read_r
 from app.services.parser_versions import BASELINE_ID, activate_parser_version, ensure_parser_state, pin_parser
 from app.services.parser_workbench import _parse_candidate
 from app.services.prompt_snapshots import load_analysis_prompt
-from app.services.worker_runtime_v237 import process_moduagent
+from app.services.worker_runtime_v238 import process_moduagent
 from test_candidate_configurations import candidate
 from test_compact_prompt_preservation import ENGINE_SHA256 as OLD_ENGINE_HASHES
 from test_parser_lifecycle import review_record
@@ -53,7 +54,7 @@ def enqueue(client, event_payload, service_headers, *, raw):
                           model_name="synthetic-only-model", status="production"))
         row = db.get(Analysis, response.json()["id"])
         prompt = load_analysis_prompt(row, client.app.state.crypto)
-        assert prompt.fixed_rules_version == "waf-system-v2.36"
+        assert prompt.fixed_rules_version == "waf-system-v2.38"
         assert prompt.evidence_pipeline["source_catalog_version"] == "evidence-selection-v5"
         db.commit()
     return response.json()["id"], event
@@ -67,8 +68,8 @@ def _parse_stage(client, row, monkeypatch):
     async def forbidden(**_kwargs):
         pytest.fail("Provider execution is outside this synthetic parser integration test")
 
-    monkeypatch.setattr(worker_v236, "_decode_payload_step", stop)
-    monkeypatch.setattr(worker_v236, "execute_structured_agent", forbidden)
+    monkeypatch.setattr(worker_v238, "_decode_payload_step", stop)
+    monkeypatch.setattr(worker_v238, "execute_structured_agent", forbidden)
     with pytest.raises(StopAfterParser, match="^synthetic-stop-after-parser$"):
         process_moduagent(row[0], client.app.state.crypto, row[1], "", .75)
 
@@ -80,7 +81,7 @@ def test_actual_moduagent_worker_reads_pinned_encrypted_bundle_not_new_active_pa
     raw = PRIVATE_MARKER + "\n" + REQUEST + "\nEND-SYNTHETIC"
     analysis_id, _ = enqueue(client, {**event_payload, "waf_vendor": "Fixture-A"}, service_headers, raw=raw)
     crypto, observed = client.app.state.crypto, []
-    actual_apply = worker_v236.apply_parser_snapshot
+    actual_apply = worker_v238.apply_parser_snapshot
 
     def observe(source, snapshot, **kwargs):
         assert hasattr(snapshot, "document")
@@ -88,7 +89,7 @@ def test_actual_moduagent_worker_reads_pinned_encrypted_bundle_not_new_active_pa
         observed.append((source, snapshot["version_id"], kwargs["waf_vendor"]))
         return actual_apply(source, snapshot, **kwargs)
 
-    monkeypatch.setattr(worker_v236, "apply_parser_snapshot", observe)
+    monkeypatch.setattr(worker_v238, "apply_parser_snapshot", observe)
     with client.app.state.session_factory() as db:
         row = db.get(Analysis, analysis_id)
         row.parser_version_id = row.parser_snapshot_json = None
@@ -128,8 +129,8 @@ def test_corrupt_encrypted_bundle_is_blocked_before_actual_parser_or_model(
     def forbidden(*_args, **_kwargs):
         pytest.fail("Corrupt parser provenance reached the parser/model")
 
-    monkeypatch.setattr(worker_v236, "apply_parser_snapshot", forbidden)
-    monkeypatch.setattr(worker_v236, "execute_structured_agent", forbidden)
+    monkeypatch.setattr(worker_v238, "apply_parser_snapshot", forbidden)
+    monkeypatch.setattr(worker_v238, "execute_structured_agent", forbidden)
     with client.app.state.session_factory() as db:
         row = db.get(Analysis, analysis_id)
         row.parser_version_id = row.parser_snapshot_json = None
@@ -340,9 +341,10 @@ def test_genuinely_saved_workbench_candidate_passes_official_preflight_and_promo
     assert not current["drifted"]
 
 
-def test_actual_new_coordinator_preserves_purpose_claims_and_shared_stop(monkeypatch):
+@pytest.mark.parametrize("revision", ["232", "238"], ids=["archived-v232", "current-v238"])
+def test_actual_new_coordinator_preserves_purpose_claims_and_shared_stop(monkeypatch, revision):
     from app import worker
-    from app.services import worker_coordinator_v232 as coordinator
+    coordinator = import_module("app.services.worker_coordinator_v" + revision)
     calls, stop = [], Event()
 
     @contextmanager
@@ -377,9 +379,10 @@ def test_actual_new_coordinator_preserves_purpose_claims_and_shared_stop(monkeyp
         (60, {"purpose": "test", "enforce_limits": True})]
 
 
-def test_actual_new_coordinator_alternates_model_validation_and_parser_admin(monkeypatch):
+@pytest.mark.parametrize("revision", ["232", "238"], ids=["archived-v232", "current-v238"])
+def test_actual_new_coordinator_alternates_model_validation_and_parser_admin(monkeypatch, revision):
     from app import worker
-    from app.services import worker_coordinator_v232 as coordinator
+    coordinator = import_module("app.services.worker_coordinator_v" + revision)
     dispatched, stop = [], Event()
 
     @contextmanager
@@ -414,8 +417,9 @@ def test_actual_new_coordinator_alternates_model_validation_and_parser_admin(mon
 
 @pytest.mark.parametrize("role", ["analysis", "model_test", "both"])
 @pytest.mark.parametrize("failure", [False, True])
-def test_actual_new_entrypoint_shares_stop_drains_display_and_restores_signals(monkeypatch, role, failure):
-    from app import worker_entrypoint_v232 as entry
+@pytest.mark.parametrize("revision", ["232", "238"], ids=["archived-v232", "current-v238"])
+def test_actual_new_entrypoint_shares_stop_drains_display_and_restores_signals(monkeypatch, role, failure, revision):
+    entry = import_module("app.worker_entrypoint_v" + revision)
     calls, signals = [], []
     settings = SimpleNamespace(worker_role=role, database_url="synthetic", data_encryption_key="synthetic", encryption_key_version="synthetic")
     old_display = entry.serve_display

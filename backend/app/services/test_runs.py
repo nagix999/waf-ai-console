@@ -97,7 +97,7 @@ def create_run_record(db, crypto, settings, *, name, idempotency_key, request_ha
     temporary = Analysis()
     pin_analysis_prompt(db, crypto, temporary, version_id=candidate.prompt_policy_version_id if candidate else None)
     from .evidence_editor import capture_editor
-    from .evidence_display_jobs_v3 import DisplayEditorSnapshot, capture_for_purpose
+    from .evidence_display_jobs_v4 import DisplayEditorSnapshot, capture_for_purpose
     editor = candidate_editor if candidate is not None else capture_for_purpose(db, crypto, "test") if mode == "moduagent" and not model_test else None
     display = editor if isinstance(editor, DisplayEditorSnapshot) else None
     if display is not None:
@@ -153,7 +153,7 @@ def create_run_record(db, crypto, settings, *, name, idempotency_key, request_ha
             selected_explanations = defaults.signature_explanation_version_id if defaults else None
         else:
             selected_explanations = None
-        if load_analysis_prompt(run, crypto).fixed_rules_version in {"waf-system-v2.23", "waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32", "waf-system-v2.34", "waf-system-v2.35", "waf-system-v2.36", "waf-system-v2.37"}:
+        if load_analysis_prompt(run, crypto).fixed_rules_version in {"waf-system-v2.23", "waf-system-v2.24", "waf-system-v2.25", "waf-system-v2.26", "waf-system-v2.27", "waf-system-v2.28", "waf-system-v2.29", "waf-system-v2.30", "waf-system-v2.31", "waf-system-v2.32", "waf-system-v2.34", "waf-system-v2.35", "waf-system-v2.36", "waf-system-v2.37", "waf-system-v2.38"}:
             pin_explanations(db, crypto, run, version_id=selected_explanations,
                              selection_origin="candidate" if candidate else "test")
             if model_test is not None:
@@ -232,7 +232,7 @@ def add_run_items(db, crypto, settings, run, rows, *, ai_visible=None, source_re
                     copy_explanations(run, analysis, crypto=crypto)
                     analysis.internal_only = bool(trusted.get("internal_only", False))
                     if run.display_editor_snapshot_ciphertext and not run.model_test_run_id:
-                        from .evidence_display_jobs_v3 import load_snapshot, pin_job
+                        from .evidence_display_jobs_v4 import load_snapshot, pin_job
                         pin_job(db, crypto, analysis, load_snapshot(crypto, run.display_editor_snapshot_ciphertext))
                 if run.model_test_run_id:
                     analysis.model_test_run_id = run.model_test_run_id

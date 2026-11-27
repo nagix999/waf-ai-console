@@ -64,7 +64,7 @@ def _rows_with_display(db, crypto, query, include_evidence):
                 and isinstance(row[1].result_json, dict) and row[1].result_json.get("schema_version") == "waf-analysis-v3"]
             if modern:
                 from .evidence_display_access import read_many_evidence_relations
-                from .evidence_display_jobs_v3 import get_display_views
+                from .evidence_display_jobs_v4 import get_display_views
                 relations = read_many_evidence_relations(db, crypto, modern)
                 views = get_display_views(db, crypto, modern, relations)
         for row in chunk:

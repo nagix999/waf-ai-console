@@ -25,6 +25,14 @@ from test_candidate_configurations import candidate
 pytestmark = pytest.mark.usefixtures("registered_vllm_target")
 
 
+@pytest.fixture
+def archived_v3_admission(monkeypatch):
+    """Keep the original V3 qualification test on an explicit V3 snapshot."""
+    from app.services import evidence_display_jobs_v4 as admission
+    monkeypatch.setattr(admission, "capture_display_profile", lambda profile, *, version=jobs.VERSION:
+        admission.DisplayEditorSnapshot.model_validate(jobs.capture_display_profile(profile, version=version).model_dump()))
+
+
 def synthetic_profile():
     return openai_profile(id="synthetic-profile", provider="vllm", base_url="http://10.0.0.10:8000/v1")
 
@@ -338,7 +346,7 @@ def test_v3_promotion_gate_rechecks_projection_even_when_saved_marker_says_succe
 
 
 def test_completed_projection_fallback_is_not_an_official_success_and_cannot_promote(
-        client, event_payload, candidate, monkeypatch):
+        client, event_payload, archived_v3_admission, candidate, monkeypatch):
     from sqlalchemy import select
     from app.models import TestEvaluation as Evaluation
     from test_official_evaluations import approved_item, execute

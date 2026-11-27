@@ -7,7 +7,7 @@ import { decisionExplanation, provisionalAnalysisNotice } from "./decisionExplan
 import { isResultV3 } from "./assessmentData.js";
 import { decisionConditions, detailEvidence } from "./decisionDetail.js";
 import { evidenceRelationView } from "./evidenceRelations.js";
-import { evidenceDisplayView } from "./evidenceDisplayPlan.js";
+import { evidenceDisplayView, isEvidenceDisplayView } from "./evidenceDisplayPlan.js";
 import { analysisEvidenceMeta, isCoreEvidence, receivedEvidence } from "./analysisEvidenceMeta.js";
 import { evidenceSourceReferences, sharedSourceText } from "./evidenceSourceSharing.js";
 import { disagreementNotice, evidenceSections, legacySignatureNotice, severityMeaning, signatureSummary, verifierDisagreed, wafObservation } from "./decisionSemantics.js";
@@ -135,7 +135,7 @@ export function EvidenceDisplaySummary({ detail, loading = false, stopped = fals
   const w = useR5Words(), display = detail.evidence_display;
   const meta = analysisEvidenceMeta(detail) || analysisEvidenceMeta(detail.result);
   if (meta?.view === "core-v1" || meta?.view === "core-v2") return <section className="panel decision-display-execution"><h2>{w("핵심 근거 전달", "Core evidence delivery")}</h2><CoreEvidenceStatus detail={detail} /><p className="muted">{w("화면과 API는 같은 근거를 사용합니다. 아래 실행 이력에는 분석 당시의 전체 기록이 보존됩니다.", "The screen and API use the same evidence. The execution trace below preserves the complete original analysis record.")}</p></section>;
-  const view = detail.status === "completed" && display?.version === "evidence-display-view-v1"
+  const view = detail.status === "completed" && isEvidenceDisplayView(display)
     ? evidenceDisplayView(detail.result, display) : null;
   if (!view) return null;
   return <section className="panel decision-display-execution"><h2>{w("현재 근거 정리", "Current evidence organization")}</h2>

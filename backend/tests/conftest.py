@@ -16,11 +16,12 @@ def legacy_evidence_editor_admissions(monkeypatch, request):
     historical = {"legacy_v220_admissions", "legacy_v221_admissions", "legacy_evidence_editor_admissions"}
     if not any(historical.intersection(marker.args) for marker in request.node.iter_markers("usefixtures")):
         return
-    from app.services import evidence_display_jobs, evidence_display_jobs_v2, evidence_display_jobs_v3
+    from app.services import evidence_display_jobs, evidence_display_jobs_v2, evidence_display_jobs_v3, evidence_display_jobs_v4
     from app.services.evidence_editor import capture_editor_profile
     monkeypatch.setattr(evidence_display_jobs, "capture_display_profile", capture_editor_profile)
     monkeypatch.setattr(evidence_display_jobs_v2, "capture_display_profile", capture_editor_profile)
     monkeypatch.setattr(evidence_display_jobs_v3, "capture_display_profile", capture_editor_profile)
+    monkeypatch.setattr(evidence_display_jobs_v4, "capture_display_profile", capture_editor_profile)
 
 
 @pytest.fixture(autouse=True)

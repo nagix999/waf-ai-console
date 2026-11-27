@@ -1,4 +1,4 @@
-"""Withdraw the candidate for new work without rewriting stored executions."""
+"""Replay the archived v236 rollback without changing its historical behavior."""
 import hashlib
 import json
 from types import SimpleNamespace
@@ -6,7 +6,8 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from app.agent import legacy_prompts_v236, legacy_prompts_v237, prompts
+from app.agent import legacy_prompts_v236, legacy_prompts_v237, prompts as current_prompts
+from app.agent import legacy_prompts_v236 as prompts
 from app.agent.evidence_pipeline_v236 import pipeline_artifact as previous_pipeline
 from app.agent.evidence_pipeline_v237 import pipeline_artifact as archived_pipeline
 from app.models import Analysis, ProductionPromotion, TestRun as NamedRun, VLLMProfile
@@ -23,7 +24,10 @@ from test_agent_openai import completion, install_http
 from test_flat_evidence_v228 import wire
 
 
-def test_new_instructions_are_exact_v236_not_a_relabeled_v237():
+pytestmark = pytest.mark.usefixtures("legacy_v236_admissions")
+
+
+def test_archived_rollback_instructions_are_exact_v236_not_a_relabeled_v237():
     for name in ("PROMPT_VERSION", "FIXED_RULES_VERSION", "FIXED_INSTRUCTIONS", "PRIMARY_ROLE",
                  "VERIFIER_ROLE", "DEFAULT_POLICY_NAME", "DEFAULT_POLICY_TEXT",
                  "BASE_INSTRUCTIONS", "PRIMARY_INSTRUCTIONS", "VERIFIER_INSTRUCTIONS"):
@@ -32,8 +36,8 @@ def test_new_instructions_are_exact_v236_not_a_relabeled_v237():
     assert prompts.build_role_instructions("Synthetic policy") == legacy_prompts_v236.build_role_instructions("Synthetic policy")
     assert "contributes_to_evidence_ids" not in prompts.FIXED_INSTRUCTIONS
     assert "related_evidence_ids" in prompts.FIXED_INSTRUCTIONS
-    assert {"waf-system-v2.36", "waf-system-v2.37"} <= prompts.SEMANTIC_RULES_VERSIONS
-    assert {"waf-system-v2.36", "waf-system-v2.37"} <= prompts.V3_RULES_VERSIONS
+    assert {"waf-system-v2.36", "waf-system-v2.37"} <= current_prompts.SEMANTIC_RULES_VERSIONS
+    assert {"waf-system-v2.36", "waf-system-v2.37"} <= current_prompts.V3_RULES_VERSIONS
 
 
 def test_frozen_pipelines_and_the_withdrawn_prompt_remain_exact():

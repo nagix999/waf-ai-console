@@ -15,7 +15,9 @@ VERSION_V2 = "core-evidence-v2"
 
 def build_response_result(result, display_view):
     """Route only an explicitly versioned new view to response-only grouping."""
-    if display_view.get("version") == "evidence-display-view-v2":
+    if display_view.get("version") == "evidence-display-view-v3":
+        from .core_evidence_v4 import build_core_result
+    elif display_view.get("version") == "evidence-display-view-v2":
         from .core_evidence_v2 import build_core_result
     else:
         from .core_evidence_v3 import build_core_result
@@ -41,7 +43,7 @@ def to_core_detail(db, crypto, analysis, *, result_version="v3", display_view=UN
         display_view = read_display_view(db, crypto, analysis)
     if not isinstance(display_view, dict):
         raise StoredResultInvalid()
-    if display_view.get("version") == "evidence-display-view-v2":
+    if display_view.get("version") in {"evidence-display-view-v2", "evidence-display-view-v3"}:
         metadata["version"] = VERSION_V2
     if display_view.get("status") in {"pending", "running"}:
         # The DB decision is complete, but the response promised by this API

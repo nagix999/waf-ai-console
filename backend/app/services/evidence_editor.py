@@ -23,7 +23,7 @@ class EditorSnapshot(BaseModel):
 
 
 def capture_editor(db, purpose, primary):
-    from .evidence_display_jobs_v3 import SUPPORTED_VERSIONS, has_job_for_active_run
+    from .evidence_display_jobs_v4 import SUPPORTED_VERSIONS, has_job_for_active_run
     from .prompt_snapshots import approved_production_record
     if has_job_for_active_run(db):
         return None  # New independently pinned display never runs in the core.
@@ -51,7 +51,7 @@ def capture_editor_profile(profile, *, db=None):
         if approved is not None:
             try:
                 expected = approved.snapshot_json["evidence_editor"]
-                from .evidence_display_jobs_v3 import SUPPORTED_VERSIONS, capture_display_profile, editor_metadata
+                from .evidence_display_jobs_v4 import SUPPORTED_VERSIONS, capture_display_profile, editor_metadata
                 if expected.get("version") in SUPPORTED_VERSIONS:
                     selected = capture_display_profile(profile, version=expected["version"])
                     if editor_metadata(selected) != expected:

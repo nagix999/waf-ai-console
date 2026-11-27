@@ -31,24 +31,34 @@ def clean_display_view(result, display_view):
     """Allowlist an administrator sidecar before exports or renderer IPC."""
     if not isinstance(display_view, dict) or result.get("schema_version") != "waf-analysis-v3":
         return None
-    from ..agent.evidence_relations import validate_evidence_relations
-    from .evidence_display_plan import build_display_plan, validate_display_plan
+    current = display_view.get("version") == "evidence-display-view-v3"
+    if current:
+        from ..agent.evidence_relations_v238 import validate_evidence_relations
+        from .evidence_display_plan_v3 import build_display_plan, validate_display_plan
+    else:
+        from ..agent.evidence_relations import validate_evidence_relations
+        from .evidence_display_plan import build_display_plan, validate_display_plan
+    relations_version = "evidence-relations-v2" if current else "evidence-relations-v1"
     try:
         relations = validate_evidence_relations(display_view.get("relations") or {
-            "version": "evidence-relations-v1", "groups": []}, result["evidence"])
+            "version": relations_version, "groups": []}, result["evidence"])
         plan = validate_display_plan(result, relations, display_view["plan"])
         status = display_view.get("status")
         if status not in {"disabled", "pending", "running", "completed", "skipped", "fallback"}:
             raise ValueError()
     except (ValueError, TypeError, KeyError):
         # Invalid presentation metadata must not conceal a single source.
-        relations = {"version": "evidence-relations-v1", "groups": []}
+        if current:
+            # Essential counter-evidence links cannot be discarded to make a
+            # malformed current plan appear valid. The caller uses full data.
+            return None
+        relations = {"version": relations_version, "groups": []}
         try:
             plan = build_display_plan(result, relations, status="fallback", reason="display_record_invalid")
         except (ValueError, TypeError, KeyError):
             return None
         status = "fallback"
-    return {"version": "evidence-display-view-v1", "status": status,
+    return {"version": "evidence-display-view-v3" if current else "evidence-display-view-v1", "status": status,
             "relations": relations, "plan": plan, "metadata": {}}
 
 

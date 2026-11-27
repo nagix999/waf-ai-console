@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { buildSync } from "esbuild";
 import { createElement } from "react";
@@ -14,7 +15,7 @@ import { relationFixture, relationMapping, sharedRelationFixture } from "../scri
 const bundle = buildSync({ entryPoints: [fileURLToPath(new URL("./AnalysisDecision.jsx", import.meta.url))], bundle: true, write: false, platform: "node", format: "cjs", packages: "external", jsx: "automatic", loader: { ".css": "empty", ".md": "text" }, logLevel: "silent" });
 const module = { exports: {} };
 runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, require: createRequire(import.meta.url), process, URL, Date });
-const { DecisionHero, EvidenceCards, DecisionConditions, TechnicalInterpretation, DecisionContext, ExecutionView } = module.exports;
+const { DecisionHero, EvidenceCards, EvidenceDisplaySummary, DecisionConditions, TechnicalInterpretation, DecisionContext, ExecutionView } = module.exports;
 const render = (component, props) => renderToStaticMarkup(createElement(component, props));
 const fixture = () => ({ id: "private-id", event_id: "private-event-id", status: "completed", analysis_purpose: "production", model_profile: "saved-model", prompt_version: "saved-prompt", result: {
   verdict: "inconclusive", summary_ko: "구분 조건을 확인해야 합니다.", input_truncated: false,
@@ -110,6 +111,25 @@ test("shared canonical relation renders one explanation and preserves both analy
   assert.match(html, /1차 분석 \/ 추가 검증/);
   assert.equal((html.match(/함께 본 원문 1개 보기/g) || []).length, 1);
   assert.match(html, /근거 2 원문 보기/);
+});
+test("mixed v2 source links keep opposing explanations visible with original role labels and safe source excerpts", () => {
+  const data = JSON.parse(readFileSync(new URL("../../backend/tests/fixtures/evidence_display_plan_v3.json", import.meta.url)));
+  const detail = { status: "completed", result: data.result, evidence_display: data.view }, before = JSON.stringify(detail);
+  const html = render(EvidenceCards, { detail, onViewInput() {} });
+  for (const item of data.result.evidence.slice(0, 2)) {
+    assert.equal(html.split(item.interpretation_ko).length - 1, 1);
+    assert.ok(html.includes(item.excerpt));
+  }
+  assert.match(html, /direction-attack_request/); assert.match(html, /direction-normal_request/);
+  assert.match(html, /함께 본 원문 1개 보기/); assert.match(html, /1차 분석/);
+  assert.doesNotMatch(html, /추가 검증|정리 실패|evidence-relations-v2|representative_evidence_id/);
+  assert.equal(JSON.stringify(detail), before);
+});
+test("execution recognizes the v3 asynchronous display view without fabricating an additional model step", () => {
+  const data = JSON.parse(readFileSync(new URL("../../backend/tests/fixtures/evidence_display_plan_v3.json", import.meta.url)));
+  const detail = { status: "completed", result: data.result, evidence_display: data.view };
+  const html = render(EvidenceDisplaySummary, { detail });
+  assert.match(html, /현재 근거 정리/); assert.doesNotMatch(html, /정리 실패|상태를 확인하지 못했습니다/);
 });
 test("unavailable or invalid relation records leave individual evidence visible with retry", () => {
   const result = relationFixture();

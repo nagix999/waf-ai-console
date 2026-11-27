@@ -1,5 +1,6 @@
 import { detailEvidence } from "./decisionDetail.js";
 import { isResultV3 } from "./assessmentData.js";
+import { validRelationOrigins } from "./evidenceRelationOrigins.js";
 
 const record = value => value !== null && typeof value === "object" && !Array.isArray(value);
 const exactKeys = (value, keys) => record(value) && Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
@@ -10,7 +11,7 @@ const roles = ["primary", "verifier"];
 export function evidenceRelationView(result, value) {
   const original = () => ({ enabled: false, invalid: value != null, items: detailEvidence(result), rows: null });
   if (value == null) return original();
-  if (!isResultV3(result) || !exactKeys(value, ["version", "groups"]) || value.version !== "evidence-relations-v1"
+  if (!isResultV3(result) || !exactKeys(value, ["version", "groups"]) || !["evidence-relations-v1", "evidence-relations-v2"].includes(value.version)
     || !Array.isArray(value.groups) || value.groups.length > 10) return original();
   if (!value.groups.length) return { ...original(), invalid: false };
   const items = detailEvidence(result, { preserveEvidence: true }), indexed = new Map(items.map(item => [item.evidence_id, item]));
@@ -18,6 +19,7 @@ export function evidenceRelationView(result, value) {
   const roleOf = item => Array.isArray(item?.origins) ? [...new Set(item.origins.map(origin => origin?.role).filter(role => roles.includes(role)))] : [];
   if (items.some(item => !/^e[1-9][0-9]?$/.test(item.evidence_id) || !roleOf(item).length
     || !["attack_request", "normal_request", "context"].includes(item.supports))) return original();
+  if (value.version === "evidence-relations-v2" && !validRelationOrigins(items)) return original();
   const representatives = new Set(), counts = { primary: 0, verifier: 0 }, groups = [];
   for (const group of value.groups) {
     if (!exactKeys(group, ["role", "representative_evidence_id", "related_evidence_ids"]) || !roles.includes(group.role)
@@ -26,7 +28,9 @@ export function evidenceRelationView(result, value) {
     if (new Set(ids).size !== ids.length || ids.some(id => typeof id !== "string" || !indexed.has(id) || !roleOf(indexed.get(id)).includes(group.role))
       || representatives.has(key) || ++counts[group.role] > 5) return original();
     const sides = new Set(ids.map(id => indexed.get(id).supports));
-    if (sides.has("attack_request") && sides.has("normal_request")) return original();
+    // Required references may include counter-evidence in v2. This is not
+    // permission to merge or reclassify those independent interpretations.
+    if (value.version === "evidence-relations-v1" && sides.has("attack_request") && sides.has("normal_request")) return original();
     representatives.add(key);
     groups.push({ role: group.role, representative: indexed.get(ids[0]), related: ids.slice(1).map(id => indexed.get(id)) });
   }

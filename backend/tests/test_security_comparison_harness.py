@@ -7,7 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from scripts import compare_security_analysis_v3 as comparison
-from app.agent import legacy_prompts_v237
+from app.agent import legacy_prompts_v236, legacy_prompts_v237
 from app.agent.contracts import SecurityAnalysisOutput, SecurityAnalysisOutputV216, SecurityAnalysisOutputV220, SemanticAssessmentOutput
 from app.agent.contracts_v224 import SecurityAnalysisOutputV224
 from app.agent.contracts_v227 import SecurityAnalysisOutputV227
@@ -18,8 +18,9 @@ from app.agent.contracts_v231 import SecurityAnalysisOutputV231
 from app.agent.contracts_v232 import SecurityAnalysisOutputV232
 from app.agent.contracts_v234 import SecurityAnalysisOutputV234
 from app.agent.contracts_v237 import SecurityAnalysisOutputV237
+from app.agent.contracts_v238 import SecurityAnalysisOutputV238
 from app.agent.executor import AgentCallResult
-from app import worker_v221, worker_v222, worker_v223, worker_v224, worker_v225, worker_v226, worker_v227, worker_v232, worker_v234, worker_v235, worker_v236, worker_v237
+from app import worker_v221, worker_v222, worker_v223, worker_v224, worker_v225, worker_v226, worker_v227, worker_v232, worker_v234, worker_v235, worker_v236, worker_v237, worker_v238
 from app.config import Settings
 from app.database import Base, build_engine
 from app.models import VLLMProfile, VLLMTestRun, utcnow
@@ -69,8 +70,9 @@ def test_changed_frozen_contract_refuses_diagnostic_before_runtime(monkeypatch):
 
 def test_manifest_models_match_pinned_worker_contracts():
     assert comparison.wire_model_for_revision(comparison.frozen_diagnostic_revision()) is SecurityAnalysisOutput
-    assert comparison.prompts.FIXED_RULES_VERSION == "waf-system-v2.36"
-    assert comparison.wire_model_for_revision(comparison.prompts) is SecurityAnalysisOutputV234
+    assert comparison.prompts.FIXED_RULES_VERSION == "waf-system-v2.38"
+    assert comparison.wire_model_for_revision(comparison.prompts) is SecurityAnalysisOutputV238
+    assert comparison.wire_model_for_revision(legacy_prompts_v236) is SecurityAnalysisOutputV234
     assert comparison.wire_model_for_revision(legacy_prompts_v237) is SecurityAnalysisOutputV237
     assert comparison.wire_model_for_revision(comparison.legacy_prompts_v232) is SecurityAnalysisOutputV232
     assert comparison.wire_model_for_revision(comparison.legacy_prompts_v227) is SecurityAnalysisOutputV227
@@ -229,7 +231,7 @@ def test_mocked_comparison_preserves_source_and_aborts_quota(tmp_path, monkeypat
         if quota:
             return AgentCallResult(None, "synthetic-quota", None, "error", None, "synthetic-safe-error",
                                    {"error_summary": {"code": "openai_http_429"}})
-        if kwargs["output_model"] in {SecurityAnalysisOutputV232, SecurityAnalysisOutputV234, SecurityAnalysisOutputV237}:
+        if kwargs["output_model"] in {SecurityAnalysisOutputV232, SecurityAnalysisOutputV234, SecurityAnalysisOutputV237, SecurityAnalysisOutputV238}:
             from test_flat_evidence_v228 import wire
             document = wire()
             source = next(item for item in json.loads(kwargs["user_input"])["evidence_candidates"]["items"]
@@ -267,6 +269,7 @@ def test_mocked_comparison_preserves_source_and_aborts_quota(tmp_path, monkeypat
     monkeypatch.setattr(worker_v235, "execute_structured_agent", execute)
     monkeypatch.setattr(worker_v236, "execute_structured_agent", execute)
     monkeypatch.setattr(worker_v237, "execute_structured_agent", execute)
+    monkeypatch.setattr(worker_v238, "execute_structured_agent", execute)
     directory = tmp_path / "safe-results"
     result = comparison.main(["--execute-model-calls", "--profile-name", "Synthetic isolated profile",
                               "--output-dir", str(directory)])
@@ -298,6 +301,12 @@ def test_mocked_comparison_preserves_source_and_aborts_quota(tmp_path, monkeypat
     assert "backend/app/services/worker_runtime_v234.py" in manifest["pipeline_source_hashes"]
     assert "backend/app/agent/contracts_v234.py" in manifest["pipeline_source_hashes"]
     assert "backend/app/agent/executor_v234.py" in manifest["pipeline_source_hashes"]
+    for path in (
+        "backend/app/agent/contracts_v238.py", "backend/app/agent/executor_v238.py",
+        "backend/app/agent/evidence_relations_v238.py", "backend/app/worker_v238.py",
+        "backend/app/services/worker_runtime_v238.py", "backend/app/worker_entrypoint_v238.py",
+    ):
+        assert path in manifest["pipeline_source_hashes"]
     checkpoints = list(directory.glob("waf-system-*.json"))
     assert len(checkpoints) == (1 if quota else 4)
     text_output = capsys.readouterr().out + "".join(path.read_text() for path in directory.glob("*.json"))

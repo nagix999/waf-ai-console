@@ -257,6 +257,17 @@ No actual model, tokenizer, latency or accuracy improvement is claimed.
 
 ## Submitted-source blocks and evidence links candidate v2.20
 
+Current v2.38 candidates retain the flat v2.36 wire fields and allow required
+dependencies across attack/normal support classifications. Mixed labels alone
+are not an execution error, an interpretation conflict or a reason to invoke
+Verifier or force a hold. Exact sources, reference integrity, dependency closure
+and decisive-request anchors remain mandatory. Integrated meaning stays in the
+representative's existing `interpretation_ko`; the editor selects existing text
+and never merges opposite support classifications. Public v3 fields are unchanged.
+Only new internal records use `evidence-relations-v2` and versioned display
+processors. Historical v1 relations and pinned executions keep their old rules.
+The following describes the original v2.20 contract.
+
 V2.20 uses `agent-input-v2` and `evidence-selection-v3`. Every submitted
 payload character belongs to one exact source block of at most 300 characters;
 there is no additional `event.payload` copy. The full serialized input budget

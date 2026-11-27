@@ -8,7 +8,7 @@ import json
 
 from sqlalchemy import desc, func, select
 
-from ..agent.evidence_relations import validate_evidence_relations
+from .evidence_relation_dispatch import empty_relations, validate_saved_relations
 from ..models import AgentRun, AgentStep
 
 
@@ -18,8 +18,8 @@ class EvidenceDisplayReadError(ValueError):
 
 
 def read_evidence_relations(db, crypto, analysis):
-    empty = {"version": "evidence-relations-v1", "groups": []}
     result = analysis.result_json
+    empty = empty_relations(result)
     if analysis.status != "completed" or not isinstance(result, dict) or result.get("schema_version") != "waf-analysis-v3":
         return empty
     latest = db.execute(select(AgentRun.id, AgentRun.status).where(AgentRun.analysis_id == analysis.id)
@@ -33,7 +33,7 @@ def read_evidence_relations(db, crypto, analysis):
 
 
 def _decode_relations(crypto, result, ciphertext):
-    empty = {"version": "evidence-relations-v1", "groups": []}
+    empty = empty_relations(result)
     if not ciphertext:
         return empty
     try:
@@ -46,7 +46,7 @@ def _decode_relations(crypto, result, ciphertext):
         canonical = validate_new_result(result)
         if saved.get("schema_version") != "waf-analysis-v3" or saved.get("evidence") != canonical["evidence"]:
             raise ValueError()
-        return validate_evidence_relations(saved["evidence_relations"], canonical["evidence"])
+        return validate_saved_relations(saved["evidence_relations"], canonical)
     except (ValueError, TypeError, KeyError, UnicodeError):
         raise EvidenceDisplayReadError() from None
 
@@ -76,6 +76,6 @@ def read_many_evidence_relations(db, crypto, analyses):
 
 def read_display_view(db, crypto, analysis):
     """An audited HTTP/export read must never queue work or call a model."""
-    from .evidence_display_jobs_v3 import get_display_view
+    from .evidence_display_jobs_v4 import get_display_view
     relations = read_evidence_relations(db, crypto, analysis)
     return get_display_view(db, crypto, analysis, relations=relations)
