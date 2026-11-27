@@ -30,11 +30,24 @@ def fixture(web="frontend"):
         model["services"][role] = service
         rows[role] = {"Id": "container-" + role, "Image": "sha256:old", "RestartCount": 0,
             "Config": {"Image": service["image"], "Cmd": service["command"], "Entrypoint": None,
-                       "Env": [f"{k}={v}" for k, v in env.items()], "Labels": {}, "Hostname": role},
-            "State": {"Running": True}, "HostConfig": {"PortBindings": redeploy.ports(service)},
+                       "Env": [f"{k}={v}" for k, v in env.items()],
+                       "Labels": {"com.docker.compose.project": "waf-test",
+                                  "com.docker.compose.service": role,
+                                  "com.docker.compose.project.working_dir": str(redeploy.ROOT)},
+                       "Hostname": role},
+            "State": {"Running": True, "Status": "running", "Paused": False,
+                      "Restarting": False, "Dead": False,
+                      "StartedAt": "2026-11-27T01:00:00Z", "FinishedAt": "0001-01-01T00:00:00Z"},
+            "HostConfig": {"PortBindings": redeploy.ports(service)},
             "Mounts": [{"Type": "volume", "Name": "existing-data", "Destination": "/data", "RW": True}] if backend else [],
             "NetworkSettings": {"Networks": {"existing-network": {}}}}
     return model, rows
+
+
+def stop_services(rows, roles=None, status="exited"):
+    for role in rows if roles is None else roles:
+        rows[role]["State"].update(Running=False, Status=status,
+                                  FinishedAt="2026-11-27T02:00:00Z")
 
 
 class ConfigurationTests(unittest.TestCase):
@@ -58,6 +71,72 @@ class ConfigurationTests(unittest.TestCase):
         for web in ("frontend", "waf-web"):
             model, rows = fixture(web)
             self.assertEqual(redeploy.validate(model, rows), "existing-data")
+
+    def test_existing_stopped_services_only_allowed_for_preflight(self):
+        for web in ("frontend", "waf-web"):
+            for stopped in (("api",), ("worker",), ("model-tester",), ("api", "worker", "model-tester", web)):
+                for status in ("exited", "created"):
+                    with self.subTest(web=web, stopped=stopped, status=status):
+                        model, rows = fixture(web)
+                        stop_services(rows, stopped, status)
+                        self.assertEqual(redeploy.validate(model, rows, allow_stopped=True), "existing-data")
+                        with self.assertRaises(DeployError):
+                            redeploy.validate(model, rows)
+
+    def test_stopped_services_do_not_bypass_configuration_or_missing_service_checks(self):
+        for mutation in (
+            lambda model, rows: model["services"]["api"]["environment"].update(WAF_AGENT_MODE="stub"),
+            lambda model, rows: model["volumes"]["data"].update(name="another-volume"),
+            lambda model, rows: model["services"]["frontend"]["ports"][0].update(published="28080"),
+            lambda model, rows: rows.pop("worker"),
+        ):
+            with self.subTest(mutation=mutation):
+                model, rows = fixture()
+                stop_services(rows)
+                mutation(model, rows)
+                with self.assertRaises(DeployError):
+                    redeploy.validate(model, rows, allow_stopped=True)
+
+    def test_transitional_invalid_or_unknown_states_are_always_refused(self):
+        changes = (
+            {"Running": True, "Paused": True},
+            {"Running": True, "Restarting": True},
+            {"Running": False, "Status": "dead", "Dead": True},
+            {"Running": False, "Status": "removing"},
+            {"Running": False, "Status": "restarting", "Restarting": True},
+            {"Running": False, "Status": "unknown"},
+            {"Running": False, "Status": "running"},
+            {"Running": True, "Status": "exited"},
+            {"Running": False, "Status": None},
+        )
+        for change in changes:
+            with self.subTest(change=change):
+                model, rows = fixture()
+                rows["api"]["State"].update(change)
+                with self.assertRaises(DeployError):
+                    redeploy.validate(model, rows, allow_stopped=True)
+                with self.assertRaises(DeployError):
+                    redeploy.lifecycle_snapshot(rows)
+
+    def test_lifecycle_snapshot_detects_restarts_without_retaining_secrets(self):
+        _, rows = fixture()
+        original = redeploy.lifecycle_snapshot(rows)
+        self.assertNotIn("synthetic$test", json.dumps(original))
+        self.assertNotIn("WAF_DATA_ENCRYPTION_KEY", json.dumps(original))
+        for field, value in (("StartedAt", "2026-11-27T03:00:00Z"),
+                             ("FinishedAt", "2026-11-27T02:59:00Z")):
+            with self.subTest(field=field):
+                changed = deepcopy(rows)
+                changed["api"]["State"][field] = value
+                self.assertNotEqual(redeploy.lifecycle_snapshot(changed), original)
+        for field, value in (("Id", "replacement-api"), ("RestartCount", 1)):
+            with self.subTest(field=field):
+                changed = deepcopy(rows)
+                changed["api"][field] = value
+                self.assertNotEqual(redeploy.lifecycle_snapshot(changed), original)
+        changed = deepcopy(rows)
+        stop_services(changed, ("worker",))
+        self.assertNotEqual(redeploy.lifecycle_snapshot(changed), original)
 
     def test_refuse_setting_port_volume_network_and_command_drift(self):
         changes = (
@@ -257,20 +336,126 @@ class DatabaseTests(unittest.TestCase):
             redeploy_db.check(self.db)
 
 
+class IdlePreflightTests(unittest.TestCase):
+    def task(self, stopped=False):
+        task = redeploy.Redeploy(Namespace(project=None, file=None, env_file=None))
+        task.model, task.rows = fixture()
+        task.volume = "existing-data"
+        task.db_code = "synthetic read-only database check"
+        if stopped:
+            stop_services(task.rows, ("api",))
+        return task
+
+    def test_running_api_uses_existing_exec_without_starting_services(self):
+        task = self.task()
+        with patch.object(task, "run", return_value="") as run:
+            task.idle()
+        command = run.call_args.args[0]
+        self.assertEqual(command, ["docker", "exec", "container-api", "python", "-c",
+                                   task.db_code, "idle", "/data/waf.db"])
+
+    def test_stopped_api_uses_existing_immutable_image_and_read_only_exact_volume(self):
+        task = self.task(stopped=True)
+        with patch.object(task, "run", return_value="") as run:
+            task.idle()
+        command = run.call_args.args[0]
+        self.assertEqual(command[:3], ["docker", "run", "--rm"])
+        self.assertEqual(command[command.index("--pull") + 1], "never")
+        self.assertEqual(command[command.index("--network") + 1], "none")
+        self.assertEqual(command[command.index("--user") + 1], "0:0")
+        self.assertIn("--read-only", command)
+        mounts = [command[index + 1] for index, value in enumerate(command) if value == "--mount"]
+        self.assertEqual(mounts, ["type=volume,source=existing-data,target=/data,readonly"])
+        self.assertEqual(command[command.index("--entrypoint"):],
+                         ["--entrypoint", "python", "sha256:old", "-c", task.db_code,
+                          "idle", "/data/waf.db"])
+        self.assertNotIn("old-image:api", command)
+        self.assertNotIn("compose", command)
+        self.assertIsNone(task.directory)
+
+    def test_failed_stopped_database_check_never_starts_api_or_workers(self):
+        task = self.task(stopped=True)
+        with patch.object(task, "run", side_effect=DeployError("synthetic database failure")) as run:
+            with self.assertRaises(DeployError):
+                task.idle()
+        self.assertEqual(run.call_count, 1)
+        self.assertFalse(task.rows["api"]["State"]["Running"])
+
+    def test_postdeploy_runtime_still_rejects_stopped_containers(self):
+        task = self.task(stopped=True)
+        task.web = "frontend"
+        task.compose = lambda *args, **kwargs: "container-api container-worker container-model-tester container-frontend"
+        task.inspect = lambda ids: list(task.rows.values())
+        with self.assertRaises(DeployError):
+            task.verify_runtime(task.model)
+
+    def test_discovery_accepts_existing_stopped_stack_without_starting_it(self):
+        for stopped in (("api",), ("worker",), ("api", "worker", "model-tester", "frontend")):
+            with self.subTest(stopped=stopped):
+                task = self.task()
+                stop_services(task.rows, stopped)
+                model, rows = task.model, task.rows
+                commands = []
+                task.runner.env = {}
+                def run(command, *args, **kwargs):
+                    commands.append(command)
+                    if command[:3] == ["docker", "compose", "version"]:
+                        return "Docker Compose version v2.synthetic"
+                    if command[:3] == ["docker", "context", "inspect"]:
+                        return json.dumps("unix:///var/run/docker.sock")
+                    if command[:3] == ["docker", "ps", "-aq"]:
+                        return " ".join(row["Id"] for row in rows.values())
+                    if command[:3] == ["docker", "ps", "-q"]:
+                        return " ".join(row["Id"] for row in rows.values() if row["State"]["Running"])
+                    if command[:2] == ["docker", "inspect"]:
+                        return json.dumps([row for row in rows.values() if row["Id"] in command[2:]])
+                    if command[:3] == ["docker", "compose", "synthetic-config"]:
+                        return json.dumps(model)
+                    if command[:2] in (["docker", "exec"], ["docker", "run"]):
+                        return ""
+                    self.fail("Unexpected Docker command: " + repr(command))
+                task.run = run
+                with patch.object(redeploy, "existing_compose_command", return_value=["docker", "compose", "synthetic-config"]):
+                    task.discover()
+                self.assertEqual(task.volume, "existing-data")
+                self.assertEqual(task.project, "waf-test")
+                self.assertEqual([role for role, row in task.rows.items() if not row["State"]["Running"]], list(stopped))
+                self.assertFalse(any("up" in command or "start" in command or "stop" in command or "build" in command for command in commands))
+
+    def test_no_existing_containers_remains_a_new_install_error(self):
+        task = self.task()
+        task.runner.env = {}
+        def run(command, *args, **kwargs):
+            if command[:3] == ["docker", "compose", "version"]:
+                return "Docker Compose version v2.synthetic"
+            if command[:3] == ["docker", "context", "inspect"]:
+                return json.dumps("unix:///var/run/docker.sock")
+            if command[:3] == ["docker", "ps", "-aq"]:
+                return ""
+            self.fail("Unexpected Docker command: " + repr(command))
+        task.run = run
+        with self.assertRaisesRegex(DeployError, "신규 설치"):
+            task.discover()
+
+
 class WorkflowTests(unittest.TestCase):
-    def task(self, root, fail=None):
+    def task(self, root, fail=None, initially_stopped=(), lifecycle_change=None):
         task = redeploy.Redeploy(Namespace(project=None, file=None, env_file=None))
         task.project, task.volume, task.web = "waf-test", "existing-data", "frontend"
         task.model, task.rows = fixture()
+        stop_services(task.rows, initially_stopped)
         task.db_code = "synthetic helper"
         actions = []
         def compose(*args, **kwargs):
             actions.append(("compose", *args))
             if fail == args[0]:
                 raise DeployError("synthetic_failure")
+            if args[0] == "build" and lifecycle_change:
+                lifecycle_change(task.rows)
             if args[0] == "stop":
                 for row in task.rows.values():
                     row["State"]["Running"] = False
+                    row["State"]["Status"] = "exited"
         def helper(image, command, **kwargs):
             action = ("permissions" if command[0] == "python" and command[1] == "/opt/waf-data-permissions.py"
                       else command[3] if command[0] == "python" else "migrate")
@@ -287,14 +472,14 @@ class WorkflowTests(unittest.TestCase):
         task.verify_runtime = lambda model: actions.append(("verified",))
         return task, actions
 
-    def execute(self, fail=None):
+    def execute(self, fail=None, initially_stopped=(), lifecycle_change=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "deploy").mkdir()
             (root / "deploy/redeploy_db.py").touch()
-            task, actions = self.task(root, fail)
+            task, actions = self.task(root, fail, initially_stopped, lifecycle_change)
             with patch.object(redeploy, "ROOT", root), redirect_stdout(io.StringIO()):
-                if fail:
+                if fail or lifecycle_change:
                     with self.assertRaises(DeployError):
                         task.deploy()
                 else:
@@ -320,6 +505,41 @@ class WorkflowTests(unittest.TestCase):
         self.assertFalse(task.stopped)
         self.assertFalse(any(action[:2] == ("compose", "stop") for action in actions))
 
+    def test_deploy_starts_new_services_after_backup_when_old_services_are_stopped(self):
+        for stopped in (("api",), ("worker",), ("api", "worker", "model-tester", "frontend")):
+            with self.subTest(stopped=stopped):
+                task, actions = self.execute(initially_stopped=stopped)
+                up = [action for action in actions if action[:2] == ("compose", "up")]
+                self.assertEqual(len(up), 2)
+                self.assertEqual(up[0][-1], "api")
+                self.assertEqual(up[1][-3:], ("worker", "model-tester", "frontend"))
+                self.assertLess(actions.index(("helper", "python", "verify", True)), actions.index(up[0]))
+                self.assertFalse(task.stopped)
+
+    def test_build_failure_keeps_initially_stopped_services_stopped(self):
+        for stopped in (("api",), ("worker",), ("api", "worker", "model-tester", "frontend")):
+            with self.subTest(stopped=stopped):
+                task, actions = self.execute("build", initially_stopped=stopped)
+                for role, row in task.rows.items():
+                    self.assertEqual(row["State"]["Running"], role not in stopped)
+                self.assertFalse(task.stopped)
+                self.assertFalse(any(action[:2] in (("compose", "stop"), ("compose", "up")) for action in actions))
+
+    def test_state_change_during_build_stops_before_stop_backup_or_start(self):
+        def restarted(rows):
+            rows["api"]["State"]["StartedAt"] = "2026-11-27T03:00:00Z"
+            rows["api"]["RestartCount"] += 1
+        task, actions = self.execute(lifecycle_change=restarted)
+        self.assertFalse(task.stopped)
+        self.assertFalse(any(action[0] == "helper" or action[:2] in (("compose", "stop"), ("compose", "up")) for action in actions))
+
+    def test_external_start_of_stopped_service_during_build_is_detected(self):
+        def started(rows):
+            rows["api"]["State"].update(Running=True, Status="running", StartedAt="2026-11-27T03:00:00Z")
+        task, actions = self.execute(initially_stopped=("api",), lifecycle_change=started)
+        self.assertFalse(task.stopped)
+        self.assertFalse(any(action[0] == "helper" or action[:2] in (("compose", "stop"), ("compose", "up")) for action in actions))
+
     def test_rehearsal_failure_never_migrates_live_or_restarts(self):
         task, actions = self.execute("rehearsal")
         self.assertTrue(task.stopped)
@@ -336,6 +556,20 @@ class WorkflowTests(unittest.TestCase):
             with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
                 self.assertEqual(redeploy.main(["--check"]), 0)
             deploy.assert_not_called()
+
+    def test_check_with_all_stopped_never_deploys_or_starts_services(self):
+        original_umask = os.umask(0o077)
+        self.addCleanup(os.umask, original_umask)
+        def discover(task):
+            task.model, task.rows = fixture()
+            stop_services(task.rows)
+            task.project = "waf-test"
+        with patch.object(redeploy.Redeploy, "discover", discover), patch.object(redeploy.Redeploy, "deploy") as deploy, \
+             patch.object(redeploy.Redeploy, "run") as run:
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(redeploy.main(["--check"]), 0)
+            deploy.assert_not_called()
+            run.assert_not_called()
 
 
 if __name__ == "__main__":

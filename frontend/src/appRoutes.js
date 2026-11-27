@@ -24,6 +24,14 @@ export function readAppHash(hash) {
   const route = readRoutePath(path);
   if (!route || query === undefined) return route;
   const params = new URLSearchParams(query);
+  if (route.page === "test") {
+    if (hash.indexOf("?", hash.indexOf("?") + 1) !== -1) return null;
+    if (!params.size) return route;
+    const sources = params.getAll("source_analysis_id");
+    if (sources.length !== 1 || [...params.keys()].some(key => key !== "source_analysis_id") || !uuid.test(sources[0])) return null;
+    return { ...route, sourceAnalysisId: sources[0].toLowerCase() };
+  }
+  if (params.has("source_analysis_id")) return null;
   if (route.page === "feedback") {
     const defaults = initialFeedbackState();
     const state = feedbackUrlState({ ...defaults,
@@ -101,6 +109,7 @@ function readRoutePath(hash) {
 export function writeAppHash(state) {
   const path = state.page === "feedback" ? "#operate/feedback" : writeRoutePath(state);
   const params = new URLSearchParams();
+  if (state.page === "test" && typeof state.sourceAnalysisId === "string" && uuid.test(state.sourceAnalysisId)) params.set("source_analysis_id", state.sourceAnalysisId.toLowerCase());
   if (state.page === "feedback" && state.feedbackState) {
     const safe = feedbackUrlState(state.feedbackState);
     for (const key of ["start", "end", "purpose", "version", "category", "analysis", "limit", "offset"]) {
@@ -165,6 +174,7 @@ function writeLegacyHash(state) {
 export function applyAppRoute(state, route) {
   if (!route) return state;
   const next = { ...state, page: route.page };
+  if (route.page === "test") next.sourceAnalysisId = typeof route.sourceAnalysisId === "string" && uuid.test(route.sourceAnalysisId) ? route.sourceAnalysisId.toLowerCase() : null;
   if (route.page === "feedback") next.feedbackState = route.feedbackState || state.feedbackState || initialFeedbackState();
   if (route.page === "promote") next.promoteRunId = route.promoteRunId;
   if (route.page === "datasets") next.datasetId = route.datasetId;

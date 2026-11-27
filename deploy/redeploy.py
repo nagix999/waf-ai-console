@@ -83,16 +83,39 @@ def web_probe_command(service):
             "awk '/^[[:space:]]*HTTP\\/1\\.[01] / { status=$2 } END { exit(status != 403) }'"]
 
 
-def validate(model, rows):
-    """Fail before mutation if the supplied Compose is not the live deployment."""
+def service_state(row, *, allow_stopped=False):
+    """Accept stable existing containers, never paused/transitional states."""
+    state = row.get("State", {})
+    require(not any(state.get(flag) for flag in ("Paused", "Restarting", "Dead")),
+            "일시정지·재시작 중이거나 손상된 WAF 컨테이너는 상태를 확인한 뒤 다시 실행하세요.")
+    running = state.get("Running") is True and state.get("Status") == "running"
+    stopped = state.get("Running") is False and state.get("Status") in ("exited", "created")
+    require(running or allow_stopped and stopped,
+            "기존 WAF 컨테이너의 상태를 확인할 수 없습니다." if allow_stopped
+            else "재배포 후 모든 WAF 서비스가 실행 중이어야 합니다.")
+    return state
+
+
+def lifecycle_snapshot(rows):
+    """Capture state changes without storing environment variables or errors."""
+    result = {}
+    for role, row in rows.items():
+        state = service_state(row, allow_stopped=True)
+        result[role] = {"id": row["Id"], "restart_count": row.get("RestartCount"),
+            **{key: state.get(key) for key in ("Running", "Status", "Paused", "Restarting", "Dead", "StartedAt", "FinishedAt")}}
+    return result
+
+
+def validate(model, rows, *, allow_stopped=False):
+    """Match the existing deployment; successful deployment still requires running."""
     services = model.get("services", {})
-    require(set(services) == set(rows), "Compose와 실행 중인 서비스가 다릅니다. 기존 배포 파일을 지정하세요.")
+    require(set(services) == set(rows), "Compose와 기존 컨테이너의 서비스가 다릅니다. 기존 배포 파일과 누락된 컨테이너를 확인하세요.")
     require(set(rows) in (set(BACKENDS) | {"frontend"}, set(BACKENDS) | {"waf-web"}),
             "API·두 worker·웹으로 구성된 WAF 전용 프로젝트만 지원합니다.")
     mounts = []
     for role, row in rows.items():
         service = services[role]
-        require(row["State"]["Running"] and not row["State"].get("Paused"), "모든 기존 WAF 서비스가 실행 중이어야 합니다.")
+        service_state(row, allow_stopped=allow_stopped)
         require(service.get("image") == row["Config"]["Image"], "실행 이미지와 Compose가 다릅니다.")
         require(service.get("command", row["Config"]["Cmd"]) == row["Config"]["Cmd"], "기존 실행 명령이 달라졌습니다.")
         require(service.get("entrypoint", row["Config"]["Entrypoint"]) == row["Config"]["Entrypoint"], "기존 entrypoint가 달라졌습니다.")
@@ -195,7 +218,7 @@ class Redeploy:
         command = existing_compose_command(self.project, labels, self.args.file, self.args.env_file)
         self.model = compose_model(json.loads(self.run(command + ["config", "--format", "json"],
              "Compose 해석 실패. --file / --env-file을 확인하세요. 비밀 값 보호를 위해 원문 오류는 숨깁니다.")))
-        self.volume = validate(self.model, self.rows)
+        self.volume = validate(self.model, self.rows, allow_stopped=True)
         # Check every running container, including non-Compose consumers, before migration.
         live_ids = self.run(["docker", "ps", "-q"]).split()
         for row in self.inspect(live_ids) if live_ids else []:
@@ -206,8 +229,19 @@ class Redeploy:
         self.idle()
 
     def idle(self):
-        self.run(["docker", "exec", self.rows["api"]["Id"], "python", "-c", self.db_code, "idle", "/data/waf.db"],
-                 "미완료 분석·모델 검증이 있거나 DB를 확인하지 못했습니다. 작업 종료 후 다시 실행하세요.")
+        api = self.rows["api"]
+        state = service_state(api, allow_stopped=True)
+        if state["Running"]:
+            command = ["docker", "exec", api["Id"], "python", "-c", self.db_code, "idle", "/data/waf.db"]
+        else:
+            # Inspect a stopped deployment without starting its app or workers.
+            # The immutable local image and exact existing volume are reused;
+            # mode=ro in redeploy_db also refuses a missing DB. Never use
+            # immutable=1: an uncheckpointed SQLite WAL must not be ignored.
+            command = ["docker", "run", "--rm", "--pull", "never", "--network", "none", "--read-only", "--user", "0:0",
+                       "--mount", f"type=volume,source={self.volume},target=/data,readonly",
+                       "--entrypoint", "python", api["Image"], "-c", self.db_code, "idle", "/data/waf.db"]
+        self.run(command, "미완료 분석·모델 검증이 있거나 기존 DB를 읽을 수 없습니다. 작업과 DB 상태를 확인한 뒤 다시 실행하세요.")
 
     def compose(self, *args, **kwargs):
         return self.run(["docker", "compose", "--env-file", "/dev/null", "-p", self.project,
@@ -257,6 +291,7 @@ class Redeploy:
 
     def deploy(self, source_root=None):
         source_root = Path(source_root or ROOT)
+        initial_lifecycle = lifecycle_snapshot(self.rows)
         state_root = secure_dir(ROOT / ".local-deploy/redeploy")
         self.directory = Path(tempfile.mkdtemp(prefix="run-", dir=state_root))
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-") + self.directory.name[4:]
@@ -267,12 +302,16 @@ class Redeploy:
         shutil.copy2(source_root / "deploy/redeploy_db.py", self.directory / "redeploy_db.py")
         self.db_code = (self.directory / "redeploy_db.py").read_text()
         self.compose("config", "--quiet", message="새 실행 구성 검사 실패. 서비스는 중지하지 않았습니다.")
-        self.journal("새 이미지 빌드 중 — 기존 서비스는 계속 실행됩니다.")
+        self.journal("새 이미지 빌드 중 — 기존 서비스의 실행·중지 상태를 유지합니다.")
         # Only the backend and web need building; workers share the same immutable tag.
         self.compose("build", "api", self.web, timeout=3600, message="이미지 빌드 실패. 기존 서비스는 중지하지 않았습니다.")
+        roles = {row["Id"]: role for role, row in self.rows.items()}
+        inspected = self.inspect(list(roles))
+        require(len(inspected) == len(roles) and {row["Id"] for row in inspected} == set(roles),
+                "빌드 중 기존 컨테이너가 바뀌었습니다.")
+        current = {roles[row["Id"]]: row for row in inspected}
+        require(lifecycle_snapshot(current) == initial_lifecycle, "빌드 중 기존 컨테이너 상태가 바뀌었습니다.")
         self.idle()
-        for role, row in zip(self.rows, self.inspect([item["Id"] for item in self.rows.values()])):
-            require(row["State"]["Running"] and row["Id"] == self.rows[role]["Id"], "빌드 중 기존 컨테이너 상태가 바뀌었습니다.")
         self.stopped = True  # Even a partially successful stop requires explicit recovery.
         self.journal("서비스 중지 — 잠시 접속할 수 없습니다.")
         self.compose("stop", "--timeout", "120", self.web, "api", "worker", "model-tester", timeout=180)
@@ -377,7 +416,8 @@ def main(argv=None):
         if args.check:
             print("사전 확인 통과. 빌드·서비스 중지·DB 변경은 하지 않았습니다.")
             return 0
-        print("기존 키·모델·지침·스키마 설정을 유지합니다. 최신 DB migration을 적용하며 잠시 서비스가 중단됩니다.")
+        print("기존 키·모델·지침·스키마 설정을 유지합니다. 최신 DB migration을 적용한 뒤 중지된 서비스를 포함해 모두 기동합니다.")
+        print("실행 중인 서비스는 DB 이전을 위해 잠시 중지합니다. --check에서는 중지된 서비스를 기동하지 않습니다.")
         print("백업과 이전 검증 후 DB 볼륨의 소유권을 UID/GID 10001로 준비하고 API·worker·웹을 non-root로 실행합니다. 공개 포트는 유지합니다.")
         print("기동 후 접수되는 분석은 기존 모델을 호출할 수 있습니다. 이미지 빌드에는 패키지 다운로드가 필요할 수 있습니다.")
         if not args.yes:

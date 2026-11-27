@@ -105,7 +105,8 @@ def create_test_run(payload: TestRunCreate, request: Request, db: DbSession, pri
                 raise HTTPException(422, "duplicate_test_metadata_location")
             row[field] = value
     run, _ = submit(db, request, principal, name=payload.name,
-        idempotency_key=payload.idempotency_key, rows=[row], kind="direct", candidate_configuration=payload.candidate_configuration)
+        idempotency_key=payload.idempotency_key, rows=[row], kind="direct", candidate_configuration=payload.candidate_configuration,
+        source_analysis_id=payload.source_analysis_id)
     return describe_run(db, run)
 
 

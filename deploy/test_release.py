@@ -25,16 +25,19 @@ class PipelineTests(unittest.TestCase):
         self.args = Namespace(project=None, file=None, env_file=None, git_dir=None,
                               remote="origin", tag=None, message="Synthetic release")
 
-    def operation(self):
+    def operation(self, stopped=()):
         operation = release.Release(self.args)
         operation.git = object()
         operation.head = "a" * 40
         operation.selected, operation.snapshot = [], {}
         operation.repository = "synthetic/waf"
         operation.docker.model, operation.docker.rows = fixture()
+        for name in stopped:
+            operation.docker.rows[name]["State"].update(Running=False, Status="exited")
         operation.docker.project = "waf-test"
         operation.original_model = deepcopy(operation.docker.model)
         operation.original_ids = {name: row["Id"] for name, row in operation.docker.rows.items()}
+        operation.original_lifecycle = redeploy.lifecycle_snapshot(operation.docker.rows)
         operation.original_project = operation.docker.project
         return operation
 
@@ -69,6 +72,87 @@ class PipelineTests(unittest.TestCase):
         export.assert_not_called()
         deploy.assert_not_called()
 
+    def test_stopped_existing_services_deploy_only_after_successful_push(self):
+        for stopped in (("worker",), ("api", "frontend"), (*redeploy.BACKENDS, "frontend")):
+            with self.subTest(stopped=stopped):
+                operation = self.operation(stopped)
+                events = []
+                before = deepcopy(operation.docker.rows)
+                source = self.root / "immutable-source"
+
+                def upload(*args):
+                    self.assertEqual(operation.docker.rows, before)
+                    events.append("push")
+                    return "b" * 40
+
+                operation.docker.discover = lambda: events.append("docker-recheck")
+                operation.docker.deploy = lambda source_root: events.append(("deploy", source_root))
+                with patch.object(release, "ROOT", self.root), patch.object(release, "upload", upload), \
+                     patch.object(release, "export_commit", return_value=source), \
+                     patch.object(operation.docker, "run") as docker_run, redirect_stdout(io.StringIO()):
+                    operation.execute()
+                self.assertEqual(events, ["push", "docker-recheck", ("deploy", source)])
+                docker_run.assert_not_called()
+
+    def test_stopped_services_are_not_started_when_push_fails(self):
+        operation = self.operation((*redeploy.BACKENDS, "frontend"))
+        before = deepcopy(operation.docker.rows)
+        with patch.object(release, "ROOT", self.root), \
+             patch.object(release, "upload", side_effect=UploadError("synthetic rejection")), \
+             patch.object(release, "export_commit") as export, \
+             patch.object(operation.docker, "discover") as discover, \
+             patch.object(operation.docker, "deploy") as deploy, \
+             patch.object(operation.docker, "run") as docker_run, redirect_stdout(io.StringIO()):
+            with self.assertRaises(UploadError):
+                operation.execute()
+        self.assertEqual(operation.docker.rows, before)
+        export.assert_not_called()
+        discover.assert_not_called()
+        deploy.assert_not_called()
+        docker_run.assert_not_called()
+
+    def test_stopped_services_pass_check_without_starting_or_publishing(self):
+        model, rows = fixture()
+        for row in rows.values():
+            row["State"].update(Running=False, Status="exited")
+        before = deepcopy(rows)
+
+        def discover(docker):
+            docker.model, docker.rows = deepcopy(model), deepcopy(rows)
+            docker.project = "waf-test"
+
+        with patch.object(release, "ROOT", self.root), patch.object(release, "Git") as git_type, \
+             patch.object(release, "validate_remote", return_value="synthetic/waf"), \
+             patch.object(release.Redeploy, "discover", discover), \
+             patch.object(release.Redeploy, "deploy") as deploy, \
+             patch.object(release.Redeploy, "run") as docker_run, \
+             patch.object(release, "upload") as upload, redirect_stdout(io.StringIO()):
+            git = git_type.return_value
+            git.text.side_effect = ["feature/synthetic", "a" * 40]
+            git.changes.return_value = ([], [])
+            git.snapshot.return_value = {}
+            self.assertEqual(release.main(["--check"]), 0)
+        self.assertEqual(rows, before)
+        deploy.assert_not_called()
+        docker_run.assert_not_called()
+        upload.assert_not_called()
+        git.call.assert_not_called()
+        self.assertFalse((self.root / ".local-deploy").exists())
+
+    def test_prepare_records_stopped_container_lifecycle(self):
+        operation = self.operation(("api", "worker"))
+        expected = redeploy.lifecycle_snapshot(operation.docker.rows)
+        del operation.original_lifecycle
+        with patch.object(release, "Git") as git_type, \
+             patch.object(release, "validate_remote", return_value="synthetic/waf"), \
+             patch.object(operation.docker, "discover"), redirect_stdout(io.StringIO()):
+            git = git_type.return_value
+            git.text.side_effect = ["feature/synthetic", "a" * 40]
+            git.changes.return_value = ([], [])
+            git.snapshot.return_value = {}
+            operation.prepare()
+        self.assertEqual(operation.original_lifecycle, expected)
+
     def test_changed_docker_target_after_push_refuses_deploy(self):
         operation = self.operation()
         def changed():
@@ -80,6 +164,27 @@ class PipelineTests(unittest.TestCase):
                 operation.execute()
         deploy.assert_not_called()
         self.assertEqual(operation.commit, "b" * 40)
+
+    def test_changed_lifecycle_with_same_id_after_push_refuses_deploy(self):
+        for was_running in (True, False):
+            with self.subTest(was_running=was_running):
+                operation = self.operation(() if was_running else ("api",))
+                original_ids = dict(operation.original_ids)
+
+                def changed():
+                    operation.docker.rows["api"]["State"].update(
+                        Running=not was_running, Status="exited" if was_running else "running")
+
+                with patch.object(release, "ROOT", self.root), \
+                     patch.object(release, "upload", return_value="b" * 40), \
+                     patch.object(release, "export_commit", return_value=self.root), \
+                     patch.object(operation.docker, "discover", changed), \
+                     patch.object(operation.docker, "deploy") as deploy, redirect_stdout(io.StringIO()):
+                    with self.assertRaisesRegex(UploadError, "Docker 서비스 상태"):
+                        operation.execute()
+                self.assertEqual({name: row["Id"] for name, row in operation.docker.rows.items()}, original_ids)
+                deploy.assert_not_called()
+                self.assertEqual(operation.commit, "b" * 40)
 
     def test_deploy_failure_retains_published_commit_and_no_second_push(self):
         operation = self.operation()

@@ -106,6 +106,12 @@
 .pw-job-history > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 .pw-job-details { display: grid; gap: 12px; min-width: 0; overflow-wrap: anywhere; }
 .pw-job-details > p { margin: 0; line-height: 1.7; }
+.pw-match-diagnostics { padding: 16px; border: 1px solid var(--line); border-radius: 8px; background: var(--raised); }
+.pw-match-diagnostics h4 { margin: 0 0 12px; font-size: 14px; }
+.pw-match-diagnostics p { margin: 9px 0 0; font-size: 12px; line-height: 1.8; }
+.pw-match-diagnostics ul { display: grid; gap: 10px; list-style: none; margin: 14px 0; padding: 0; }
+.pw-match-diagnostics li { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); font-size: 12px; }
+.pw-match-diagnostics li small { color: var(--muted); }
 .pw-empty { padding: 22px; border: 1px dashed var(--line); border-radius: 8px; line-height: 1.8; color: var(--muted); font-size: 13px; }
 .pw-pill { display: inline-block; padding: 4px 8px; border-radius: 5px; background: var(--raised); color: var(--muted); border: 1px solid var(--line); font-size: 11px; line-height: 1.5; }
 .pw-pill.production, .pw-pill.validation { color: var(--accent); background: var(--pw-soft); border-color: color-mix(in srgb, var(--accent) 28%, var(--line)); }

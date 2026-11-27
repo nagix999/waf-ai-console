@@ -7,7 +7,7 @@ import { buildSync } from "esbuild";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { parserJobTimeline, parserJobDiagnostics, parserJobFailure, parserJobKindLabel,
-  parserJobStatusLabel } from "./parserWorkbenchJobs.js";
+  parserJobStatusLabel, parserJobMatchSummary } from "./parserWorkbenchJobs.js";
 
 function load(name = "default") {
   const source = buildSync({ entryPoints: [fileURLToPath(new URL("./ParserWorkbenchJobs.jsx", import.meta.url))],
@@ -188,10 +188,10 @@ test("matching failures have concise KR and EN guidance without stale correction
       { field: "extract", type: "parser_authoring_not_qualified" }, { field: "extract", type: "parser_rule_not_matched" },
     ] }],
   } } });
-  assert.equal(parserJobFailure(row).message, "형식 식별 조건이 일부 입력과 맞지 않습니다.");
-  assert.equal(parserJobFailure(row).action, "형식 묶음과 조건을 확인하세요.");
-  assert.equal(parserJobFailure(row, true).message, "The format matching conditions do not match some inputs.");
-  assert.equal(parserJobFailure(row, true).action, "Review the format groups and matching conditions.");
+  assert.equal(parserJobFailure(row).message, "형식 식별 조건이 입력과 맞지 않습니다.");
+  assert.equal(parserJobFailure(row).action, "작업 상세에서 조건별 일치 여부를 확인하세요.");
+  assert.equal(parserJobFailure(row, true).message, "The format matching conditions do not match the inputs.");
+  assert.equal(parserJobFailure(row, true).action, "Review condition matches in job details.");
   assert.equal(parserJobFailure(job(1, "failed", { error_code: "parser_rule_not_matched" })).message,
     parserJobFailure(row).message);
   row.summary.diagnostics.attempts.push({ code: "parser_workbench_authoring_failed", stage: "authoring",
@@ -210,8 +210,8 @@ test("current matching failures explain the condition mismatch without exposing 
         matched: false, code: "parser_prefix_mismatch", payload: "PRIVATE_PAYLOAD" }],
     }] } },
   })] }));
-  assert.match(html, /형식 식별 조건이 일부 입력과 맞지 않습니다/);
-  assert.match(html, /형식 묶음과 조건을 확인하세요/);
+  assert.match(html, /형식 식별 조건이 입력과 맞지 않습니다/);
+  assert.match(html, /작업 상세에서 조건별 일치 여부를 확인하세요/);
   assert.doesNotMatch(html, /parser_rule_not_matched|parser_prefix_mismatch|match\.all\.0|c001|PRIVATE_PAYLOAD/);
 });
 test("failed latest work shows a concise reason and corrections, with technical codes in details only", () => {
@@ -265,4 +265,141 @@ test("work labels and unknown statuses never echo arbitrary server content", () 
   const Details = load("ParserWorkbenchJobDetails");
   const html = renderToStaticMarkup(createElement(Details, { job: job(1, "PRIVATE_STATUS") }));
   assert.doesNotMatch(html, /PRIVATE_STATUS/);
+});
+
+function coverage(changes = {}) {
+  return { sample_count: 20, checked_sample_count: 20, truncated: false, conditions: [
+    { condition_index: 0, field: "match.all.0", kind: "starts_with", matched_count: 5, error_count: 0 },
+    { condition_index: 1, field: "match.all.1", kind: "json_string_exists", matched_count: 3, error_count: 2 },
+  ], ...changes };
+}
+function authoringJob(attemptChanges = {}, changes = {}) {
+  return job(1, "failed", { error_code: "parser_workbench_authoring_failed", summary: { diagnostics: {
+    attempts: [{ stage: "authoring", code: "parser_workbench_authoring_failed", group_index: 2,
+      issues: [{ field: "match", type: "parser_rule_not_matched" }], ...attemptChanges }],
+  } }, ...changes });
+}
+
+test("coverage diagnostics retain only bounded counters and fixed condition definitions", () => {
+  const expected = coverage(), raw = coverage({ PRIVATE_PAYLOAD: "PRIVATE_VALUE" });
+  raw.conditions[0] = { ...raw.conditions[0], value: "PRIVATE_LITERAL", pattern: "PRIVATE_PATTERN",
+    json_pointer: "PRIVATE_POINTER", sample_ids: ["PRIVATE_HOLDOUT"] };
+  const value = parserJobDiagnostics(authoringJob({ match_coverage: raw }));
+  assert.deepEqual(value.attempts[0].match_coverage, expected);
+  assert.doesNotMatch(JSON.stringify(value), /PRIVATE/);
+  const summary = parserJobMatchSummary(authoringJob({ match_coverage: raw }));
+  assert.equal(summary.source, "coverage");
+  assert.equal(summary.group_index, 2);
+  assert.equal(summary.sample_count, 20);
+  assert.equal(summary.checked_sample_count, 20);
+  assert.deepEqual(summary.conditions.map(row => [row.matched_count, row.unmatched_count, row.error_count]),
+    [[5, 15, 0], [3, 15, 2]]);
+});
+
+test("invalid coverage is ignored rather than coercing values or inventing totals", () => {
+  const malformed = [null, "PRIVATE_TEXT", {},
+    ...[0, 101, true, "20", 1.5, Infinity].map(sample_count => coverage({ sample_count })),
+    ...[-1, 21, false, "20", 0.5].map(checked_sample_count => coverage({ checked_sample_count })),
+    ...[null, 1, "false"].map(truncated => coverage({ truncated })),
+    ...[[], {}, "PRIVATE_CONDITIONS", Array.from({ length: 9 }, () => coverage().conditions[0])]
+      .map(conditions => coverage({ conditions })),
+    ...[
+      { condition_index: 8 }, { condition_index: "0" }, { condition_index: true },
+      { field: "PRIVATE_FIELD" }, { field: "match.all.1" }, { field: "match.all.0\n" },
+      { kind: "PRIVATE_KIND" }, { matched_count: 21 }, { matched_count: true },
+      { error_count: -1 }, { error_count: 16 }, { error_count: "0" },
+    ].map(change => coverage({ conditions: [{ ...coverage().conditions[0], ...change }] })),
+    coverage({ conditions: [coverage().conditions[0], coverage().conditions[0]] }),
+    coverage({ conditions: [coverage().conditions[0], { ...coverage().conditions[1], field: "match.any.1" }] }),
+  ];
+  for (const raw of malformed) {
+    const row = authoringJob({ match_coverage: raw });
+    assert.equal(parserJobDiagnostics(row).attempts[0].match_coverage, undefined);
+    assert.equal(parserJobMatchSummary(row), null);
+    assert.doesNotMatch(JSON.stringify(parserJobDiagnostics(row)), /PRIVATE/);
+  }
+});
+
+test("coverage supports zero checked inputs without claiming a zero success rate", () => {
+  const row = authoringJob({ match_coverage: coverage({ checked_sample_count: 0, truncated: true,
+    conditions: [{ ...coverage().conditions[0], matched_count: 0, error_count: 0 }] }) });
+  const result = parserJobMatchSummary(row);
+  assert.equal(result.checked_sample_count, 0);
+  assert.equal(result.conditions[0].unmatched_count, 0);
+  const Details = load("ParserWorkbenchJobDetails");
+  const html = renderToStaticMarkup(createElement(Details, { job: row }));
+  assert.match(html, /제안용 입력 20개 중 0개를 확인/);
+  assert.match(html, /검사를 완료하지 못한 입력: 20개/);
+  assert.doesNotMatch(html, /성공률|0%/);
+});
+
+test("only the latest failed authoring attempt contributes a condition summary", () => {
+  const row = authoringJob({ match_coverage: coverage() });
+  for (const status of ["completed", "pending", "running", "processing", "canceled"]) {
+    assert.equal(parserJobMatchSummary({ ...row, status }), null);
+  }
+  row.summary.diagnostics.attempts.push({ stage: "response", code: "parser_workbench_output_incomplete" });
+  assert.equal(parserJobMatchSummary(row), null);
+  row.summary.diagnostics.attempts.pop();
+  row.error_code = "parser_workbench_output_incomplete";
+  assert.equal(parserJobMatchSummary(row), null);
+});
+
+test("older records summarize retained checks only, deduplicate samples, and separate errors", () => {
+  const check = { sample_id: "c001", condition_index: 0, field: "match.any.0", kind: "starts_with",
+    matched: false, code: "parser_prefix_mismatch" };
+  const row = authoringJob({ match_checks: [check, check, { ...check, sample_id: "c002", matched: true, code: "ok" },
+    { ...check, sample_id: "c003", code: "parser_json_invalid" }], failed_sample_ids: Array(8).fill("PRIVATE_ID") });
+  const summary = parserJobMatchSummary(row);
+  assert.equal(summary.source, "recorded_checks");
+  assert.equal(summary.sample_count, null);
+  assert.equal(summary.checked_sample_count, 3);
+  assert.deepEqual(summary.conditions.map(value => [value.checked_count, value.matched_count,
+    value.unmatched_count, value.error_count]), [[3, 1, 1, 1]]);
+  const Details = load("ParserWorkbenchJobDetails"), html = renderToStaticMarkup(createElement(Details, { job: row }));
+  assert.match(html, /이전 기록에 남은 검사만 표시/);
+  assert.match(html, /전체 입력의 일치 비율이 아닙니다/);
+  assert.match(html, /확인한 입력 3개 중 1개 일치/);
+  assert.match(html, /불일치 1개 \/ 검사 오류 1개/);
+  assert.doesNotMatch(html, /PRIVATE_ID/);
+});
+
+for (const english of [false, true]) {
+  test(`job details explain safe condition coverage and next actions in ${english ? "EN" : "KR"}`, () => {
+    const Details = load("ParserWorkbenchJobDetails");
+    const row = authoringJob({ match_coverage: coverage({ sample_count: 30, truncated: true }) });
+    const html = renderToStaticMarkup(createElement(Details, { job: row, english }));
+    assert.match(html, english ? /Format condition checks/ : /형식 식별 조건 검사/);
+    assert.match(html, english ? /format 2/ : /2번째 형식/);
+    assert.match(html, english ? /Checked 20 of 30 authoring inputs/ : /제안용 입력 30개 중 20개를 확인/);
+    assert.match(html, english ? /Inputs not fully checked: 10/ : /검사를 완료하지 못한 입력: 10개/);
+    assert.match(html, english ? /5 of 20 checked inputs match/ : /확인한 입력 20개 중 5개 일치/);
+    assert.match(html, english ? /does not mean HTTP extraction succeeded/ : /HTTP 추출 성공을 뜻하지/);
+    assert.match(html, english ? /changing URI or header values/ : /입력별로 달라지는 URI나 헤더 값/);
+    assert.match(html, english ? /different wrapper structures/ : /포장 구조가 다른 입력/);
+    assert.doesNotMatch(html, /PRIVATE/);
+  });
+}
+
+test("any matching conditions do not present a false condition as an overall failure", () => {
+  const Details = load("ParserWorkbenchJobDetails");
+  const row = authoringJob({ match_coverage: coverage({ conditions: coverage().conditions
+    .map(item => ({ ...item, field: item.field.replace(".all.", ".any.") })) }) });
+  const summary = parserJobMatchSummary(row);
+  assert.equal(summary.mode, "any");
+  const html = renderToStaticMarkup(createElement(Details, { job: row }));
+  assert.match(html, /하나 이상의 식별 조건이 맞으면/);
+  assert.match(html, /개별 조건의 결과는 HTTP 추출 성공 여부와 다릅니다/);
+  assert.doesNotMatch(html, /모든 식별 조건이 맞아야/);
+});
+
+test("a matched format with extraction errors does not blame the matching conditions", () => {
+  const Details = load("ParserWorkbenchJobDetails");
+  const row = authoringJob({ issues: [{ field: "extract", type: "parser_request_not_qualified" }],
+    match_coverage: coverage({ conditions: [{ ...coverage().conditions[0], matched_count: 20 }] }) });
+  const html = renderToStaticMarkup(createElement(Details, { job: row }));
+  assert.equal(parserJobMatchSummary(row).has_match_failure, false);
+  assert.match(html, /확인한 입력 20개 중 20개 일치/);
+  assert.match(html, /추출 설정을 확인하세요/);
+  assert.doesNotMatch(html, /형식 식별 조건이 입력과 맞지|입력별로 달라지는 URI/);
 });

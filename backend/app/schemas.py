@@ -177,6 +177,22 @@ class RawEventResponse(BaseModel):
     decoding: dict[str, Any] | None = None
 
 
+class SingleTestTemplateResponse(BaseModel):
+    """Audited administrator copy; reference metadata is never event input."""
+    model_config = ConfigDict(extra="forbid")
+    source_analysis_id: str
+    source_analysis_purpose: AnalysisPurpose
+    internal_only: bool
+    event: dict[str, Any]
+    initial_assessment: InitialAssessmentInput
+    expected_verdict: Literal["true_positive", "false_positive", "inconclusive"] | None
+    name: str | None = None
+    difficulty: str | None = None
+    test_category: str | None = None
+    case_name: str | None = None
+    source_test_run_id: str | None = None
+
+
 class AnalysisListResponse(BaseModel):
     items: list[AnalysisSummary]
     total: int

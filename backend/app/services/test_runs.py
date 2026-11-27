@@ -258,10 +258,14 @@ def add_run_items(db, crypto, settings, run, rows, *, ai_visible=None, source_re
 
 
 def enqueue_named_run(db, crypto, settings, *, name, idempotency_key, rows, kind, actor,
-                      filename=None, content_hash=None, candidate_configuration=None):
+                      filename=None, content_hash=None, candidate_configuration=None, source_analysis_id=None):
     try:
+        if source_analysis_id is not None and (kind != "direct" or len(rows) != 1):
+            raise AnalysisIngestError("single_test_source_requires_direct", 422)
         try:
             document = {"name": name, "kind": kind, "rows": rows, "filename": filename}
+            if source_analysis_id is not None:
+                document["source_analysis_id"] = source_analysis_id
             # Preserve old replay hashes when the optional candidate is absent.
             if candidate_configuration is not None:
                 document["candidate_configuration"] = candidate_configuration.request_document()
@@ -275,7 +279,18 @@ def enqueue_named_run(db, crypto, settings, *, name, idempotency_key, rows, kind
             request_hash=digest, kind=kind, actor=actor, filename=filename, dataset_hash=content_hash,
             candidate_configuration=candidate_configuration)
         if not duplicate:
-            add_run_items(db, crypto, settings, run, rows, allow_initial_assessment=kind == "direct")
+            trusted_items = None
+            if source_analysis_id is not None:
+                from .single_test_templates import source_analysis, internal_only, require_internal_copy_profiles
+                source = source_analysis(db, source_analysis_id)
+                restricted = internal_only(source)
+                if restricted:
+                    require_internal_copy_profiles(db, crypto, run)
+                trusted_items = [{"internal_only": restricted, "source_kind": "reference"}]
+                run.test_purpose = "development"
+                db.add(AccessAudit(actor_kind="admin_session", actor_id=actor, action="create_single_test_from_analysis",
+                    resource_type="analysis_to_test_run", resource_id=f"{source.id}:{run.id}"))
+            add_run_items(db, crypto, settings, run, rows, allow_initial_assessment=kind == "direct", trusted_items=trusted_items)
             db.add(AccessAudit(actor_kind="admin_session", actor_id=actor, action="create_test_run",
                 resource_type="test_run", resource_id=run.id))
         db.commit()

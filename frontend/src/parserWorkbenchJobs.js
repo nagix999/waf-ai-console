@@ -92,6 +92,28 @@ function safeMatchCheck(check) {
     matched: check.matched, code: MATCH_CODES.has(check.code) ? check.code : "parser_match_condition_failed" };
 }
 
+function safeMatchCoverage(value) {
+  const total = count(value?.sample_count), checked = count(value?.checked_sample_count);
+  if (total === null || total < 1 || total > 100 || checked === null || checked > total
+    || typeof value?.truncated !== "boolean" || !Array.isArray(value?.conditions)
+    || value.conditions.length < 1 || value.conditions.length > 8) return null;
+  const seen = new Set(), conditions = [];
+  let mode = null;
+  for (const item of value.conditions) {
+    const index = count(item?.condition_index), matched = count(item?.matched_count), errors = count(item?.error_count);
+    if (index === null || index > 7 || !MATCH_FIELDS.has(item?.field) || !item.field.endsWith(`.${index}`)
+      || !MATCH_KINDS.has(item?.kind) || matched === null || matched > checked
+      || errors === null || errors > checked - matched || seen.has(index)) return null;
+    const itemMode = item.field.split(".")[1];
+    if (mode !== null && mode !== itemMode) return null;
+    mode = itemMode;
+    seen.add(index);
+    conditions.push({ condition_index: index, field: item.field, kind: item.kind,
+      matched_count: matched, error_count: errors });
+  }
+  return { sample_count: total, checked_sample_count: checked, truncated: value.truncated, conditions };
+}
+
 export function parserJobDiagnostics(job) {
   const diagnostics = job?.summary?.diagnostics;
   const attempts = (Array.isArray(diagnostics?.attempts) ? diagnostics.attempts : []).slice(0, 100).map(item => ({
@@ -107,6 +129,7 @@ export function parserJobDiagnostics(job) {
         .filter(key => count(item.usage[key]) !== null).map(key => [key, item.usage[key]])) } : {}),
     ...(Array.isArray(item?.issues) ? { issues: item.issues.slice(0, 20).map(safeIssue) } : {}),
     ...(Array.isArray(item?.match_checks) ? { match_checks: item.match_checks.slice(0, 64).map(safeMatchCheck).filter(Boolean) } : {}),
+    ...(safeMatchCoverage(item?.match_coverage) ? { match_coverage: safeMatchCoverage(item.match_coverage) } : {}),
     ...(Array.isArray(item?.failed_sample_ids) ? { failed_sample_count: item.failed_sample_ids.length } : {}),
   }));
   return {
@@ -118,6 +141,47 @@ export function parserJobDiagnostics(job) {
     call_reservations: count(job?.summary?.call_count),
     attempts,
   };
+}
+
+export function parserJobMatchSummary(job) {
+  const diagnostics = parserJobDiagnostics(job), latest = diagnostics.attempts.at(-1);
+  // Earlier failed corrections remain technical history, not the current cause.
+  if (job?.status !== "failed" || latest?.stage !== "authoring" || latest.code === "ok"
+    || !["parser_workbench_authoring_failed", "parser_authoring_not_qualified", "parser_rule_not_matched"]
+      .includes(diagnostics.error_code)) return null;
+  const group_index = latest.group_index <= 20 ? latest.group_index : null;
+  const has_match_failure = diagnostics.error_code === "parser_rule_not_matched"
+    || latest.issues?.some(issue => issue.type === "parser_rule_not_matched") === true;
+  const coverage = latest.match_coverage;
+  if (coverage) return { source: "coverage", group_index, has_match_failure, ...coverage,
+    mode: coverage.conditions[0].field.split(".")[1],
+    conditions: coverage.conditions.map(item => ({ ...item, checked_count: coverage.checked_sample_count,
+      unmatched_count: coverage.checked_sample_count - item.matched_count - item.error_count })) };
+  if (!has_match_failure) return null;
+  const rows = new Map(), samples = new Set();
+  for (const check of latest.match_checks || []) {
+    const key = check.field;
+    if (!rows.has(key)) {
+      if (rows.size >= 8) continue;
+      rows.set(key, { condition_index: check.condition_index, field: check.field,
+        kind: check.kind, samples: new Map() });
+    }
+    const row = rows.get(key);
+    if (row.kind !== check.kind) continue;
+    if (!row.samples.has(check.sample_id)) row.samples.set(check.sample_id, check);
+    samples.add(check.sample_id);
+  }
+  if (!rows.size) return null;
+  const mismatches = new Set(["parser_prefix_mismatch", "parser_json_value_mismatch", "parser_json_string_missing",
+    "parser_marker_missing", "parser_regex_no_match"]);
+  return { source: "recorded_checks", group_index, has_match_failure, sample_count: null, checked_sample_count: samples.size,
+    truncated: null, mode: null, conditions: [...rows.values()].map(row => {
+      const checks = [...row.samples.values()], matched = checks.filter(check => check.matched).length;
+      const errors = checks.filter(check => !check.matched && !mismatches.has(check.code)).length;
+      return { condition_index: row.condition_index, field: row.field, kind: row.kind,
+        checked_count: checks.length, matched_count: matched, error_count: errors,
+        unmatched_count: checks.length - matched - errors };
+    }) };
 }
 
 export function parserJobFailure(job, english = false) {
@@ -138,8 +202,8 @@ export function parserJobFailure(job, english = false) {
     message = w("모델 응답이 형식 또는 규칙 정의와 맞지 않습니다.", "The model response does not match the format or rule definition.");
     action = w("작업 상세에서 오류 항목을 확인한 뒤 다시 요청하세요.", "Review the validation issues in job details before requesting again.");
   } else if (matchFailure) {
-    message = w("형식 식별 조건이 일부 입력과 맞지 않습니다.", "The format matching conditions do not match some inputs.");
-    action = w("형식 묶음과 조건을 확인하세요.", "Review the format groups and matching conditions.");
+    message = w("형식 식별 조건이 입력과 맞지 않습니다.", "The format matching conditions do not match the inputs.");
+    action = w("작업 상세에서 조건별 일치 여부를 확인하세요.", "Review condition matches in job details.");
   } else if (["parser_workbench_authoring_failed", "parser_authoring_not_qualified", "parser_request_not_qualified", "parser_source_mapping_invalid", "source_span_invalid", "parser_extraction_empty", "parser_extraction_not_string", "parser_json_pointer_missing", "parser_marker_missing", "parser_marker_ambiguous", "parser_regex_no_match", "parser_regex_ambiguous", "parser_regex_empty_capture"].includes(value)) {
     message = w("제안한 규칙으로 일부 입력을 올바르게 추출하지 못했습니다.", "The proposed rule could not correctly extract some inputs.");
     action = w("형식 묶음과 제안용 입력을 대조한 뒤 다시 요청하세요.", "Review the format groups against the authoring inputs before requesting again.");

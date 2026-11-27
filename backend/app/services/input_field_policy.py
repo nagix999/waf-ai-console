@@ -19,7 +19,7 @@ SERVER_CONTROL_FIELDS = frozenset({
     "test_run_id", "test_category", "test_difficulty", "idempotency_key", "test_name",
     "input_schema_version_id", "input_schema_snapshot_ciphertext", "input_schema_metadata",
     "input_schema", "field_definitions", "schema_snapshot", "selection_origin",
-    "internal_only", "dataset_version_id", "api_source_system", "accepting_items",
+    "internal_only", "source_analysis_id", "dataset_version_id", "api_source_system", "accepting_items",
     "candidate_configuration", "configuration_snapshot", "configuration_hash", "configuration_snapshot_json",
     "evaluation_mode", "approved_item_version_ids", "dataset_item_version_id", "official_evaluation_pending",
     "ground_truth", "evaluation_kind", "metrics_version", "analysis_ids_json", "summary_json",

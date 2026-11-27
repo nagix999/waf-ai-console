@@ -1,5 +1,6 @@
 #!/bin/sh
-# Default: review, publish to main, then redeploy this host's existing WAF stack.
+# Default: review, publish to main, then redeploy/start this host's existing WAF stack.
+# Existing stopped containers are supported; --check never starts services.
 # Preserve the old explicit Gateway commands for existing installations.
 set -eu
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)

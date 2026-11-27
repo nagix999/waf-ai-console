@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from deploy.automation.common import DeployError, operator_lock, private_write, secure_dir
 from deploy.github_upload import Git, UploadError, display, require, upload, validate_remote
-from deploy.redeploy import Redeploy, environment, ports
+from deploy.redeploy import Redeploy, environment, lifecycle_snapshot, ports
 
 
 def export_commit(git, commit, directory):
@@ -68,6 +68,7 @@ class Release:
         self.docker.discover()
         self.original_model = deepcopy(self.docker.model)
         self.original_ids = {name: row["Id"] for name, row in self.docker.rows.items()}
+        self.original_lifecycle = lifecycle_snapshot(self.docker.rows)
         self.original_project = self.docker.project
         print(f"GitHub: {self.repository}\n현재 브랜치: {self.branch}\n반영 대상: main\n태그: {self.args.tag or '추가하지 않음'}")
         print(f"Docker: {self.docker.project} / {environment(self.docker.rows['api'])['WAF_AGENT_MODE']}")
@@ -102,6 +103,8 @@ class Release:
         require(self.docker.project == self.original_project and self.docker.model == self.original_model
                 and {name: row["Id"] for name, row in self.docker.rows.items()} == self.original_ids,
                 "GitHub 처리 중 Docker 대상 또는 설정이 바뀌었습니다. Docker 배포는 중단합니다.")
+        require(lifecycle_snapshot(self.docker.rows) == self.original_lifecycle,
+                "GitHub 처리 중 Docker 서비스 상태가 바뀌었습니다. Docker 배포는 중단합니다.")
         self.record("Docker 재배포 중")
         self.docker.deploy(source_root=source)
         self.record("전체 완료")
@@ -138,7 +141,7 @@ def main(argv=None):
                 print("Git·Docker 사전 검사 통과. 커밋·fetch·push·빌드·DB 이전은 하지 않았습니다. 원격 최신 상태와 권한은 실제 실행에서 확인합니다.")
                 return 0
             print("main이 현재 브랜치에 포함된 경우만 반영합니다. 충돌·브랜치 보호 시 중단하며 강제 push하지 않습니다.")
-            print("GitHub 반영 후 현재 서버의 WAF가 잠시 중단됩니다. DB 백업·사본 이전 시험 후 같은 커밋으로 재배포합니다.")
+            print("GitHub 반영 후 실행 중인 WAF는 잠시 중지합니다. DB 백업·사본 이전 시험 후 중지된 서비스도 같은 커밋으로 기동합니다.")
             print("재기동 후 분석 요청은 기존 모델을 호출할 수 있습니다. 이미지 빌드에는 패키지 다운로드가 필요할 수 있습니다.")
             if not args.yes:
                 require(sys.stdin.isatty(), "대화형 터미널에서 실행하거나 대상 검토 후 --yes를 사용하세요.")

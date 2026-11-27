@@ -24,6 +24,7 @@ from ..schemas import (
     AnalysisListResponse,
     AnalysisSummary,
     RawEventResponse,
+    SingleTestTemplateResponse,
     ReviewCreate,
     ReviewResponse,
     UploadResponse,
@@ -351,6 +352,22 @@ def get_raw_event(
         encryption_key_version=row.encryption_key_version,
         decoding=decode_payload(payload),
     )
+
+
+@router.get("/analyses/{analysis_id}/single-test-template", response_model=SingleTestTemplateResponse)
+def get_single_test_template(
+    analysis_id: str, request: Request, response: Response, db: DbSession,
+    principal: Annotated[Principal, Depends(require_scope("admin"))],
+) -> SingleTestTemplateResponse:
+    from ..services.single_test_templates import source_analysis, template
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        source_analysis(db, analysis_id)
+        # Audit before decrypting even when the copy subsequently fails.
+        record_access(db, principal, "view_single_test_template", "analysis", analysis_id)
+        return template(db, request.app.state.crypto, analysis_id)
+    except AnalysisIngestError as exc:
+        raise HTTPException(exc.status_code, exc.code, headers={"Cache-Control": "no-store"}) from None
 
 
 @router.get("/analyses/{analysis_id}/retry-eligibility", response_model=RetryEligibility)

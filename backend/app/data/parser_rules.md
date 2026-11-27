@@ -155,6 +155,38 @@ runtime rule selection; frozen engine files and approved artifact hashes remain
 unchanged. Conditions are not automatically dropped, relaxed or changed from
 all to any to force a pass.
 
+The authoring-only `format_observations` describes bounded observations of the
+current group's authoring inputs: raw HTTP line-ending representations and JSON
+paths containing request-like strings. JSON paths are escaped as JSON Pointers;
+literal method, URI, IP, timestamp and scalar values are not inferred as stable
+conditions. The path examples are untrusted suggestions to the same approved
+internal model, not automatically adopted rules or extraction-accuracy claims.
+They stay in memory and are never added to plaintext job diagnostics. The helper
+uses at most 100 inputs, one shared 0.1-second inspection budget, eight paths,
+32 JSON string checks per input and 4 KiB of serialized observations.
+
+On authoring failure, `attempts[].match_coverage` and correction feedback can
+include the current group's checked-input count and each condition's match and
+inspection-error counts. One shared 0.1-second budget bounds this optional
+diagnosis; partially checked inputs are not counted, and omitted checks remain
+unmeasured rather than mismatches. These are individual all/any condition checks,
+not overall rule-selection or extraction success rates. No payload, predicate
+value, JSON path, raw model output or held-out data enters this metadata.
+
+Optional observations are removed first when input space is tight. Optional
+coverage can also be omitted, without dropping original authoring samples or
+weakening engine validation. An observation/diagnostic failure alone does not
+create a new job failure. Viewing a failure never calls a model. The UI shows
+condition-level counts in job details; earlier bounded match-check records are
+explicitly not presented as rates for the entire group. Existing failed jobs
+are not retroactively populated or automatically rerun.
+
+The mandatory rule-authoring instructions are compressed from 1,087 to 1,020
+characters (2,147 to 1,880 UTF-8 bytes), keeping the trust boundaries, literal
+predicate semantics and output restrictions. These counts do not include the
+optional observations or source samples, and are not tokenizer measurements or
+a guarantee of faster real-model generation.
+
 The existing total budget remains two calls for discovery or N + 2 calls for N
 rule groups (two shared corrections). Restarting a worker does not reset it.
 Rules must still pass all authoring extraction/source-span checks; partial
@@ -192,6 +224,29 @@ historical verdict code is not changed to extend that list.
 Synthetic automated and mocked-transport tests do not establish real-model
 generation quality, real WAF format coverage or Production performance. Those
 must be evaluated separately with authorized internal data and profiles.
+
+## Authoring structure and condition-coverage verification (2026-11-27)
+
+- The related backend batch passed 327 tests, including structure observations,
+  condition coverage, existing corrections, workbench authorization/lifecycle,
+  pinned rule/runtime artifacts and candidate/Production preservation.
+- Eight additional mocked-transport integration cases passed: first/correction
+  inputs, authoring/holdout and group separation, optional-helper omission,
+  input-budget preservation, unchanged N + 2 calls and failed-rule nonpublication.
+- After compressing the mandatory instructions, the nine-case integration batch
+  passed again, including the new mandatory character/byte-budget regression.
+  The 39 existing correction/diagnostic cases also passed again on the final
+  instructions. This adds only one unique test, for 336 distinct related
+  backend cases overall; repeated tests are not double-counted.
+- All 77 related frontend tests and the final Vite build passed. The build's
+  existing large-chunk warning and backend's existing AnyIO warning remain.
+- One final verification container was interrupted with exit 137; its partial
+  run is not counted. Both smaller final batches passed with explicit memory
+  and process caps. The interruption's cause was not established.
+- No real model call, operational-data transfer, live-DB change, active parser
+  or model change, deployment or Git mutation was performed. Browser review and
+  actual internal model rule-generation success rates remain unverified. There
+  is no DB migration or new runtime dependency in this change.
 
 ## Rule-correction verification (2026-11-18)
 

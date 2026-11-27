@@ -51,6 +51,7 @@ export const api = {
   testDefaults: (options = {}) => request("/api/v1/admin/test-configuration-defaults", { ...options, cache: "no-store" }),
   saveTestDefaults: payload => request("/api/v1/admin/test-configuration-defaults", { method: "PATCH", body: JSON.stringify(payload) }),
   cloneTest: (id, options = {}) => request(`/api/v1/test-runs/${encodeURIComponent(id)}/clone-template`, { ...options, cache: "no-store" }),
+  singleTestTemplate: (id, options = {}) => request(`/api/v1/analyses/${encodeURIComponent(id)}/single-test-template`, { ...options, cache: "no-store" }),
   previewTestImport: (id, payload) => request(`/api/v1/test-runs/${encodeURIComponent(id)}/ground-truth-import/preview`, { method: "POST", body: JSON.stringify(payload) }),
   confirmTestImport: (id, payload) => request(`/api/v1/test-runs/${encodeURIComponent(id)}/ground-truth-import/confirm`, { method: "POST", body: JSON.stringify(payload) }),
   productionConfiguration: (options = {}) => request("/api/v1/admin/production-configurations", { ...options, cache: "no-store" }),

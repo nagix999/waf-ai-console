@@ -118,3 +118,67 @@ test("final JSON is a UI-only execution selection, not an arbitrary API step", (
     assert.equal(readAppHash(`#operate/inference/${id}/agent-trace?step=${encodeURIComponent(step)}`).executionSelection.stepId, null);
   }
 });
+
+test("single analysis copies use only a normalized server UUID and canonical new-Test URL", () => {
+  const sourceId = "ABCDEF01-2345-4678-9ABC-DEF012345678";
+  for (const path of ["#evaluate/tests/new", "#test"]) {
+    const route = readAppHash(`${path}?source_analysis_id=${sourceId}`);
+    assert.deepEqual(route, { page: "test", sourceAnalysisId: sourceId.toLowerCase() });
+    const state = applyAppRoute(initial(), route);
+    assert.equal(state.sourceAnalysisId, sourceId.toLowerCase());
+    assert.equal(writeAppHash(state), `#evaluate/tests/new?source_analysis_id=${sourceId.toLowerCase()}`);
+  }
+});
+
+test("new-Test reload and Back/Forward restore only a source pointer, not previous input", () => {
+  const originalDetail = applyAppRoute(initial(), readAppHash(`#operate/inference/${id}/result`));
+  const copy = { ...originalDetail, page: "test", sourceAnalysisId: id };
+  const hash = writeAppHash(copy);
+  const reloaded = applyAppRoute(initial(), readAppHash(hash));
+  assert.equal(reloaded.page, "test");
+  assert.equal(reloaded.sourceAnalysisId, id);
+  const back = applyAppRoute(reloaded, readAppHash(writeAppHash(originalDetail)));
+  assert.equal(back.page, "detail");
+  assert.equal(back.selectedId, id);
+  assert.equal(writeAppHash(back), `#operate/inference/${id}/result`);
+  const forward = applyAppRoute(back, readAppHash(hash));
+  assert.equal(forward.sourceAnalysisId, id);
+  const normalNewTest = applyAppRoute(forward, readAppHash("#evaluate/tests/new"));
+  assert.equal(normalNewTest.sourceAnalysisId, null);
+  assert.equal(writeAppHash(normalNewTest), "#evaluate/tests/new");
+  assert.equal(applyAppRoute(forward, readAppHash("#test")).sourceAnalysisId, null);
+  assert.equal(forward.sourceAnalysisId, id);
+});
+
+test("single-Test source pointers reject malformed, duplicate and unrelated query parameters", () => {
+  for (const value of ["", "secret", "../admin", "undefined", "null", `${id}/raw`, `[${id}]`, ` ${id}`]) {
+    assert.equal(readAppHash(`#evaluate/tests/new?source_analysis_id=${encodeURIComponent(value)}`), null);
+  }
+  for (const query of [
+    `source_analysis_id=${id}&source_analysis_id=${id}`,
+    `source_analysis_id=${id}&payload=PRIVATE_PAYLOAD`,
+    `source_analysis_id=${id}?payload=PRIVATE_PAYLOAD`,
+    "payload=PRIVATE_PAYLOAD", "sourceAnalysisId=PRIVATE_PAYLOAD", "source_analysis_id[]=PRIVATE_PAYLOAD",
+  ]) assert.equal(readAppHash(`#evaluate/tests/new?${query}`), null);
+  assert.deepEqual(readAppHash("#evaluate/tests/new?"), { page: "test" });
+  for (const path of ["#overview", "#operate/feedback", "#operate/inference", `#operate/inference/${id}/agent-trace`, "#configure/parsers"]) {
+    assert.equal(readAppHash(`${path}?source_analysis_id=${id}`), null);
+  }
+});
+
+test("single-Test URL never includes form contents or a source pointer on another page", () => {
+  const source = { ...initial(), page: "test", sourceAnalysisId: id,
+    payload: "PRIVATE_PAYLOAD", summary_ko: "PRIVATE_RESULT", testName: "PRIVATE_NAME",
+    form: { event_id: "PRIVATE_EVENT", payload: "PRIVATE_PAYLOAD", extra_fields: { private: "PRIVATE_EXTRA" } },
+    listState: { ...initial().listState, draft: { q: "PRIVATE_SEARCH" } } };
+  assert.equal(writeAppHash(source), `#evaluate/tests/new?source_analysis_id=${id}`);
+  for (const value of [null, undefined, "", "not-a-server-id", 123, {}, [id]]) {
+    assert.equal(writeAppHash({ ...source, sourceAnalysisId: value }), "#evaluate/tests/new");
+    assert.equal(applyAppRoute(source, { page: "test", sourceAnalysisId: value }).sourceAnalysisId, null);
+  }
+  for (const page of ["dashboard", "analyses", "settings", "detail", "feedback"]) {
+    const hash = writeAppHash({ ...source, page, selectedId: id });
+    assert.ok(!hash.includes("source_analysis_id"));
+    assert.ok(!hash.includes("PRIVATE_"));
+  }
+});

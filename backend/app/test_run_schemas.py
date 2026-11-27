@@ -13,11 +13,19 @@ class TestRunCreate(InitialAssessmentInput):
     name: str = Field(min_length=1, max_length=120)
     idempotency_key: str = Field(min_length=8, max_length=120, pattern=r"^[A-Za-z0-9_.:-]+$")
     event: dict[str, Any]
+    source_analysis_id: str | None = Field(default=None, min_length=36, max_length=36,
+        pattern=r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+        description="Administrator single-Test copy provenance, never an event or model input.")
     candidate_configuration: CandidateConfiguration | None = None
     expected_verdict: Literal["true_positive", "false_positive", "inconclusive"] | None = None
     difficulty: str | None = Field(default=None, max_length=80)
     test_category: str | None = Field(default=None, max_length=120)
     case_name: str | None = Field(default=None, max_length=240)
+
+    @field_validator("source_analysis_id")
+    @classmethod
+    def canonical_source_identifier(cls, value):
+        return value.lower() if value is not None else None
 
     @field_validator("name")
     @classmethod

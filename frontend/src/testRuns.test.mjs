@@ -172,6 +172,45 @@ test("finished test rows distinguish completion from case failures without chang
   assert.match(item, /실행 실패/); assert.match(item, /analysis-row-failed/);
 });
 
+test("accepted test cases open a new single analysis form without running an analysis", () => {
+  const items = [
+    { id: "case-completed", analysis_id: "analysis-completed", ingest_status: "accepted", status: "completed" },
+    { id: "case-failed", analysis_id: "analysis-failed", ingest_status: "accepted", status: "failed" },
+  ];
+  const before = JSON.stringify(items), calls = [];
+  let table;
+  function CaptureRows() { table = TestRunItemRows({ items, onOpen() {}, onSingleTest: id => calls.push(["navigate", id]) }); return null; }
+  render(CaptureRows);
+  const actionColumn = table.props.columns.find(column => column.id === "actions");
+  assert.ok(actionColumn);
+  assert.deepEqual(calls, []);
+  for (const item of items) {
+    const popover = actionColumn.render(item);
+    const action = descendants(popover.props.children(() => calls.push(["close"])))
+      .find(node => node.type === "button" && node.props.children === "단건 분석으로 가져오기");
+    assert.equal(action.props.type, "button");
+    action.props.onClick();
+    assert.deepEqual(calls.splice(0), [["close"], ["navigate", item.analysis_id]]);
+  }
+  assert.equal(actionColumn.render({ id: "rejected", analysis_id: "unused", ingest_status: "rejected" }), "—");
+  assert.equal(actionColumn.render({ id: "unlinked", ingest_status: "accepted" }), "—");
+  assert.equal(JSON.stringify(items), before);
+});
+
+test("single analysis navigation preserves existing case dataset actions", () => {
+  const item = { id: "case", analysis_id: "analysis", ingest_status: "accepted",
+    ground_truth_source: { dataset_id: "dataset", stable_case_id: "stable-case" } };
+  const calls = []; let table;
+  function CaptureRows() { table = TestRunItemRows({ items: [item], onOpen() {}, onSingleTest: id => calls.push(["single", id]),
+    onImport: id => calls.push(["import", id]), onGroundTruth: (...ids) => calls.push(["dataset", ...ids]) }); return null; }
+  render(CaptureRows);
+  const popover = table.props.columns.find(column => column.id === "actions").render(item);
+  const buttons = descendants(popover.props.children(() => {})).filter(node => node.type === "button");
+  assert.equal(buttons.length, 3);
+  buttons.forEach(button => button.props.onClick());
+  assert.deepEqual(calls, [["single", "analysis"], ["dataset", "dataset", "stable-case"], ["import", "case"]]);
+});
+
 test("open ingestion, pending evaluation and stopped test rows never look completed", () => {
   const base = { id: "run", name: "상태 확인", status: "completed", total: 1, accepted: 1,
     completed: 1, failed: 0, rejected: 0, duplicates: 0, canceled: 0, pending: 0, processing: 0, accepting_items: false };

@@ -1,5 +1,6 @@
 import InitialAssessmentFields from "./InitialAssessmentFields.jsx";
 import { emptyInitialAssessment, initialAssessmentError, singleTestAdmission } from "./initialAssessmentInput.js";
+import { transformSingleAnalysisTemplate, buildSingleAnalysisTemplateEvent } from "./singleAnalysisTemplate.js";
 import NavigationAction from "./NavigationAction.jsx";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { api } from "./api.js";
@@ -62,7 +63,7 @@ import { createFullValidationController, datasetListState, emptyFullValidationSt
 import { allowedInternalTarget, internalEgressError, internalTargetAddress, internalTargetURL, vllmTargetError } from "./internalEgress.js";
 import "./unifiedAnalysis.css";
 import { initialTestRunFilters, initialTestRunHistoryState, TestRunDetail, TestRunHistory } from "./TestRuns.jsx";
-import { autoTestName, emptySingleTest, newTestRequestKey, singleTestEvent, testRunError, validateTestName } from "./testRuns.js";
+import { autoTestName, emptySingleTest, newTestRequestKey, testRunError, validateTestName } from "./testRuns.js";
 import { ModelAssignmentDialog } from "./ModelAssignments.jsx";
 import { assignmentBlockReason, createAssignmentController, emptyAssignmentState, roleAssigned } from "./modelAssignments.js";
 import { createBrowserHistory } from "./browserHistory.js";
@@ -165,7 +166,8 @@ export function Login({ onLogin }) {
 }
 
 
-export function AnalysisTable({ items, onOpen, title = "분석 결과", subtitle, total = items.length, loading = false, purpose = "", selection, sorting, onSortingChange }) {
+export function AnalysisTable({ items, onOpen, onSingleTest, title = "분석 결과", subtitle, total = items.length, loading = false, purpose = "", selection, sorting, onSortingChange }) {
+  const w = useR5Words();
   const showPurpose = !["test", "production", "legacy_unknown"].includes(purpose);
   const columns = [
     ...(selection ? [{ id: "select", header: selection.header, width: 44, className: "selection-cell", render: item => selection.cell(item.id, item.event_name || "분석") }] : []),
@@ -179,6 +181,7 @@ export function AnalysisTable({ items, onOpen, title = "분석 결과", subtitle
     { id: "reference", header: "참고 판정 비교", width: "14%", className: "unified-reference", render: item => <CompactReferenceComparison evaluation={item.evaluation} detail={item} /> },
     { id: "duration", header: "전체 소요 시간", width: "10%", className: "numeric", render: item => analysisElapsedTime(item) },
     { id: "created_at", header: "접수 시각", sortable: true, width: "13%", render: item => { const receivedAt = analysisReceivedAt(item.created_at); return <time className="analysis-received-at" dateTime={receivedAt.dateTime}><span>{receivedAt.date}</span><small>{receivedAt.time}</small></time>; } },
+    ...(onSingleTest ? [{ id: "actions", header: w("작업", "Actions"), width: 64, render: item => <MoreActions label={w("분석 작업", "Analysis actions")}><button type="button" onClick={() => onSingleTest(item.id)}>{w("단건 분석으로 가져오기", "Use in Single Analysis")}</button></MoreActions> }] : []),
   ];
   return <section className="panel"><div className="panel-head"><div><h2>{title}</h2>{subtitle && <small>{subtitle}</small>}</div><span className="count-label" aria-live="polite">{loading ? "조회 중…" : `${total.toLocaleString()}건`}</span></div>
     <DataTable label={title} className="analysis-data-table" data={items} columns={columns} sorting={sorting} onSortingChange={onSortingChange} rowClassName={item => analysisRowState(item.status).className}
@@ -201,24 +204,24 @@ export function initialTestResultsState() {
 }
 
 // Test-run searches and item filters never become Production analysis filters.
-export function AnalysisResultsPage({ purpose, onScopeChange, state, setState, testState, setTestState, onSelectRun, onOpenRunItem, onOpen, onUnauthorized, onShowTestRuns, onShowAllTestItems, onPromote, onClone, onGroundTruth, splitNavigation = false, actions }) {
+export function AnalysisResultsPage({ purpose, onScopeChange, state, setState, testState, setTestState, onSelectRun, onOpenRunItem, onOpen, onSingleTest, onUnauthorized, onShowTestRuns, onShowAllTestItems, onPromote, onClone, onGroundTruth, splitNavigation = false, actions }) {
   const w = useR5Words();
   const setPart = key => update => setTestState(current => ({ ...current, [key]: typeof update === "function" ? update(current[key]) : update }));
   const showRuns = onShowTestRuns || (() => setTestState(current => ({ ...current, view: "runs", runId: null })));
   const showAllTestItems = onShowAllTestItems || (() => setTestState(current => ({ ...current, view: "items", runId: null, items: initialListState("test") })));
-  if (purpose !== "test") return <AnalysisList purpose="production" key="production" state={state} setState={setState} onOpen={onOpen} onUnauthorized={onUnauthorized} />;
-  if (!testState.runId && testState.view === "items") return <AnalysisList key="test-items" state={testState.items} setState={setPart("items")} onScopeChange={onScopeChange} onShowTestRuns={showRuns} onOpen={onOpen} onUnauthorized={onUnauthorized} />;
+  if (purpose !== "test") return <AnalysisList purpose="production" key="production" state={state} setState={setState} onOpen={onOpen} onSingleTest={onSingleTest} onUnauthorized={onUnauthorized} />;
+  if (!testState.runId && testState.view === "items") return <AnalysisList key="test-items" state={testState.items} setState={setPart("items")} onScopeChange={onScopeChange} onShowTestRuns={showRuns} onOpen={onOpen} onSingleTest={onSingleTest} onUnauthorized={onUnauthorized} />;
   return <div className="page-stack test-results-page">
     {!testState.runId && <SettingsPageActions><NavigationAction onClick={showAllTestItems}>{w("테스트 문항 전체 보기", "All Test cases")}</NavigationAction>{actions}</SettingsPageActions>}
     {!splitNavigation && <div className="analysis-list-toolbar"><AnalysisScopeTabs purpose="test" onChange={onScopeChange} /></div>}
     {testState.runId
-      ? <TestRunDetail key={testState.runId} id={testState.runId} onPromote={onPromote} onClone={onClone} onGroundTruth={onGroundTruth} filters={testState.filters} onFiltersChange={setPart("filters")} onBack={showRuns} onOpen={onOpenRunItem} onUnauthorized={onUnauthorized} />
+      ? <TestRunDetail key={testState.runId} id={testState.runId} onPromote={onPromote} onClone={onClone} onGroundTruth={onGroundTruth} onSingleTest={onSingleTest} filters={testState.filters} onFiltersChange={setPart("filters")} onBack={showRuns} onOpen={onOpenRunItem} onUnauthorized={onUnauthorized} />
       : <TestRunHistory state={testState.history} onStateChange={setPart("history")} onSelect={onSelectRun} onViewAnalyses={showAllTestItems} onUnauthorized={onUnauthorized} />}
     {!testState.runId && <p className="evaluation-footnote">{w("테스트명 없이 저장된 이전 결과는 ‘테스트 문항 전체 보기’에서 확인할 수 있습니다. 기존 데이터를 임의의 테스트 실행으로 묶지 않습니다.", "Open All Test cases to find older results without a named Test. Existing records are not assigned to an inferred Test.")}</p>}
   </div>;
 }
 
-export function AnalysisList({ state, setState, onOpen, onUnauthorized, onScopeChange, onShowTestRuns, purpose = "test" }) {
+export function AnalysisList({ state, setState, onOpen, onSingleTest, onUnauthorized, onScopeChange, onShowTestRuns, purpose = "test" }) {
   const w = useR5Words();
   const [data, setData] = useState({ items: [], total: 0 });
   const [loading, setLoading] = useState(true);
@@ -322,25 +325,39 @@ export function AnalysisList({ state, setState, onOpen, onUnauthorized, onScopeC
     </form>
     {error && <div className="error" role="alert">{error}</div>}
     <AnalysisSelectionActions ids={selection.ids} onClear={selection.clear} onSaved={() => setLabelRefresh(value => value + 1)} />
-    <AnalysisTable items={data.items} total={data.total} loading={loading} onOpen={onOpen} purpose={state.applied.analysis_purpose} selection={selection} sorting={serverSorting(query.sort_by, query.sort_order)} onSortingChange={update => setState(current => ({ ...current, ...changedSort(update, serverSorting(query.sort_by, query.sort_order)) }))} />
+    <AnalysisTable items={data.items} total={data.total} loading={loading} onOpen={onOpen} onSingleTest={onSingleTest} purpose={state.applied.analysis_purpose} selection={selection} sorting={serverSorting(query.sort_by, query.sort_order)} onSortingChange={update => setState(current => ({ ...current, ...changedSort(update, serverSorting(query.sort_by, query.sort_order)) }))} />
     <Pagination label="분석 결과 페이지" total={data.total} limit={state.limit} offset={state.offset} disabled={loading} onOffsetChange={offset => setState(current => ({ ...current, offset }))} onLimitChange={limit => setState(current => ({ ...current, limit, offset: 0 }))} />
     {purpose === "production" && <ProductionPerformanceSummary filters={query} refresh={labelRefresh} onUnauthorized={onUnauthorized} />}
     <details className="panel analysis-list-evaluation"><summary>{w("참고 판정 평가", "Reference verdict evaluation")}<span>{w("현재 검색 범위", "Current search scope")} / {data.evaluation_summary?.evaluable ?? "—"}{w("건 비교", " comparable cases")}</span></summary><EvaluationOverview summary={data.evaluation_summary} loading={loading} error={error} /></details>
   </div>;
 }
 
-export function TestAnalysisPage({ onViewTests, onOpen, selectedRunId, onSelectRun, agentMode, cloneRunId }) {
+export function TestAnalysisPage({ onViewTests, onOpen, selectedRunId, onSelectRun, agentMode, cloneRunId, sourceAnalysisId }) {
   const w = useR5Words();
-  const [purpose, setPurpose] = useState("official_evaluation"), [inputMode, setInputMode] = useState("direct");
+  const [purpose, setPurpose] = useState(sourceAnalysisId ? "development" : "official_evaluation"), [inputMode, setInputMode] = useState("direct");
   const [candidate, setCandidate] = useState({ configuration: null, blocked: "configuration_unavailable" });
   const [submitting, setSubmitting] = useState(false), [template, setTemplate] = useState(null), [templateError, setTemplateError] = useState("");
+  const [source, setSource] = useState(null), [sourceError, setSourceError] = useState(false), [sourceAttempt, setSourceAttempt] = useState(0);
   const [localRunId, setLocalRunId] = useState(null);
   useEffect(() => { if (!cloneRunId) return; const controller = new AbortController(); setTemplate(null); setTemplateError("");
     api.cloneTest(cloneRunId, { signal: controller.signal }).then(value => { if (!controller.signal.aborted) { setTemplate(value); setPurpose(value.test_purpose === "official_evaluation" ? "official_evaluation" : "development"); setInputMode(value.source_dataset_id ? "dataset" : value.input_source_kind === "upload" ? "file" : "direct"); } }).catch(() => { if (!controller.signal.aborted) setTemplateError(w("원래 설정을 불러오지 못했습니다.", "Could not load source configuration.")); }); return () => controller.abort();
   }, [cloneRunId]);
+  useEffect(() => {
+    if (!sourceAnalysisId) return;
+    const controller = new AbortController(); setSource(null); setSourceError(false);
+    api.singleTestTemplate(sourceAnalysisId, { signal: controller.signal }).then(value => {
+      if (controller.signal.aborted) return;
+      const next = transformSingleAnalysisTemplate(value);
+      if (next.sourceAnalysisId !== sourceAnalysisId) throw new Error("source_mismatch");
+      setSource(next); setPurpose("development"); setInputMode("direct");
+    }).catch(() => { if (!controller.signal.aborted) setSourceError(true); });
+    return () => controller.abort();
+  }, [sourceAnalysisId, sourceAttempt]);
   const runId = selectedRunId === undefined ? localRunId : selectedRunId, selectRun = onSelectRun || setLocalRunId;
   const submissionProps = { candidateConfiguration: candidate.configuration, onBusy: setSubmitting, disabledReason: candidate.blocked };
+  const internalModelBlocked = Boolean(source?.internalOnly && candidate.external);
   if (runId) return <TestRunDetail key={runId} id={runId} onBack={() => selectRun(null)} onOpen={onOpen} />;
+  if (sourceAnalysisId && !source) return <section className="panel"><p role={sourceError ? "alert" : "status"}>{sourceError ? w("기존 입력을 불러오지 못했습니다. 원본의 삭제 여부와 조회 권한을 확인하세요.", "Could not load the original input. Check whether it was deleted and whether you have access.") : w("단건 분석 입력을 불러오는 중…", "Loading Single Analysis input…")}</p><div className="action-row">{sourceError && <button type="button" className="secondary" onClick={() => setSourceAttempt(value => value + 1)}>{w("다시 불러오기", "Reload input")}</button>}<button type="button" className="back" onClick={onViewTests}>{w("테스트로 돌아가기", "Back to Tests")}</button></div></section>;
   if (cloneRunId && !template) return <section className="panel"><p role={templateError ? "alert" : "status"}>{templateError || w("설정을 불러오는 중…", "Loading configuration…")}</p><button className="back" onClick={onViewTests}>{w("테스트로 돌아가기", "Back to Tests")}</button></section>;
   return <div className="page-stack test-workspace">
     <SettingsPageActions><button type="button" className="secondary" onClick={onViewTests}>← {w("테스트", "Tests")}</button></SettingsPageActions>
@@ -348,7 +365,7 @@ export function TestAnalysisPage({ onViewTests, onOpen, selectedRunId, onSelectR
     <section className="panel test-creation-purpose"><div className="panel-head"><h2>{w("테스트 목적", "Test purpose")}</h2></div><div className="r5-purpose-grid">{[["official_evaluation", w("공식 테스트", "Official Test"), w("공식 버전의 전체 문항으로 평가합니다. 완료 후 운영 반영을 검토할 수 있습니다.", "Evaluates every case in a Published Version. Enables Production Review after completion.")], ["development", w("개발 테스트", "Development Test"), w("단건, 파일 또는 데이터셋으로 확인합니다. 운영 반영 근거로 사용하지 않습니다.", "Explore a single event, file or dataset. Not eligible for Production.")]].map(([value, label, note]) => <label key={value}><input type="radio" name="test-purpose" value={value} checked={purpose === value} disabled={submitting} onChange={() => setPurpose(value)} /><strong>{label}</strong><small>{note}</small></label>)}</div></section>
     {template && !template.resource_validity.valid && <p className="notice">{w("원래 설정에 사용할 수 없는 항목이 있습니다. 대체하지 않았으므로 선택을 확인하세요.", "Some source resources are unavailable. They were not replaced; review each selection.")}</p>}
     <section className="test-creation-data" aria-label={w("테스트 문항", "Test cases")}>
-      <div hidden={purpose !== "development"}><DetailTabs label={w("입력 방식", "Input source")} items={[["direct", w("단건 분석", "Single Analysis")], ["file", w("배치 파일 분석", "Batch File Analysis")], ["dataset", w("평가 데이터셋", "Dataset")]]} value={inputMode} onChange={value => { if (!submitting) setInputMode(value); }}>{key => key === "direct" ? <SingleTest onCreated={run => selectRun(run.id)} {...submissionProps} /> : key === "file" ? <UploadPage onViewTests={onViewTests} onOpen={onOpen} onCreated={run => selectRun(run.id)} {...submissionProps} /> : purpose === "development" && <DatasetAnalysis purpose={purpose} sourceTemplate={template} onCreated={run => selectRun(run.id)} agentMode={agentMode} external={candidate.external} {...submissionProps} />}</DetailTabs></div>
+      <div hidden={purpose !== "development"}><DetailTabs label={w("입력 방식", "Input source")} items={[["direct", w("단건 분석", "Single Analysis")], ["file", w("배치 파일 분석", "Batch File Analysis")], ["dataset", w("평가 데이터셋", "Dataset")]]} value={inputMode} onChange={value => { if (!submitting) setInputMode(value); }}>{key => key === "direct" ? <SingleTest onCreated={run => selectRun(run.id)} {...submissionProps} sourceTemplate={source} internalModelBlocked={internalModelBlocked} disabledReason={internalModelBlocked ? w("이 입력은 내부 전용입니다. 모든 분석 모델을 vLLM으로 선택하세요.", "This input is internal-only. Select vLLM for every model role.") : submissionProps.disabledReason} /> : key === "file" ? <UploadPage onViewTests={onViewTests} onOpen={onOpen} onCreated={run => selectRun(run.id)} {...submissionProps} /> : purpose === "development" && <DatasetAnalysis purpose={purpose} sourceTemplate={template} onCreated={run => selectRun(run.id)} agentMode={agentMode} external={candidate.external} {...submissionProps} />}</DetailTabs></div>
       {purpose === "official_evaluation" && <DatasetAnalysis purpose={purpose} sourceTemplate={template} onCreated={run => selectRun(run.id)} agentMode={agentMode} external={candidate.external} {...submissionProps} />}
     </section>
     </div><CandidateConfiguration compact agentMode={agentMode} busy={submitting} onChange={setCandidate} initialConfiguration={template?.candidate_configuration} /></div>
@@ -400,15 +417,16 @@ function UploadPage({ onViewTests, onOpen, onCreated, disabledReason, candidateC
   );
 }
 
-function SingleTest({ onCreated, disabledReason, candidateConfiguration, onBusy }) {
+export function SingleTest({ onCreated, disabledReason, candidateConfiguration, onBusy, sourceTemplate, internalModelBlocked = false }) {
   const w = useR5Words();
-  const [name, setName] = useState(""); const [expectedVerdict, setExpectedVerdict] = useState("");
-  const [difficulty, setDifficulty] = useState(""); const [category, setCategory] = useState(""); const requestKey = useRef(null);
-  const [form, setForm] = useState(emptySingleTest);
-  const [additionalFields, setAdditionalFields] = useState("");
-  const [initialAssessment, setInitialAssessment] = useState(emptyInitialAssessment);
+  const [name, setName] = useState(sourceTemplate?.name || ""); const [expectedVerdict, setExpectedVerdict] = useState(sourceTemplate?.expectedVerdict || "");
+  const [difficulty, setDifficulty] = useState(sourceTemplate?.difficulty || ""); const [category, setCategory] = useState(sourceTemplate?.category || ""); const requestKey = useRef(null);
+  const [caseName, setCaseName] = useState(sourceTemplate?.caseName || "");
+  const [form, setForm] = useState(() => sourceTemplate?.form || emptySingleTest());
+  const [additionalFields, setAdditionalFields] = useState(sourceTemplate?.additionalFields || "");
+  const [initialAssessment, setInitialAssessment] = useState(() => sourceTemplate?.initialAssessment || emptyInitialAssessment());
   useEffect(() => { requestKey.current = null; }, [candidateConfiguration]);
-  const [extraOpen, setExtraOpen] = useState(false);
+  const [extraOpen, setExtraOpen] = useState(Boolean(sourceTemplate));
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const update = (key) => (event) => { setForm({ ...form, [key]: event.target.value }); requestKey.current = null; };
@@ -417,23 +435,29 @@ function SingleTest({ onCreated, disabledReason, candidateConfiguration, onBusy 
     requestKey.current ||= newTestRequestKey();
     const testName = autoTestName(name, requestKey.current);
     const nameError = validateTestName(testName); if (nameError) { setMessage(nameError); return; }
-    let observation = singleTestEvent(form, requestKey.current);
-    try { const extra = additionalFields.trim() ? JSON.parse(additionalFields) : {}; if (!extra || Array.isArray(extra) || typeof extra !== "object" || Object.keys(extra).some(key => Object.hasOwn(observation, key))) throw new Error(); observation = { ...observation, ...extra }; }
-    catch { setMessage("추가 필드는 JSON 객체로 입력하세요. 기본 필드를 중복해서 넣을 수 없습니다."); return; }
+    let observation;
+    try { observation = buildSingleAnalysisTemplateEvent({ form, additionalFields, originalEvent: sourceTemplate?.originalEvent }, requestKey.current); }
+    catch { setMessage(w("추가 필드는 JSON 객체로 입력하세요. 기본 필드나 접수 정보를 중복해서 넣을 수 없습니다.", "Enter additional fields as a JSON object, without duplicating base fields or admission metadata.")); return; }
     let admission;
     try { admission = singleTestAdmission(observation, initialAssessment); }
     catch (error) { setMessage(initialAssessmentError(error, w)); return; }
     setMessage("등록 중…"); setBusy(true); onBusy?.(true);
     try {
-      const created = await api.createTestRun({ name: testName, idempotency_key: requestKey.current, ...admission, ...(candidateConfiguration ? { candidate_configuration: candidateConfiguration } : {}), ...(expectedVerdict ? { expected_verdict: expectedVerdict } : {}), ...(difficulty.trim() ? { difficulty: difficulty.trim() } : {}), ...(category.trim() ? { test_category: category.trim() } : {}) });
+      const created = await api.createTestRun({ name: testName, idempotency_key: requestKey.current, ...admission, ...(sourceTemplate ? { source_analysis_id: sourceTemplate.sourceAnalysisId } : {}), ...(candidateConfiguration ? { candidate_configuration: candidateConfiguration } : {}), ...(expectedVerdict ? { expected_verdict: expectedVerdict } : {}), ...(difficulty.trim() ? { difficulty: difficulty.trim() } : {}), ...(category.trim() ? { test_category: category.trim() } : {}), ...(caseName.trim() ? { case_name: caseName.trim() } : {}) });
       setMessage("테스트를 접수했습니다.");
       requestKey.current = null; onCreated(created);
-    } catch (err) { setMessage(initialAssessmentError(err, w) || testRunError(err)); }
+    } catch (err) {
+      const copyError = sourceTemplate && (err.message === "single_test_internal_models_required" ? w("이 입력은 내부 전용입니다. 모든 분석 모델을 vLLM으로 선택하세요.", "This input is internal-only. Select vLLM for every model role.")
+        : err.message === "analysis_not_found" ? w("원래 분석이 삭제되어 접수하지 못했습니다. 입력을 다시 불러와 확인하세요.", "The original analysis was deleted. Reload and check the input before submitting.")
+        : err.message === "single_test_configuration_unavailable" ? w("테스트 설정을 확인하지 못했습니다. 설정을 다시 불러온 뒤 접수하세요.", "Could not verify Test Configuration. Reload it before submitting.") : null);
+      setMessage(copyError || initialAssessmentError(err, w) || testRunError(err));
+    }
     finally { setBusy(false); onBusy?.(false); }
   }
   return (
     <form className="panel form-panel" onSubmit={run}>
       <div className="panel-head"><h2><Icon name="test" size={20} />{w("단건 분석", "Single Analysis")}</h2><span className="ux-muted">{w("HTTP 요청 1건", "One HTTP request")}</span></div>
+      {sourceTemplate && <p className="notice">{w("기존 입력을 가져왔습니다. 입력값과 테스트 설정을 확인한 뒤 분석을 시작하세요. 이전 AI 판정은 참고 답안으로 복사하지 않습니다.", "Original input loaded. Review the fields and Test Configuration before starting. The previous AI verdict is not copied as a reference answer.")}{sourceTemplate.internalOnly && <strong> {w("운영 출처 또는 내부 전용 입력은 vLLM에서만 분석할 수 있습니다.", "Production-source or internal-only input can be analyzed only with vLLM.")}</strong>}</p>}
       <fieldset className="test-submission-fields" disabled={busy}>
       <label className="test-name-field">{w("테스트명", "Test name")} <input maxLength={120} value={name} onChange={event => { setName(event.target.value); requestKey.current = null; }} placeholder={w("비워두면 ID 자동 생성", "Leave blank for an automatic ID")} /></label>
       <div className="form-grid"><label>{w("참고 판정 (선택)", "Reference Verdict (optional)")}<select value={expectedVerdict} onChange={event => { setExpectedVerdict(event.target.value); requestKey.current = null; }}><option value="">{w("기대 판정 없음", "No reference")}</option>{Object.entries(referenceVerdicts).map(([value, label]) => <option key={value} value={value}>{w(label, { true_positive: "True Positive", false_positive: "False Positive", inconclusive: "Inconclusive" }[value])}</option>)}</select></label><label>{w("난이도 (선택)", "Difficulty (optional)")}<input value={difficulty} maxLength={80} onChange={event => { setDifficulty(event.target.value); requestKey.current = null; }} placeholder={w("예: easy", "e.g. easy")} /></label><label>{w("테스트 유형 (선택)", "Category (optional)")}<input value={category} maxLength={120} onChange={event => { setCategory(event.target.value); requestKey.current = null; }} placeholder={w("예: sql_injection", "e.g. sql_injection")} /></label></div>
@@ -449,14 +473,15 @@ function SingleTest({ onCreated, disabledReason, candidateConfiguration, onBusy 
       <label>{w("HTTP 원문", "Raw HTTP")}<textarea rows="8" required value={form.payload} onChange={update("payload")} placeholder={"GET /search?q=example HTTP/1.1\nHost: example.internal\n\n"} /></label>
       <button type="button" className="text-button" aria-expanded={extraOpen} aria-controls="single-test-extra" onClick={() => setExtraOpen(value => !value)}>{extraOpen ? w("추가 입력 닫기", "Hide optional fields") : w("추가 입력", "Optional fields")}</button>
       <div className="form-grid" id="single-test-extra" hidden={!extraOpen}><label>{w("이벤트 ID", "Event ID")}<input value={form.event_id} onChange={update("event_id")} placeholder={w("비워두면 ID 자동 생성", "Leave blank for an automatic ID")} /></label><label>{w("이벤트명", "Event name")}<input value={form.event_name} onChange={update("event_name")} placeholder={w("예: 검색 요청", "e.g. search request")} /></label><label>{w("출발지 포트", "Source port")}<input type="number" min="0" max="65535" value={form.src_port} onChange={update("src_port")} placeholder={w("예: 42310", "e.g. 42310")} /></label><label>{w("목적지 포트", "Destination port")}<input type="number" min="0" max="65535" value={form.dest_port} onChange={update("dest_port")} placeholder={w("예: 443", "e.g. 443")} /></label></div>
+      {extraOpen && <label>{w("문항명 (선택)", "Case name (optional)")}<input value={caseName} maxLength={240} onChange={event => { setCaseName(event.target.value); requestKey.current = null; }} /></label>}
       {extraOpen && <InitialAssessmentFields value={initialAssessment} words={w} onChange={value => { setInitialAssessment(value); requestKey.current = null; }} />}
       {extraOpen && <label>{w("스키마 추가 필드 (JSON)", "Additional schema fields (JSON)")}<textarea value={additionalFields} rows={3} placeholder={'{"vendor_score": 2}'} onChange={event => { setAdditionalFields(event.target.value); requestKey.current = null; }} /></label>}
-      </fieldset><div className="action-row"><button type="submit" className="primary" disabled={busy || Boolean(disabledReason)}>{busy ? w("접수 중…", "Submitting…") : w("분석 시작", "Start analysis")}</button><span aria-live="polite">{message}</span></div>
+      </fieldset>{internalModelBlocked && <p role="status" className="notice">{disabledReason}</p>}<div className="action-row"><button type="submit" className="primary" disabled={busy || Boolean(disabledReason)}>{busy ? w("접수 중…", "Submitting…") : w("분석 시작", "Start analysis")}</button><span aria-live="polite">{message}</span></div>
     </form>
   );
 }
 
-export function Detail({ id, onBack, onOpen, onFeedback, backLabel = "분석 결과", tab: controlledTab, onTabChange, onResolved, executionSelection, onExecutionSelectionChange }) {
+export function Detail({ id, onBack, onOpen, onSingleTest, onFeedback, backLabel = "분석 결과", tab: controlledTab, onTabChange, onResolved, executionSelection, onExecutionSelectionChange }) {
   const { t } = useConsolePreferences();
   const w = useR5Words();
   const [view, setView] = useState(() => emptyDetailState(id));
@@ -499,6 +524,7 @@ export function Detail({ id, onBack, onOpen, onFeedback, backLabel = "분석 결
   const navigation = <div className="panel-head-inline inference-toolbar">
     <button className="back" onClick={onBack}>← {backLabel}</button>
     <div className="ux-toolbar">
+      {detail && view.id === id && onSingleTest && <button type="button" className="secondary" onClick={() => onSingleTest(id)}>{w("단건 분석으로 가져오기", "Use in Single Analysis")}</button>}
       {detail && view.id === id && <RetryAnalysis key={id} detail={detail} onOpen={onOpen} />}
       {detail && view.id === id && <AnalysisDownloads id={id} status={detail.status} includeAppendix={reportAppendix} includeDecoding={Boolean(raw?.decoding)} />}
       <button type="button" className="icon-button" aria-label={t("detail.refresh")} title={t("detail.refresh")} disabled={loading || labelsLoading || runsLoading} onClick={() => loader.current?.refresh()}><Icon name="refresh" size={18} /></button>
@@ -811,7 +837,7 @@ function initialNavigationSnapshot() {
     page: "dashboard", listState: initialListState(), selectedId: null,
     resultsPurpose: "", testResults: initialTestResultsState(),
     detailReturnPage: "analyses", settingsTab: "models", detailTab: "result", days: 7, serviceApiKeyId: "",
-    feedbackState: initialFeedbackState(), executionSelection: null,
+    feedbackState: initialFeedbackState(), executionSelection: null, sourceAnalysisId: null,
   };
 }
 
@@ -885,12 +911,13 @@ function ConsoleApp() {
     if (items) move(current => ({ ...current, resultsPurpose: "test", testResults: { ...current.testResults, view: "items", runId: null, items }, page: "analyses" }));
   }
   function openTest(id) { move(current => ({ ...current, selectedId: id, executionSelection: null, detailReturnPage: "test", detailTab: "result", page: "detail" })); }
+  function useInSingleTest(id) { move(current => ({ ...current, page: "test", cloneRunId: null, sourceAnalysisId: id })); }
   function filterProduction(filters) { move(current => ({ ...current, resultsPurpose: "production", listState: dashboardListState(filters), page: "analyses" })); }
   function changeResultsScope(purpose) {
     if (purpose === resultsPurpose) return;
     move(current => ({ ...current, resultsPurpose: purpose, testResults: { ...current.testResults, view: "items", runId: null }, listState: purpose === "test" ? current.listState : { ...current.listState, offset: 0, draft: { ...current.listState.draft, analysis_purpose: purpose }, applied: { ...current.listState.applied, analysis_purpose: purpose } } }));
   }
-  function navigate(key) { move(current => ({ ...consoleDestination(current, key), ...(key === "run" ? { cloneRunId: null } : {}) })); }
+  function navigate(key) { move(current => ({ ...consoleDestination(current, key), ...(key === "run" ? { cloneRunId: null, sourceAnalysisId: null } : {}) })); }
   function search(field, query) { const result = consoleSearch(screen, field, query); if (!result.error && query.trim()) setGlobalSearch({ field, query: query.trim() }); return result.error; }
   function backFromDetail() {
     const targetPage = detailReturnPage === "testRun" ? "analyses" : detailReturnPage;
@@ -912,17 +939,17 @@ function ConsoleApp() {
     {page === "promote" && <Promotion onOpenTest={() => openTestRun(screen.promoteRunId)} fromHome={screen.promotionOrigin === "dashboard"} initialRunId={screen.promoteRunId} onNavigate={navigate} onBack={() => screen.promotionOrigin === "dashboard" ? navigate("status") : openTestRun(screen.promoteRunId)} />}
     {page === "analyses" && <AnalysisResultsPage
       actions={resultsPurpose === "test" && testResults.view === "runs" && !testResults.runId ? <><TestDefaults agentMode={mode} /><button className="primary" onClick={() => navigate("run")}>+ {t("run")}</button></> : null}
-      onClone={id => move(current => ({ ...current, page: "test", cloneRunId: id }))}
+      onClone={id => move(current => ({ ...current, page: "test", cloneRunId: id, sourceAnalysisId: null }))}
       onGroundTruth={(id, caseId) => move(current => ({ ...current, page: "datasets", datasetId: id, groundTruthCaseId: caseId, groundTruthState: undefined }))}
       onPromote={id => move(current => ({ ...current, page: "promote", promoteRunId: id, promotionOrigin: "test" }))}
       splitNavigation purpose={resultsPurpose} onScopeChange={changeResultsScope} state={listState} setState={setListState}
       testState={testResults} setTestState={setTestResults} onSelectRun={openTestRun} onOpenRunItem={openRunItem}
-      onOpen={openDetail} onUnauthorized={onUnauthorized} onShowTestRuns={backToTests} onShowAllTestItems={showAllTestItems} />}
-    {page === "test" && <TestAnalysisPage key={screen.cloneRunId || "new"} cloneRunId={screen.cloneRunId} onViewTests={viewTests} onOpen={openTest} selectedRunId={null} onSelectRun={openTestRun} agentMode={mode} onConfigureModels={() => navigate("agents")} />}
+      onOpen={openDetail} onSingleTest={useInSingleTest} onUnauthorized={onUnauthorized} onShowTestRuns={backToTests} onShowAllTestItems={showAllTestItems} />}
+    {page === "test" && <TestAnalysisPage key={screen.sourceAnalysisId || screen.cloneRunId || "new"} cloneRunId={screen.cloneRunId} sourceAnalysisId={screen.sourceAnalysisId} onViewTests={viewTests} onOpen={openTest} selectedRunId={null} onSelectRun={openTestRun} agentMode={mode} onConfigureModels={() => navigate("agents")} />}
     {page === "apiDocs" && <ProductionApi />}
     {page === "feedback" && <Suspense fallback={<p role="status">{t("loading")}</p>}><FeedbackWorkspace state={screen.feedbackState} onStateChange={value => navigation.navigate(current => ({ ...current, feedbackState: typeof value === "function" ? value(current.feedbackState) : value }))} onUnauthorized={onUnauthorized} onOpen={(id, purpose, runId) => move(current => ({ ...current, page: "detail", selectedId: id, detailTab: "result", executionSelection: null, detailReturnPage: "feedback", resultsPurpose: purpose === "test" ? "test" : "production", testResults: { ...current.testResults, runId: runId || null, view: runId ? "runs" : "items" } }))} /></Suspense>}
     {page === "datasets" && <GroundTruthWorkspace initialCaseId={screen.groundTruthCaseId} id={screen.datasetId} initialState={screen.groundTruthState} listState={screen.datasetListState} onListStateChange={value => navigation.remember(current => ({ ...current, datasetListState: value }))} onSelect={id => id ? move(current => ({ ...current, page: "datasets", datasetId: id, groundTruthCaseId: undefined, groundTruthState: undefined })) : navigation.backTo(current => current.page === "datasets" && !current.datasetId, current => ({ ...current, page: "datasets", datasetId: null, groundTruthCaseId: undefined, groundTruthState: undefined }))} />}
     {page === "settings" && <Settings standalone onProductionChange={setProductionName} onViewDataset={viewDataset} tab={settingsTab} onTabChange={tab => move(current => ({ ...current, settingsTab: tab }))} parserRoute={screen.parserRoute} onParserRoute={parserRoute => move(current => ({ ...current, parserRoute }))} />}
-    {page === "detail" && <Detail onResolved={resolveDetail} key={selectedId} id={selectedId} onBack={backFromDetail} onOpen={id => move(current => ({ ...current, selectedId: id, detailTab: "result", executionSelection: null }))} onFeedback={detail => move(current => ({ ...current, page: "feedback", feedbackState: analysisFeedbackState(detail) }))} tab={detailTab} onTabChange={tab => navigation.navigate(current => ({ ...current, detailTab: tab }))} executionSelection={screen.executionSelection} onExecutionSelectionChange={executionSelection => navigation.navigate(current => ({ ...current, executionSelection }))} backLabel={t(detailReturnPage === "feedback" ? "feedback" : detailReturnPage === "testRun" || detailReturnPage === "analyses" && resultsPurpose === "test" ? "runs" : detailReturnPage === "test" ? "run" : detailReturnPage === "dashboard" ? "status" : "history")} />}
+    {page === "detail" && <Detail onResolved={resolveDetail} key={selectedId} id={selectedId} onBack={backFromDetail} onOpen={id => move(current => ({ ...current, selectedId: id, detailTab: "result", executionSelection: null }))} onSingleTest={useInSingleTest} onFeedback={detail => move(current => ({ ...current, page: "feedback", feedbackState: analysisFeedbackState(detail) }))} tab={detailTab} onTabChange={tab => navigation.navigate(current => ({ ...current, detailTab: tab }))} executionSelection={screen.executionSelection} onExecutionSelectionChange={executionSelection => navigation.navigate(current => ({ ...current, executionSelection }))} backLabel={t(detailReturnPage === "feedback" ? "feedback" : detailReturnPage === "testRun" || detailReturnPage === "analyses" && resultsPurpose === "test" ? "runs" : detailReturnPage === "test" ? "run" : detailReturnPage === "dashboard" ? "status" : "history")} />}
   </ConsoleShell>;
 }
